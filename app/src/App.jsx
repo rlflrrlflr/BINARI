@@ -14,6 +14,7 @@ import { useState, useRef, useEffect } from "react";
           ③콜2 실패 재시도 ④가짜 '건너뛰기' 제거 ⑤휴먼디자인 죽은 코드 삭제 ⑥심야 컨텍스트 주입 ⑦접전 배지
    v16(B1): 수호신의 기억 — localStorage 영속화(프로필+대화). 재회 시 온보딩·형성 연출 생략, 재회 인사, '다른 사람이야?' 리셋
    v16(B2): 아침 문안 — 재회 유저 전용 데일리 카드(바이오리듬·달·일진, 전부 로컬 계산=API 0콜). 하루 1장, 자정 소멸
+   v16(B4): 부적 내보내기 — 1080×1920 스토리 규격 포스터(문양+인장+6효+카테고리 실루엣). 질문 원문 미포함, share→다운로드 폴백
    정정: 토정비결은 v11부터 구현·사용 중(과거 '보류' 주석은 낡은 정보) · 손없는날은 미구현 */
 
 /* ───── 만세력 계산 ───── */
@@ -366,11 +367,7 @@ function DustOrb({ size = 160 }) {
 }
 
 /* ───── 수호신의 부적 (v7 · 판결 후속) — 판결·사주 기반 파라메트릭 생성 ───── */
-function BujeokCanvas({ saju, direction, seed, size = 220 }) {
-  const ref = useRef(null);
-  useEffect(() => {
-    const cv = ref.current; if (!cv) return;
-    const ctx = cv.getContext("2d");
+function drawBujeokInto(ctx, saju, direction, seed, size) {
     let h = 7; for (const ch of seed) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
     const rnd = () => ((h = (h * 1664525 + 1013904223) >>> 0) / 2 ** 32);
     const [c1, c2] = EL_COLOR[saju.main];
@@ -394,8 +391,72 @@ function BujeokCanvas({ saju, direction, seed, size = 220 }) {
     if (direction === "GO") { ctx.beginPath(); ctx.moveTo(cx, cy - 26); ctx.lineTo(cx - 14, cy + 12); ctx.lineTo(cx + 14, cy + 12); ctx.closePath(); ctx.stroke(); }
     else if (direction === "STOP") { ctx.beginPath(); ctx.moveTo(cx - 18, cy - 6); ctx.lineTo(cx + 18, cy - 6); ctx.moveTo(cx - 18, cy + 6); ctx.lineTo(cx + 18, cy + 6); ctx.stroke(); }
     else { ctx.beginPath(); ctx.arc(cx, cy, 16, 0, 7); ctx.stroke(); ctx.beginPath(); ctx.arc(cx, cy, 9, 0, 7); ctx.stroke(); }
-  }, [saju, direction, seed, size]);
+}
+function BujeokCanvas({ saju, direction, seed, size = 220 }) {
+  const ref = useRef(null);
+  useEffect(() => { const cv = ref.current; if (!cv) return; drawBujeokInto(cv.getContext("2d"), saju, direction, seed, size); }, [saju, direction, seed, size]);
   return <canvas ref={ref} width={size} height={size} style={{ display: "block" }} />;
+}
+
+/* v16(B4): 부적 포스터 — 1080×1920(인스타 스토리 규격). 질문 원문은 절대 넣지 않는다: 스포일러 없는 자랑 */
+const CAT_LABEL = { A: "인생의 물음", B: "마음의 물음", C: "오늘의 물음" };
+function buildBujeokPoster({ saju, direction, seed, tosses, hexInfo, category, against, total }) {
+  const W = 1080, H = 1920;
+  const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+  const ctx = cv.getContext("2d");
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, "#141021"); bg.addColorStop(0.55, "#0a0812"); bg.addColorStop(1, "#050408");
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+  let h7 = 7; for (const c of seed) h7 = (h7 * 31 + c.charCodeAt(0)) >>> 0;
+  const rnd = () => ((h7 = (h7 * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+  for (let i = 0; i < 90; i++) { ctx.globalAlpha = 0.12 + rnd() * 0.3; ctx.fillStyle = rnd() < 0.5 ? "#ffe9ad" : "#cdd6ff"; ctx.beginPath(); ctx.arc(rnd() * W, rnd() * H, 0.8 + rnd() * 1.6, 0, 7); ctx.fill(); }
+  ctx.globalAlpha = 1;
+  ctx.textAlign = "center"; ctx.fillStyle = "#8a7f95"; ctx.font = "500 34px sans-serif";
+  ctx.fillText("비 나 리  ·  B I N A R I", W / 2, 150);
+  const bj = document.createElement("canvas"); bj.width = 640; bj.height = 640;
+  drawBujeokInto(bj.getContext("2d"), saju, direction, seed, 640);
+  ctx.drawImage(bj, (W - 640) / 2, 240);
+  const SEAL = { GO: ["나아가라", "#3dc98f"], STOP: ["멈춰라", "#e05a5a"], HOLD: ["기다려라", "#7f8fd4"] };
+  const [word, color] = SEAL[direction] || SEAL.HOLD;
+  ctx.font = "900 130px 'Noto Serif KR', serif"; ctx.fillStyle = color;
+  ctx.shadowColor = color; ctx.shadowBlur = 60;
+  ctx.fillText(word, W / 2, 1080);
+  ctx.shadowBlur = 0;
+  ctx.font = "600 44px sans-serif"; ctx.fillStyle = "#c9b98f";
+  ctx.fillText(direction, W / 2, 1150);
+  if (tosses && tosses.length === 6) {
+    const bw = 300, bh = 16, gap = 30, x0 = (W - bw) / 2, y0 = 1480;
+    tosses.forEach((t, i) => {
+      const y = y0 - i * (bh + gap);
+      ctx.fillStyle = "#e6d0a0";
+      if (t.v % 2) ctx.fillRect(x0, y, bw, bh);
+      else { ctx.fillRect(x0, y, bw * 0.42, bh); ctx.fillRect(x0 + bw * 0.58, y, bw * 0.42, bh); }
+      if (t.v === 6 || t.v === 9) { ctx.fillStyle = "#ffe9ad"; ctx.beginPath(); ctx.arc(x0 + bw + 26, y + bh / 2, 6, 0, 7); ctx.fill(); }
+    });
+    if (hexInfo) { ctx.font = "500 36px 'Noto Serif KR', serif"; ctx.fillStyle = "#c9b98f"; ctx.fillText(`卦 ${hexInfo.name}${hexInfo.moving && hexInfo.moving.length ? " → " + hexInfo.toName : ""}`, W / 2, 1560); }
+  }
+  ctx.font = "500 38px 'Noto Serif KR', serif"; ctx.fillStyle = "#9d8fb5";
+  ctx.fillText(CAT_LABEL[category] || "어느 물음", W / 2, 1650);
+  if (total > 0 && against > 0 && against / total >= 0.4) {
+    ctx.font = "600 34px sans-serif"; ctx.fillStyle = "#e5b96b";
+    ctx.fillText(`지표가 갈라섰다 · ${total - against} : ${against}`, W / 2, 1710);
+  }
+  const d = new Date();
+  ctx.font = "400 30px sans-serif"; ctx.fillStyle = "#5f5670";
+  ctx.fillText(`${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")} · 수호신의 부적`, W / 2, 1810);
+  return cv;
+}
+async function saveOrShareBujeok(args) {
+  const cv = buildBujeokPoster(args);
+  const blob = await new Promise((r) => cv.toBlob(r, "image/png"));
+  if (!blob) return;
+  const file = new File([blob], "binari_bujeok.png", { type: "image/png" });
+  try {
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file] }); return; }
+  } catch (_) { /* 공유 취소·실패 → 다운로드 폴백 */ }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = "binari_bujeok.png"; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
 /* ───── AI 판결 프롬프트 (v2 수호신) ───── */
@@ -828,6 +889,8 @@ MBTI: ${mbti || "미입력"} / 혈액형: ${blood || "미입력"} / 수비학 �
             <div className="fade bwrap">
               <BujeokCanvas saju={saju} direction={res.direction} seed={q + (res.verdict || "")} />
               <p className="fine">오늘의 판결을 지키는 부적 — 같은 질문·같은 판결에서만 같은 문양이 나와.</p>
+              <button className="btn ghost sm" onClick={() => saveOrShareBujeok({ saju, direction: res.direction, seed: q + (res.verdict || ""), tosses, hexInfo, category: res.category, against: res.against || 0, total: res.total || 0 })}>부적 간직하기 — 이미지로</button>
+              <p className="fine">질문은 이미지에 담기지 않아 — 문양과 판결의 방향만.</p>
             </div>
           )}
           {res && cardOn && <button className="btn ghost mt" onClick={() => { setRes(null); setDetail(null); setWhy(false); setDetailBusy(false); setQ(""); setCardOn(false); setRitual(false); setTosses([]); setHexInfo(null); setBujeok(false); }}>다른 걸 물어볼래</button>}
