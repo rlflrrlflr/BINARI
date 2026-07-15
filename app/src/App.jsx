@@ -242,8 +242,8 @@ function GuardianCanvas({ saju, zo, mbti, blood, num, moon, agitateRef, size = 3
     const accent = rotHue(EL_COLOR[subEl][1], zoDeg * 0.5);
     // 축4 대칭수 = 수비학 라이프패스(구조적 지문)
     const lp = num || 5, arms = lp === 11 ? 11 : lp === 22 ? 8 : lp === 33 ? 12 : (lp + 2);
-    // 축5 밀도/반짝임/속도/질서 = MBTI
-    const n = E ? 1600 : 1150, speed = P ? 1.15 : 0.78, chaos = T ? 0.6 : 1.35; // T=정연, F=유동
+    // 축5 밀도/반짝임/속도/질서 = MBTI (v17-A: 유속장 리라이트 — 입자 대폭 증량)
+    const n = E ? 4200 : 3200, speed = P ? 1.15 : 0.78, chaos = T ? 0.6 : 1.35; // T=정연, F=유동
     // 축6 헤일로(전체 밝기·크기) = 태어난 밤의 달 위상
     const MOON_I = { 새달: 0, 초승달: 1, 상현달: 2, "차오르는 달": 3, 보름달: 4, "기우는 달": 3, 하현달: 2, 그믐달: 1 };
     const lum = 0.55 + (MOON_I[moon?.name] ?? 2) * 0.11; // 0.55~0.99
@@ -253,8 +253,10 @@ function GuardianCanvas({ saju, zo, mbti, blood, num, moon, agitateRef, size = 3
       const sa = srnd() * Math.PI * 2, sr = R * (1.1 + srnd() * 0.9);
       // o를 arms(대칭수)에 스냅 → 라이프패스가 갈래/빛살 수를 결정
       const arm = Math.floor(srnd() * arms);
+      const sx = cx + Math.cos(sa) * sr, sy = cy + Math.sin(sa) * sr;
+      // v17-A: x/y = 현재 실위치(유속장이 갱신), vx/vy = 속도 → 흐름에 방향과 기억이 생긴다
       return { u: srnd(), v: srnd(), o: arm + srnd() * 0.6, s: srnd(), arm,
-        ph: srnd() * Math.PI * 2, sx: cx + Math.cos(sa) * sr, sy: cy + Math.sin(sa) * sr,
+        ph: srnd() * Math.PI * 2, sx, sy, x: sx, y: sy, vx: 0, vy: 0,
         dly: srnd() * 0.35, acc: srnd() < 0.24 }; // 약 24%는 강조색
     });
     let t = 0, raf;
@@ -284,42 +286,49 @@ function GuardianCanvas({ saju, zo, mbti, blood, num, moon, agitateRef, size = 3
     const draw = () => {
       t += 0.01 * speed;
       const age = (performance.now() - born) / 1000;         // 등장 후 경과(초)
-      const breathe = 0.9 + (0.1 + (agitateRef && agitateRef.current ? 0.1 : 0)) * Math.sin(t * (0.8 + (agitateRef && agitateRef.current ? 5 : 0))); // 호흡 글로우(레퍼런스 A)
-      const wob = Math.sin(t * 0.35) * 0.05;                 // 전체 미세 흔들림(구체 회전감, 레퍼런스 B)
       const agi = agitateRef && agitateRef.current ? 1 : 0;  // v6: 판결 직전 요동(게이트 열리기 전)
-      ctx.clearRect(0, 0, w, w);
+      const breathe = 0.9 + (0.1 + agi * 0.1) * Math.sin(t * (0.8 + agi * 5)); // 호흡 글로우(레퍼런스 A)
+      // v17-A ① 잔상: 배경색을 칠하면 stage 그라디언트를 가리므로, destination-out으로
+      //   알파만 서서히 빼 '빛이 그린 궤적'을 남긴다(투명 캔버스 유지). 요동 시 더 빨리 지워 반응성 확보.
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = `rgba(0,0,0,${0.09 + agi * 0.07})`;
+      ctx.fillRect(0, 0, w, w);
       ctx.globalCompositeOperation = "lighter";
       const gcy = form === "화" ? cy + R * 0.3 : cy;
-      const gr = ctx.createRadialGradient(cx, gcy, 1, cx, gcy, R * 0.6 * breathe);
-      gr.addColorStop(0, c2 + "30"); gr.addColorStop(0.5, c1 + "15"); gr.addColorStop(1, "transparent");
-      ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(cx, gcy, R * 0.6 * breathe, 0, 7); ctx.fill();
-      const gr2 = ctx.createRadialGradient(cx, gcy - R * 0.25, 1, cx, gcy - R * 0.25, R * 0.85);
-      gr2.addColorStop(0, c1 + "0c"); gr2.addColorStop(1, "transparent");
-      ctx.fillStyle = gr2; ctx.beginPath(); ctx.arc(cx, gcy - R * 0.25, R * 0.85, 0, 7); ctx.fill();
-      ps.forEach(p => {
-        const [fx, fy, depth] = place(p);
-        // 어셈블: 입자별 딜레이를 두고 2.4초에 걸쳐 흩어진 자리 → 제 자리 (레퍼런스 C)
+      const gr = ctx.createRadialGradient(cx, gcy, 1, cx, gcy, R * 0.62 * breathe);
+      gr.addColorStop(0, c2 + "1e"); gr.addColorStop(0.5, c1 + "10"); gr.addColorStop(1, "transparent");
+      ctx.globalAlpha = 1; ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(cx, gcy, R * 0.62 * breathe, 0, 7); ctx.fill();
+      // v17-A ② 유속장: 각 입자에 속도. 유사 컬 노이즈(위치 기반 회전 흐름)로 밀되,
+      //   오행 형태(place)로 스프링 복원 → 흐르면서도 형상을 유지. '살아있음'의 핵심인 방향·인과가 생긴다.
+      for (let i = 0; i < ps.length; i++) {
+        const p = ps[i];
+        const [tx, ty, depth] = place(p);
         const k = easeOut(Math.max(0, Math.min(1, (age - p.dly) / 2.4)));
-        const turb = 1 - k;                                   // 모이기 전 난류 강도
-        let x = p.sx + (fx - p.sx) * k + Math.sin(t * 2.4 + p.ph * 3) * 14 * turb;
-        let y = p.sy + (fy - p.sy) * k + Math.cos(t * 1.9 + p.o) * 14 * turb;
-        // 상시 미세 난류 + 전체 흔들림 (모인 뒤에도 완전히 정지하지 않게)
-        x += Math.sin(t * 1.6 + p.ph * 2.2) * (1.6 + agi * 7) * chaos * k + (y - cy) * wob * 0.12;
-        y += Math.cos(t * 1.3 + p.o * 1.4) * (1.6 + agi * 7) * chaos * k - (x - cx) * wob * 0.06;
-        const tw = N ? (0.5 + 0.5 * Math.sin(t * 5 + p.o * 7)) : 0.85;
-        ctx.globalAlpha = Math.max(0, depth) * tw * (0.45 + p.s * 0.45) * (0.25 + 0.75 * k) * lum;
+        const fx = Math.sin(p.y * 0.012 + t * 0.9 + p.ph) + Math.sin(p.y * 0.022 - t * 0.6);
+        const fy = Math.cos(p.x * 0.013 - t * 0.8) + Math.cos(p.x * 0.019 + t * 0.5 + p.ph);
+        const flow = (0.16 + 0.55 * (1 - k)) * chaos * (0.5 + p.s); // 모이기 전 흐름 강, 모인 뒤 잔류
+        const spring = 0.006 + 0.032 * k;                          // 모일수록 형태로 당김 강해짐
+        const ax = (tx - p.x) * spring + fx * flow + (agi ? Math.sin(t * 9 + p.o) * 1.5 : 0);
+        const ay = (ty - p.y) * spring + fy * flow + (agi ? Math.cos(t * 8 + p.ph) * 1.5 : 0);
+        p.vx = p.vx * 0.9 + ax; p.vy = p.vy * 0.9 + ay;
+        const sp = Math.hypot(p.vx, p.vy), lim = 3.0 + agi * 4;    // 속도 상한(폭주 방지)
+        if (sp > lim) { p.vx *= lim / sp; p.vy *= lim / sp; }
+        p.x += p.vx; p.y += p.vy;
+        const tw = N ? (0.55 + 0.45 * Math.sin(t * 5 + p.o * 7)) : 0.9;
+        ctx.globalAlpha = Math.max(0, depth) * tw * (0.4 + p.s * 0.5) * (0.3 + 0.7 * k) * lum;
         ctx.fillStyle = p.acc ? accent : (p.o % 3 < 1 ? c2 : c1);
-        ctx.beginPath(); ctx.arc(x, y, 0.4 + p.s * 0.7, 0, 7); ctx.fill();
-      });
-      ctx.globalAlpha = 1;
+        const r = 0.7 + p.s * 1.1;                                 // fillRect가 arc보다 빠름(증량 감당)
+        ctx.fillRect(p.x - r * 0.5, p.y - r * 0.5, r, r);
+      }
       if (blood) {
         const sa = t * 1.6, sx = cx + Math.cos(sa) * R * 1.0, sy = cy + Math.sin(sa) * R * 0.8;
-        ctx.globalAlpha = 0.45 + 0.2 * Math.sin(t * 3);
-        const sg = ctx.createRadialGradient(sx, sy, 0, sx, sy, 4);
+        ctx.globalAlpha = 0.5 + 0.2 * Math.sin(t * 3);
+        const sg = ctx.createRadialGradient(sx, sy, 0, sx, sy, 5);
         sg.addColorStop(0, BLOOD_COLOR[blood]); sg.addColorStop(1, "transparent");
-        ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(sx, sy, 4, 0, 7); ctx.fill();
-        ctx.globalAlpha = 1;
+        ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(sx, sy, 5, 0, 7); ctx.fill();
       }
+      ctx.globalAlpha = 1;
       raf = requestAnimationFrame(draw);
     };
     draw();
