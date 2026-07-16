@@ -22,6 +22,8 @@ import { useState, useRef, useEffect } from "react";
    v16(B7): 스트릭 최소형 — "수호신과 연결된 지 N일째" 방문일 카운터만(게임화 없음)
    v18: ①듀얼 모드 API — /api/judge(배포) 없으면 직접 호출로 자동 폴백(아티팩트 호환 복구) ②저장 안전 셈(localStorage 차단 시 메모리 강등)
         ③모를 권리 — 질문 범위만 답하는 프롬프트 규칙 / 토정비결 옵트인 접기 / 아침 문안 노크형(청해야 펼친다)
+   v18(이펙트): 금 폼 containment(경계 내 회전·왕복 빛살 — 폭발 금지) · 코어 가산/페이드 평형 조정(백색 포화 제거·색 보존)
+        · 텍스트 가독 플레이트 + 질문 패널 그라데이션(수호신 위 글자 겹침 해소)
    정정: 토정비결은 v11부터 구현·사용 중(과거 '보류' 주석은 낡은 정보) · 손없는날은 미구현 */
 
 /* ───── 만세력 계산 ───── */
@@ -278,9 +280,11 @@ function GuardianCanvas({ saju, zo, mbti, blood, num, moon, agitateRef, size = 3
         const spread = Math.min(arms, 7), ang = -Math.PI / 2 + ((p.arm % spread) - (spread - 1) / 2) * 0.42 + Math.sin(t + p.ph) * 0.08, len = p.v * R * 1.9;
         return [cx + Math.cos(ang) * len + Math.sin(p.u * 10 + t) * p.v * R * 0.3, cy + R * 0.6 + Math.sin(ang) * len, g];
       }
-      if (form === "금") { // 방사형 빛살 (라이프패스=빛살 수)
-        const ang = (p.arm / arms) * Math.PI * 2 + (p.u - 0.5) * 0.12, rr = (p.v + t * 0.05) % 1 * R * 1.25;
-        return [cx + Math.cos(ang) * rr, cy + Math.sin(ang) * rr, 1 - p.v];
+      if (form === "금") { // 벼려진 빛(v18): 회전하는 빛살이 경계 안에서 숨쉬며 맴돈다 — 폭발이 아니라 존재
+        const bw = 0.12 + 0.55 / arms;                          // 팔이 적을수록 넓게 — 3갈래도 존재감
+        const ang = (p.arm / arms) * Math.PI * 2 + (p.u - 0.5) * bw + t * 0.15;
+        const rr = (0.14 + 0.78 * p.v + 0.05 * Math.sin(t * 1.3 + p.ph)) * R; // 팔을 따라 상시 관통 + 미세 숨
+        return [cx + Math.cos(ang) * rr, cy + Math.sin(ang) * rr * 0.94, 0.45 + 0.55 * (1 - p.v)];
       }
       const ang = p.u * Math.PI * 2, rr = Math.pow(p.v, 0.5) * R * 0.95; // 흙: 조밀한 구
       return [cx + Math.cos(ang + t * 0.15) * rr, cy + Math.sin(ang + t * 0.15) * rr * 0.92, g];
@@ -294,12 +298,12 @@ function GuardianCanvas({ saju, zo, mbti, blood, num, moon, agitateRef, size = 3
       //   알파만 서서히 빼 '빛이 그린 궤적'을 남긴다(투명 캔버스 유지). 요동 시 더 빨리 지워 반응성 확보.
       ctx.globalCompositeOperation = "destination-out";
       ctx.globalAlpha = 1;
-      ctx.fillStyle = `rgba(0,0,0,${0.09 + agi * 0.07})`;
+      ctx.fillStyle = `rgba(0,0,0,${0.10 + agi * 0.06})`;
       ctx.fillRect(0, 0, w, w);
       ctx.globalCompositeOperation = "lighter";
       const gcy = form === "화" ? cy + R * 0.3 : cy;
       const gr = ctx.createRadialGradient(cx, gcy, 1, cx, gcy, R * 0.62 * breathe);
-      gr.addColorStop(0, c2 + "1e"); gr.addColorStop(0.5, c1 + "10"); gr.addColorStop(1, "transparent");
+      gr.addColorStop(0, c2 + "0c"); gr.addColorStop(0.5, c1 + "07"); gr.addColorStop(1, "transparent");
       ctx.globalAlpha = 1; ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(cx, gcy, R * 0.62 * breathe, 0, 7); ctx.fill();
       // v17-A ② 유속장: 각 입자에 속도. 유사 컬 노이즈(위치 기반 회전 흐름)로 밀되,
       //   오행 형태(place)로 스프링 복원 → 흐르면서도 형상을 유지. '살아있음'의 핵심인 방향·인과가 생긴다.
@@ -1097,10 +1101,10 @@ const CSS = `
 .w100{width:100%;display:flex;flex-direction:column;align-items:center}
 .gtext{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;pointer-events:none;padding:0 34px}
 .gtext.up{padding-bottom:150px}
-.gpanel{position:absolute;left:0;right:0;margin:0 auto;top:calc(50% - 30px);width:min(86vw,400px);display:flex;flex-direction:column;align-items:center;z-index:3}
-.forming{font-size:13px;line-height:2.1;color:#cfc4e2;letter-spacing:.14em;margin:0;text-shadow:0 0 16px rgba(245,217,139,.4);animation:formPulse 2.1s ease-in-out infinite}
+.gpanel{position:absolute;left:0;right:0;margin:0 auto;top:calc(50% - 30px);width:min(86vw,400px);display:flex;flex-direction:column;align-items:center;z-index:3;background:linear-gradient(180deg,rgba(10,8,18,0) 0%,rgba(10,8,18,.34) 26%,rgba(10,8,18,.58) 100%);border-radius:20px;padding:22px 16px 10px}
+.forming{font-size:13px;line-height:2.1;color:#cfc4e2;letter-spacing:.14em;margin:0;text-shadow:0 0 16px rgba(245,217,139,.4);animation:formPulse 2.1s ease-in-out infinite;background:rgba(5,4,8,.45);padding:10px 18px;border-radius:14px}
 @keyframes formPulse{0%,100%{opacity:.5}50%{opacity:1}}
-.gname{font-size:14px;line-height:1.9;color:#f0e2b8;margin:0;text-shadow:0 2px 18px rgba(5,4,8,.95),0 0 26px rgba(245,217,139,.28)}
+.gname{font-size:14px;line-height:1.9;color:#f0e2b8;margin:0;text-shadow:0 2px 18px rgba(5,4,8,.95),0 0 26px rgba(245,217,139,.28);background:rgba(5,4,8,.5);padding:8px 16px;border-radius:14px}
 .gintro.dim2{color:#c9b98f;font-size:14px;margin:2px 0 12px}
 .hexpanel{display:flex;flex-direction:column;align-items:center;gap:8px;margin-top:6px;width:100%}
 .hexlines{display:flex;flex-direction:column;gap:8px;margin:6px 0}
