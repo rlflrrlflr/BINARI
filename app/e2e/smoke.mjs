@@ -94,14 +94,20 @@ try {
   await page.waitForTimeout(1500);
   check("재회: 온보딩 생략(질문 UI 직행)", await page.locator("textarea.qbox").isVisible());
   check("재회 인사", await page.getByText("다시 왔네. 기다렸어.").isVisible());
-  check("재회: 아침 문안 카드", await page.getByText("아침 문안").isVisible());
+  // v18 모를 권리: 자동 펼침이 아니라 노크 → 탭해야 카드
+  check("재회: 아침 문안 노크(자동 펼침 아님)", await page.getByText("수호신이 오늘의 하늘을 봐뒀어").isVisible());
+  check("노크 전 카드 미노출(모를 권리)", (await page.getByText("아침 문안").count()) === 0);
+  check("토정비결 접힘(모를 권리)", (await page.getByText("새해의 괘").count()) === 0 && (await page.getByText("올해의 흐름도 봐줄까?").count()) === 1);
+  await page.getByText("수호신이 오늘의 하늘을 봐뒀어").click();
+  await page.waitForTimeout(400);
+  check("노크 후 아침 문안 펼침", await page.getByText("아침 문안").isVisible());
   await shot("08_return_daily");
   await page.getByRole("button", { name: "받았어" }).click();
   await page.waitForTimeout(400);
   check("데일리 수령 후 카드 소멸", (await page.getByText("아침 문안").count()) === 0);
   await page.reload();
   await page.waitForTimeout(1500);
-  check("재재방문: 오늘 카드 재노출 없음", (await page.getByText("아침 문안").count()) === 0);
+  check("재재방문: 노크·카드 재노출 없음", (await page.getByText("수호신이 오늘의 하늘을 봐뒀어").count()) === 0 && (await page.getByText("아침 문안").count()) === 0);
   check("리셋 링크 존재", await page.getByText("다른 사람이야?").isVisible());
   await shot("09_return_after_daily");
 } catch (e) {
