@@ -23,6 +23,8 @@ import { useState, useRef, useEffect } from "react";
    v18: ①듀얼 모드 API — /api/judge(배포) 없으면 직접 호출로 자동 폴백(아티팩트 호환 복구) ②저장 안전 셈(localStorage 차단 시 메모리 강등)
         ③모를 권리 — 질문 범위만 답하는 프롬프트 규칙 / 토정비결 옵트인 접기 / 아침 문안 노크형(청해야 펼친다)
    v19(모바일): 질문칸 박스화(파티클에 안 묻힘·iOS 줌 방지 16px)·좌우 풀폭(모바일 여백 축소)
+   v23(의식): 의식 모드 장면화 — 입력창 대신 질문 인용문, 빈 점선 스캐폴드 폐지(효가 낙하하며 쌓임), 동전 포물선 궤적,
+        낙착마다 수호신 요동(6효째 클라이맥스), '물음을 고칠래' 중도 취소
    v23(리빌·성격): 리빌 전면화 — 지표를 화면 중앙에 크게 1.15s씩, 오브로 흡수되는 연출(절정을 읽게 한다)
         · MBTI 픽션화 — 16그리드 폐지 → "내 기억이 맞는지 골라줘" 2택×4(설문 문법 제거, 같은 정보)
    v23(온보딩): ①오브 성장 — 조각(생일→성격→가치)마다 입자·색·빛 축적('모아주면 곁이 된다'의 시각화) ②팔 수 3~7 상한+머리 갈래(문양→존재)
@@ -791,8 +793,8 @@ export default function App() {
       setTimeout(() => judge(hi), 800);
     }
   };
-  const toss = () => { if (tosses.length >= 6 || busy || tossing) return; setTossing(true); setTimeout(() => { setTossing(false); finalize([...tosses, oneCoin()]); }, 750); };
-  const tossAll = () => { if (tosses.length >= 6 || busy || tossing) return; setTossing(true); setTimeout(() => { setTossing(false); const nt = [...tosses]; while (nt.length < 6) nt.push(oneCoin()); finalize(nt); }, 900); }; // 한 번에
+  const toss = () => { if (tosses.length >= 6 || busy || tossing) return; setTossing(true); setTimeout(() => { setTossing(false); agitateRef.current = true; setTimeout(() => { agitateRef.current = false; }, tosses.length >= 5 ? 1400 : 600); finalize([...tosses, oneCoin()]); }, 750); }; // v23: 낙착마다 존재가 일렁인다
+  const tossAll = () => { if (tosses.length >= 6 || busy || tossing) return; setTossing(true); setTimeout(() => { setTossing(false); agitateRef.current = true; setTimeout(() => { agitateRef.current = false; }, 1400); const nt = [...tosses]; while (nt.length < 6) nt.push(oneCoin()); finalize(nt); }, 900); }; // 한 번에
 
   // v15: 콜2 — 확정된 판결의 '근거'만 풀어쓴다(백그라운드, 클릭 전에 미리 로드)
   const fetchDetail = async (system, priorConvo, userText, r1) => {
@@ -1036,7 +1038,7 @@ MBTI: ${mbti || "미입력"} / 혈액형: ${blood || "미입력"} / 수비학 �
                 </div>
               )}
               {!ritual && <p className="gintro dim2">{isNight ? "밤이 깊었네. 이 시간의 물음은 마음이 먼저 기울어 있기 마련이야." : "그래서, 요즘 뭘 망설이고 있어?"}</p>}
-              <textarea className="qbox" rows={2} value={q} placeholder={'"밤 11시, 전남친에게 카톡 보낼까?"'} onChange={e => setQ(e.target.value)} disabled={ritual && tosses.length > 0} />
+              {!ritual && <textarea className="qbox" rows={2} value={q} placeholder={'"밤 11시, 전남친에게 카톡 보낼까?"'} onChange={e => setQ(e.target.value)} />}
               {!ritual && (() => { const qk = looksQuick(q); return (
                 <div className="w100">
                   <div className="row gap center">
@@ -1072,22 +1074,24 @@ MBTI: ${mbti || "미입력"} / 혈액형: ${blood || "미입력"} / 수비학 �
               )}
               {ritual && !res && (
                 <div className="hexpanel fade">
-                  <p className="sub2">질문을 마음에 붙들고, 동전 셋을 여섯 번 던져.</p>
-                  <div className="hexlines">
-                    {[5, 4, 3, 2, 1, 0].map(i => { const l = tosses[i];
-                      return (
-                        <div key={i} className={`hline ${l ? "on" : ""}`}>
-                          {l ? (l.v % 2 ? <span className="yang" /> : <span className="yin" />) : <span className="hempty" />}
-                          {l && (l.v === 6 || l.v === 9) && <i className="mv">●</i>}
-                        </div>);
-                    })}
+                  <p className="qquote">“{q}”</p>
+                  <p className="sub2">물음을 마음에 붙들고 — 동전 셋, 여섯 번.</p>
+                  <div className="coinstage">
+                    {tossing && <><span className="coin fly" /><span className="coin fly c2" /><span className="coin fly c3" /></>}
+                    {!tossing && tosses.length > 0 && <p className="coins">{tosses[tosses.length - 1].coins.map((c, i) => <span key={i}>{c === 3 ? "● 앞" : "○ 뒤"}</span>)}</p>}
                   </div>
-                  {tossing
-                    ? <p className="coins"><span className="coin" /><span className="coin c2" /><span className="coin c3" /></p>
-                    : tosses.length > 0 && <p className="coins">{tosses[tosses.length - 1].coins.map((c, i) => <span key={i}>{c === 3 ? "● 앞" : "○ 뒤"}</span>)}</p>}
+                  <div className="hexlines">
+                    {tosses.map((l, idx) => (
+                      <div key={idx} className="hline on drop">
+                        {l.v % 2 ? <span className="yang" /> : <span className="yin" />}
+                        {(l.v === 6 || l.v === 9) && <i className="mv">●</i>}
+                      </div>
+                    ))}
+                  </div>
                   {tosses.length < 6
-                    ? <div className="row gap center"><button className="btn gold" onClick={toss} disabled={busy || tossing}>{tossing ? "동전이 공중에…" : `동전 던지기 (${tosses.length}/6)`}</button><button className="btn ghost" onClick={tossAll} disabled={busy || tossing}>한 번에 던지기</button></div>
+                    ? <div className="row gap center"><button className="btn gold" onClick={toss} disabled={busy || tossing}>{tossing ? "동전이 공중에…" : `동전을 던진다 (${tosses.length}/6)`}</button><button className="btn ghost" onClick={tossAll} disabled={busy || tossing}>한 번에 던지기</button></div>
                     : <p className="sub2 mt">{busy ? "조각들이 합의하는 중…" : hexInfo && (<>괘가 맺혔어 — <b>{hexInfo.name}</b>{hexInfo.moving.length > 0 && ` · 변효 ${hexInfo.moving.map(n => n + 1).join(",")}효 → ${hexInfo.toName}`}</>)}</p>}
+                  {!busy && !tossing && tosses.length < 6 && <button className="resetlink" onClick={() => { setRitual(false); setTosses([]); setHexInfo(null); }}>물음을 고칠래</button>}
                 </div>
               )}
               {err && (
@@ -1237,7 +1241,7 @@ const CSS = `
 .gsay{font-size:14.5px;line-height:1.8;color:#f0e2b8;margin:2px 0 10px;text-align:center}
 .gintro.dim2{color:#c9b98f;font-size:14px;margin:2px 0 12px}
 .hexpanel{display:flex;flex-direction:column;align-items:center;gap:8px;margin-top:6px;width:100%}
-.hexlines{display:flex;flex-direction:column;gap:8px;margin:6px 0}
+.hexlines{display:flex;flex-direction:column-reverse;gap:8px;margin:6px 0;min-height:8px}
 .hline{position:relative;width:86px;height:8px;display:flex;justify-content:center}
 .hline .yang{width:86px;height:8px;border-radius:4px;background:linear-gradient(90deg,#f5d98b,#c98f3d);box-shadow:0 0 10px rgba(245,217,139,.45)}
 .hline .yin{width:86px;height:8px;border-radius:4px;background:linear-gradient(90deg,#f5d98b 0 36%,transparent 36% 64%,#c98f3d 64% 100%)}
@@ -1247,6 +1251,13 @@ const CSS = `
 .coin{width:16px;height:16px;border-radius:50%;background:linear-gradient(180deg,#f5d98b,#c98f3d);display:inline-block;box-shadow:0 0 10px rgba(245,217,139,.55);animation:coinFlip .3s linear infinite}
 .coin.c2{animation-delay:.09s}.coin.c3{animation-delay:.17s}
 @keyframes coinFlip{0%{transform:rotateX(0) translateY(0)}50%{transform:rotateX(180deg) translateY(-12px)}100%{transform:rotateX(360deg) translateY(0)}}
+.qquote{font-size:16px;line-height:1.7;color:#f0e2b8;margin:0 0 2px;text-align:center}
+.coinstage{min-height:34px;display:flex;align-items:center;justify-content:center;gap:14px}
+.coin.fly{animation:coinFly .75s ease-out both}
+.coin.fly.c2{animation-delay:.09s}.coin.fly.c3{animation-delay:.17s}
+@keyframes coinFly{0%{transform:translateY(26px) rotateX(0);opacity:0}18%{opacity:1}55%{transform:translateY(-24px) rotateX(540deg)}100%{transform:translateY(0) rotateX(1080deg);opacity:1}}
+.hline.drop{animation:hexDrop .5s cubic-bezier(.2,.8,.3,1.25) both}
+@keyframes hexDrop{from{opacity:0;transform:translateY(-16px) scaleX(.6);filter:brightness(2.6)}to{opacity:1;transform:none;filter:none}}
 .wrapc{flex-wrap:wrap}
 .bwrap{display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:16px;filter:drop-shadow(0 0 18px rgba(245,217,139,.2))}
 .persp{perspective:1100px;margin-top:22px;cursor:pointer;-webkit-tap-highlight-color:transparent}

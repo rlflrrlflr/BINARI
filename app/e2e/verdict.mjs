@@ -48,7 +48,7 @@ const b = await chromium.launch();
   await page.getByRole("button", { name: "다른 걸 물어볼래" }).click(); await page.waitForTimeout(400);
   await page.locator("textarea.qbox").fill("이직할까 크게 고민이야"); await page.waitForTimeout(300);
   await page.getByRole("button", { name: "판결을 청한다" }).click();
-  await page.waitForSelector("text=동전 셋을 여섯 번", { timeout: 5000 });
+  await page.waitForSelector("text=동전 셋", { timeout: 5000 });
   await page.getByRole("button", { name: "한 번에 던지기" }).click();
   ck("S1 의식 판결(콜1)", await waitVerdict(page));
   await page.getByRole("button", { name: "왜 이렇게 봤어?" }).click().catch(() => {});

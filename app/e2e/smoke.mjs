@@ -77,7 +77,7 @@ try {
   const ritualCls = (await page.getByRole("button", { name: "판결을 청한다" }).getAttribute("class")) || "";
   check("무게 질문 → 의식이 기본(gold)", ritualCls.includes("gold"));
   await page.getByRole("button", { name: "판결을 청한다" }).click();
-  await page.waitForSelector("text=동전 셋을 여섯 번", { timeout: 5000 });
+  await page.waitForSelector("text=동전 셋", { timeout: 5000 });
   await page.getByRole("button", { name: "한 번에 던지기" }).click();
   await page.waitForSelector("text=판결이 닿지 못했어", { timeout: 12000 });
   check("의식 실패: '다시 청하기' 노출", await page.getByRole("button", { name: "다시 청하기" }).isVisible());
