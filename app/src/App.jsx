@@ -23,6 +23,7 @@ import { useState, useRef, useEffect } from "react";
    v18: ①듀얼 모드 API — /api/judge(배포) 없으면 직접 호출로 자동 폴백(아티팩트 호환 복구) ②저장 안전 셈(localStorage 차단 시 메모리 강등)
         ③모를 권리 — 질문 범위만 답하는 프롬프트 규칙 / 토정비결 옵트인 접기 / 아침 문안 노크형(청해야 펼친다)
    v19(모바일): 질문칸 박스화(파티클에 안 묻힘·iOS 줌 방지 16px)·좌우 풀폭(모바일 여백 축소)
+   v21: 앱 웹뷰 감지 — 클로드 앱에서는 complete 봉인(아티팩트 사망 방지, 진단 v01 실측) + 전 경로 차단 시 정직한 안내
    v20(QC): 판결 폭포수 — 실패 시 complete→server→direct 자동 이월(쓰레기 응답·파싱 실패 포함). 진단 아티팩트 동봉
    v19(아티팩트 복구): 판결 경로 3-way — window.claude.complete(아티팩트 내장 API·최우선) → /api/judge(배포) → 직접호출.
         아티팩트에선 배포 없이도 판결이 물린다(사용자 지적 반영: '이전엔 아티팩트에서 됐다')
@@ -604,7 +605,17 @@ async function callDirect(system, messages, maxTokens) {
 }
 /* v19: 아티팩트 내장 API — window.claude.complete(prompt)는 문자열 프롬프트 in / 문자열 out.
    키·배포 없이 아티팩트 런타임이 호출을 물어준다. system+messages를 한 프롬프트로 병합. */
-function hasComplete() { return typeof window !== "undefined" && window.claude && typeof window.claude.complete === "function"; }
+/* v21: 클로드 '앱' 웹뷰 감지 — 2026-07 실측(진단 v01): 앱 안에서는 complete 호출이 아티팩트 자체를 죽인다(짧은 프롬프트도).
+   iOS 앱 웹뷰는 UA에 Safari 토큰이 없다. 앱이면 complete를 봉인해 아티팩트 사망을 방지. */
+const IS_APP_WEBVIEW = (() => {
+  try {
+    const ua = navigator.userAgent;
+    if (/iPhone|iPad|iPod/.test(ua) && !/Safari\//.test(ua)) return true;
+    if (/Android/.test(ua) && /\bwv\b/.test(ua)) return true;
+  } catch (_) {}
+  return false;
+})();
+function hasComplete() { return !IS_APP_WEBVIEW && typeof window !== "undefined" && window.claude && typeof window.claude.complete === "function"; }
 async function callComplete(system, messages, maxTokens) {
   const sysText = Array.isArray(system) ? system.map(s => s.text).join("\n") : String(system);
   const convo = messages.map(m => (m.role === "assistant" ? "수호신: " : "너: ") + (typeof m.content === "string" ? m.content : "")).join("\n\n");
@@ -631,7 +642,9 @@ async function callClaude(system, messages, maxTokens) {
       return out;
     } catch (e) { lastErr = e; if (API_MODE === mode) API_MODE = null; }
   }
-  throw lastErr || new Error("모든 판결 경로가 닿지 않았어");
+  throw IS_APP_WEBVIEW
+    ? new Error("클로드 '앱' 안에서는 판결 길이 막혀 있어(앱의 제한) — 사파리에서 claude.ai를 열거나, PC에서 물어봐 줘")
+    : (lastErr || new Error("모든 판결 경로가 닿지 않았어"));
 }
 
 /* ═══════════════ 앱 ═══════════════ */

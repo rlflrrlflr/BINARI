@@ -78,6 +78,29 @@ const b = await chromium.launch();
   await page.close();
 }
 
+// ── 시나리오 3: 클로드 '앱' 웹뷰(iOS UA, Safari 토큰 없음) — complete 봉인 + 정직한 안내 (2026-07 진단 실측 반영) ──
+{
+  const page = await b.newPage({
+    viewport: { width: 430, height: 932 },
+    userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
+  });
+  page.setDefaultTimeout(9000);
+  await page.addInitScript(() => {
+    window.__completeCalled = false;
+    window.claude = { complete: async () => { window.__completeCalled = true; throw new Error("Invalid response format"); } };
+  });
+  await page.route("https://api.anthropic.com/**", (route) => route.abort());   // 앱처럼 직접 호출도 차단
+  await onboard(page);
+  await page.locator("textarea.qbox").fill("전남친에게 연락할까?"); await page.waitForTimeout(300);
+  await page.getByRole("button", { name: "가볍게 물을래" }).click();
+  let errTxt = "";
+  for (let i = 0; i < 30; i++) { errTxt = (await page.locator(".err").allTextContents()).join(""); if (errTxt) break; await page.waitForTimeout(300); }
+  ck("S3 앱 웹뷰: complete 호출 안 함(아티팩트 사망 방지)", (await page.evaluate(() => window.__completeCalled)) === false);
+  ck("S3 앱 웹뷰: 정직한 안내 표시", errTxt.includes("사파리"), errTxt.slice(0, 80));
+  ck("S3 앱 웹뷰: 재시도 UI 생존", await page.getByRole("button", { name: "가볍게 물을래" }).isVisible());
+  await page.close();
+}
+
 await b.close();
 const f = R.filter((x) => !x).length;
 console.log(`\n=== 판결 경로: ${R.length - f}/${R.length} PASS ===`);
