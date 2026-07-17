@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 
 const appDir = join(dirname(fileURLToPath(import.meta.url)), "..");
 execSync("npx esbuild src/App.jsx --format=esm --jsx=automatic --outfile=.mansae-test.tmp.mjs", { cwd: appDir });
-const { calcSaju, sunLongitude, equationOfTime, cityLon } = await import(join(appDir, ".mansae-test.tmp.mjs"));
+const { calcSaju, sunLongitude, equationOfTime, cityLon, moonLongitude, tzolkin } = await import(join(appDir, ".mansae-test.tmp.mjs"));
 
 const results = [];
 const check = (name, pass, note = "") => { results.push(pass); console.log(`${pass ? "PASS" : "FAIL"} — ${name}${note ? " · " + note : ""}`); };
@@ -46,6 +46,20 @@ check("도시 매핑: 부산 129.08 / 미입력 서울", cityLon("부산 해운�
 const seoul = calcSaju(1993, 7, 15, 15, 25, false, cityLon("서울"));
 const busan = calcSaju(1993, 7, 15, 15, 25, false, cityLon("부산"));
 check("시주 계산 정상(서울·부산 모두 산출)", !!seoul.pillars.시 && !!busan.pillars.시, `서울 ${seoul.pillars.시} / 부산 ${busan.pillars.시}`);
+
+// 8. 달 황경 — 식(蝕)은 태양-달 정렬의 절대 검증: 2000-01-21 04:44 UT 개기월식(충), 2000-02-05 13:03 UT 신월(합)
+const diff180 = (a, b) => Math.abs((((a - b) % 360) + 540) % 360 - 180);
+const oppo = diff180(moonLongitude(2451564.697), sunLongitude(2451564.697) + 180);
+const conj = diff180(moonLongitude(2451580.044), sunLongitude(2451580.044));
+check("달 황경: 월식 때 태양+180° 정렬", oppo < 1.5, oppo.toFixed(2) + "° 오차");
+check("달 황경: 신월 때 태양과 합", conj < 1.5, conj.toFixed(2) + "° 오차");
+
+// 9. 마야 촐킨 — 공표된 앵커: 2000-01-01(JDN 2451545) = 11 이크
+const tz = tzolkin(2451545);
+check("촐킨: 2000-01-01 = 11 이크(바람)", tz.tone === 11 && tz.sign.includes("이크"), `${tz.tone} ${tz.sign}`);
+
+// 10. 납음오행 — 1990(경오년) = 노방토
+check("납음: 경오년 = 노방토(길가의 흙)", (calcSaju(1990, 7, 15, 12, 0, false).nayin || "").includes("노방토"));
 
 execSync("rm -f .mansae-test.tmp.mjs", { cwd: appDir });
 const fails = results.filter(r => !r).length;
