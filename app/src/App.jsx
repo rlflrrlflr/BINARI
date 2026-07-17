@@ -23,6 +23,8 @@ import { useState, useRef, useEffect } from "react";
    v18: ①듀얼 모드 API — /api/judge(배포) 없으면 직접 호출로 자동 폴백(아티팩트 호환 복구) ②저장 안전 셈(localStorage 차단 시 메모리 강등)
         ③모를 권리 — 질문 범위만 답하는 프롬프트 규칙 / 토정비결 옵트인 접기 / 아침 문안 노크형(청해야 펼친다)
    v19(모바일): 질문칸 박스화(파티클에 안 묻힘·iOS 줌 방지 16px)·좌우 풀폭(모바일 여백 축소)
+   v19(아티팩트 복구): 판결 경로 3-way — window.claude.complete(아티팩트 내장 API·최우선) → /api/judge(배포) → 직접호출.
+        아티팩트에선 배포 없이도 판결이 물린다(사용자 지적 반영: '이전엔 아티팩트에서 됐다')
    v18(이펙트): 금 폼 containment(경계 내 회전·왕복 빛살 — 폭발 금지) · 코어 가산/페이드 평형 조정(백색 포화 제거·색 보존)
         · 텍스트 가독 플레이트 + 질문 패널 그라데이션(수호신 위 글자 겹침 해소)
    정정: 토정비결은 v11부터 구현·사용 중(과거 '보류' 주석은 낡은 정보) · 손없는날은 미구현 */
@@ -599,9 +601,22 @@ async function callDirect(system, messages, maxTokens) {
   });
   return r.json();
 }
+/* v19: 아티팩트 내장 API — window.claude.complete(prompt)는 문자열 프롬프트 in / 문자열 out.
+   키·배포 없이 아티팩트 런타임이 호출을 물어준다. system+messages를 한 프롬프트로 병합. */
+function hasComplete() { return typeof window !== "undefined" && window.claude && typeof window.claude.complete === "function"; }
+async function callComplete(system, messages, maxTokens) {
+  const sysText = Array.isArray(system) ? system.map(s => s.text).join("\n") : String(system);
+  const convo = messages.map(m => (m.role === "assistant" ? "수호신: " : "너: ") + (typeof m.content === "string" ? m.content : "")).join("\n\n");
+  const prompt = sysText + "\n\n═══ 대화 ═══\n" + convo + "\n\n(반드시 위 지시의 JSON만, 백틱·서문 없이 출력)";
+  const raw = await window.claude.complete(prompt);
+  const txt = typeof raw === "string" ? raw : (raw && (raw.completion != null ? raw.completion : raw.content && raw.content[0] && raw.content[0].text)) || String(raw);
+  return { content: [{ type: "text", text: txt }] };
+}
 async function callClaude(system, messages, maxTokens) {
   let data;
-  if (API_MODE === "direct") data = await callDirect(system, messages, maxTokens);
+  if (API_MODE === null) API_MODE = hasComplete() ? "complete" : "auto";
+  if (API_MODE === "complete") data = await callComplete(system, messages, maxTokens);
+  else if (API_MODE === "direct") data = await callDirect(system, messages, maxTokens);
   else if (API_MODE === "server") data = await callServer(system, messages, maxTokens);
   else {
     try { data = await callServer(system, messages, maxTokens); API_MODE = "server"; }
