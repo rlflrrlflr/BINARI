@@ -43,11 +43,11 @@ try {
 
   // 4. 가치여정 8→4→1
   await page.waitForTimeout(700);
-  for (const v of ["안정", "성장", "자유", "인정", "관계", "성취", "즐거움", "의미"]) await page.getByRole("button", { name: v, exact: true }).click();
-  await page.getByRole("button", { name: "여덟 개 골랐어" }).click();
+  for (const v of ["안정", "성장", "자유", "인정", "관계", "성취"]) await page.getByRole("button", { name: v, exact: true }).click();
+  await page.getByRole("button", { name: "여섯 개 골랐어" }).click();
   await page.waitForTimeout(500);
-  for (const v of ["안정", "성장", "자유", "인정"]) await page.getByRole("button", { name: v, exact: true }).click();
-  await page.getByRole("button", { name: "넷을 남겼어" }).click();
+  for (const v of ["안정", "성장", "자유"]) await page.getByRole("button", { name: v, exact: true }).click();
+  await page.getByRole("button", { name: "셋을 남겼어" }).click();
   await page.waitForTimeout(500);
   await page.getByRole("button", { name: "안정", exact: true }).click();
   await shot("04_values");
