@@ -22,6 +22,7 @@ import { useState, useRef, useEffect } from "react";
    v16(B7): 스트릭 최소형 — "수호신과 연결된 지 N일째" 방문일 카운터만(게임화 없음)
    v18: ①듀얼 모드 API — /api/judge(배포) 없으면 직접 호출로 자동 폴백(아티팩트 호환 복구) ②저장 안전 셈(localStorage 차단 시 메모리 강등)
         ③모를 권리 — 질문 범위만 답하는 프롬프트 규칙 / 토정비결 옵트인 접기 / 아침 문안 노크형(청해야 펼친다)
+   v19(모바일): 질문칸 박스화(파티클에 안 묻힘·iOS 줌 방지 16px)·좌우 풀폭(모바일 여백 축소)
    v18(이펙트): 금 폼 containment(경계 내 회전·왕복 빛살 — 폭발 금지) · 코어 가산/페이드 평형 조정(백색 포화 제거·색 보존)
         · 텍스트 가독 플레이트 + 질문 패널 그라데이션(수호신 위 글자 겹침 해소)
    정정: 토정비결은 v11부터 구현·사용 중(과거 '보류' 주석은 낡은 정보) · 손없는날은 미구현 */
@@ -1119,9 +1120,9 @@ const CSS = `
 @keyframes haloPulse{0%,100%{filter:drop-shadow(0 0 26px rgba(245,217,139,.14))}50%{filter:drop-shadow(0 0 46px rgba(245,217,139,.34))}}
 .halo.dimmed{opacity:.32;filter:blur(2px) drop-shadow(0 0 30px rgba(245,217,139,.2));transition:opacity .6s,filter .6s}
 .gintro{font-size:15px;line-height:1.8;margin:4px 0;color:#e0d6ef}.gintro.dim{color:#9d8fb5;font-size:14px;margin-bottom:14px}
-.qbox{width:100%;background:transparent;border:none;border-bottom:1px solid rgba(245,217,139,.35);color:#f0e2b8;padding:12px 4px;font-size:15.5px;font-family:inherit;resize:none;line-height:1.7;margin-bottom:14px;text-align:center;transition:border-color .3s,box-shadow .3s}
-.qbox::placeholder{color:#4d445f}
-.qbox:focus{outline:none;border-bottom-color:#ffe9ad;box-shadow:0 14px 20px -16px rgba(245,217,139,.6)}
+.qbox{width:100%;background:rgba(16,12,26,.82);border:1px solid rgba(245,217,139,.45);border-radius:14px;color:#f0e2b8;padding:14px 14px;font-size:16px;font-family:inherit;resize:none;line-height:1.6;margin-bottom:14px;text-align:center;transition:border-color .3s,box-shadow .3s;box-shadow:0 8px 28px rgba(0,0,0,.5)}
+.qbox::placeholder{color:#8a7f95}
+.qbox:focus{outline:none;border-color:#ffe9ad;box-shadow:0 0 0 2px rgba(245,217,139,.22),0 8px 28px rgba(0,0,0,.5)}
 .w100{width:100%;display:flex;flex-direction:column;align-items:center}
 .gtext{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;pointer-events:none;padding:0 34px}
 .gtext.up{padding-bottom:150px}
@@ -1201,6 +1202,7 @@ const CSS = `
 .vlogq{margin:0;font-size:12.5px;color:#cbc0dd;line-height:1.5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .vlogmeta{margin:3px 0 0;font-family:sans-serif;font-size:10px;color:#8a7f95}
 .vlogmeta b{font-weight:600}.lgo{color:#3dc98f}.lstop{color:#e05a5a}.lhold{color:#7f8fd4}
+@media(max-width:520px){.stage{padding:20px 10px 72px}.scene{max-width:100%}.gpanel{width:min(95vw,470px);padding:20px 12px 10px}.grid16{gap:6px}}
 @media(prefers-reduced-motion:reduce){.fade,.line,.spark,.mcard,.chip.on,.halo.busy,.forming,.persp.cardIn,.hline .mv,.rv,.gateflash{animation:none;transition:none;opacity:1;transform:none}}
 `;
 
