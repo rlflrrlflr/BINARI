@@ -23,6 +23,7 @@ import { useState, useRef, useEffect } from "react";
    v18: ①듀얼 모드 API — /api/judge(배포) 없으면 직접 호출로 자동 폴백(아티팩트 호환 복구) ②저장 안전 셈(localStorage 차단 시 메모리 강등)
         ③모를 권리 — 질문 범위만 답하는 프롬프트 규칙 / 토정비결 옵트인 접기 / 아침 문안 노크형(청해야 펼친다)
    v19(모바일): 질문칸 박스화(파티클에 안 묻힘·iOS 줌 방지 16px)·좌우 풀폭(모바일 여백 축소)
+   v20(QC): 판결 폭포수 — 실패 시 complete→server→direct 자동 이월(쓰레기 응답·파싱 실패 포함). 진단 아티팩트 동봉
    v19(아티팩트 복구): 판결 경로 3-way — window.claude.complete(아티팩트 내장 API·최우선) → /api/judge(배포) → 직접호출.
         아티팩트에선 배포 없이도 판결이 물린다(사용자 지적 반영: '이전엔 아티팩트에서 됐다')
    v18(이펙트): 금 폼 containment(경계 내 회전·왕복 빛살 — 폭발 금지) · 코어 가산/페이드 평형 조정(백색 포화 제거·색 보존)
@@ -612,19 +613,25 @@ async function callComplete(system, messages, maxTokens) {
   const txt = typeof raw === "string" ? raw : (raw && (raw.completion != null ? raw.completion : raw.content && raw.content[0] && raw.content[0].text)) || String(raw);
   return { content: [{ type: "text", text: txt }] };
 }
+/* v20(QC): 폭포수 — 한 경로가 어떤 이유로든 실패하면(호출 오류·쓰레기 응답·파싱 실패) 다음 경로로 자동 이동.
+   성공한 경로만 기억, 기억한 경로가 실패하면 기억을 버리고 전체 재탐색. 모바일 브리지가 죽어도 다른 길로 판결이 간다. */
 async function callClaude(system, messages, maxTokens) {
-  let data;
-  if (API_MODE === null) API_MODE = hasComplete() ? "complete" : "auto";
-  if (API_MODE === "complete") data = await callComplete(system, messages, maxTokens);
-  else if (API_MODE === "direct") data = await callDirect(system, messages, maxTokens);
-  else if (API_MODE === "server") data = await callServer(system, messages, maxTokens);
-  else {
-    try { data = await callServer(system, messages, maxTokens); API_MODE = "server"; }
-    catch (_) { data = await callDirect(system, messages, maxTokens); API_MODE = "direct"; }
+  const all = hasComplete() ? ["complete", "server", "direct"] : ["server", "direct"];
+  const order = API_MODE && all.includes(API_MODE) ? [API_MODE, ...all.filter((m) => m !== API_MODE)] : all;
+  let lastErr = null;
+  for (const mode of order) {
+    try {
+      const data = mode === "complete" ? await callComplete(system, messages, maxTokens)
+        : mode === "server" ? await callServer(system, messages, maxTokens)
+        : await callDirect(system, messages, maxTokens);
+      if (!data || data.type === "error" || data.error) throw new Error((data && data.error && data.error.message) || "API 오류");
+      const txt = (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n");
+      const out = { json: repairJSON(txt), txt };   // 파싱 실패도 이 경로의 실패로 간주 → 다음 경로
+      API_MODE = mode;
+      return out;
+    } catch (e) { lastErr = e; if (API_MODE === mode) API_MODE = null; }
   }
-  if (data.type === "error" || data.error) throw new Error(data.error?.message || "API 오류");
-  const txt = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("\n");
-  return { json: repairJSON(txt), txt };
+  throw lastErr || new Error("모든 판결 경로가 닿지 않았어");
 }
 
 /* ═══════════════ 앱 ═══════════════ */
