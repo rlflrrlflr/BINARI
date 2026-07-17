@@ -36,7 +36,7 @@ try {
 
   // 3. 회상 리빌 → MBTI/혈액형
   await page.waitForSelector("text=요즘의 너는", { timeout: 10000 });
-  await page.getByRole("button", { name: "INFP", exact: true }).click();
+  for (const t of ["혼자일 때 차오르는 쪽", "아직 오지 않은 것을 보는 쪽", "마음이 먼저 움직이는 쪽", "열어둔 길이 편한 쪽"]) await page.getByRole("button", { name: t }).click();
   await page.getByRole("button", { name: "B형", exact: true }).click();
   await shot("03_reveal");
   await page.getByRole("button", { name: "마음의 방으로" }).click();
