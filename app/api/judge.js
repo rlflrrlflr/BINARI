@@ -21,7 +21,7 @@ export default async function handler(req, res) {
     const r = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({ model: process.env.BINARI_MODEL || "claude-sonnet-4-6", max_tokens: mt, system, messages }),
+      body: JSON.stringify({ model: process.env.BINARI_MODEL || "claude-sonnet-5", max_tokens: mt, system, messages, thinking: { type: "disabled" } }),
     });
     const data = await r.json();
     // 북극성 계측: 카테고리(A/B/C)·방향·토큰 사용량만 로그 — 질문 원문은 남기지 않는다

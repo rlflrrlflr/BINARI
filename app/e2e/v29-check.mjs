@@ -27,14 +27,17 @@ const tins = page.locator("input.in:not(.wide)");
 await tins.nth(0).fill("14"); await tins.nth(1).fill("30");
 await page.getByRole("button", { name: "기억났어" }).click();
 await page.getByRole("button", { name: "하늘을 열기" }).click();
-await page.waitForSelector("text=요즘의 너는", { timeout: 10000 });
 
-// ── ① 회상 나레이션: 선택 전 노출 → 첫 선택 후 숨김 ──
-const mentionBefore = await page.getByText("너였지", { exact: false }).isVisible().catch(() => false);
-ck("① 선택 전 회상 나레이션 노출", mentionBefore);
-await page.getByRole("button", { name: "혼자일 때 차오르는 쪽" }).click(); await page.waitForTimeout(300);
+// ── ① v30 순차: 회상 나레이션 단계 → "응, 기억나" 탭 → 문항 단계(나레이션 숨김) ──
+await page.waitForSelector("text=너였지", { timeout: 12000 });
+const mentionOnRecall = await page.getByText("너였지", { exact: false }).isVisible().catch(() => false);
+ck("① 회상 단계에서 나레이션 노출", mentionOnRecall);
+ck("① 회상 단계에선 문항 미노출(순차)", (await page.getByText("요즘의 너는", { exact: false }).count()) === 0);
+await page.getByRole("button", { name: "응, 기억나" }).click();
+await page.waitForSelector("text=요즘의 너는", { timeout: 8000 });
 const mentionAfter = await page.getByText("너였지", { exact: false }).isVisible().catch(() => false);
-ck("① 첫 선택 후 회상 나레이션 숨김", !mentionAfter);
+ck("① 문항 단계에선 나레이션 숨김", !mentionAfter);
+await page.getByRole("button", { name: "혼자일 때 차오르는 쪽" }).click(); await page.waitForTimeout(300);
 const q2Visible = await page.getByText("네 눈은 어디를", { exact: false }).isVisible().catch(() => false);
 ck("① 선택은 계속 진행(2번째 문항 노출)", q2Visible);
 

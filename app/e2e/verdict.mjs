@@ -21,6 +21,7 @@ async function onboard(page) {
   await tins.nth(0).fill("14"); await tins.nth(1).fill("30");
   await page.getByRole("button", { name: "기억났어" }).click();
   await page.getByRole("button", { name: "하늘을 열기" }).click();
+  await page.getByRole("button", { name: "응, 기억나" }).click({ timeout: 12000 }); // v30: 회상 나레이션 넘기기
   await page.waitForSelector("text=요즘의 너는", { timeout: 10000 });
   for (const t of ["혼자일 때 차오르는 쪽", "아직 오지 않은 것을 보는 쪽", "마음이 먼저 움직이는 쪽", "열어둔 길이 편한 쪽"]) await page.getByRole("button", { name: t }).click(); // v24: 순차 문항
   await page.getByRole("button", { name: "마음의 방으로" }).click(); await page.waitForTimeout(500);

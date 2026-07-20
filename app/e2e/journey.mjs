@@ -33,6 +33,7 @@ await shot("j02c_흐름장면");
 await page.getByRole("button", { name: "여", exact: true }).click();
 await page.getByRole("button", { name: "하늘을 열기" }).click();
 await page.waitForTimeout(1600); await shot("j03_리빌_중간");
+await page.getByRole("button", { name: "응, 기억나" }).click({ timeout: 15000 }); // v30: 회상 나레이션 넘기기
 await page.waitForSelector("text=요즘의 너는", { timeout: 15000 });
 await page.waitForTimeout(400); await shot("j04_리빌완료_성격질문");
 // MBTI 순차 문항 (v24) — 두 번째 기억 화면을 한 컷 담는다
