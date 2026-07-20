@@ -27,11 +27,10 @@ await page.getByRole("button", { name: "하늘을 열기" }).click();
 await page.waitForTimeout(1600); await shot("j03_리빌_중간");
 await page.waitForSelector("text=요즘의 너는", { timeout: 15000 });
 await page.waitForTimeout(400); await shot("j04_리빌완료_성격질문");
-// MBTI 선택 (그리드 또는 픽션형 어느 쪽이든 대응)
-const grid = await page.getByRole("button", { name: "INFP", exact: true }).count();
-if (grid) { await page.getByRole("button", { name: "INFP", exact: true }).click(); }
-else { for (const t of ["혼자", "오지 않은", "마음이", "열어둔"]) await page.getByRole("button", { name: new RegExp(t) }).first().click(); }
-await page.getByRole("button", { name: "B형", exact: true }).click();
+// MBTI 순차 문항 (v24) — 두 번째 기억 화면을 한 컷 담는다
+await page.getByRole("button", { name: /혼자/ }).first().click();
+await page.waitForTimeout(350); await shot("j04b_성격_기억2");
+for (const t of ["오지 않은", "마음이", "열어둔"]) await page.getByRole("button", { name: new RegExp(t) }).first().click();
 await page.waitForTimeout(300); await shot("j05_성격선택후");
 await page.getByRole("button", { name: "마음의 방으로" }).click(); await page.waitForTimeout(600);
 await shot("j06_가치_마음의방");
