@@ -23,6 +23,8 @@ import { useState, useRef, useEffect } from "react";
    v18: ①듀얼 모드 API — /api/judge(배포) 없으면 직접 호출로 자동 폴백(아티팩트 호환 복구) ②저장 안전 셈(localStorage 차단 시 메모리 강등)
         ③모를 권리 — 질문 범위만 답하는 프롬프트 규칙 / 토정비결 옵트인 접기 / 아침 문안 노크형(청해야 펼친다)
    v19(모바일): 질문칸 박스화(파티클에 안 묻힘·iOS 줌 방지 16px)·좌우 풀폭(모바일 여백 축소)
+   v27(다양성): 실루엣 축 확장 — 팔 수(라이프패스 3~7)를 5형태 전부에(불꽃 혀·물결 층·흙 봉우리 개수), E/I=크기, T/F=입자 질감. 정령 위성(혈액형 잔재) 제거
+   v26(도입부): 동화 영화 장면화 — 서식 해체 4장면, 조각 보태기, 카드 조기 뒤집기 '근거 모으는 중'
    v25(정보): 이름(호칭) — 수호신이 이름을 부른다 · 성별→대운(현재 인생 10년 흐름, 타이밍 층·별도 축 신설 없이 사주에 흡수)
    v25(정확성): 음력 생일 입력 — 음/양력 토글+윤달 체크, 음력이면 양력으로 정규화 후 사주 계산(간절기·설날생 오판 방지)
    v24(성격): MBTI 순차 문항화 — 기억 1/4씩, '아까 걸로 돌아갈래' · 혈액형 제거(판결 미반영 지표 정리, 정령은 달 별자리로 재배선)
@@ -369,7 +371,7 @@ function GuardianCanvas({ saju, zo, mbti, num, moon, agitateRef, size = 340 }) {
     // 축6 헤일로(전체 밝기·크기) = 태어난 밤의 달 위상
     const MOON_I = { 새달: 0, 초승달: 1, 상현달: 2, "차오르는 달": 3, 보름달: 4, "기우는 달": 3, 하현달: 2, 그믐달: 1 };
     const lum = 0.55 + (MOON_I[moon?.name] ?? 2) * 0.11; // 0.55~0.99
-    const w = size, cx = w / 2, cy = w / 2, R = w * 0.42;
+    const w = size, cx = w / 2, cy = w / 2, R = w * 0.42 * (E ? 1.06 : 0.9); // v27: 외향=확장·내향=응축
     // v4: 어셈블 연출 — 화면 가장자리에 흩어진 채 시작, 난류를 타고 제 자리로 모인다 (v14: 시드 고정)
     const ps = Array.from({ length: n }, (_, i) => {
       const sa = srnd() * Math.PI * 2, sr = R * (1.1 + srnd() * 0.9);
@@ -386,13 +388,15 @@ function GuardianCanvas({ saju, zo, mbti, num, moon, agitateRef, size = 340 }) {
     const easeOut = (x) => 1 - Math.pow(1 - x, 3);
     const place = (p) => {
       const g = 0.6 + 0.4 * Math.sin(t * 1.2 + p.ph);
-      if (form === "화") { // 불: 아래→위 솟는 기둥
+      if (form === "화") { // 불: arms개 불꽃 혀가 솟는다 (라이프패스=혀 수)
         const rise = (p.v + t * 0.12 * (0.5 + p.s)) % 1;
-        const sway = Math.sin(rise * 6 + t * 2 + p.ph) * (0.5 - Math.abs(p.u - 0.5)) * R * 0.9;
-        return [cx + (p.u - 0.5) * R * 1.1 * (1 - rise * 0.6) + sway, cy + R * 0.95 - rise * R * 2.1, 1 - rise];
+        const armX = (p.arm - (arms - 1) / 2) / Math.max(arms, 1);
+        const sway = Math.sin(rise * 6 + t * 2 + p.ph) * (0.5 - Math.abs(p.u - 0.5)) * R * 0.5;
+        return [cx + armX * R * 1.5 + (p.u - 0.5) * R * 0.42 * (1 - rise * 0.6) + sway, cy + R * 0.95 - rise * R * 2.1, 1 - rise];
       }
-      if (form === "수") { // 물: 좌우 물결 층
-        return [cx + (p.u - 0.5) * R * 2.1, cy + (p.v - 0.5) * R * 1.0 + Math.sin(p.u * 8 + t * 1.8 + p.ph) * R * 0.22, g];
+      if (form === "수") { // 물: arms개 물결 층 (라이프패스=층 수)
+        const band = (p.arm - (arms - 1) / 2) / Math.max(arms, 1);
+        return [cx + (p.u - 0.5) * R * 2.1, cy + band * R * 1.55 + (p.v - 0.5) * R * 0.24 + Math.sin(p.u * 8 + t * 1.8 + p.ph) * R * 0.15, g];
       }
       if (form === "목") { // 나무: arms개 갈래로 가지치며 퍼짐 (라이프패스=갈래 수)
         const spread = Math.min(arms, 7), ang = -Math.PI / 2 + ((p.arm % spread) - (spread - 1) / 2) * 0.42 + Math.sin(t + p.ph) * 0.08, len = p.v * R * 1.9;
@@ -405,7 +409,9 @@ function GuardianCanvas({ saju, zo, mbti, num, moon, agitateRef, size = 340 }) {
         const rr = (0.14 + 0.78 * p.v + 0.05 * Math.sin(t * 1.3 + p.ph)) * R * lead;
         return [cx + Math.cos(ang) * rr, cy + Math.sin(ang) * rr * 0.94, (0.45 + 0.55 * (1 - p.v)) * (p.arm === 0 ? 1.1 : 1)];
       }
-      const ang = p.u * Math.PI * 2, rr = Math.pow(p.v, 0.5) * R * 0.95; // 흙: 조밀한 구
+      const ang = p.u * Math.PI * 2; // 흙: arms갈래로 부푼 덩어리 (라이프패스=봉우리 수)
+      const lobe = 1 + 0.24 * Math.cos(arms * (ang + t * 0.12));
+      const rr = Math.pow(p.v, 0.5) * R * 0.9 * lobe;
       return [cx + Math.cos(ang + t * 0.15) * rr, cy + Math.sin(ang + t * 0.15) * rr * 0.92, g];
     };
     const draw = () => {
@@ -443,15 +449,8 @@ function GuardianCanvas({ saju, zo, mbti, num, moon, agitateRef, size = 340 }) {
         const tw = N ? (0.55 + 0.45 * Math.sin(t * 5 + p.o * 7)) : 0.9;
         ctx.globalAlpha = Math.max(0, depth) * tw * (0.4 + p.s * 0.5) * (0.3 + 0.7 * k) * lum;
         ctx.fillStyle = p.acc ? accent : (p.o % 3 < 1 ? c2 : c1);
-        const r = 0.7 + p.s * 1.1;                                 // fillRect가 arc보다 빠름(증량 감당)
+        const r = (0.7 + p.s * 1.1) * (T ? 0.84 : 1.24);           // v27: 사고=날카롭게·감정=부드럽게(fillRect가 arc보다 빠름)
         ctx.fillRect(p.x - r * 0.5, p.y - r * 0.5, r, r);
-      }
-      {                                                          // 정령 — 달의 기운을 빌려 곁을 도는 은빛 위성
-        const sa = t * 1.6, sx = cx + Math.cos(sa) * R * 1.0, sy = cy + Math.sin(sa) * R * 0.8;
-        ctx.globalAlpha = 0.5 + 0.2 * Math.sin(t * 3);
-        const sg = ctx.createRadialGradient(sx, sy, 0, sx, sy, 5);
-        sg.addColorStop(0, "#cdd6ff"); sg.addColorStop(1, "transparent");
-        ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(sx, sy, 5, 0, 7); ctx.fill();
       }
       ctx.globalAlpha = 1;
       raf = requestAnimationFrame(draw);
@@ -1096,9 +1095,9 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
       {step === 2 && saju && (
         <section className="scene fade">
           <div className="halo">
-            <DustOrb size={210} stage={mbti ? 2 : 1} tint={saju ? EL_COLOR[saju.main] : undefined} />
+            <DustOrb size={210} stage={1 + Object.keys(dims).length * 0.5} tint={saju ? EL_COLOR[saju.main] : undefined} />
             <div className="gtext">
-              {reveal >= 5 && <p className="gname fade">기억이 다 돌아왔어</p>}
+              {reveal >= 5 && mbti && <p className="gname fade">기억이 다 돌아왔어</p>}
             </div>
           </div>
           {reveal >= 1 && reveal < 5 && (
@@ -1113,8 +1112,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
           {reveal >= 5 && (
             <div className="fade">
               <p className="mention">
-                그래 — {birth.name ? <><b>{birth.name}</b>, </> : ""}너는 원래 <b>{EL_TRAIT[saju.main]}</b> 사람이었지.<br />
-                때로는 {ZO_FLAW[zo.el]}지만,<br />
+                그래 — {birth.name ? <><b>{birth.name}</b>, </> : ""}원래 <b>{EL_TRAIT[saju.main]}</b> 너였지.<br />
                 <b>{MOON_DRIVE[moon.name]}</b> 모습이 늘 멋있었어.
               </p>
               <details className="refbox">
@@ -1127,7 +1125,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                 <p className="refline">{moon.read}</p>
                 <p className="refline">{LP_READ[num]}</p>
               </details>
-              <p className="sub2 mt">요즘의 너는 어떤 모습이야? — 내 기억이 맞는지, 하나씩 골라줘.</p>
+              <p className="sub2 mt">요즘의 너는? — 하나씩 골라줘.</p>
               {(() => {
                 const qi = DIMQ.findIndex(([k]) => !dims[k]);
                 if (qi === -1) return (
@@ -1416,7 +1414,7 @@ const CSS = `
 .chip{font-family:inherit;font-size:12.5px;letter-spacing:.06em;color:#c9b98f;border:1px solid rgba(245,217,139,.3);border-radius:999px;padding:8px 18px;opacity:0;transform:translateY(8px);transition:all .7s ease}
 .chip.on{opacity:1;transform:none;animation:chipGlow 1.6s ease}
 @keyframes chipGlow{0%{box-shadow:0 0 0 rgba(245,217,139,0)}30%{box-shadow:0 0 18px rgba(245,217,139,.45)}100%{box-shadow:0 0 0 rgba(245,217,139,0)}}
-.mention{font-size:17px;line-height:2;color:#e8dff5;margin:22px 0 6px}
+.mention{font-size:14.5px;line-height:1.7;color:#e8dff5;margin:14px 0 4px}
 .mention b{color:#ffe9ad;font-weight:600}
 .refbox{width:100%;margin:10px 0 4px;font-family:sans-serif;font-size:12px;color:#8a7f95;text-align:left}
 .refbox summary{cursor:pointer;text-align:center;letter-spacing:.08em;color:#6f6580;list-style:none}
