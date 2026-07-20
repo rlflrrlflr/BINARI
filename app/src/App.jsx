@@ -551,13 +551,14 @@ void main(){
       +vec2(sin(s*8.0+t+a_r1.x),cos(s*7.0-t))*0.05*s*u_chaos;
     depth=0.5+0.5*(1.0-s);
     v_a=(0.4+0.6*(1.0-s*0.55))*(0.4+0.6*smoothstep(0.0,0.2,s));
-  } else if(u_form<3.5){ // 금 — 궤도 빛줄기 (리드 가닥 비대칭)
-    float lead=strand<0.5?1.14:1.0-mod(strand,3.0)*0.05;
-    float ang=sOff*6.2832+t*0.22+a_r0.y*1.4;
-    float rr=(0.2+0.68*a_r0.z+0.05*sin(t*1.2+a_r1.x))*lead;
-    p=vec2(cos(ang)*rr, sin(ang)*rr*0.9);
-    depth=0.45+0.55*(1.0-a_r0.z);
-    v_a=0.45+0.55*(1.0-a_r0.z*0.7);
+  } else if(u_form<3.5){ // 금 — 나선 빛줄기 (은하 팔: 구멍·오므림 제거, 입자가 팔 따라 바깥으로 흐름)
+    float arm=mod(strand,u_arms);
+    float sf=fract(a_r0.z+t*0.025*(0.6+a_r0.y));
+    float r=mix(0.1,0.98,pow(sf,0.85))*(0.9+0.2*fract(sin(arm*7.13)*17.9));
+    float ang=arm/u_arms*6.2832+sf*(1.5+u_twist*0.45)+t*0.2+(a_r0.x-0.5)*(0.12+0.55*sf)/max(r,0.2);
+    p=vec2(cos(ang),sin(ang)*0.92)*r;
+    depth=0.45+0.55*(1.0-sf);
+    v_a=(0.5+0.5*(1.0-sf*0.5))*smoothstep(0.0,0.1,sf)*smoothstep(1.0,0.82,sf);
   } else { // 토 — 중심 없는 난류 융기
     float rr=pow(a_r0.z,0.75)*0.88;
     float ang=a_r0.x*6.2832+t*0.05;
