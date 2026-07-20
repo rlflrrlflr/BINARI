@@ -23,6 +23,7 @@ import { useState, useRef, useEffect } from "react";
    v18: ①듀얼 모드 API — /api/judge(배포) 없으면 직접 호출로 자동 폴백(아티팩트 호환 복구) ②저장 안전 셈(localStorage 차단 시 메모리 강등)
         ③모를 권리 — 질문 범위만 답하는 프롬프트 규칙 / 토정비결 옵트인 접기 / 아침 문안 노크형(청해야 펼친다)
    v19(모바일): 질문칸 박스화(파티클에 안 묻힘·iOS 줌 방지 16px)·좌우 풀폭(모바일 여백 축소)
+   v28(지문): 심화 지표를 시각으로 — 납음(30)=움직임 결·촐킨(20날개×13톤)=코어 문양·나크샤트라(27)=강조색·대운=현재 아우라. 판결 방향에 수호신 반응(연기)
    v27(다양성): 실루엣 축 확장 — 팔 수(라이프패스 3~7)를 5형태 전부에(불꽃 혀·물결 층·흙 봉우리 개수), E/I=크기, T/F=입자 질감. 정령 위성(혈액형 잔재) 제거
    v26(도입부): 동화 영화 장면화 — 서식 해체 4장면, 조각 보태기, 카드 조기 뒤집기 '근거 모으는 중'
    v25(정보): 이름(호칭) — 수호신이 이름을 부른다 · 성별→대운(현재 인생 10년 흐름, 타이밍 층·별도 축 신설 없이 사주에 흡수)
@@ -343,7 +344,7 @@ function _hslToHex(h,s,l){h=(((h%360)+360)%360)/360;const q=l<0.5?l*(1+s):l+s-l*
 const rotHue=(hex,deg)=>{const[h,s,l]=_hexToHsl(hex);return _hslToHex(h+deg,s,l);};
 const seedRnd=(str)=>{let h=7;for(const c of String(str))h=(h*31+c.charCodeAt(0))>>>0;return()=>((h=(h*1664525+1013904223)>>>0)/2**32);};
 
-function GuardianCanvas({ saju, zo, mbti, num, moon, agitateRef, size = 340 }) {
+function GuardianCanvas({ saju, zo, mbti, num, moon, birth, agitateRef, reactRef, size = 340 }) {
   const ref = useRef(null);
   useEffect(() => {
     const cv = ref.current; if (!cv) return;
@@ -353,6 +354,16 @@ function GuardianCanvas({ saju, zo, mbti, num, moon, agitateRef, size = 340 }) {
     // 개인 시드: 생일·성격·별자리 전체에서 파생 → 입자 배치·hue 지터가 사람마다 고정
     const seedStr = `${saju.main}${zo?.name || ""}${mbti || ""}${num || ""}${saju.pillars?.일 || ""}`;
     const srnd = seedRnd(seedStr);
+    // ── v28: 심화 지표 → 서로 다른 시각 채널 (사주 5형태 안에서 사람마다 유일해지도록) ──
+    const _b = birth || {};
+    const _jd = _b.y ? jdn(+_b.y, +_b.m, +_b.d) : 0, _nn = _jd - 584283;
+    const tzSign = (((_nn + 19) % 20) + 20) % 20;               // 마야 20날개 → 코어 문양
+    const tzTone = (((_nn + 3) % 13) + 13) % 13 + 1;            // 13톤 → 코어 층·강도
+    const nayinIdx = Math.max(0, NAYIN.indexOf(saju.nayin));    // 납음 30 → 움직임 결
+    const nayFreq = 0.4 + (nayinIdx % 10) * 0.14, nayAmp = 0.32 + Math.floor(nayinIdx / 10) * 0.26;
+    let nakIdx = 0, duEl = null;
+    try { const _mp = moonPlacements(+_b.y, +_b.m, +_b.d, +_b.h || 12, +_b.min || 0, !!_b.noHour); nakIdx = Math.max(0, NAKSHATRA.indexOf(_mp.nakshatra)); } catch (_) {}
+    try { if (_b.sex) { const _du = daeun(+_b.y, +_b.m, +_b.d, _b.noHour ? 12 : +_b.h, _b.noHour || _b.min === "" ? 0 : +_b.min, !!_b.noHour, cityLon(_b.city), _b.sex === "M", new Date().getFullYear()); if (_du && !_du.pre) duEl = _du.el; } } catch (_) {}
     // 축1 형태 = 오행 주기운(5)
     const form = saju.main;
     // 축2 주색 = 오행 기본색을 별자리로 hue 회전(12) + 시드 지터 → 같은 오행도 색이 갈라짐
@@ -363,7 +374,7 @@ function GuardianCanvas({ saju, zo, mbti, num, moon, agitateRef, size = 340 }) {
     // 축3 강조색 = 사주 오행 분포 2순위 기운(개인의 실제 오행 비율 반영)
     const _order = Object.entries(saju.counts || {}).sort((a, b) => b[1] - a[1]).map(e => e[0]);
     const subEl = _order.find(e => e !== saju.main) || saju.main;
-    const accent = rotHue(EL_COLOR[subEl][1], zoDeg * 0.5);
+    const accent = rotHue(EL_COLOR[subEl][1], zoDeg * 0.5 + nakIdx * 5);   // v28: 나크샤트라 27 → 강조색 갈래
     // 축4 대칭수 = 수비학 라이프패스(구조적 지문)
     const lp = num || 5, arms = 3 + ((lp - 1) % 5);              // v23: 3~7 상한 — 다대칭=문양화 방지
     // 축5 밀도/반짝임/속도/질서 = MBTI (v17-A: 유속장 리라이트 — 입자 대폭 증량)
@@ -419,6 +430,15 @@ function GuardianCanvas({ saju, zo, mbti, num, moon, agitateRef, size = 340 }) {
       const age = (performance.now() - born) / 1000;         // 등장 후 경과(초)
       const agi = agitateRef && agitateRef.current ? 1 : 0;  // v6: 판결 직전 요동(게이트 열리기 전)
       const breathe = 0.9 + (0.1 + agi * 0.1) * Math.sin(t * (0.8 + agi * 5)); // 호흡 글로우(레퍼런스 A)
+      let gExpand = 0, gBright = 1;                          // v28: 판결 반응(연기)
+      if (reactRef && reactRef.current) {
+        const rt = (performance.now() - reactRef.current.t0) / 1000;
+        const env = Math.max(0, 1 - rt / 1.7) * Math.min(1, rt / 0.18);  // 0.18s 상승→1.7s 소멸
+        const dir = reactRef.current.dir;
+        if (dir === "GO") { gExpand = env * 0.5; gBright = 1 + env * 0.5; }          // 솟구쳐 펼침·밝아짐
+        else if (dir === "STOP") { gExpand = -env * 0.45; gBright = 1 - env * 0.55; } // 수축·어두워짐(가로막음)
+        else { gExpand = env * 0.1 * Math.sin(rt * 5); gBright = 1 - env * 0.12; }    // HOLD: 잔잔히 맥동(재움)
+      }
       // v17-A ① 잔상: 배경색을 칠하면 stage 그라디언트를 가리므로, destination-out으로
       //   알파만 서서히 빼 '빛이 그린 궤적'을 남긴다(투명 캔버스 유지). 요동 시 더 빨리 지워 반응성 확보.
       ctx.globalCompositeOperation = "destination-out";
@@ -434,10 +454,11 @@ function GuardianCanvas({ saju, zo, mbti, num, moon, agitateRef, size = 340 }) {
       //   오행 형태(place)로 스프링 복원 → 흐르면서도 형상을 유지. '살아있음'의 핵심인 방향·인과가 생긴다.
       for (let i = 0; i < ps.length; i++) {
         const p = ps[i];
-        const [tx, ty, depth] = place(p);
+        let [tx, ty, depth] = place(p);
+        if (gExpand) { tx = cx + (tx - cx) * (1 + gExpand); ty = cy + (ty - cy) * (1 + gExpand); }
         const k = easeOut(Math.max(0, Math.min(1, (age - p.dly) / 2.4)));
-        const fx = Math.sin(p.y * 0.012 + t * 0.9 + p.ph) + Math.sin(p.y * 0.022 - t * 0.6);
-        const fy = Math.cos(p.x * 0.013 - t * 0.8) + Math.cos(p.x * 0.019 + t * 0.5 + p.ph);
+        const fx = Math.sin(p.y * 0.012 + t * 0.9 + p.ph) + Math.sin(p.y * 0.022 - t * 0.6) + Math.sin(t * nayFreq + p.o) * nayAmp;
+        const fy = Math.cos(p.x * 0.013 - t * 0.8) + Math.cos(p.x * 0.019 + t * 0.5 + p.ph) + Math.cos(t * nayFreq * 1.1 + p.ph) * nayAmp;
         const flow = (0.16 + 0.55 * (1 - k)) * chaos * (0.5 + p.s); // 모이기 전 흐름 강, 모인 뒤 잔류
         const spring = 0.006 + 0.032 * k;                          // 모일수록 형태로 당김 강해짐
         const ax = (tx - p.x) * spring + fx * flow + (agi ? Math.sin(t * 9 + p.o) * 1.5 : 0);
@@ -447,17 +468,37 @@ function GuardianCanvas({ saju, zo, mbti, num, moon, agitateRef, size = 340 }) {
         if (sp > lim) { p.vx *= lim / sp; p.vy *= lim / sp; }
         p.x += p.vx; p.y += p.vy;
         const tw = N ? (0.55 + 0.45 * Math.sin(t * 5 + p.o * 7)) : 0.9;
-        ctx.globalAlpha = Math.max(0, depth) * tw * (0.4 + p.s * 0.5) * (0.3 + 0.7 * k) * lum;
+        ctx.globalAlpha = Math.max(0, depth) * tw * (0.4 + p.s * 0.5) * (0.3 + 0.7 * k) * lum * gBright;
         ctx.fillStyle = p.acc ? accent : (p.o % 3 < 1 ? c2 : c1);
         const r = (0.7 + p.s * 1.1) * (T ? 0.84 : 1.24);           // v27: 사고=날카롭게·감정=부드럽게(fillRect가 arc보다 빠름)
         ctx.fillRect(p.x - r * 0.5, p.y - r * 0.5, r, r);
+      }
+      if (duEl) {                                                // v28: 대운 — 현재 인생 계절의 기운색 아우라
+        const da = ctx.createRadialGradient(cx, cy, 1, cx, cy, R * 0.5 * breathe);
+        da.addColorStop(0, EL_COLOR[duEl][0] + "10"); da.addColorStop(1, "transparent");
+        ctx.globalAlpha = 1; ctx.fillStyle = da; ctx.beginPath(); ctx.arc(cx, cy, R * 0.5 * breathe, 0, 7); ctx.fill();
+      }
+      {                                                          // v28: 마야 촐킨 코어 문양 — 20날개=마디 수·13톤=층/강도 (사람마다 다른 심장)
+        const nodes = 3 + tzSign % 6, rings = 1 + Math.floor((tzTone - 1) / 5), crot = t * (0.28 + (tzSign % 4) * 0.14);
+        for (let ring = 0; ring < rings; ring++) {
+          const rr = R * (0.09 + ring * 0.065);
+          for (let kk = 0; kk < nodes; kk++) {
+            const a = crot * (ring % 2 ? -1 : 1) + (kk / nodes) * Math.PI * 2 + (tzSign % 5) * 0.31;
+            const nx = cx + Math.cos(a) * rr, ny = cy + Math.sin(a) * rr * 0.96;
+            const pz = 2.4 + tzTone * 0.16;
+            ctx.globalAlpha = Math.min(0.9, (0.32 + tzTone * 0.028) * (0.6 + 0.4 * Math.sin(t * 2 + kk + ring)) * lum);
+            const ng = ctx.createRadialGradient(nx, ny, 0, nx, ny, pz);
+            ng.addColorStop(0, c2); ng.addColorStop(0.5, c1); ng.addColorStop(1, "transparent");
+            ctx.fillStyle = ng; ctx.beginPath(); ctx.arc(nx, ny, pz, 0, 7); ctx.fill();
+          }
+        }
       }
       ctx.globalAlpha = 1;
       raf = requestAnimationFrame(draw);
     };
     draw();
     return () => cancelAnimationFrame(raf);
-  }, [saju, zo, mbti, size]);
+  }, [saju, zo, mbti, size, birth && birth.y, birth && birth.sex, birth && birth.name]);
   return <canvas ref={ref} width={size} height={size} style={{ display: "block" }} />;
 }
 
@@ -865,6 +906,8 @@ export default function App() {
   const [dailyOpen, setDailyOpen] = useState(false);          // v18: 아침 문안 노크형 — 청해야 펼친다
   const [tjOpen, setTjOpen] = useState(false);                // v18: 토정비결 옵트인
   const agitateRef = useRef(false);
+  const reactRef = useRef(null);                 // v28: 판결 방향(GO/STOP/HOLD) 반응
+  const [introSeen, setIntroSeen] = useState(false); // v28: 수호신 자기소개는 첫 만남 1회만
   const detailArgsRef = useRef(null);            // v16: 콜2 재시도용 인자 보관
 
   useEffect(() => { if (step === 3) { if (returning) { setPhase(1); return; } setPhase(0); const tm = setTimeout(() => setPhase(1), 3200); return () => clearTimeout(tm); } }, [step, returning]);
@@ -947,7 +990,7 @@ export default function App() {
 
   const judge = async (hi, quick = false) => {
     if (!q.trim() || busy) return;
-    setBusy(true); setErr(""); setRes(null); setDetail(null); setWhy(false); setFlip(false); setCardOn(false);
+    setBusy(true); setErr(""); setRes(null); setDetail(null); setWhy(false); setFlip(false); setCardOn(false); reactRef.current = null; setIntroSeen(true);
     try {
       const bio = biorhythm(+birth.y, +birth.m, +birth.d);
       const mp = moonPlacements(+birth.y, +birth.m, +birth.d, +birth.h || 12, +birth.min || 0, !!birth.noHour); // v22
@@ -974,7 +1017,9 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
       const { json: r1 } = await callClaude(system, [...priorConvo, concludeMsg], 320);
       // L1 등장 연출(짧게)
       agitateRef.current = true; setRes(r1);
-      setTimeout(() => { agitateRef.current = false; setCardOn(true); }, 700);
+      reactRef.current = { dir: r1.direction, t0: performance.now() };   // v28: 수호신이 판결을 연기
+      setTimeout(() => { agitateRef.current = false; }, 700);
+      setTimeout(() => { setCardOn(true); }, 1400);                       // 몸짓을 보여준 뒤 카드
       // 대화 기억: 깨끗한 질문 + 확정 결론만 저장(이어묻기용)
       setConvo(prev => [...prev, { role: "user", content: userText }, { role: "assistant", content: `판결: ${r1.direction} — ${r1.verdict} (${r1.total}중 ${r1.against} 반대)` }].slice(-12));
       setRecords(prev => [...prev, { at: Date.now(), q: q.slice(0, 60), direction: r1.direction, verdict: r1.verdict, cat: r1.category, followUp: null, note: "" }].slice(-50)); // v16(B3)
@@ -1039,8 +1084,8 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
           <div className="orb"><DustOrb size={170} stage={0} /></div>
           {bstep === 0 && (
             <div className="bscene" key={0}>
-              <p className="line">그 전에 — 너를 뭐라고 부를까?</p>
-              <p className="sub2">이름이어도, 별명이어도 좋아. 부를 수만 있으면 돼.</p>
+              <p className="line">네 이름을 다시 들려줄래.</p>
+              <p className="sub2">어릴 적 내가 부르던 그 이름. 부르고 싶은 이름이면 뭐든 좋아.</p>
               <input className="in wide center" lang="ko" placeholder="…" maxLength={12} value={birth.name} onChange={e => setBirth({ ...birth, name: e.target.value })} />
               <button className="btn gold mt" onClick={() => { setBirth({ ...birth, name: birth.name.trim() }); setBstep(1); }}>{birth.name.trim() ? birth.name.trim() + " — 그래, 기억했어" : "그냥 조용히 갈래"}</button>
             </div>
@@ -1179,7 +1224,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
           <div className={`halo wide ${busy || (res && !cardOn) ? "busy" : ""} ${res && cardOn ? "dimmed" : ""}`}>
             {phase === 0
               ? <BirthCanvas tint={saju ? EL_COLOR[saju.main] : undefined} size={Math.min(typeof window !== "undefined" ? window.innerWidth : 400, 620)} />
-              : <div className="fade"><GuardianCanvas saju={saju} zo={zo} mbti={mbti} num={num} moon={moon} agitateRef={agitateRef} size={Math.min(typeof window !== "undefined" ? window.innerWidth : 400, 620)} /></div>}
+              : <div className="fade"><GuardianCanvas saju={saju} zo={zo} mbti={mbti} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} size={Math.min(typeof window !== "undefined" ? window.innerWidth : 400, 620)} /></div>}
             <div className="gtext up">
               {phase === 0 && <p className="forming">흩어져 있던 조각들이<br />너를 향해 모이고 있어…</p>}
             </div>
@@ -1187,7 +1232,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
 
           {phase >= 1 && !res && (
             <div className="fade gpanel">
-              <p className="gsay fade">{returning ? "다시 왔네" + (birth.name ? ", " + birth.name : "") + ". 기다렸어." : guardianIntro}</p>
+              {(!introSeen || returning) && <p className="gsay fade">{returning ? "다시 왔네" + (birth.name ? ", " + birth.name : "") + ". 기다렸어." : guardianIntro}</p>}
               {returning && !res && !busy && !ritual && (!birth.name || !birth.sex) && (addOpen ? (
                 <div className="addpanel fade">
                   {!birth.name && <input className="in wide center" lang="ko" placeholder="너를 뭐라고 부를까?" maxLength={12} value={addName} onChange={e => setAddName(e.target.value)} />}
