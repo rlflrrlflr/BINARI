@@ -18,11 +18,19 @@ const shot = (n) => page.screenshot({ path: `${SHOTS}/${n}.png`, fullPage: true 
 
 await page.goto(BASE); await page.waitForTimeout(1400);
 await shot("j01_오프닝");
-await page.getByRole("button", { name: "조각을 모으러 갈래" }).click(); await page.waitForTimeout(500);
-await shot("j02_생년월일");
+await page.getByRole("button", { name: "조각을 모으러 갈래" }).click(); await page.waitForTimeout(800);
+await shot("j02_이름장면");
+await page.locator("input.in.wide").first().fill("서연");
+await page.getByRole("button", { name: /기억했어/ }).click(); await page.waitForTimeout(500);
+await shot("j02b_하늘장면");
 const ins = page.locator("input.in:not(.wide)");
 await ins.nth(0).fill(BY); await ins.nth(1).fill(BM); await ins.nth(2).fill(BD);
-await ins.nth(3).fill("14"); await ins.nth(4).fill("30");
+await page.getByRole("button", { name: "이 하늘이야" }).click(); await page.waitForTimeout(400);
+const tins = page.locator("input.in:not(.wide)");
+await tins.nth(0).fill("14"); await tins.nth(1).fill("30");
+await page.getByRole("button", { name: "기억났어" }).click(); await page.waitForTimeout(400);
+await shot("j02c_흐름장면");
+await page.getByRole("button", { name: "여", exact: true }).click();
 await page.getByRole("button", { name: "하늘을 열기" }).click();
 await page.waitForTimeout(1600); await shot("j03_리빌_중간");
 await page.waitForSelector("text=요즘의 너는", { timeout: 15000 });

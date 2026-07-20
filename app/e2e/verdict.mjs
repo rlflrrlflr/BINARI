@@ -13,8 +13,13 @@ const CALL2 = JSON.stringify({ subline: "밤이 널 속이는 거야.", reasons:
 async function onboard(page) {
   await page.goto(BASE); await page.waitForTimeout(900);
   await page.getByRole("button", { name: "조각을 모으러 갈래" }).click(); await page.waitForTimeout(400);
+  await page.getByRole("button", { name: "그냥 조용히 갈래" }).click(); // v26: 이름 장면 건너뛰기
   const ins = page.locator("input.in:not(.wide)");
-  await ins.nth(0).fill("1990"); await ins.nth(1).fill("2"); await ins.nth(2).fill("25"); await ins.nth(3).fill("14"); await ins.nth(4).fill("30");
+  await ins.nth(0).fill("1990"); await ins.nth(1).fill("2"); await ins.nth(2).fill("25");
+  await page.getByRole("button", { name: "이 하늘이야" }).click();
+  const tins = page.locator("input.in:not(.wide)");
+  await tins.nth(0).fill("14"); await tins.nth(1).fill("30");
+  await page.getByRole("button", { name: "기억났어" }).click();
   await page.getByRole("button", { name: "하늘을 열기" }).click();
   await page.waitForSelector("text=요즘의 너는", { timeout: 10000 });
   for (const t of ["혼자일 때 차오르는 쪽", "아직 오지 않은 것을 보는 쪽", "마음이 먼저 움직이는 쪽", "열어둔 길이 편한 쪽"]) await page.getByRole("button", { name: t }).click(); // v24: 순차 문항

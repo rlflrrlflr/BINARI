@@ -28,10 +28,14 @@ try {
 
   // 2. 생년월일
   await page.waitForTimeout(600);
+  await page.getByRole("button", { name: "그냥 조용히 갈래" }).click(); // v26: 이름 장면 건너뛰기
   const ins = page.locator("input.in:not(.wide)");
   await ins.nth(0).fill("1993"); await ins.nth(1).fill("7"); await ins.nth(2).fill("15");
-  await ins.nth(3).fill("14"); await ins.nth(4).fill("30");
+  await page.getByRole("button", { name: "이 하늘이야" }).click();
+  const tins = page.locator("input.in:not(.wide)");
+  await tins.nth(0).fill("14"); await tins.nth(1).fill("30");
   await shot("02_birth");
+  await page.getByRole("button", { name: "기억났어" }).click();
   await page.getByRole("button", { name: "하늘을 열기" }).click();
 
   // 3. 회상 리빌 → MBTI/혈액형

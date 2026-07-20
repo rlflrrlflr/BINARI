@@ -827,6 +827,9 @@ export default function App() {
   const returning = !!mem;                        // 재회 여부 — 인사·연출 분기
   const [step, setStep] = useState(mem ? 3 : 0);  // 기억이 있으면 온보딩 전체 생략
   const [birth, setBirth] = useState(mem?.birth || { y: "", m: "", d: "", h: "", min: "", city: "", noHour: false, cal: "solar", leap: false, name: "", sex: "" });
+  if (birth.name === undefined) birth.name = ""; if (birth.sex === undefined) birth.sex = ""; // v26: 구버전 저장 호환
+  const [bstep, setBstep] = useState(0);                      // v26: 동화 도입부 장면 인덱스
+  const [addOpen, setAddOpen] = useState(false); const [addName, setAddName] = useState(""); const [addSex, setAddSex] = useState(""); // v26: 조각 보태기
   const [saju, setSaju] = useState(mem?.saju || null);
   const [zo, setZo] = useState(mem?.zo || null);
   const [moon, setMoon] = useState(mem?.moon || null);
@@ -1025,7 +1028,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
           <p className="line">…불렀어?</p>
           <p className="line d1">어른이 된다는 건, 나를 이루던 것들이 조금씩 흩어지는 일이야.</p>
           <p className="line d2">나는 그 흩어진 조각들 — 네가 모아주면, 다시 너의 곁이 될 수 있어.</p>
-          <div className="row gap">
+          <div className="row gap lateIn">
             <button className="btn gold" onClick={() => setStep(1)}>조각을 모으러 갈래</button>
           </div>
           <p className="brand-mark">비나리 BINARI</p>
@@ -1034,35 +1037,59 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
 
       {step === 1 && (
         <section className="scene fade">
-          <h2 className="title">태어난 순간의 하늘</h2>
-          <p className="sub2">너를 다시 또렷하게 보려면, 네가 태어난 순간의 하늘이 필요해.</p>
-          <div className="form">
-            <input className="in wide" lang="ko" placeholder="너를 뭐라고 부를까? (선택)" maxLength={12} value={birth.name} onChange={e => setBirth({ ...birth, name: e.target.value })} />
-            <div className="row gap">
-              <input className="in" placeholder="1993" inputMode="numeric" maxLength={4} value={birth.y} onChange={e => setBirth({ ...birth, y: e.target.value })} /><span className="unit">년</span>
-              <input className="in sm" placeholder="7" inputMode="numeric" maxLength={2} value={birth.m} onChange={e => setBirth({ ...birth, m: e.target.value })} /><span className="unit">월</span>
-              <input className="in sm" placeholder="15" inputMode="numeric" maxLength={2} value={birth.d} onChange={e => setBirth({ ...birth, d: e.target.value })} /><span className="unit">일</span>
+          <div className="orb"><DustOrb size={170} stage={0} /></div>
+          {bstep === 0 && (
+            <div className="bscene" key={0}>
+              <p className="line">그 전에 — 너를 뭐라고 부를까?</p>
+              <p className="sub2">이름이어도, 별명이어도 좋아. 부를 수만 있으면 돼.</p>
+              <input className="in wide center" lang="ko" placeholder="…" maxLength={12} value={birth.name} onChange={e => setBirth({ ...birth, name: e.target.value })} />
+              <button className="btn gold mt" onClick={() => { setBirth({ ...birth, name: birth.name.trim() }); setBstep(1); }}>{birth.name.trim() ? birth.name.trim() + " — 그래, 기억했어" : "그냥 조용히 갈래"}</button>
             </div>
-            <div className="row gap caltoggle">
-              <button type="button" className={`calbtn ${birth.cal !== "lunar" ? "on" : ""}`} onClick={() => setBirth({ ...birth, cal: "solar" })}>양력</button>
-              <button type="button" className={`calbtn ${birth.cal === "lunar" ? "on" : ""}`} onClick={() => setBirth({ ...birth, cal: "lunar" })}>음력</button>
-              {birth.cal === "lunar" && <label className="chk"><input type="checkbox" checked={!!birth.leap} onChange={e => setBirth({ ...birth, leap: e.target.checked })} /> 윤달</label>}
+          )}
+          {bstep === 1 && (
+            <div className="bscene" key={1}>
+              <p className="line">네가 태어난 순간의 하늘로 데려가 줘.</p>
+              <div className="row gap center">
+                <input className="in" placeholder="1993" inputMode="numeric" maxLength={4} value={birth.y} onChange={e => setBirth({ ...birth, y: e.target.value })} /><span className="unit">년</span>
+                <input className="in sm" placeholder="7" inputMode="numeric" maxLength={2} value={birth.m} onChange={e => setBirth({ ...birth, m: e.target.value })} /><span className="unit">월</span>
+                <input className="in sm" placeholder="15" inputMode="numeric" maxLength={2} value={birth.d} onChange={e => setBirth({ ...birth, d: e.target.value })} /><span className="unit">일</span>
+              </div>
+              <div className="row gap center caltoggle">
+                <button type="button" className={"calbtn " + (birth.cal !== "lunar" ? "on" : "")} onClick={() => setBirth({ ...birth, cal: "solar" })}>양력</button>
+                <button type="button" className={"calbtn " + (birth.cal === "lunar" ? "on" : "")} onClick={() => setBirth({ ...birth, cal: "lunar" })}>음력</button>
+                {birth.cal === "lunar" && <label className="chk"><input type="checkbox" checked={!!birth.leap} onChange={e => setBirth({ ...birth, leap: e.target.checked })} /> 윤달</label>}
+              </div>
+              {birth.cal === "lunar" && <p className="fine">달의 날짜구나 — 하늘의 달력으로 바꿔 읽어줄게.</p>}
+              {err && <p className="err">{err}</p>}
+              <button className="btn gold mt" onClick={() => { const y = +birth.y, m = +birth.m, d = +birth.d; if (!y || !m || !d || y < 1900 || y > 2025 || m < 1 || m > 12 || d < 1 || d > 31) { setErr("생년월일을 확인해줘. 너를 또렷하게 보려면 정확해야 해."); return; } setErr(""); setBstep(2); }}>이 하늘이야</button>
             </div>
-            <div className="row gap caltoggle">
-              <button type="button" className={`calbtn ${birth.sex === "M" ? "on" : ""}`} onClick={() => setBirth({ ...birth, sex: birth.sex === "M" ? "" : "M" })}>남</button>
-              <button type="button" className={`calbtn ${birth.sex === "F" ? "on" : ""}`} onClick={() => setBirth({ ...birth, sex: birth.sex === "F" ? "" : "F" })}>여</button>
-              <span className="chk"><em>인생 시기(대운)를 보려면 · 선택</em></span>
+          )}
+          {bstep === 2 && (
+            <div className="bscene" key={2}>
+              <p className="line">몇 시였는지도 기억나?</p>
+              <div className="row gap center">
+                <input className="in sm" placeholder="14" inputMode="numeric" maxLength={2} disabled={birth.noHour} value={birth.h} onChange={e => setBirth({ ...birth, h: e.target.value })} /><span className="unit">시</span>
+                <input className="in sm" placeholder="30" inputMode="numeric" maxLength={2} disabled={birth.noHour} value={birth.min} onChange={e => setBirth({ ...birth, min: e.target.value })} /><span className="unit">분</span>
+                <label className="chk"><input type="checkbox" checked={birth.noHour} onChange={e => setBirth({ ...birth, noHour: e.target.checked })} /> 모름 <em>(괜찮아, 조금 흐리게 보일 뿐이야)</em></label>
+              </div>
+              <input className="in wide center" lang="ko" placeholder="태어난 도시 (건너뛰어도 돼)" value={birth.city} onChange={e => setBirth({ ...birth, city: e.target.value })} />
+              {err && <p className="err">{err}</p>}
+              <button className="btn gold mt" onClick={() => { if (!birth.noHour) { const h = +birth.h; if (birth.h === "" || h < 0 || h > 23) { setErr("태어난 시(0~23시)를 알려주거나 '모름'을 선택해줘."); return; } if (birth.min !== "" && (+birth.min < 0 || +birth.min > 59)) { setErr("분은 0~59 사이로 알려줘."); return; } } setErr(""); setBstep(3); }}>기억났어</button>
             </div>
-            <div className="row gap">
-              <input className="in sm" placeholder="14" inputMode="numeric" maxLength={2} disabled={birth.noHour} value={birth.h} onChange={e => setBirth({ ...birth, h: e.target.value })} /><span className="unit">시</span>
-              <input className="in sm" placeholder="30" inputMode="numeric" maxLength={2} disabled={birth.noHour} value={birth.min} onChange={e => setBirth({ ...birth, min: e.target.value })} /><span className="unit">분</span>
-              <label className="chk"><input type="checkbox" checked={birth.noHour} onChange={e => setBirth({ ...birth, noHour: e.target.checked })} /> 시간 모름 <em>(괜찮아, 조금 흐리게 보일 뿐이야)</em></label>
+          )}
+          {bstep === 3 && (
+            <div className="bscene" key={3}>
+              <p className="line">마지막 조각 — 하늘은 너를 어느 흐름에 실어 보냈을까.</p>
+              <p className="sub2">음과 양의 흐름은 인생의 계절(대운)을 읽는 열쇠야.<br />말하고 싶지 않으면 그냥 열어도 돼.</p>
+              <div className="row gap center">
+                <button type="button" className={"calbtn " + (birth.sex === "M" ? "on" : "")} onClick={() => setBirth({ ...birth, sex: birth.sex === "M" ? "" : "M" })}>남</button>
+                <button type="button" className={"calbtn " + (birth.sex === "F" ? "on" : "")} onClick={() => setBirth({ ...birth, sex: birth.sex === "F" ? "" : "F" })}>여</button>
+              </div>
+              {err && <p className="err">{err}</p>}
+              <button className="btn gold mt" onClick={doReveal}>하늘을 열기</button>
             </div>
-            <input className="in wide" lang="ko" placeholder="태어난 도시 (선택)" value={birth.city} onChange={e => setBirth({ ...birth, city: e.target.value })} />
-          </div>
-          {err && <p className="err">{err}</p>}
-          <button className="btn gold" onClick={doReveal}>하늘을 열기</button>
-          <p className="fine">음력이면 양력으로 바꿔 사주를 봐 · 절기는 태양황경 천문 계산으로 판정(오차 수분) · 시각은 출생 도시 경도+균시차의 진태양시 보정 · 도시 비우면 서울 기준</p>
+          )}
+          {bstep > 0 && <button className="resetlink" onClick={() => { setErr(""); setBstep(bstep - 1); }}>아까 장면으로 돌아갈래</button>}
         </section>
       )}
 
@@ -1076,7 +1103,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
           </div>
           {reveal >= 1 && reveal < 5 && (
             <div className="rvstage">
-              {reveal === 1 && <div className="rvbig" key={1}><span>사주 — 태어난 순간의 하늘</span><b>{saju.pillars.년} · {saju.pillars.월} · {saju.pillars.일} · {saju.pillars.시}</b></div>}
+              {reveal === 1 && <div className="rvbig" key={1}><span>사주 — 태어난 순간의 하늘</span><b>{saju.pillars.년} · {saju.pillars.월} · {saju.pillars.일} · {saju.pillars.시}</b>{birth.lunarNote && <i className="rvlunar">{birth.lunarNote} — 하늘의 달력으로 바꿔 읽었어</i>}</div>}
               {reveal === 2 && <div className="rvbig" key={2}><span>별자리</span><b>{zo.name} — {zo.el}의 별</b></div>}
               {reveal === 3 && <div className="rvbig" key={3}><span>태어난 밤의 달</span><b>{moon.name} — {moon.sub}</b></div>}
               {reveal === 4 && <div className="rvbig" key={4}><span>수비학</span><b>{num}의 길</b></div>}
@@ -1162,7 +1189,23 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
 
           {phase >= 1 && !res && (
             <div className="fade gpanel">
-              <p className="gsay fade">{returning ? "다시 왔네. 기다렸어." : guardianIntro}</p>
+              <p className="gsay fade">{returning ? "다시 왔네" + (birth.name ? ", " + birth.name : "") + ". 기다렸어." : guardianIntro}</p>
+              {returning && !res && !busy && !ritual && (!birth.name || !birth.sex) && (addOpen ? (
+                <div className="addpanel fade">
+                  {!birth.name && <input className="in wide center" lang="ko" placeholder="너를 뭐라고 부를까?" maxLength={12} value={addName} onChange={e => setAddName(e.target.value)} />}
+                  {!birth.sex && <div className="row gap center">
+                    <button type="button" className={"calbtn " + (addSex === "M" ? "on" : "")} onClick={() => setAddSex(addSex === "M" ? "" : "M")}>남</button>
+                    <button type="button" className={"calbtn " + (addSex === "F" ? "on" : "")} onClick={() => setAddSex(addSex === "F" ? "" : "F")}>여</button>
+                    <span className="chk"><em>인생의 계절(대운)을 읽는 열쇠</em></span>
+                  </div>}
+                  <div className="row gap center">
+                    <button className="btn gold" onClick={() => { const nb = { ...birth, name: birth.name || addName.trim(), sex: birth.sex || addSex }; setBirth(nb); saveMemory({ birth: nb, saju, zo, moon, num, mbti, vals8, vals4, core, convo, records, streak }); setAddOpen(false); }}>조각을 보탤게</button>
+                    <button className="btn ghost" onClick={() => setAddOpen(false)}>다음에</button>
+                  </div>
+                </div>
+              ) : (
+                <button className="knock fade" onClick={() => setAddOpen(true)}>수호신이 아직 못 찾은 조각이 있대 — {!birth.name && !birth.sex ? "이름과 흐름" : !birth.name ? "이름" : "음양의 흐름"}</button>
+              ))}
               {returning && streak && streak.count >= 2 && !res && (
                 <p className="streak">수호신과 연결된 지 {streak.count}일째</p>
               )}
@@ -1268,7 +1311,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
 
           {res && !cardOn && <div className="gateflash" />}
           {res && cardOn && (
-            <div className="persp cardIn" onClick={() => { if (why && detail && !detail._err && !detail._quick) setFlip(f => !f); }}>
+            <div className="persp cardIn" onClick={() => { if (why && (detailBusy || (detail && !detail._err && !detail._quick))) setFlip(f => !f); }}>
               <div className="vcard" style={{ transform: `rotateY(${flip ? 180 : 0}deg)` }}>
                 <div className="vface">
                   <i className="corner tl">✦</i><i className="corner tr">✦</i><i className="corner bl">✦</i><i className="corner br">✦</i>
@@ -1297,14 +1340,14 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                       <div className="pips">{[...Array(res.total || 0)].map((_, i) => <span key={i} className={`pip ${i < res.against ? "on" : ""}`} />)}
                         <em>{res.total}개 중 {res.against}개 {res.direction === "STOP" ? "반대" : res.direction === "HOLD" ? "접전" : "찬성"}</em></div>
                       {detail && !detail._err && detail.funLine && <p className="vfun">정령 — {detail.funLine} <span className="dim">(판결 미반영)</span></p>}
-                      {detail && !detail._err && !detail._quick && <div className="vbot"><span>운명 합의 판결</span><span>카드 탭 → 지표별 근거</span></div>}
+                      {(detailBusy || (detail && !detail._err && !detail._quick)) && <div className="vbot"><span>운명 합의 판결</span><span>카드 탭 → 지표별 근거</span></div>}
                     </div>
                   )}
                 </div>
                 {/* L3 세부 (뒤집기) */}
                 <div className="vface back">
                   <div className="vtop"><span>판결 근거</span><span>탭 → 돌아가기</span></div>
-                  <ul className="vr">{detail?.reasons?.map((r, i) => <li key={i}><b>{r.axis}</b>{r.vote && <em className="vote">{r.vote}</em>}<p>{r.text}</p></li>)}</ul>
+                  {detail?.reasons ? <ul className="vr">{detail.reasons.map((r, i) => <li key={i}><b>{r.axis}</b>{r.vote && <em className="vote">{r.vote}</em>}<p>{r.text}</p></li>)}</ul> : <p className="gathering">조각들이 근거를 모으고 있어<span className="dots"><i>.</i><i>.</i><i>.</i></span></p>}
                   {detail?.disclaimer && <p className="disc">{detail.disclaimer}</p>}
                 </div>
               </div>
@@ -1351,6 +1394,16 @@ const CSS = `
 .caltoggle{align-items:center}
 .calbtn{font-family:inherit;font-size:13px;padding:7px 18px;border-radius:999px;border:1px solid rgba(138,127,149,.35);background:transparent;color:#9d8fb5;cursor:pointer;transition:all .2s}
 .calbtn.on{border-color:#ffe9ad;color:#ffe9ad;box-shadow:0 0 12px rgba(245,217,139,.25)}
+.bscene{display:flex;flex-direction:column;gap:14px;align-items:center;width:100%;margin-top:6px}
+.in.center{text-align:center}
+.center{justify-content:center}
+.lateIn{opacity:0;animation:fd 1.6s cubic-bezier(.22,.7,.25,1) 4.4s forwards}
+.rvlunar{display:block;font-size:11.5px;font-family:sans-serif;letter-spacing:.12em;color:#9d8fb5;margin-top:7px;font-style:normal}
+.addpanel{display:flex;flex-direction:column;gap:10px;align-items:center;margin:2px 0 14px;width:100%}
+.gathering{font-size:13.5px;color:#c9b98f;text-align:center;margin:30px 0}
+.gathering .dots i{animation:blinkDot 1.2s infinite;font-style:normal}
+.gathering .dots i:nth-child(2){animation-delay:.35s}.gathering .dots i:nth-child(3){animation-delay:.7s}
+@keyframes blinkDot{0%,100%{opacity:.15}50%{opacity:1}}
 .chk input{accent-color:#c98f3d}
 .btn{font-family:inherit;font-size:14px;font-weight:600;letter-spacing:.14em;padding:13px 28px;border-radius:999px;border:1px solid rgba(245,217,139,.4);background:transparent;color:#f0e2b8;cursor:pointer;transition:box-shadow .3s,border-color .3s}
 .btn:hover{border-color:#ffe9ad;box-shadow:0 0 22px rgba(245,217,139,.25)}
