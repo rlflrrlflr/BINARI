@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 
 const appDir = join(dirname(fileURLToPath(import.meta.url)), "..");
 execSync("npx esbuild src/App.jsx --format=esm --jsx=automatic --outfile=.mansae-test.tmp.mjs", { cwd: appDir });
-const { calcSaju, sunLongitude, equationOfTime, cityLon, moonLongitude, tzolkin } = await import(join(appDir, ".mansae-test.tmp.mjs"));
+const { calcSaju, sunLongitude, equationOfTime, cityLon, moonLongitude, tzolkin, lunar2solar, solar2lunar, daeun } = await import(join(appDir, ".mansae-test.tmp.mjs"));
 
 const results = [];
 const check = (name, pass, note = "") => { results.push(pass); console.log(`${pass ? "PASS" : "FAIL"} — ${name}${note ? " · " + note : ""}`); };
@@ -60,6 +60,51 @@ check("촐킨: 2000-01-01 = 11 이크(바람)", tz.tone === 11 && tz.sign.includ
 
 // 10. 납음오행 — 1990(경오년) = 노방토
 check("납음: 경오년 = 노방토(길가의 흙)", (calcSaju(1990, 7, 15, 12, 0, false).nayin || "").includes("노방토"));
+
+// 11. 음력→양력 변환 (v25) — 공표된 설날: 음력 정월 초하루 = 양력 설날
+const ny2000 = lunar2solar(2000, 1, 1, false);
+check("음력 2000.1.1 = 양력 2000.2.5(설날)", ny2000 && ny2000.y === 2000 && ny2000.m === 2 && ny2000.d === 5, ny2000 && `${ny2000.y}.${ny2000.m}.${ny2000.d}`);
+const ny1993 = lunar2solar(1993, 1, 1, false);
+check("음력 1993.1.1 = 양력 1993.1.23(설날)", ny1993 && ny1993.y === 1993 && ny1993.m === 1 && ny1993.d === 23, ny1993 && `${ny1993.y}.${ny1993.m}.${ny1993.d}`);
+
+// 12. 왕복 검증 — 양력→음력→양력 원복 (경계·평범한 날 섞어)
+let rtOk = 0;
+const rtDates = [[2000, 2, 5], [1993, 1, 23], [1988, 8, 15], [1975, 3, 3], [2010, 12, 31], [1990, 6, 1]];
+for (const [y, m, d] of rtDates) {
+  const lb = solar2lunar(y, m, d);
+  const back = lb && lunar2solar(lb.ly, lb.lm, lb.ld, lb.isLeap);
+  if (back && back.y === y && back.m === m && back.d === d) rtOk++;
+}
+check("음↔양 왕복 원복 6/6", rtOk === 6, `${rtOk}/6`);
+
+// 13. 윤달 구분 — 1993년은 윤3월(LUNAR[1993] leap=3)이 존재하고, 평3월과 다른 날이어야 한다
+const m3 = lunar2solar(1993, 3, 1, false), lm3 = lunar2solar(1993, 3, 1, true);
+check("음력 1993 윤3월 존재·평3월과 상이", m3 && lm3 && !(m3.m === lm3.m && m3.d === lm3.d), m3 && lm3 ? `평${m3.m}.${m3.d} vs 윤${lm3.m}.${lm3.d}` : "null");
+
+// 14. 간절기 오판 방지 — 음력 설날생(음력 1993.1.1)을 양력으로 정규화하면 계해년(1992 사주년)이 아닌 임신년 경계를 정확히 탄다
+//     음력 1993.1.1 = 양력 1993.1.23 → 입춘(2/4) 전이므로 사주년은 임신년(1992)
+const sinSaju = calcSaju(ny1993.y, ny1993.m, ny1993.d, 12, 0, false);
+check("설날생 사주년: 음력정월=양력1.23=입춘전=임신년", sinSaju.pillars.년 === "임신", sinSaju.pillars.년);
+
+// 15. 대운(v25) — 방향 규칙: 1990=경오년(경=stem6=양). 양년 남=순행, 양년 여=역행
+const lon = cityLon("서울");
+const duM = daeun(1990, 6, 15, 12, 0, false, lon, true, 2026);
+const duF = daeun(1990, 6, 15, 12, 0, false, lon, false, 2026);
+check("대운 방향: 양년(경오) 남=순행", duM.dir === "순행", duM.dir);
+check("대운 방향: 양년(경오) 여=역행", duF.dir === "역행", duF.dir);
+check("대운수 1~10 범위", duM.num >= 1 && duM.num <= 10, `${duM.num}세 시작`);
+
+// 16. 대운 pre 상태 — 대운수 나이 이전이면 아직 첫 대운 전
+const duBaby = daeun(1990, 6, 15, 12, 0, false, lon, true, 1992); // 세는 3세 < 대운수 7 → pre
+check("대운: 대운수 이전이면 pre=true", duBaby.pre === true, `3세 < 대운수 ${duM.num}`);
+
+// 17. 첫 대운 간지 = 월주 ±1 (순행은 다음 간지) — 정의적 검증
+const gi = ["갑","을","병","정","무","기","경","신","임","계"], ji = ["자","축","인","묘","진","사","오","미","신","유","술","해"];
+const mp90 = calcSaju(1990, 6, 15, 12, 0, false).pillars.월;
+let mpi = -1; for (let i = 0; i < 60; i++) if (gi[i % 10] + ji[i % 12] === mp90) mpi = i;
+const expectFwd = gi[(mpi + 1) % 60 % 10] + ji[(mpi + 1) % 60 % 12];
+const duFirst = daeun(1990, 6, 15, 12, 0, false, lon, true, 1990 + duM.num); // 대운수 나이 → 첫 대운
+check("순행 첫 대운 = 월주 다음 간지", duFirst.pre === false && duFirst.ganji === expectFwd, `${duFirst.ganji} (월주 ${mp90} → 기대 ${expectFwd})`);
 
 execSync("rm -f .mansae-test.tmp.mjs", { cwd: appDir });
 const fails = results.filter(r => !r).length;

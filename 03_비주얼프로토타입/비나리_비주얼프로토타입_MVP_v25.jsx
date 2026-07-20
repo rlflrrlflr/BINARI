@@ -23,6 +23,8 @@ import { useState, useRef, useEffect } from "react";
    v18: ①듀얼 모드 API — /api/judge(배포) 없으면 직접 호출로 자동 폴백(아티팩트 호환 복구) ②저장 안전 셈(localStorage 차단 시 메모리 강등)
         ③모를 권리 — 질문 범위만 답하는 프롬프트 규칙 / 토정비결 옵트인 접기 / 아침 문안 노크형(청해야 펼친다)
    v19(모바일): 질문칸 박스화(파티클에 안 묻힘·iOS 줌 방지 16px)·좌우 풀폭(모바일 여백 축소)
+   v25(정보): 이름(호칭) — 수호신이 이름을 부른다 · 성별→대운(현재 인생 10년 흐름, 타이밍 층·별도 축 신설 없이 사주에 흡수)
+   v25(정확성): 음력 생일 입력 — 음/양력 토글+윤달 체크, 음력이면 양력으로 정규화 후 사주 계산(간절기·설날생 오판 방지)
    v24(성격): MBTI 순차 문항화 — 기억 1/4씩, '아까 걸로 돌아갈래' · 혈액형 제거(판결 미반영 지표 정리, 정령은 달 별자리로 재배선)
    v24(탄생): 깨우기 전환 — 구체 수축→섬광→블룸 뒤 수호신 페이드인(먼지→우주→존재의 사슬 봉합)
    v24(오브): 3D 회전 입자 구체 — 흩어진 먼지가 단계마다 응집·착색·가속하는 작은 우주, 성장 순간 펄스 링
@@ -156,6 +158,29 @@ function calcSaju(y, m, d, h, mi, hourUnknown, lon = 126.978) {
     nayin: NAYIN[Math.floor((((sy - 4) % 60 + 60) % 60) / 2)],   // v22: 납음오행
   };
 }
+const ganjiIdx = (g, j) => { for (let i = 0; i < 60; i++) if (i % 10 === g && i % 12 === j) return i; return 0; };
+function daeun(y, m, d, h, mi, hourUnknown, lon, isMale, nowY) {   // v25: 대운 — 현재 인생 10년 흐름(성별 필요)
+  const jdBirth = jdFromKST(y, m, d, hourUnknown ? 12 : h, hourUnknown ? 0 : (mi || 0));
+  const lam = sunLongitude(jdBirth);
+  const beforeIpchun = m <= 2 && !(lam >= 315);
+  const sy = beforeIpchun ? y - 1 : y;
+  const yG = ((sy - 4) % 10 + 10) % 10;
+  const mn = Math.floor(((lam - 315 + 360) % 360) / 30) + 1;
+  const mJ = (mn + 1) % 12, mG = ((yG % 5) * 2 + 2 + (mn - 1)) % 10;
+  const mIdx = ganjiIdx(mG, mJ);
+  const forward = (yG % 2 === 0) === isMale;                       // 양남·음녀=순행 / 음남·양녀=역행
+  const seg0 = Math.floor(((lam - 315 + 360) % 360) / 30);         // 대운수: 순행=다음 節까지·역행=이전 節까지, 일수/3 반올림
+  let j = jdBirth, days = 15;
+  for (let i = 0; i < 1800; i++) { j += forward ? 0.02 : -0.02; if (Math.floor(((sunLongitude(j) - 315 + 360) % 360) / 30) !== seg0) { days = Math.abs(j - jdBirth); break; } }
+  const num = Math.max(1, Math.min(10, Math.round(days / 3)));
+  const age = nowY - y + 1;                                        // 세는나이 근사(10년 버킷엔 충분)
+  const dir = forward ? "순행" : "역행";
+  if (age < num) return { pre: true, num, dir };
+  const step = Math.floor((age - num) / 10) + 1;                   // 1대운 = 월주 ±1
+  const idx = ((mIdx + (forward ? step : -step)) % 60 + 60) % 60;
+  const startAge = num + (step - 1) * 10;
+  return { pre: false, ganji: GAN[idx % 10] + JI[idx % 12], el: GAN_EL[idx % 10], startAge, endAge: startAge + 9, num, dir };
+}
 /* ───── 별자리 · 달 위상 ───── */
 const ZODIAC = [
   ["염소자리",1,19,"흙"],["물병자리",2,18,"공기"],["물고기자리",3,20,"물"],["양자리",4,19,"불"],
@@ -243,6 +268,22 @@ function lunar2solarOrd(ly, lm, ld) {
     let mm = i + 1; if (leap > 0 && i + 1 > leap) mm = i;
     const isLeapSlot = leap > 0 && i + 1 === leap + 1;
     if (mm === lm && !isLeapSlot) return rec[0] + off + ld - 1;
+    off += ms[i];
+  }
+  return null;
+}
+function lunar2solar(ly, lm, ld, wantLeap) {   // v25: 음력→양력 (LUNAR 표 1900~2030, solar2lunar의 역)
+  const rec = LUNAR[ly]; if (!rec) return null;
+  const leap = rec[1], ms = rec[2]; let off = 0;
+  for (let i = 0; i < ms.length; i++) {
+    let mm = i + 1, isLeapSlot = false;
+    if (leap > 0) { if (i + 1 === leap + 1) { mm = leap; isLeapSlot = true; } else if (i + 1 > leap) mm = i; }
+    if (mm === lm && isLeapSlot === !!wantLeap) {
+      if (ld < 1 || ld > ms[i]) return null;
+      const ord = rec[0] + off + (ld - 1);
+      const dt = new Date((ord - 719163) * 86400000);
+      return { y: dt.getUTCFullYear(), m: dt.getUTCMonth() + 1, d: dt.getUTCDate() };
+    }
     off += ms[i];
   }
   return null;
@@ -648,16 +689,16 @@ const SYS = `당신은 유저의 '수호신' 비나리다. 어릴 때 곁에 있
 ## 질문 분류
 A.큰 결정(이직·이사·결혼·이별·큰 투자) / B.감정 충동(연락·지름·한마디) / C.일상 소분(메뉴·옷·약속)
 ## 층위·가중치
-기질 층(MBTI·별자리·수비학 라이프패스·가치[요즘]·달[달 별자리·나크샤트라=정서와 본능]·마야 문양) / 타이밍 층(사주 오행·달 위상·바이오리듬[오늘]·삼재[해당 연도만]·주역 괘[유저가 동전으로 청한 경우만]). A: 기질50/타이밍50, B: 타이밍55/기질45, C: 타이밍만. 정령: 달 별자리의 기운을 빌린 곁의 장난꾸러기 — 판결 미반영, funLine 재미 한마디 전용.
+기질 층(MBTI·별자리·수비학 라이프패스·가치[요즘]·달[달 별자리·나크샤트라=정서와 본능]·마야 문양) / 타이밍 층(사주 오행·대운[현재 인생 시기, 제공 시]·달 위상·바이오리듬[오늘]·삼재[해당 연도만]·주역 괘[유저가 동전으로 청한 경우만]). A: 기질50/타이밍50, B: 타이밍55/기질45, C: 타이밍만. 정령: 달 별자리의 기운을 빌린 곁의 장난꾸러기 — 판결 미반영, funLine 재미 한마디 전용.
 ## 3화법
 단호(해로운 선택 앞: "보내지 마. 끝.") / 격려(두려움에 좋은 선택을 망설일 때) / 충고(스스로를 속일 때, 따끔하되 존중).
 ## 경험 편향
 지표 동률·1차이 접전이면 '해보는 쪽' 판정 + 접전임을 밝힘("2:2야. 이럴 땐 해본 쪽이 네 인생에 남아"). 예외: 가드레일, 큰돈·비가역 결정 접전은 HOLD("하루만 재워두고 다시 물어봐").
 ## 규칙
-각 지표 GO/STOP/중립→가중 합산, 충돌은 봉합 없이 노출. B반말·A다정한 존댓말. 유머는 유저 데이터 소재. 선택을 때리되 사람을 때리지 않는다.
+각 지표 GO/STOP/중립→가중 합산, 충돌은 봉합 없이 노출. B반말·A다정한 존댓말. 호칭이 제공되면 결정적 순간에 이름을 부른다(B:"○○아"·A:"○○님") — 매 문장 강요는 말 것. 유머는 유저 데이터 소재. 선택을 때리되 사람을 때리지 않는다.
 - 금지: 질문 문장에서 심리를 추정해 판결하는 것("이렇게 묻는 건 이미 가고 싶은 거야" 류). 그건 지표가 아니라 독심술이다. 판결 근거는 오직 제공된 지표의 실제 값.
 - 판정 절차(순서 강제): ①각 지표를 질문에 비추어 서로 독립적으로 GO/STOP/중립 판정한다 — 이때 다른 지표의 판정이나 예상 결론을 참조하지 않는다 ②가중 합산으로 direction을 산출한다 ③verdict·subline은 합산 결과를 따른다. 결론을 먼저 정해두고 근거를 끼워 맞추는 것 금지 — 지표끼리 결론이 갈리면 갈린 그대로 보여준다.
-- reasons에는 판결에 참여한 모든 지표를 각 1줄씩 빠짐없이 포함한다 — 사주·달·별자리·MBTI·수비학·바이오리듬·마야와, 제공된 경우 삼재·가치·주역·토정비결까지 전부. 달 축은 위상·달 별자리·나크샤트라를 묶어 한 줄로, 사주 축은 납음을 함께 인용할 수 있다. 각 축이 왜 GO/STOP/중립인지 그 지표의 실제 값을 짚어서 말한다.
+- reasons에는 판결에 참여한 모든 지표를 각 1줄씩 빠짐없이 포함한다 — 사주·달·별자리·MBTI·수비학·바이오리듬·마야와, 제공된 경우 삼재·가치·주역·토정비결까지 전부. 달 축은 위상·달 별자리·나크샤트라를 묶어 한 줄로, 사주 축은 납음·대운(제공 시 현재 인생 시기의 기운)을 함께 인용할 수 있다(대운은 별도 축을 신설하지 말고 사주 근거 안에 녹인다). 각 축이 왜 GO/STOP/중립인지 그 지표의 실제 값을 짚어서 말한다.
 - 주역 괘가 제공된 경우: reasons에 '주역' 축을 반드시 포함하고, verdict와 subline에 괘의 기운을 우선 반영한다(유저가 직접 동전을 던져 청한 괘다).
 - 가치여정이 제공된 경우 최소 1축을 reasons에 포함한다.
 - total은 이번 판결에 참여한 지표 수와 일치시키고, against는 그중 반대표 수다.
@@ -785,7 +826,7 @@ export default function App() {
   const [mem] = useState(loadMemory);             // v16(B1): 부팅 시 기억 1회 로드
   const returning = !!mem;                        // 재회 여부 — 인사·연출 분기
   const [step, setStep] = useState(mem ? 3 : 0);  // 기억이 있으면 온보딩 전체 생략
-  const [birth, setBirth] = useState(mem?.birth || { y: "", m: "", d: "", h: "", min: "", city: "", noHour: false });
+  const [birth, setBirth] = useState(mem?.birth || { y: "", m: "", d: "", h: "", min: "", city: "", noHour: false, cal: "solar", leap: false, name: "", sex: "" });
   const [saju, setSaju] = useState(mem?.saju || null);
   const [zo, setZo] = useState(mem?.zo || null);
   const [moon, setMoon] = useState(mem?.moon || null);
@@ -862,10 +903,17 @@ export default function App() {
     if (!birth.noHour && (birth.h === "" || h < 0 || h > 23)) { setErr("태어난 시(0~23시)를 알려주거나 '모름'을 선택해줘."); return; }
     if (!birth.noHour && birth.min !== "" && (mi < 0 || mi > 59)) { setErr("분은 0~59 사이로 알려줘."); return; }
     setErr("");
-    setSaju(calcSaju(y, m, d, h, mi, birth.noHour, cityLon(birth.city)));
-    setZo(getZodiac(m, d));
-    setMoon(moonPhase(y, m, d));
-    setNum(lifePath(y, m, d));
+    let sy = y, sm = m, sd = d;                                 // v25: 음력이면 양력으로 정규화 — 이후 모든 계산은 양력 기준
+    if (birth.cal === "lunar") {
+      const s = lunar2solar(y, m, d, !!birth.leap);
+      if (!s) { setErr(`음력 ${y}.${m}.${d}${birth.leap ? " 윤달" : ""}을 못 찾았어. 날짜나 윤달 여부를 확인해줘.`); return; }
+      sy = s.y; sm = s.m; sd = s.d;
+      setBirth(b => ({ ...b, cal: "solar", leap: false, y: String(sy), m: String(sm), d: String(sd), lunarNote: `음력 ${y}.${m}.${d}${birth.leap ? "(윤달)" : ""}` }));
+    }
+    setSaju(calcSaju(sy, sm, sd, h, mi, birth.noHour, cityLon(birth.city)));
+    setZo(getZodiac(sm, sd));
+    setMoon(moonPhase(sy, sm, sd));
+    setNum(lifePath(sy, sm, sd));
     setStep(2); setReveal(0);
     [1, 2, 3, 4, 5].forEach((k, i) => setTimeout(() => setReveal(k), 350 + i * 1150)); // v23: 항목당 1.15s — 절정을 읽게 한다
   };
@@ -903,11 +951,12 @@ export default function App() {
       const mp = moonPlacements(+birth.y, +birth.m, +birth.d, +birth.h || 12, +birth.min || 0, !!birth.noHour); // v22
       const tzk = tzolkin(jdn(+birth.y, +birth.m, +birth.d));                                                   // v22
       const sj = samjae(saju.yJ, new Date().getFullYear());
+      const du = birth.sex ? daeun(+birth.y, +birth.m, +birth.d, birth.noHour ? 12 : +birth.h, birth.noHour || birth.min === "" ? 0 : +birth.min, !!birth.noHour, cityLon(birth.city), birth.sex === "M", new Date().getFullYear()) : null; // v25: 대운
       // v14: 세션 내내 고정인 프로필(주역 제외)은 system에 담아 프롬프트 캐싱 → 2번째 질문부터 빨라짐
-      const profile = `사주: ${saju.pillars.년}년 ${saju.pillars.월}월 ${saju.pillars.일}일 ${saju.pillars.시}시 / 오행 ${Object.entries(saju.counts).map(([k, v]) => k + v).join(" ")} / 주기운 ${saju.main}${saju.nayin ? ` / 납음 ${saju.nayin}` : ""}
+      const profile = `${birth.name ? `호칭: ${birth.name}\n` : ""}${birth.sex ? `성별: ${birth.sex === "M" ? "남" : "여"}\n` : ""}사주: ${saju.pillars.년}년 ${saju.pillars.월}월 ${saju.pillars.일}일 ${saju.pillars.시}시 / 오행 ${Object.entries(saju.counts).map(([k, v]) => k + v).join(" ")} / 주기운 ${saju.main}${saju.nayin ? ` / 납음 ${saju.nayin}` : ""}
 별자리: ${zo.name}(${zo.el}) / 달: 태어난 밤의 위상 ${moon.name} · 달 별자리 ${mp.moonSign}(정서·내면) · 나크샤트라 ${mp.nakshatra}(베다 27수)
 마야 촐킨: ${tzk.tone}의 톤 · ${tzk.sign}
-MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}
+MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ? `\n대운: 아직 첫 대운 전 — 대운수 ${du.num}세부터 ${du.dir}(지금은 월주 기운이 지배)` : `\n대운(현재 인생 시기): ${du.ganji}(${du.el}) 대운 · ${du.startAge}~${du.endAge}세 · ${du.dir} — 10년 단위 큰 흐름`) : ""}
 바이오리듬(오늘): 신체 ${bio.body}% · 감정 ${bio.emotion}% · 지성 ${bio.intellect}%${sj ? `\n삼재: 올해 ${sj} (입춘 경계 근사)` : ""}${tj ? `\n토정비결(당년 신수): 괘상수 ${tj.code} (상${tj.sang} 중${tj.jung} 하${tj.ha}), 음력 생일 ${tj.lunar}` : ""}${core ? `\n가치여정(워드소팅 16→6→3→1): 핵심 ${core} / 지킨 가치 ${vals4.filter(v => v !== core).join("·")} / 마지막에 버린 ${vals8.filter(v => !vals4.includes(v)).join("·")}` : ""}`;
       // 주역 괘는 질문마다 달라지므로 유저 턴에
       const qExtra = hi ? `\n[이번에 청한 주역] 본괘 ${hi.name}${hi.moving.length ? ` / 변효 ${hi.moving.map(n => n + 1).join(",")}효 / 지괘 ${hi.toName}` : ""}` : "";
@@ -988,10 +1037,21 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}
           <h2 className="title">태어난 순간의 하늘</h2>
           <p className="sub2">너를 다시 또렷하게 보려면, 네가 태어난 순간의 하늘이 필요해.</p>
           <div className="form">
+            <input className="in wide" lang="ko" placeholder="너를 뭐라고 부를까? (선택)" maxLength={12} value={birth.name} onChange={e => setBirth({ ...birth, name: e.target.value })} />
             <div className="row gap">
               <input className="in" placeholder="1993" inputMode="numeric" maxLength={4} value={birth.y} onChange={e => setBirth({ ...birth, y: e.target.value })} /><span className="unit">년</span>
               <input className="in sm" placeholder="7" inputMode="numeric" maxLength={2} value={birth.m} onChange={e => setBirth({ ...birth, m: e.target.value })} /><span className="unit">월</span>
               <input className="in sm" placeholder="15" inputMode="numeric" maxLength={2} value={birth.d} onChange={e => setBirth({ ...birth, d: e.target.value })} /><span className="unit">일</span>
+            </div>
+            <div className="row gap caltoggle">
+              <button type="button" className={`calbtn ${birth.cal !== "lunar" ? "on" : ""}`} onClick={() => setBirth({ ...birth, cal: "solar" })}>양력</button>
+              <button type="button" className={`calbtn ${birth.cal === "lunar" ? "on" : ""}`} onClick={() => setBirth({ ...birth, cal: "lunar" })}>음력</button>
+              {birth.cal === "lunar" && <label className="chk"><input type="checkbox" checked={!!birth.leap} onChange={e => setBirth({ ...birth, leap: e.target.checked })} /> 윤달</label>}
+            </div>
+            <div className="row gap caltoggle">
+              <button type="button" className={`calbtn ${birth.sex === "M" ? "on" : ""}`} onClick={() => setBirth({ ...birth, sex: birth.sex === "M" ? "" : "M" })}>남</button>
+              <button type="button" className={`calbtn ${birth.sex === "F" ? "on" : ""}`} onClick={() => setBirth({ ...birth, sex: birth.sex === "F" ? "" : "F" })}>여</button>
+              <span className="chk"><em>인생 시기(대운)를 보려면 · 선택</em></span>
             </div>
             <div className="row gap">
               <input className="in sm" placeholder="14" inputMode="numeric" maxLength={2} disabled={birth.noHour} value={birth.h} onChange={e => setBirth({ ...birth, h: e.target.value })} /><span className="unit">시</span>
@@ -1002,7 +1062,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}
           </div>
           {err && <p className="err">{err}</p>}
           <button className="btn gold" onClick={doReveal}>하늘을 열기</button>
-          <p className="fine">절기는 태양황경 천문 계산으로 판정해(오차 수분) · 시각은 출생 도시 경도+균시차의 진태양시 보정 · 도시를 비우면 서울 기준</p>
+          <p className="fine">음력이면 양력으로 바꿔 사주를 봐 · 절기는 태양황경 천문 계산으로 판정(오차 수분) · 시각은 출생 도시 경도+균시차의 진태양시 보정 · 도시 비우면 서울 기준</p>
         </section>
       )}
 
@@ -1026,7 +1086,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}
           {reveal >= 5 && (
             <div className="fade">
               <p className="mention">
-                그래 — 너는 원래 <b>{EL_TRAIT[saju.main]}</b> 사람이었지.<br />
+                그래 — {birth.name ? <><b>{birth.name}</b>, </> : ""}너는 원래 <b>{EL_TRAIT[saju.main]}</b> 사람이었지.<br />
                 때로는 {ZO_FLAW[zo.el]}지만,<br />
                 <b>{MOON_DRIVE[moon.name]}</b> 모습이 늘 멋있었어.
               </p>
@@ -1288,6 +1348,9 @@ const CSS = `
 .in:disabled{opacity:.35}
 .unit{color:#8a7f95;font-size:13px}
 .chk{font-family:sans-serif;font-size:12px;color:#c9b98f;display:flex;align-items:center;gap:6px}.chk em{color:#8a7f95;font-style:normal}
+.caltoggle{align-items:center}
+.calbtn{font-family:inherit;font-size:13px;padding:7px 18px;border-radius:999px;border:1px solid rgba(138,127,149,.35);background:transparent;color:#9d8fb5;cursor:pointer;transition:all .2s}
+.calbtn.on{border-color:#ffe9ad;color:#ffe9ad;box-shadow:0 0 12px rgba(245,217,139,.25)}
 .chk input{accent-color:#c98f3d}
 .btn{font-family:inherit;font-size:14px;font-weight:600;letter-spacing:.14em;padding:13px 28px;border-radius:999px;border:1px solid rgba(245,217,139,.4);background:transparent;color:#f0e2b8;cursor:pointer;transition:box-shadow .3s,border-color .3s}
 .btn:hover{border-color:#ffe9ad;box-shadow:0 0 22px rgba(245,217,139,.25)}
@@ -1431,4 +1494,4 @@ const CSS = `
 @media(prefers-reduced-motion:reduce){.fade,.line,.spark,.mcard,.chip.on,.halo.busy,.forming,.persp.cardIn,.hline .mv,.rv,.gateflash{animation:none;transition:none;opacity:1;transform:none}}
 `;
 
-export { calcSaju, sunLongitude, equationOfTime, cityLon, moonLongitude, tzolkin, moonPlacements }; // 검증(e2e/mansae-test.mjs)용
+export { calcSaju, sunLongitude, equationOfTime, cityLon, moonLongitude, tzolkin, moonPlacements, lunar2solar, solar2lunar, daeun }; // 검증(e2e/mansae-test.mjs)용

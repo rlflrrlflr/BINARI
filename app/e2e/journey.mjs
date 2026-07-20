@@ -20,7 +20,7 @@ await page.goto(BASE); await page.waitForTimeout(1400);
 await shot("j01_오프닝");
 await page.getByRole("button", { name: "조각을 모으러 갈래" }).click(); await page.waitForTimeout(500);
 await shot("j02_생년월일");
-const ins = page.locator("input.in");
+const ins = page.locator("input.in:not(.wide)");
 await ins.nth(0).fill(BY); await ins.nth(1).fill(BM); await ins.nth(2).fill(BD);
 await ins.nth(3).fill("14"); await ins.nth(4).fill("30");
 await page.getByRole("button", { name: "하늘을 열기" }).click();

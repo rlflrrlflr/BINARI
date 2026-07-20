@@ -28,7 +28,7 @@ try {
 
   // 2. 생년월일
   await page.waitForTimeout(600);
-  const ins = page.locator("input.in");
+  const ins = page.locator("input.in:not(.wide)");
   await ins.nth(0).fill("1993"); await ins.nth(1).fill("7"); await ins.nth(2).fill("15");
   await ins.nth(3).fill("14"); await ins.nth(4).fill("30");
   await shot("02_birth");
