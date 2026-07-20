@@ -23,6 +23,7 @@ import { useState, useRef, useEffect } from "react";
    v18: ①듀얼 모드 API — /api/judge(배포) 없으면 직접 호출로 자동 폴백(아티팩트 호환 복구) ②저장 안전 셈(localStorage 차단 시 메모리 강등)
         ③모를 권리 — 질문 범위만 답하는 프롬프트 규칙 / 토정비결 옵트인 접기 / 아침 문안 노크형(청해야 펼친다)
    v19(모바일): 질문칸 박스화(파티클에 안 묻힘·iOS 줌 방지 16px)·좌우 풀폭(모바일 여백 축소)
+   v31(B단계): WebGL 수호신 — GPU 입자 2만+(셰이더 위치계산, 메인스레드 해방)·무구심점 흐름(화 리본기둥/수 물결층/목 가지흐름/금 궤도빛줄기/토 난류융기)·촐킨=가닥·꼬임 재배선·3패스 잔상·판결 연기/요동/어셈블 보존·Canvas2D 자동 폴백(?r=2d 강제 가능)
    v30(체감): 카드 뜨면 수호신 사실상 정지(restRef 3단계 0/46/300ms — 판결 정독 중 스크롤·클릭 회복)·회상 나레이션→문항 순차('응,기억나' 탭)·캔버스 가장자리 radial 마스크(네모 경계 제거)·모델 Sonnet5+thinking off·재설정 앱내 확인(window.confirm 폐지)·동전 CTA 밀림 해소(hexlines 88px 예약)·CTA 인식도(고스트 버튼 강화·hover/press)
    v29(정독): 회상 나레이션은 선택 시작 전 1회만(첫 픽 후 숨김)·자기소개는 탄생 순간에만(justBorn 7초 후 소멸)·판결 대기·정독 중 캔버스 프레임 솎기(restRef ~21fps로 스크롤·카드 렌더에 메인스레드 양보)
    v28(지문): 심화 지표를 시각으로 — 납음(30)=움직임 결·촐킨(20날개×13톤)=코어 문양·나크샤트라(27)=강조색·대운=현재 아우라. 판결 방향에 수호신 반응(연기)
@@ -505,7 +506,203 @@ function GuardianCanvas({ saju, zo, mbti, num, moon, birth, agitateRef, reactRef
     draw();
     return () => cancelAnimationFrame(raf);
   }, [saju, zo, mbti, size, birth && birth.y, birth && birth.sex, birth && birth.name]);
-  return <canvas ref={ref} width={size} height={size} style={{ display: "block", WebkitMaskImage: "radial-gradient(circle at 50% 50%, #000 58%, transparent 88%)", maskImage: "radial-gradient(circle at 50% 50%, #000 58%, transparent 88%)" }} />;
+  return <canvas ref={ref} data-renderer="2d" width={size} height={size} style={{ display: "block", WebkitMaskImage: "radial-gradient(circle at 50% 50%, #000 58%, transparent 88%)", maskImage: "radial-gradient(circle at 50% 50%, #000 58%, transparent 88%)" }} />;
+}
+
+
+/* ───── v31: WebGL 수호신 (B단계) — GPU 입자 유속, 무(無)구심점 흐름. 실패 시 Canvas2D 폴백 ─────
+   설계: 입자 위치를 정점 셰이더에서 시간 함수로 계산(상태 없음 → 버퍼 피드백 불필요, 메인스레드 해방).
+   유일성 재배선: 촐킨(20날개×13톤)=가닥 수·꼬임(코어 문양 대체) · 납음=흐름 결 · 나크샤트라=강조색 · 대운=색조 틴트.
+   형태(오행 5): 화=꼬여 오르는 리본 기둥 · 수=흐르는 물결 층 · 목=뻗는 가지 흐름 · 금=궤도 빛줄기 · 토=중심 없는 난류 융기.
+   레퍼런스: 불 리본·유속 소용돌이·난류 블룸(2026-07-21 사용자 영상) — 밝은 중앙 코어 없이 흐름 자체로 존재. */
+const GL_VERT = `
+precision highp float;
+attribute vec4 a_r0; // x:u y:v z:s w:size·위상
+attribute vec4 a_r1; // x:ph y:dly z:colorPick w:strandPick
+uniform float u_t,u_form,u_R,u_arms,u_strands,u_twist,u_speed,u_chaos,u_nayF,u_nayA,u_expand,u_agi,u_k,u_ps,u_lum,u_twk;
+varying float v_a; varying float v_pick;
+void main(){
+  float t=u_t*u_speed;
+  float strand=floor(a_r1.w*u_strands+0.0001);
+  float sOff=strand/max(u_strands,1.0);
+  vec2 p; float depth=1.0;
+  if(u_form<0.5){ // 화 — 꼬여 오르는 리본 기둥
+    float s=fract(a_r0.y+t*0.05*(0.5+a_r0.z));
+    float tw=s*u_twist*6.2832+t*0.55+sOff*6.2832;
+    float rad=(0.16+0.07*sin(s*7.0+t*1.3+a_r1.x))*(0.55+0.9*a_r0.x);
+    p=vec2(sin(tw)*rad*2.1+sin(s*3.0+t*0.4+sOff*9.0)*0.16*u_chaos, mix(-1.05,1.05,s));
+    depth=0.45+0.55*(0.5+0.5*cos(tw));
+    v_a=0.42+0.58*s;
+  } else if(u_form<1.5){ // 수 — 흐르는 물결 층
+    float dir=mod(strand,2.0)<0.5?1.0:-1.0;
+    float x=mix(-1.25,1.25,fract(a_r0.x+t*0.045*dir*(0.6+a_r0.z)));
+    float band=(sOff-0.5)*1.5;
+    p=vec2(x, band+0.11*sin(x*3.6+t*1.5+a_r1.x)+(a_r0.y-0.5)*0.16);
+    depth=0.5+0.5*a_r0.z;
+    v_a=(1.0-abs(x)*0.45)*0.9;
+  } else if(u_form<2.5){ // 목 — 뻗어 오르는 가지 흐름
+    float br=mod(strand,u_arms);
+    float ang=-1.5708+(br-(u_arms-1.0)*0.5)*0.42+0.09*sin(t*0.9+br*2.0);
+    float s=fract(a_r0.y+t*0.05*(0.5+a_r0.z));
+    vec2 d=vec2(cos(ang),sin(ang));
+    p=vec2(0.0,0.72)+d*(s*1.85)+vec2(-d.y,d.x)*(a_r0.x-0.5)*(0.1+s*0.5)
+      +vec2(sin(s*8.0+t+a_r1.x),cos(s*7.0-t))*0.05*s*u_chaos;
+    depth=0.5+0.5*(1.0-s);
+    v_a=0.35+0.65*(1.0-s*0.6);
+  } else if(u_form<3.5){ // 금 — 궤도 빛줄기 (리드 가닥 비대칭)
+    float lead=strand<0.5?1.14:1.0-mod(strand,3.0)*0.05;
+    float ang=sOff*6.2832+t*0.22+a_r0.y*1.4;
+    float rr=(0.3+0.55*a_r0.z+0.05*sin(t*1.2+a_r1.x))*lead;
+    p=vec2(cos(ang)*rr, sin(ang)*rr*0.9);
+    depth=0.45+0.55*(1.0-a_r0.z);
+    v_a=0.45+0.55*(1.0-a_r0.z*0.7);
+  } else { // 토 — 중심 없는 난류 융기
+    float rr=pow(a_r0.z,0.5)*0.92;
+    float ang=a_r0.x*6.2832+t*0.06;
+    p=vec2(cos(ang),sin(ang)*0.92)*rr;
+    p+=u_chaos*0.22*vec2(sin(p.y*2.3+t*0.5+a_r1.x),cos(p.x*2.1-t*0.42+a_r0.y*6.0));
+    p*=1.0+0.05*sin(t*0.8);
+    depth=0.5+0.5*a_r0.y;
+    v_a=0.4+0.6*(1.0-rr);
+  }
+  p+=u_nayA*0.055*vec2(sin(t*u_nayF+a_r0.w*6.2832),cos(t*u_nayF*1.1+a_r1.x)); // 납음 결
+  p+=u_agi*0.05*vec2(sin(t*9.0+a_r0.w*40.0),cos(t*8.0+a_r1.x*40.0));          // 의식 요동
+  p*=(1.0+u_expand)*u_R;                                                        // 판결 팽창/수축
+  vec2 scat=vec2(cos(a_r1.x*6.2832),sin(a_r1.x*6.2832))*(1.15+a_r0.z*0.75);    // 어셈블 시작점
+  float k=clamp((u_k-a_r1.y*0.35)/0.65,0.0,1.0); k=1.0-(1.0-k)*(1.0-k)*(1.0-k);
+  p=mix(scat,p,k);
+  gl_Position=vec4(p,0.0,1.0);
+  gl_PointSize=u_ps*(0.6+a_r0.w)*(0.6+0.5*depth);
+  float twk=mix(1.0,0.55+0.45*sin(t*5.0+a_r0.w*44.0),u_twk);
+  v_a*=(0.25+0.75*k)*u_lum*depth*twk;
+  v_pick=a_r1.z;
+}`;
+const GL_FRAG = `
+precision mediump float;
+uniform vec3 u_c1,u_c2,u_acc; uniform float u_bright,u_alpha;
+varying float v_a; varying float v_pick;
+void main(){
+  float m=smoothstep(0.5,0.05,length(gl_PointCoord-0.5));
+  vec3 col=v_pick>0.76?u_acc:(v_pick>0.38?u_c2:u_c1);
+  float a=m*v_a*u_alpha;
+  gl_FragColor=vec4(col*a*u_bright,a);
+}`;
+const hex2rgb = (h) => [parseInt(h.slice(1,3),16)/255, parseInt(h.slice(3,5),16)/255, parseInt(h.slice(5,7),16)/255];
+function glDetect() {
+  try {
+    if (typeof window === "undefined") return false;
+    if (/[?&]r=2d(&|$)/.test(window.location.search)) return false;   // 디버그: ?r=2d → Canvas2D 강제
+    const c = document.createElement("canvas");
+    return !!(c.getContext("webgl") || c.getContext("experimental-webgl"));
+  } catch (_) { return false; }
+}
+function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactRef, restRef, size = 340, onFail }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const cv = ref.current; if (!cv) return;
+    let gl = null, raf = 0, dead = false, lostFn = null;
+    const fail = () => { if (!dead) { dead = true; if (raf) cancelAnimationFrame(raf); onFail && onFail(); } };
+    try { gl = cv.getContext("webgl", { alpha: true, antialias: false, depth: false, preserveDrawingBuffer: true }); } catch (_) {}
+    if (!gl) { fail(); return; }
+    lostFn = (e) => { e.preventDefault(); fail(); };
+    cv.addEventListener("webglcontextlost", lostFn);
+    try {
+      // ── 지표 → 지문 (Canvas2D와 동일 파생, 시드 재현) ──
+      const E = mbti?.[0] === "E", N = mbti?.[1] === "N", T = mbti?.[2] === "T", P = mbti?.[3] === "P";
+      const seedStr = `${saju.main}${zo?.name || ""}${mbti || ""}${num || ""}${saju.pillars?.일 || ""}`;
+      const srnd = seedRnd(seedStr);
+      const _b = birth || {};
+      const _jd = _b.y ? jdn(+_b.y, +_b.m, +_b.d) : 0, _nn = _jd - 584283;
+      const tzSign = (((_nn + 19) % 20) + 20) % 20, tzTone = (((_nn + 3) % 13) + 13) % 13 + 1;
+      const nayinIdx = Math.max(0, NAYIN.indexOf(saju.nayin));
+      const nayF = 0.4 + (nayinIdx % 10) * 0.14, nayA = 0.32 + Math.floor(nayinIdx / 10) * 0.26;
+      let nakIdx = 0, duEl = null;
+      try { const _mp = moonPlacements(+_b.y, +_b.m, +_b.d, +_b.h || 12, +_b.min || 0, !!_b.noHour); nakIdx = Math.max(0, NAKSHATRA.indexOf(_mp.nakshatra)); } catch (_) {}
+      try { if (_b.sex) { const _du = daeun(+_b.y, +_b.m, +_b.d, _b.noHour ? 12 : +_b.h, _b.noHour || _b.min === "" ? 0 : +_b.min, !!_b.noHour, cityLon(_b.city), _b.sex === "M", new Date().getFullYear()); if (_du && !_du.pre) duEl = _du.el; } } catch (_) {}
+      const FORM_I = { 화: 0, 수: 1, 목: 2, 금: 3, 토: 4 };
+      const [b1, b2] = EL_COLOR[saju.main];
+      const zoIdx = Math.max(0, ZO_ORDER.indexOf(zo?.name));
+      const zoDeg = (zoIdx - 5.5) * 6 + (srnd() - 0.5) * 16;
+      const _ord = Object.entries(saju.counts || {}).sort((a, b) => b[1] - a[1]).map(e => e[0]);
+      const subEl = _ord.find(e => e !== saju.main) || saju.main;
+      let c1 = hex2rgb(rotHue(b1, zoDeg)), c2 = hex2rgb(rotHue(b2, zoDeg));
+      const acc = hex2rgb(rotHue(EL_COLOR[subEl][1], zoDeg * 0.5 + nakIdx * 5));
+      if (duEl) { const dc = hex2rgb(EL_COLOR[duEl][0]); c2 = c2.map((v, i) => v * 0.78 + dc[i] * 0.22); } // 대운 → 색조 틴트
+      const lp = num || 5, arms = 3 + ((lp - 1) % 5);
+      const strands = 3 + tzSign % 6, twist = 1.2 + (tzTone - 1) * 0.22; // 촐킨 → 가닥·꼬임 (코어 문양 대체)
+      const MOON_I = { 새달: 0, 초승달: 1, 상현달: 2, "차오르는 달": 3, 보름달: 4, "기우는 달": 3, 하현달: 2, 그믐달: 1 };
+      const lum = 0.55 + (MOON_I[moon?.name] ?? 2) * 0.11;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      cv.width = Math.round(size * dpr); cv.height = Math.round(size * dpr);
+      gl.viewport(0, 0, cv.width, cv.height);
+      const n = E ? 26000 : 20000;
+      const r0 = new Float32Array(n * 4), r1 = new Float32Array(n * 4);
+      for (let i = 0; i < n; i++) {
+        r0[i * 4] = srnd(); r0[i * 4 + 1] = srnd(); r0[i * 4 + 2] = srnd(); r0[i * 4 + 3] = srnd();
+        r1[i * 4] = srnd(); r1[i * 4 + 1] = srnd(); r1[i * 4 + 2] = srnd(); r1[i * 4 + 3] = srnd();
+      }
+      const mk = (ty, s) => { const sh = gl.createShader(ty); gl.shaderSource(sh, s); gl.compileShader(sh); if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh) || "shader"); return sh; };
+      const prog = gl.createProgram();
+      gl.attachShader(prog, mk(gl.VERTEX_SHADER, GL_VERT)); gl.attachShader(prog, mk(gl.FRAGMENT_SHADER, GL_FRAG));
+      gl.linkProgram(prog);
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog) || "link");
+      gl.useProgram(prog);
+      const buf = (name, arr) => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, arr, gl.STATIC_DRAW); const loc = gl.getAttribLocation(prog, name); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 4, gl.FLOAT, false, 0, 0); return b; };
+      buf("a_r0", r0); buf("a_r1", r1);
+      const L = {}; ["u_t","u_form","u_R","u_arms","u_strands","u_twist","u_speed","u_chaos","u_nayF","u_nayA","u_expand","u_agi","u_k","u_ps","u_lum","u_twk","u_c1","u_c2","u_acc","u_bright","u_alpha"].forEach(k => { L[k] = gl.getUniformLocation(prog, k); });
+      gl.uniform1f(L.u_form, FORM_I[saju.main] ?? 4);
+      gl.uniform1f(L.u_R, 0.8 * (E ? 1.0 : 0.9));
+      gl.uniform1f(L.u_arms, arms); gl.uniform1f(L.u_strands, strands); gl.uniform1f(L.u_twist, twist);
+      gl.uniform1f(L.u_speed, P ? 1.15 : 0.78); gl.uniform1f(L.u_chaos, T ? 0.6 : 1.35);
+      gl.uniform1f(L.u_nayF, nayF); gl.uniform1f(L.u_nayA, nayA);
+      gl.uniform1f(L.u_ps, (T ? 1.5 : 2.1) * dpr); gl.uniform1f(L.u_lum, lum); gl.uniform1f(L.u_twk, N ? 1 : 0);
+      gl.uniform3fv(L.u_c1, c1); gl.uniform3fv(L.u_c2, c2); gl.uniform3fv(L.u_acc, acc);
+      gl.disable(gl.DEPTH_TEST);
+      gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE); // 가산 발광
+      gl.clearColor(0, 0, 0, 0);
+      const born = performance.now(); let lastHeavy = 0;
+      const draw = () => {
+        if (dead) return;
+        const now = performance.now();
+        const agi = agitateRef && agitateRef.current ? 1 : 0;
+        let expand = 0, bright = 1, reacting = false;
+        if (reactRef && reactRef.current) {
+          const rt = (now - reactRef.current.t0) / 1000;
+          if (rt < 1.8) {
+            reacting = true;
+            const env = Math.max(0, 1 - rt / 1.7) * Math.min(1, rt / 0.18);
+            const dir = reactRef.current.dir;
+            if (dir === "GO") { expand = env * 0.5; bright = 1 + env * 0.5; }
+            else if (dir === "STOP") { expand = -env * 0.45; bright = 1 - env * 0.55; }
+            else { expand = env * 0.1 * Math.sin(rt * 5); bright = 1 - env * 0.12; }
+          }
+        }
+        const restMs = restRef && restRef.current ? restRef.current : 0;
+        if (restMs && !agi && !reacting && now - lastHeavy < restMs) { raf = requestAnimationFrame(draw); return; }
+        lastHeavy = now;
+        const t = (now - born) / 1000;
+        gl.uniform1f(L.u_k, Math.min(1, t / 2.6));
+        gl.uniform1f(L.u_agi, agi); gl.uniform1f(L.u_expand, expand); gl.uniform1f(L.u_bright, bright);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.uniform1f(L.u_t, t); gl.uniform1f(L.u_alpha, 0.4); gl.drawArrays(gl.POINTS, 0, n);          // 본체
+        gl.uniform1f(L.u_t, t - 0.055); gl.uniform1f(L.u_alpha, 0.18); gl.drawArrays(gl.POINTS, 0, n); // 잔상 1
+        gl.uniform1f(L.u_t, t - 0.11); gl.uniform1f(L.u_alpha, 0.08); gl.drawArrays(gl.POINTS, 0, n);  // 잔상 2
+        raf = requestAnimationFrame(draw);
+      };
+      draw();
+    } catch (_) { fail(); return; }
+    return () => {
+      dead = true; if (raf) cancelAnimationFrame(raf);
+      if (lostFn) cv.removeEventListener("webglcontextlost", lostFn);
+      try { const ext = gl.getExtension("WEBGL_lose_context"); ext && ext.loseContext(); } catch (_) {}
+    };
+  }, [saju, zo, mbti, size, birth && birth.y, birth && birth.sex, birth && birth.name]);
+  return <canvas ref={ref} data-renderer="webgl" width={size} height={size} style={{ display: "block", width: size + "px", height: size + "px", WebkitMaskImage: "radial-gradient(circle at 50% 50%, #000 58%, transparent 88%)", maskImage: "radial-gradient(circle at 50% 50%, #000 58%, transparent 88%)" }} />;
+}
+/* WebGL 우선, 불가·실패 시 Canvas2D — 기존 버전은 그대로 보존(폴백+비교용) */
+function Guardian(props) {
+  const [glOk, setGlOk] = useState(glDetect);
+  return glOk ? <GuardianCanvasGL {...props} onFail={() => setGlOk(false)} /> : <GuardianCanvas {...props} />;
 }
 
 /* ───── 오프닝용 점 구름 (지표 없이 은은하게) ───── */
@@ -1239,7 +1436,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
           <div className={`halo wide ${busy || (res && !cardOn) ? "busy" : ""} ${res && cardOn ? "dimmed" : ""}`}>
             {phase === 0
               ? <BirthCanvas tint={saju ? EL_COLOR[saju.main] : undefined} size={Math.min(typeof window !== "undefined" ? window.innerWidth : 400, 620)} />
-              : <div className="fade"><GuardianCanvas saju={saju} zo={zo} mbti={mbti} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} restRef={restRef} size={Math.min(typeof window !== "undefined" ? window.innerWidth : 400, 620)} /></div>}
+              : <div className="fade"><Guardian saju={saju} zo={zo} mbti={mbti} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} restRef={restRef} size={Math.min(typeof window !== "undefined" ? window.innerWidth : 400, 620)} /></div>}
             <div className="gtext up">
               {phase === 0 && <p className="forming">흩어져 있던 조각들이<br />너를 향해 모이고 있어…</p>}
             </div>
