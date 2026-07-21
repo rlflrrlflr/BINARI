@@ -521,6 +521,9 @@ attribute vec4 a_r0; // x:u y:v z:s w:size·위상
 attribute vec4 a_r1; // x:ph y:dly z:colorPick w:strandPick
 uniform float u_t,u_form,u_R,u_arms,u_strands,u_twist,u_speed,u_chaos,u_nayF,u_nayA,u_expand,u_agi,u_k,u_ps,u_lum,u_twk,u_psMul,u_focal;
 varying float v_a; varying float v_pick;
+float hash21(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
+float vnoise(vec2 p){ vec2 i=floor(p),f=fract(p); f=f*f*(3.0-2.0*f); float a=hash21(i),b=hash21(i+vec2(1.0,0.0)),c=hash21(i+vec2(0.0,1.0)),d=hash21(i+vec2(1.0,1.0)); return mix(mix(a,b,f.x),mix(c,d,f.x),f.y); }
+vec2 curl2(vec2 p){ float e=0.12; float x1=vnoise(p+vec2(0.0,e)),x2=vnoise(p-vec2(0.0,e)),y1=vnoise(p+vec2(e,0.0)),y2=vnoise(p-vec2(e,0.0)); return vec2(x1-x2,-(y1-y2))/(2.0*e); }
 void main(){
   float t=u_t*u_speed;
   float strand=floor(a_r1.w*u_strands+0.0001);
@@ -569,12 +572,11 @@ void main(){
     depth=0.5+0.5*a_r0.y;
     v_a=0.55+0.45*(1.0-rr*0.7);
   }
-  // ── 살아있는 거동 ── 강체 아님: 입자가 형태 속을 난류로 계속 흘러다님(불 날름·연기 말림)
-  float tt=t*(0.85+u_speed*0.35);
-  vec2 churn=vec2(
-    sin(p.y*2.4+tt*1.35+a_r1.x*4.0)+0.55*sin(p.y*5.1-tt*2.2+a_r0.w*7.0),
-    cos(p.x*2.2-tt*1.15+a_r0.y*4.0)+0.55*cos(p.x*4.6+tt*1.95+a_r1.x*6.0));
-  p+=(0.012+0.018*u_chaos)*churn;                                              // F(감정)=더 요동, T=차분 (형태 결 보존)
+  // ── 살아있는 방향성 흐름 ── 등방성 노이즈(지직) → 코히런트 컬노이즈(연기·불 결) + 형태 방향
+  vec2 fdir = u_form<0.5 ? vec2(0.0,1.0) : u_form<1.5 ? vec2(1.0,0.1) : u_form<2.5 ? vec2(0.15,1.0) : u_form<3.5 ? vec2(0.0,0.0) : vec2(0.0,0.55); // 화 위·수 옆·목 위·금 나선·토 피어오름
+  vec2 cflow = curl2(p*1.8 + fdir*(t*0.22) + vec2(0.0, t*0.12));               // 코히런트 흐름장(결이 뭉쳐 흐름)
+  p += (0.05+0.04*u_chaos) * cflow;                                            // 결 따라 흐름(F=더)
+  p += fdir * 0.03 * (0.55+0.45*sin(t*0.8+a_r0.w*6.283));                      // 형태 방향 드리프트
   // 구심점(I/E): I=코어로 모임, E=중심 없이 흩어져 떠돎
   p*=mix(1.14,0.9,u_focal);
   p+=(1.0-u_focal)*0.2*vec2(sin(t*0.24+1.7),sin(t*0.19+0.3));                   // E: 오프센터 유동
@@ -656,11 +658,11 @@ function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactR
       const lp = num || 5, arms = 3 + ((lp - 1) % 5);
       const strands = 3 + tzSign % 6, twist = 1.2 + (tzTone - 1) * 0.22; // 촐킨 → 가닥·꼬임 (코어 문양 대체)
       const MOON_I = { 새달: 0, 초승달: 1, 상현달: 2, "차오르는 달": 3, 보름달: 4, "기우는 달": 3, 하현달: 2, 그믐달: 1 };
-      const lum = 0.55 + (MOON_I[moon?.name] ?? 2) * 0.11;
+      const lum = 0.72 + (MOON_I[moon?.name] ?? 2) * 0.1;
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       cv.width = Math.round(size * dpr); cv.height = Math.round(size * dpr);
       gl.viewport(0, 0, cv.width, cv.height);
-      const n = E ? 26000 : 20000;
+      const n = E ? 34000 : 27000;
       const r0 = new Float32Array(n * 4), r1 = new Float32Array(n * 4);
       for (let i = 0; i < n; i++) {
         r0[i * 4] = srnd(); r0[i * 4 + 1] = srnd(); r0[i * 4 + 2] = srnd(); r0[i * 4 + 3] = srnd();
