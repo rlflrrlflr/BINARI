@@ -575,18 +575,19 @@ void main(){
   vec2 scat=vec2(cos(a_r1.x*6.2832),sin(a_r1.x*6.2832))*(1.15+a_r0.z*0.75);    // 어셈블 시작점
   float k=clamp((u_k-a_r1.y*0.35)/0.65,0.0,1.0); k=1.0-(1.0-k)*(1.0-k)*(1.0-k);
   p=mix(scat,p,k);
-  // 공간감: 얇은 부피 + 고정 기울기 + 완만한 자전 → 시차(우주감)
-  float zc=(a_r0.w-0.5)*0.62+(depth-0.5)*0.34;
+  // 공간감: 얇은 부피 + 형태별 기울기(원반=타원 foreshorten) + 좌우 흔들림 시차 + 강한 원근
+  float zc=(a_r0.w-0.5)*0.6+(depth-0.5)*0.3;
   vec3 P=vec3(p,zc);
-  float ax=0.52;                                              // 고정 기울기(원반·기둥을 입체로)
-  P.yz=mat2(cos(ax),-sin(ax),sin(ax),cos(ax))*P.yz;
-  float ay=t*0.06;                                            // 완만한 자전
+  float ax = u_form<0.5 ? 0.42 : u_form<1.5 ? 0.9 : u_form<2.5 ? 0.46 : u_form<3.5 ? 0.8 : 0.74; // 화·수·목·금·토
+  P.yz=mat2(cos(ax),-sin(ax),sin(ax),cos(ax))*P.yz;          // X축 기울기
+  float ay=0.34*sin(t*0.16);                                 // 좌우 흔들림(자전 아님 → edge-on 방지, 머리 흔들 듯 시차)
   P.xz=mat2(cos(ay),-sin(ay),sin(ay),cos(ay))*P.xz;
-  float sc=2.8/(2.8+P.z);                                     // 원근(가까울수록 크게)
-  gl_Position=vec4(P.xy*sc*0.66,0.0,1.0);
-  gl_PointSize=u_ps*u_psMul*(0.6+a_r0.w)*(0.55+0.5*depth)*sc;
+  float dcam=2.05;                                            // 가까운 카메라 → 강한 원근(근접 확대·foreshorten)
+  float sc=dcam/(dcam+P.z);
+  gl_Position=vec4(P.xy*sc*0.45,0.0,1.0);
+  gl_PointSize=u_ps*u_psMul*(0.6+a_r0.w)*(0.5+0.55*depth)*sc;
   float twk=mix(1.0,0.55+0.45*sin(t*5.0+a_r0.w*44.0),u_twk);
-  v_a*=(0.25+0.75*k)*u_lum*depth*twk*clamp(sc*0.72,0.4,1.2);
+  v_a*=(0.25+0.75*k)*u_lum*depth*twk*clamp(sc*0.66,0.34,1.34); // 근/원 밝기 대비(깊이 단서)
   v_pick=a_r1.z;
 }`;
 const GL_FRAG = `
