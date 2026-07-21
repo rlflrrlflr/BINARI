@@ -519,7 +519,7 @@ const GL_VERT = `
 precision highp float;
 attribute vec4 a_r0; // x:u y:v z:s w:size·위상
 attribute vec4 a_r1; // x:ph y:dly z:colorPick w:strandPick
-uniform float u_t,u_form,u_R,u_arms,u_strands,u_twist,u_speed,u_chaos,u_nayF,u_nayA,u_expand,u_agi,u_k,u_ps,u_lum,u_twk,u_psMul;
+uniform float u_t,u_form,u_R,u_arms,u_strands,u_twist,u_speed,u_chaos,u_nayF,u_nayA,u_expand,u_agi,u_k,u_ps,u_lum,u_twk,u_psMul,u_focal;
 varying float v_a; varying float v_pick;
 void main(){
   float t=u_t*u_speed;
@@ -569,9 +569,19 @@ void main(){
     depth=0.5+0.5*a_r0.y;
     v_a=0.55+0.45*(1.0-rr*0.7);
   }
+  // ── 살아있는 거동 ── 강체 아님: 입자가 형태 속을 난류로 계속 흘러다님(불 날름·연기 말림)
+  float tt=t*(0.85+u_speed*0.35);
+  vec2 churn=vec2(
+    sin(p.y*2.4+tt*1.35+a_r1.x*4.0)+0.55*sin(p.y*5.1-tt*2.2+a_r0.w*7.0),
+    cos(p.x*2.2-tt*1.15+a_r0.y*4.0)+0.55*cos(p.x*4.6+tt*1.95+a_r1.x*6.0));
+  p+=(0.012+0.018*u_chaos)*churn;                                              // F(감정)=더 요동, T=차분 (형태 결 보존)
+  // 구심점(I/E): I=코어로 모임, E=중심 없이 흩어져 떠돎
+  p*=mix(1.14,0.9,u_focal);
+  p+=(1.0-u_focal)*0.2*vec2(sin(t*0.24+1.7),sin(t*0.19+0.3));                   // E: 오프센터 유동
+  float rl=length(p);
   p+=u_nayA*0.055*vec2(sin(t*u_nayF+a_r0.w*6.2832),cos(t*u_nayF*1.1+a_r1.x)); // 납음 결
   p+=u_agi*0.05*vec2(sin(t*9.0+a_r0.w*40.0),cos(t*8.0+a_r1.x*40.0));          // 의식 요동
-  p*=(1.0+u_expand)*u_R;                                                        // 판결 팽창/수축
+  p*=(1.0+u_expand)*(1.0+0.028*sin(t*1.7))*u_R;                                 // 판결 팽창/수축 + 숨쉬는 맥동
   vec2 scat=vec2(cos(a_r1.x*6.2832),sin(a_r1.x*6.2832))*(1.15+a_r0.z*0.75);    // 어셈블 시작점
   float k=clamp((u_k-a_r1.y*0.35)/0.65,0.0,1.0); k=1.0-(1.0-k)*(1.0-k)*(1.0-k);
   p=mix(scat,p,k);
@@ -580,14 +590,16 @@ void main(){
   vec3 P=vec3(p,zc);
   float ax = u_form<0.5 ? 0.42 : u_form<1.5 ? 0.9 : u_form<2.5 ? 0.46 : u_form<3.5 ? 0.8 : 0.74; // 화·수·목·금·토
   P.yz=mat2(cos(ax),-sin(ax),sin(ax),cos(ax))*P.yz;          // X축 기울기
-  float ay=0.5*sin(t*0.34);                                  // 좌우 흔들림 ±29°·18.5s(각도가 눈에 띄게 바뀜, edge-on 안 감)
+  float ay=0.16*sin(t*0.5);                                  // 미세 시차만(강체 스윙 축소 — '두둥실' 제거)
   P.xz=mat2(cos(ay),-sin(ay),sin(ay),cos(ay))*P.xz;
   float dcam=2.4;                                             // 원근(근/원 크기차 = 입체 단서)
   float sc=dcam/(dcam+P.z);
   gl_Position=vec4(P.xy*sc*0.64,0.0,1.0);                     // 0.45→0.64 확대(너무 작던 것 보정)
   gl_PointSize=u_ps*u_psMul*(0.6+a_r0.w)*(0.5+0.55*depth)*sc;
   float twk=mix(1.0,0.55+0.45*sin(t*5.0+a_r0.w*44.0),u_twk);
-  v_a*=(0.25+0.75*k)*u_lum*depth*twk*clamp(sc*0.66,0.34,1.34); // 근/원 밝기 대비(깊이 단서)
+  float life=0.78+0.22*sin(t*3.6+a_r1.x*22.0);                                  // 잔잔한 생명 깜빡임
+  float core=1.0+u_focal*0.45*smoothstep(0.5,0.0,rl);                           // I: 코어 발광(구심점, 백화 완화)
+  v_a*=(0.25+0.75*k)*u_lum*depth*twk*clamp(sc*0.66,0.34,1.34)*life*core;
   v_pick=a_r1.z;
 }`;
 const GL_FRAG = `
@@ -662,11 +674,11 @@ function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactR
       gl.useProgram(prog);
       const buf = (name, arr) => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, arr, gl.STATIC_DRAW); const loc = gl.getAttribLocation(prog, name); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 4, gl.FLOAT, false, 0, 0); return b; };
       buf("a_r0", r0); buf("a_r1", r1);
-      const L = {}; ["u_t","u_form","u_R","u_arms","u_strands","u_twist","u_speed","u_chaos","u_nayF","u_nayA","u_expand","u_agi","u_k","u_ps","u_lum","u_twk","u_psMul","u_c1","u_c2","u_acc","u_bright","u_alpha"].forEach(k => { L[k] = gl.getUniformLocation(prog, k); });
+      const L = {}; ["u_t","u_form","u_R","u_arms","u_strands","u_twist","u_speed","u_chaos","u_nayF","u_nayA","u_expand","u_agi","u_k","u_ps","u_lum","u_twk","u_psMul","u_focal","u_c1","u_c2","u_acc","u_bright","u_alpha"].forEach(k => { L[k] = gl.getUniformLocation(prog, k); });
       gl.uniform1f(L.u_form, FORM_I[saju.main] ?? 4);
       gl.uniform1f(L.u_R, 0.8 * (E ? 1.0 : 0.9));
       gl.uniform1f(L.u_arms, arms); gl.uniform1f(L.u_strands, strands); gl.uniform1f(L.u_twist, twist);
-      gl.uniform1f(L.u_speed, P ? 1.15 : 0.78); gl.uniform1f(L.u_chaos, T ? 0.6 : 1.35);
+      gl.uniform1f(L.u_speed, P ? 1.15 : 0.78); gl.uniform1f(L.u_chaos, T ? 0.6 : 1.35); gl.uniform1f(L.u_focal, E ? 0.12 : 0.88); // I=구심점(모임)·E=무구심점(흩어짐)
       gl.uniform1f(L.u_nayF, nayF); gl.uniform1f(L.u_nayA, nayA);
       const F_AL = { 화: 0.58, 수: 0.5, 목: 0.52, 금: 0.3, 토: 0.4 }[saju.main] || 0.5;  // 가산 백화 방지: 밀집 형태일수록 낮게
       const F_PS = { 금: 0.82, 토: 0.9 }[saju.main] || 1;
