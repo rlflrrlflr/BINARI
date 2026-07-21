@@ -575,10 +575,18 @@ void main(){
   vec2 scat=vec2(cos(a_r1.x*6.2832),sin(a_r1.x*6.2832))*(1.15+a_r0.z*0.75);    // 어셈블 시작점
   float k=clamp((u_k-a_r1.y*0.35)/0.65,0.0,1.0); k=1.0-(1.0-k)*(1.0-k)*(1.0-k);
   p=mix(scat,p,k);
-  gl_Position=vec4(p,0.0,1.0);
-  gl_PointSize=u_ps*u_psMul*(0.6+a_r0.w)*(0.6+0.5*depth);
+  // 공간감: 얇은 부피 + 고정 기울기 + 완만한 자전 → 시차(우주감)
+  float zc=(a_r0.w-0.5)*0.62+(depth-0.5)*0.34;
+  vec3 P=vec3(p,zc);
+  float ax=0.52;                                              // 고정 기울기(원반·기둥을 입체로)
+  P.yz=mat2(cos(ax),-sin(ax),sin(ax),cos(ax))*P.yz;
+  float ay=t*0.06;                                            // 완만한 자전
+  P.xz=mat2(cos(ay),-sin(ay),sin(ay),cos(ay))*P.xz;
+  float sc=2.8/(2.8+P.z);                                     // 원근(가까울수록 크게)
+  gl_Position=vec4(P.xy*sc*0.66,0.0,1.0);
+  gl_PointSize=u_ps*u_psMul*(0.6+a_r0.w)*(0.55+0.5*depth)*sc;
   float twk=mix(1.0,0.55+0.45*sin(t*5.0+a_r0.w*44.0),u_twk);
-  v_a*=(0.25+0.75*k)*u_lum*depth*twk;
+  v_a*=(0.25+0.75*k)*u_lum*depth*twk*clamp(sc*0.72,0.4,1.2);
   v_pick=a_r1.z;
 }`;
 const GL_FRAG = `
@@ -1442,8 +1450,8 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
         <section className="scene fade">
           <div className={`halo wide ${busy || (res && !cardOn) ? "busy" : ""} ${res && cardOn ? "dimmed" : ""}`}>
             {phase === 0
-              ? <BirthCanvas tint={saju ? EL_COLOR[saju.main] : undefined} size={Math.min(typeof window !== "undefined" ? window.innerWidth : 400, 620)} />
-              : <div className="fade"><Guardian saju={saju} zo={zo} mbti={mbti} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} restRef={restRef} size={Math.min(typeof window !== "undefined" ? window.innerWidth : 400, 620)} /></div>}
+              ? <BirthCanvas tint={saju ? EL_COLOR[saju.main] : undefined} size={Math.min(typeof window !== "undefined" ? window.innerWidth * 0.92 : 360, typeof window !== "undefined" ? window.innerHeight * 0.44 : 360, 560)} />
+              : <div className="fade"><Guardian saju={saju} zo={zo} mbti={mbti} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} restRef={restRef} size={Math.min(typeof window !== "undefined" ? window.innerWidth * 0.92 : 360, typeof window !== "undefined" ? window.innerHeight * 0.44 : 360, 560)} /></div>}
             <div className="gtext up">
               {phase === 0 && <p className="forming">흩어져 있던 조각들이<br />너를 향해 모이고 있어…</p>}
             </div>
