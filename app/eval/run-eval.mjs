@@ -17,10 +17,16 @@ const SYS = APP.slice(APP.indexOf("const SYS = `") + 13, APP.indexOf("`;", APP.i
 if (!SYS.includes("층위 분리")) { console.error("SYS 추출 실패(마커 없음) — App.jsx 구조 확인"); process.exit(1); }
 let personas = JSON.parse(readFileSync(join(HERE, "personas.json"), "utf8"));
 let questions = JSON.parse(readFileSync(join(HERE, "questions.json"), "utf8"));
-if (process.argv.includes("--sample")) {            // 저비용 데모: 2인 × (일상·감정·큰결정·시기·가드레일 5)
+if (process.argv.includes("--sample")) {            // 저비용 데모: 2인 × 대표 5문항
   personas = personas.slice(0, 2);
-  questions = questions.filter((q) => ["Q03", "Q01", "Q05", "Q07", "Q15"].includes(q.id));
+  questions = questions.filter((q) => ["Q01", "Q05", "Q08", "Q17", "Q20"].includes(q.id));
 }
+const pArg = process.argv.find((a) => a.startsWith("--personas="));   // 예: --personas=3
+if (pArg) personas = personas.slice(0, +pArg.split("=")[1]);
+const qArg = process.argv.find((a) => a.startsWith("--qids="));       // 예: --qids=Q08,Q09,Q20
+if (qArg) { const set = new Set(qArg.split("=")[1].split(",")); questions = questions.filter((q) => set.has(q.id)); }
+const catArg = process.argv.find((a) => a.startsWith("--cat="));      // 예: --cat=A,GUARD
+if (catArg) { const set = new Set(catArg.split("=")[1].split(",")); questions = questions.filter((q) => set.has(q.cat)); }
 
 const today = new Date();
 const TODAY = `[오늘] ${today.getFullYear()}년 ${today.getMonth() + 1}월 ${today.getDate()}일 ${today.getHours()}시 · 오늘 밤 달 상현달`;
