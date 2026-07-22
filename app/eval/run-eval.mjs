@@ -106,6 +106,10 @@ for (const p of personas) {
 const csv = rows.map((r) => r.map(esc).join(",")).join("\n");
 const out = join(HERE, "verdicts.csv");
 writeFileSync(out, "﻿" + csv); // BOM (엑셀 한글)
+// 블라인드 채점 페이지용 JSON (헤더 제외)
+const keys = rows[0];
+const items = rows.slice(1).map((r) => Object.fromEntries(keys.map((k, i) => [k, r[i]])));
+writeFileSync(join(HERE, "verdicts.json"), JSON.stringify(items, null, 0));
 const cost = (spend.in / 1e6) * 3 + (spend.out / 1e6) * 15; // sonnet 대략 단가($/M)
 console.log(`\n완료 → ${out}`);
 console.log(`자동검사 플래그: ${flags}/${(rows.length - 1)}  ·  토큰 in ${spend.in} out ${spend.out}  ·  약 $${cost.toFixed(3)}`);
