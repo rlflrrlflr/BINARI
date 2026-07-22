@@ -233,7 +233,7 @@ const LP_READ = {
 };
 
 /* ───── v7 지표: 바이오리듬 · 삼재 · 가치 ───── */
-const VALUES16 = ["안정", "성장", "자유", "인정", "관계", "성취", "즐거움", "의미", "돈", "건강", "용기", "정직", "창조", "평온", "몰입"]; // v22: 24→16 통합 / v36: 가족 제외(마지막에 버리기 부담)
+const VALUES16 = ["안정", "성장", "자유", "인정", "관계", "성취", "즐거움", "의미", "돈", "건강", "용기", "모험", "창조", "평온", "아름다움", "몰입"]; // v37: '버리기 죄책감' 항목 배제 원칙 — 가족·정직 제외, 모험·아름다움 추가(4×4 복원)
 function biorhythm(y, m, d) { // 출생일 기준 23/28/33일 주기 — 정확 계산
   const days = (Date.now() - new Date(y, m - 1, d).getTime()) / 86400000;
   const f = (p) => Math.round(Math.sin(2 * Math.PI * (days / p)) * 100);
@@ -1201,7 +1201,7 @@ export default function App() {
 
   const doReveal = () => {
     const y = +birth.y, m = +birth.m, d = +birth.d, h = birth.noHour ? 12 : +birth.h, mi = birth.noHour || birth.min === "" ? 0 : +birth.min;
-    if (!y || !m || !d || y < 1900 || y > 2025 || m < 1 || m > 12 || d < 1 || d > 31) { setErr("생년월일을 확인해줘. 너를 또렷하게 보려면 정확해야 해."); return; }
+    if (!y || !m || !d || y < 1900 || y > new Date().getFullYear() || m < 1 || m > 12 || d < 1 || d > 31) { setErr("생년월일을 확인해줘. 너를 또렷하게 보려면 정확해야 해."); return; }
     if (!birth.noHour && (birth.h === "" || h < 0 || h > 23)) { setErr("태어난 시(0~23시)를 알려주거나 '모름'을 선택해줘."); return; }
     if (!birth.noHour && birth.min !== "" && (mi < 0 || mi > 59)) { setErr("분은 0~59 사이로 알려줘."); return; }
     setErr("");
@@ -1257,7 +1257,7 @@ export default function App() {
       const profile = `${birth.name ? `호칭: ${birth.name}\n` : ""}${birth.sex ? `성별: ${birth.sex === "M" ? "남" : "여"}\n` : ""}사주: ${saju.pillars.년}년 ${saju.pillars.월}월 ${saju.pillars.일}일 ${saju.pillars.시}시 / 오행 ${Object.entries(saju.counts).map(([k, v]) => k + v).join(" ")} / 주기운 ${saju.main}${saju.nayin ? ` / 납음 ${saju.nayin}` : ""}
 별자리: ${zo.name}(${zo.el}) / 달: 태어난 밤의 위상 ${moon.name} · 달 별자리 ${mp.moonSign}(정서·내면) · 나크샤트라 ${mp.nakshatra}(베다 27수)
 마야 촐킨: ${tzk.tone}의 톤 · ${tzk.sign}
-MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ? `\n대운: 아직 첫 대운 전 — 대운수 ${du.num}세부터 ${du.dir}(지금은 월주 기운이 지배)` : `\n대운(현재 인생 시기): ${du.ganji}(${du.el}) 대운 · ${du.startAge}~${du.endAge}세 · ${du.dir} — 10년 단위 큰 흐름`) : ""}${sj ? `\n삼재: 올해 ${sj} (입춘 경계 근사)` : ""}${tj ? `\n토정비결(당년 신수): 괘상수 ${tj.code} (상${tj.sang} 중${tj.jung} 하${tj.ha}), 음력 생일 ${tj.lunar}` : ""}${core ? `\n가치여정(워드소팅 16→6→3→1): 핵심 ${core} / 지킨 가치 ${vals4.filter(v => v !== core).join("·")} / 마지막에 버린 ${vals8.filter(v => !vals4.includes(v)).join("·")}` : ""}`;
+MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ? `\n대운: 아직 첫 대운 전 — 대운수 ${du.num}세부터 ${du.dir}(지금은 월주 기운이 지배)` : `\n대운(현재 인생 시기): ${du.ganji}(${du.el}) 대운 · ${du.startAge}~${du.endAge}세 · ${du.dir} — 10년 단위 큰 흐름`) : ""}${sj ? `\n삼재: 올해 ${sj} (입춘 경계 근사)` : ""}${tj ? `\n토정비결(당년 신수): 괘상수 ${tj.code} (상${tj.sang} 중${tj.jung} 하${tj.ha}), 음력 생일 ${tj.lunar}` : ""}${core ? `\n가치여정(워드소팅 16→6→3→1): 핵심 ${core} / 지킨 가치 ${vals4.filter(v => v !== core).join("·")} / 마지막에 내려놓은 ${vals8.filter(v => !vals4.includes(v)).join("·")}` : ""}`;
       // 주역 괘는 질문마다 달라지므로 유저 턴에
       const qExtra = hi ? `\n[이번에 청한 주역] 본괘 ${hi.name}${hi.moving.length ? ` / 변효 ${hi.moving.map(n => n + 1).join(",")}효 / 지괘 ${hi.toName}` : ""}` : "";
       const fuRec = [...records].reverse().find(r => r.followUp && r.followUp !== "later");
@@ -1283,7 +1283,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
       if (quick) { setDetail({ _quick: true }); }            // v16(B5): 속결은 콜2 생략 — 원가 절반
       else { detailArgsRef.current = [system, priorConvo, userText, r1]; fetchDetail(system, priorConvo, userText, r1); }
       return;
-    } catch (e) { setErr("판결이 닿지 못했어 · " + (e?.message || "")); }
+    } catch (e) { const m = e?.message || ""; setErr("판결이 닿지 못했어 · " + (/[가-힣]/.test(m) ? m : "잠시 뒤 다시 청해줘")); console.warn("judge:", m); }
     setBusy(false);
   };
 
@@ -1315,7 +1315,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
     return { bio, mp, ilju: todayIlju(), mood };
   })() : null;
 
-  const guardianIntro = saju && zo ? `나는 ${saju.nayin ? `'${saju.nayin.split("·")[1]}'` : (saju.main === "수" ? "깊은 물결" : saju.main === "화" ? "꺼지지 않는 불꽃" : saju.main === "목" ? "자라나는 숲" : saju.main === "금" ? "벼려진 빛" : "단단한 대지")}의 기운을 두른, ${zo.el === "물" ? "안개처럼 흐르는" : zo.el === "불" ? "타오르는 형상의" : zo.el === "공기" ? "바람으로 된" : "산처럼 고요한"} 존재야.` : "";
+  const guardianIntro = saju && zo ? `나는 ${saju.nayin ? `'${saju.nayin.split("·")[1] || saju.nayin}'` : (saju.main === "수" ? "깊은 물결" : saju.main === "화" ? "꺼지지 않는 불꽃" : saju.main === "목" ? "자라나는 숲" : saju.main === "금" ? "벼려진 빛" : "단단한 대지")}의 기운을 두른, ${zo.el === "물" ? "안개처럼 흐르는" : zo.el === "불" ? "타오르는 형상의" : zo.el === "공기" ? "바람으로 된" : "산처럼 고요한"} 존재야.` : "";
 
   return (
     <div className="stage">
@@ -1360,7 +1360,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
               </div>
               {birth.cal === "lunar" && <p className="fine">달의 날짜구나 — 하늘의 달력으로 바꿔 읽어줄게.</p>}
               {err && <p className="err">{err}</p>}
-              <button className="btn gold mt" onClick={() => { const y = +birth.y, m = +birth.m, d = +birth.d; if (!y || !m || !d || y < 1900 || y > 2025 || m < 1 || m > 12 || d < 1 || d > 31) { setErr("생년월일을 확인해줘. 너를 또렷하게 보려면 정확해야 해."); return; } setErr(""); setBstep(2); }}>이 하늘이야</button>
+              <button className="btn gold mt" onClick={() => { const y = +birth.y, m = +birth.m, d = +birth.d; if (!y || !m || !d || y < 1900 || y > new Date().getFullYear() || m < 1 || m > 12 || d < 1 || d > 31) { setErr("생년월일을 확인해줘. 너를 또렷하게 보려면 정확해야 해."); return; } setErr(""); setBstep(2); }}>이 하늘이야</button>
             </div>
           )}
           {bstep === 2 && (
@@ -1466,7 +1466,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
             </div>
           </div>
           <div key={vstage} className="fade">
-          <p className="sub2">{vstage === 0 ? "너를 움직이는 말들이야. 생각 말고, 손이 가는 대로 여섯 개." : vstage === 1 ? "여섯 중 셋만 지킬 수 있어. 무엇을 버리는지가 진짜 너야." : "마지막이야 — 단 하나만 지킬 수 있다면."}</p>
+          <p className="sub2">{vstage === 0 ? "너를 움직이는 말들이야. 생각 말고, 손이 가는 대로 여섯 개." : vstage === 1 ? "여섯 중 셋만 지킬 수 있어. 무엇을 내려놓는지가 진짜 너야." : "마지막이야 — 단 하나만 지킬 수 있다면."}</p>
           <div className="grid16">{(vstage === 0 ? VALUES16 : vstage === 1 ? vals8 : vals4).map(v => (
             <button key={v} className={`cell ${(vstage === 0 ? vals8 : vstage === 1 ? vals4 : [core]).includes(v) ? "sel" : ""}`} onClick={() => pick(v)}>{v}</button>
           ))}</div>
@@ -1541,7 +1541,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                 </div>
               )}
               {!ritual && <p className="gintro dim2">{isNight ? "밤이 깊었네. 이 시간의 물음은 마음이 먼저 기울어 있기 마련이야." : "그래서, 요즘 뭘 망설이고 있어?"}</p>}
-              {!ritual && <textarea className="qbox" rows={2} value={q} placeholder={'"밤 11시, 전남친에게 카톡 보낼까?"'} onChange={e => setQ(e.target.value)} />}
+              {!ritual && <textarea className="qbox" rows={2} maxLength={100} value={q} placeholder={'"밤 11시, 전남친에게 카톡 보낼까?"'} onChange={e => setQ(e.target.value)} />}
               {!ritual && (() => { const qk = looksQuick(q); return (
                 <div className="w100">
                   <div className="row gap center">
@@ -1556,7 +1556,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
               )}
               {!ritual && tj && tjOpen && <p className="season fade">{yearGanji} 토정비결 — 새해의 괘 <b>{tj.code}</b> (상{tj.sang}·중{tj.jung}·하{tj.ha}) · 음력 생일 {tj.lunar} 기준 · 판결에 함께 흘러들어</p>}
               {!ritual && !res && records.length > 0 && (
-                <button className="resetlink" onClick={() => setLogOpen(o => !o)}>{logOpen ? "판결록 접기" : `판결록 — ${records.length}번의 판결`}</button>
+                <button className="resetlink" onClick={() => { setLogOpen(o => !o); setOpenRec(-1); }}>{logOpen ? "판결록 접기" : `판결록 — ${records.length}번의 판결`}</button>
               )}
               {!ritual && !res && logOpen && (
                 <div className="vlog fade">
@@ -1707,7 +1707,6 @@ const CSS = `
 .calbtn.on{border-color:#ffe9ad;color:#ffe9ad;box-shadow:0 0 12px rgba(245,217,139,.25)}
 .bscene{display:flex;flex-direction:column;gap:14px;align-items:center;width:100%;margin-top:6px}
 .in.center{text-align:center}
-.center{justify-content:center}
 .lateIn{opacity:0;animation:fd 1.6s cubic-bezier(.22,.7,.25,1) 4.4s forwards}
 .rvlunar{display:block;font-size:11.5px;font-family:sans-serif;letter-spacing:.12em;color:#9d8fb5;margin-top:7px;font-style:normal}
 .addpanel{display:flex;flex-direction:column;gap:10px;align-items:center;margin:2px 0 14px;width:100%}
@@ -1717,10 +1716,9 @@ const CSS = `
 @keyframes blinkDot{0%,100%{opacity:.15}50%{opacity:1}}
 .chk input{accent-color:#c98f3d}
 .btn{font-family:inherit;font-size:14px;font-weight:600;letter-spacing:.14em;padding:13px 28px;border-radius:999px;border:1px solid rgba(245,217,139,.4);background:transparent;color:#f0e2b8;cursor:pointer;transition:box-shadow .3s,border-color .3s,background .3s,transform .1s}
-.btn:hover{border-color:#ffe9ad;box-shadow:0 0 22px rgba(245,217,139,.25)}
 .btn.gold{background:linear-gradient(180deg,#f5d98b,#c98f3d);color:#241a08;border:none;box-shadow:0 6px 22px rgba(201,143,61,.3)}
 .btn.ghost{border-color:rgba(245,217,139,.32);background:rgba(245,217,139,.05);color:#d6c493;box-shadow:0 2px 14px rgba(0,0,0,.28)}.btn:hover{border-color:rgba(245,217,139,.7);box-shadow:0 0 16px rgba(245,217,139,.2)}.btn.gold:hover{box-shadow:0 8px 26px rgba(201,143,61,.45)}.btn:active{transform:translateY(1px)}.btn:disabled{opacity:.45;cursor:default}.mt{margin-top:18px}
-.fine{font-family:sans-serif;font-size:10px;color:#5f5670;margin-top:14px;line-height:1.6}
+.fine{font-family:sans-serif;font-size:11px;color:#6b617d;margin-top:14px;line-height:1.6}
 .err{color:#e58a8a;font-size:13px;font-family:sans-serif;margin:10px 0}
 .cards{display:flex;flex-direction:column;gap:14px;width:100%;margin-top:10px}
 .chips{display:flex;flex-direction:column;gap:8px;width:100%;margin:8px 0 4px;align-items:center}
@@ -1775,7 +1773,7 @@ const CSS = `
 .coin{width:16px;height:16px;border-radius:50%;background:linear-gradient(180deg,#f5d98b,#c98f3d);display:inline-block;box-shadow:0 0 10px rgba(245,217,139,.55);animation:coinFlip .3s linear infinite}
 .coin.c2{animation-delay:.09s}.coin.c3{animation-delay:.17s}
 @keyframes coinFlip{0%{transform:rotateX(0) translateY(0)}50%{transform:rotateX(180deg) translateY(-12px)}100%{transform:rotateX(360deg) translateY(0)}}
-.qquote{font-size:16px;line-height:1.7;color:#f0e2b8;margin:0 0 2px;text-align:center}
+.qquote{font-size:16px;line-height:1.7;color:#f0e2b8;margin:0 0 2px;text-align:center;overflow-wrap:anywhere}
 .coinstage{min-height:34px;display:flex;align-items:center;justify-content:center;gap:14px}
 .coin.fly{animation:coinFly .75s ease-out both}
 .coin.fly.c2{animation-delay:.09s}.coin.fly.c3{animation-delay:.17s}
@@ -1798,7 +1796,6 @@ const CSS = `
 .dimq{font-size:15px;line-height:1.6;color:#f0e2b8;margin:0}
 .dimrow{display:flex;gap:8px;width:100%}
 .dimopt{flex:1;font-family:inherit;font-size:12.5px;padding:12px 8px;border-radius:14px;border:1px solid rgba(245,217,139,.24);background:rgba(245,217,139,.05);color:#c3b591;cursor:pointer;transition:all .25s;line-height:1.5;word-break:keep-all}.dimopt:hover{border-color:rgba(245,217,139,.5);color:#e6d9a8}
-.dimopt:hover{border-color:rgba(245,217,139,.5)}
 .dimopt.sel{border-color:#ffe9ad;color:#ffe9ad;box-shadow:0 0 14px rgba(245,217,139,.3),inset 0 0 10px rgba(245,217,139,.08)}
 @keyframes rvIn{from{opacity:0;filter:blur(7px);transform:scale(.9)}to{opacity:1;filter:blur(0);transform:none}}
 @keyframes rvScatter{to{opacity:0;filter:blur(12px);letter-spacing:.7em;transform:scale(1.28)}}
@@ -1816,7 +1813,7 @@ const CSS = `
 .vface.back{transform:rotateY(180deg);text-align:left}
 .vtop,.vbot{display:flex;justify-content:space-between;font-family:sans-serif;font-size:10px;letter-spacing:.2em;color:#c9b98f}
 .vbot{margin-top:auto;color:#8a7f95}
-.vq{font-size:14px;line-height:1.7;margin:22px 0 0;color:#d8cfe6}
+.vq{font-size:14px;line-height:1.7;margin:22px 0 0;color:#d8cfe6;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .vdiv{display:flex;align-items:center;gap:10px;color:#c98f3d;margin:14px 0;font-size:11px}.vdiv::before,.vdiv::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,transparent,#c98f3d88,transparent)}
 .vv{font-size:27px;font-weight:900;margin:0;background:linear-gradient(180deg,#ffe9ad,#c98f3d);-webkit-background-clip:text;background-clip:text;color:transparent}
 .vv.go{background:linear-gradient(180deg,#b8ffd9,#3dc98f);-webkit-background-clip:text;background-clip:text}
