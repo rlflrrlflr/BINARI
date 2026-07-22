@@ -28,7 +28,7 @@ try {
 
   // 2. 생년월일
   await page.waitForTimeout(600);
-  await page.getByRole("button", { name: "그냥 조용히 갈래" }).click(); // v26: 이름 장면 건너뛰기
+  await page.getByRole("button", { name: "이름 없이 갈래" }).click(); // v26: 이름 장면 건너뛰기
   const ins = page.locator("input.in:not(.wide)");
   await ins.nth(0).fill("1993"); await ins.nth(1).fill("7"); await ins.nth(2).fill("15");
   await page.getByRole("button", { name: "이 하늘이야" }).click();

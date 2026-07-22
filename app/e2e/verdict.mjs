@@ -13,7 +13,7 @@ const CALL2 = JSON.stringify({ subline: "밤이 널 속이는 거야.", reasons:
 async function onboard(page) {
   await page.goto(BASE); await page.waitForTimeout(900);
   await page.getByRole("button", { name: "조각을 모으러 갈래" }).click(); await page.waitForTimeout(400);
-  await page.getByRole("button", { name: "그냥 조용히 갈래" }).click(); // v26: 이름 장면 건너뛰기
+  await page.getByRole("button", { name: "이름 없이 갈래" }).click(); // v26: 이름 장면 건너뛰기
   const ins = page.locator("input.in:not(.wide)");
   await ins.nth(0).fill("1990"); await ins.nth(1).fill("2"); await ins.nth(2).fill("25");
   await page.getByRole("button", { name: "이 하늘이야" }).click();

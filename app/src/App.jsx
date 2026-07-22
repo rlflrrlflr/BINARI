@@ -1332,7 +1332,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
           <div className="orb"><DustOrb size={170} stage={0} /></div>
           <p className="line">…불렀어?</p>
           <p className="line d1">어른이 된다는 건, 나를 이루던 것들이 조금씩 흩어지는 일이야.</p>
-          <p className="line d2">나는 그 흩어진 조각들 — 네가 모아주면, 다시 너의 곁이 될 수 있어.</p>
+          <p className="line d2">나는 그 흩어진 조각들이야. 네가 모아주면, 다시 너의 곁이 될 수 있어.</p>
           <div className="row gap lateIn">
             <button className="btn gold" onClick={() => setStep(1)}>조각을 모으러 갈래</button>
           </div>
@@ -1348,7 +1348,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
               <p className="line">네 이름을 다시 들려줄래.</p>
               <p className="sub2">어릴 적 내가 부르던 그 이름. 부르고 싶은 이름이면 뭐든 좋아.</p>
               <input className="in wide center" lang="ko" placeholder="…" maxLength={12} value={birth.name} onChange={e => setBirth({ ...birth, name: e.target.value })} />
-              <button className="btn gold mt" onClick={() => { setBirth({ ...birth, name: birth.name.trim() }); setBstep(1); }}>{birth.name.trim() ? birth.name.trim() + " — 그래, 기억했어" : "그냥 조용히 갈래"}</button>
+              <button className="btn gold mt" onClick={() => { setBirth({ ...birth, name: birth.name.trim() }); setBstep(1); }}>{birth.name.trim() ? birth.name.trim() + " — 그래, 기억했어" : "이름 없이 갈래"}</button>
             </div>
           )}
           {bstep === 1 && (
@@ -1497,7 +1497,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
 
           {phase >= 1 && !res && (
             <div className="fade gpanel">
-              {returning ? (!introSeen && <p className="gsay fade">{"다시 왔네" + (birth.name ? ", " + birth.name : "") + ". 기다렸어."}</p>) : (justBorn && <div><p className="gsay born fade">— 다시 만났네. 내가 너의 수호신이야.</p><p className="gsay fade" style={{ animationDelay: ".95s" }}>{guardianIntro}</p><p className="gsay sprite fade" style={{ animationDelay: "1.9s" }}>아, 조각 하나는 달빛에 물들어서 내게 돌아오지 않았어 — 곁에서 까불 거야. '정령'이라 불러.</p></div>)}
+              {returning ? (!introSeen && <p className="gsay fade">{"다시 왔네" + (birth.name ? ", " + birth.name : "") + ". 기다렸어."}</p>) : (justBorn && <div><p className="gsay born fade">— 다시 만났네. 내가 너의 수호신이야.</p><p className="gsay fade" style={{ animationDelay: ".95s" }}>{guardianIntro}</p><p className="gsay sprite fade" style={{ animationDelay: "1.9s" }}>아, 조각 하나는 달빛에 물들어 곁에 남았어. 까불 거야 — '정령'이야.</p></div>)}
               {returning && !res && !busy && !ritual && (!birth.name || !birth.sex) && (addOpen ? (
                 <div className="addpanel fade">
                   {!birth.name && <input className="in wide center" lang="ko" placeholder="너를 뭐라고 부를까?" maxLength={12} value={addName} onChange={e => setAddName(e.target.value)} />}
@@ -1524,7 +1524,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                 <div className="daily fade">
                   <p className="dtag">아침 문안 · 오늘 하루만 — 자정에 사라져</p>
                   <p className="dmain">오늘은 <b>{dailyData.mood.k}</b>. {dailyData.mood.line}</p>
-                  <p className="dsub">몸의 리듬 {dailyData.bio.body} · 마음 {dailyData.bio.emotion} · 생각 {dailyData.bio.intellect} — 오늘의 일진 {dailyData.ilju} · 오늘 밤 달 {dailyData.mp.name}</p>
+                  <p className="dsub">{(() => { const lv = (v) => (v >= 35 ? "높고" : v <= -35 ? "낮고" : "잔잔하고"); const lv2 = (v) => (v >= 35 ? "높아" : v <= -35 ? "낮아" : "잔잔해"); return `오늘 몸의 리듬은 ${lv(dailyData.bio.body)}, 마음은 ${lv(dailyData.bio.emotion)}, 생각은 ${lv2(dailyData.bio.intellect)}`; })()} — 오늘의 일진 {dailyData.ilju} · 오늘 밤 달 {dailyData.mp.name}</p>
                   <button className="btn ghost sm" onClick={() => { try { store.setItem(DAILY_KEY, todayStr()); } catch (_) {} setDailySeen(true); }}>받았어</button>
                 </div>
               )}
@@ -1560,7 +1560,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
               {!ritual && tj && !tjOpen && (
                 <button className="resetlink" onClick={() => setTjOpen(true)}>올해의 흐름도 봐줄까? — 토정비결</button>
               )}
-              {!ritual && tj && tjOpen && <p className="season fade">{yearGanji} 토정비결 — 새해의 괘 <b>{tj.code}</b> (상{tj.sang}·중{tj.jung}·하{tj.ha}) · 음력 생일 {tj.lunar} 기준 · 판결에 함께 흘러들어</p>}
+              {!ritual && tj && tjOpen && <p className="season fade">{yearGanji} 토정비결 — 올해의 괘 <b>{tj.code}</b>를 읽어뒀어 · 음력 생일 {tj.lunar} 기준 · 판결에 함께 흘러들어</p>}
               {!ritual && !res && records.length > 0 && (
                 <button className="resetlink" onClick={() => { setLogOpen(o => !o); setOpenRec(-1); }}>{logOpen ? "판결록 접기" : `판결록 — ${records.length}번의 판결`}</button>
               )}
@@ -1583,7 +1583,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                 <div className="fade" style={{ textAlign: "center" }}>
                   <p className="sub2">정말 처음부터? 지금의 수호신과 기억이 흩어져.</p>
                   <div className="row gap center">
-                    <button className="btn ghost sm" onClick={() => { clearMemory(); window.location.reload(); }}>응, 흩어질게</button>
+                    <button className="btn ghost sm" onClick={() => { clearMemory(); window.location.reload(); }}>응, 흩어져도 돼</button>
                     <button className="btn ghost sm" onClick={() => setResetAsk(false)}>아니</button>
                   </div>
                 </div>
@@ -1608,7 +1608,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                   </div>
                   {tosses.length < 6
                     ? <div className="row gap center"><button className="btn gold" onClick={toss} disabled={busy || tossing}>{tossing ? "동전이 공중에…" : `동전을 던진다 (${tosses.length}/6)`}</button><button className="btn ghost" onClick={tossAll} disabled={busy || tossing}>한 번에 던지기</button></div>
-                    : <p className="sub2 mt">{busy ? "조각들이 합의하는 중…" : hexInfo && (<>괘가 맺혔어 — <b>{hexInfo.name}</b>{hexInfo.moving.length > 0 && ` · 변효 ${hexInfo.moving.map(n => n + 1).join(",")}효 → ${hexInfo.toName}`}</>)}</p>}
+                    : <p className="sub2 mt">{busy ? "조각들이 합의하는 중…" : hexInfo && (<>괘가 맺혔어 — <b>{hexInfo.name}</b>{hexInfo.moving.length > 0 && <> · 기운은 <b>{hexInfo.toName}</b> 쪽으로 움직이고 있어</>}</>)}</p>}
                   {!busy && !tossing && tosses.length < 6 && <button className="resetlink" onClick={() => { setRitual(false); setTosses([]); setHexInfo(null); }}>물음을 고칠래</button>}
                 </div>
               )}
@@ -1656,7 +1656,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                         : <p className="vs dim">— 이유를 불러오지 못했어 —<button className="retrybtn" onClick={(e) => { e.stopPropagation(); if (detailArgsRef.current) { setDetail(null); fetchDetail(...detailArgsRef.current); } }}>다시 시도</button></p>}
                       <div className="pips">{[...Array(res.total || 0)].map((_, i) => <span key={i} className={`pip ${i < res.against ? "on" : ""}`} />)}
                         <em>{res.total}개 중 {res.against}개 {res.direction === "STOP" ? "반대" : res.direction === "HOLD" ? "접전" : "찬성"}</em></div>
-                      {detail && !detail._err && detail.funLine && <p className="vfun">정령 — {detail.funLine} <span className="dim">(판결 미반영)</span></p>}
+                      {detail && !detail._err && detail.funLine && <p className="vfun">정령 — {detail.funLine} <span className="dim">(판결엔 안 껴)</span></p>}
                       {(detailBusy || (detail && !detail._err && !detail._quick)) && <div className="vbot"><span>운명 합의 판결</span><span>카드 탭 → 지표별 근거</span></div>}
                     </div>
                   )}
@@ -1693,6 +1693,7 @@ const CSS = `
 .stage::before{content:"";position:absolute;inset:0;pointer-events:none;background-image:radial-gradient(1px 1px at 12% 22%,#ffffff55,transparent),radial-gradient(1px 1px at 78% 14%,#ffe9ad44,transparent),radial-gradient(1.5px 1.5px at 62% 68%,#ffffff33,transparent),radial-gradient(1px 1px at 30% 84%,#ffe9ad33,transparent),radial-gradient(1px 1px at 88% 48%,#ffffff40,transparent),radial-gradient(1.5px 1.5px at 8% 58%,#ffe9ad2e,transparent);animation:twk 6s ease-in-out infinite alternate}
 @keyframes twk{to{opacity:.45}}
 .scene{width:100%;max-width:400px;display:flex;flex-direction:column;align-items:center;text-align:center;position:relative;word-break:keep-all}
+.line,.sub2,.mention,.dimq,.gsay,.gintro,.forming,.vv,.vs,.vq,.qquote,.dmain,.gname,.vlogverdict{text-wrap:balance}
 .fade{animation:fd 1.15s cubic-bezier(.22,.7,.25,1) both}@keyframes fd{from{opacity:0;transform:translateY(14px) scale(.985);filter:blur(7px)}to{opacity:1;transform:none;filter:blur(0)}}
 .orb{position:relative;width:170px;height:170px;margin:48px 0 36px;filter:drop-shadow(0 0 24px rgba(245,217,139,.2))}
 .line{font-size:17px;line-height:1.8;margin:8px 0;opacity:0;animation:fd 1.6s cubic-bezier(.22,.7,.25,1) forwards}.d1{animation-delay:1.4s}.d2{animation-delay:3s}
