@@ -1,2 +1,3 @@
 app/eval/verdicts.csv
 app/eval/verdicts.json
+!app/.env.example

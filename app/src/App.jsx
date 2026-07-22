@@ -1,5 +1,25 @@
 import { useState, useRef, useEffect } from "react";
 
+/* ───── 계측(PostHog) — 휴면-준비: VITE_POSTHOG_KEY 없으면 완전 무동작 ───── */
+const AKEY = import.meta.env.VITE_POSTHOG_KEY;
+let _ph = null, _phInit = false;
+async function _initAnalytics() {
+  if (_phInit || !AKEY || typeof window === "undefined") return; _phInit = true;
+  try {
+    const { default: posthog } = await import("posthog-js");
+    posthog.init(AKEY, { api_host: import.meta.env.VITE_POSTHOG_HOST || "https://us.i.posthog.com", capture_pageview: false, autocapture: false, persistence: "localStorage" });
+    _ph = posthog;
+  } catch (_) {}
+}
+// 질문 원문·실명은 절대 보내지 않는다(속성 화이트리스트만).
+function track(ev, props) {
+  try {
+    if (_ph) _ph.capture(ev, props || {});
+    if (typeof window !== "undefined" && window.__binariTrackDebug) (window.__binariEvents = window.__binariEvents || []).push({ ev, props: props || {} });
+  } catch (_) {}
+}
+if (typeof window !== "undefined" && /[?&]trackdebug/.test(window.location.search)) window.__binariTrackDebug = true;
+
 /* ═══════════════ 비나리 BINARI · 웹앱 (v16-dev · 0단계: 아티팩트 탈출) ═══════════════
    온보딩(재회→의식→회상개봉) → 파라메트릭 수호신 → AI 판결(v2 수호신 프롬프트)
    만세력: JS 자체 구현 — 일주=율리우스일(검증), 절기=태양황경 천문계산(v18, ±수분), 진태양시=도시 경도+균시차(v18)
@@ -1139,6 +1159,9 @@ export default function App() {
   if (birth.name === undefined) birth.name = ""; if (birth.sex === undefined) birth.sex = ""; // v26: 구버전 저장 호환
   const [bstep, setBstep] = useState(0);                      // v26: 동화 도입부 장면 인덱스
   const [addOpen, setAddOpen] = useState(false); const [addName, setAddName] = useState(""); const [addSex, setAddSex] = useState(""); // v26: 조각 보태기
+  const QHINTS = ["밤 11시, 전남친에게 카톡 보낼까?", "받은 이직 제안, 수락할까?", "지금 이 회사 그만둘까?", "3주째 답 없는 썸, 한 번 더 연락할까?", "무리해서 이 집 계약할까?"];
+  const [qhint] = useState(() => QHINTS[Math.floor((typeof window!=="undefined"?(window.history.length||0):0)) % QHINTS.length]);
+  useEffect(() => { _initAnalytics(); track("app_open", { returning }); }, []); // 계측: 세션 시작
   const [saju, setSaju] = useState(mem?.saju || null);
   const [zo, setZo] = useState(mem?.zo || null);
   const [moon, setMoon] = useState(mem?.moon || null);
@@ -1218,6 +1241,7 @@ export default function App() {
   };
 
   const doReveal = () => {
+    track("birth_submitted", { noHour: !!birth.noHour, cal: birth.cal, hasName: !!birth.name, hasSex: !!birth.sex });
     const y = +birth.y, m = +birth.m, d = +birth.d, h = birth.noHour ? 12 : +birth.h, mi = birth.noHour || birth.min === "" ? 0 : +birth.min;
     if (!y || !m || !d || y < 1900 || y > new Date().getFullYear() || m < 1 || m > 12 || d < 1 || d > 31) { setErr("생년월일을 확인해줘. 너를 또렷하게 보려면 정확해야 해."); return; }
     if (!birth.noHour && (birth.h === "" || h < 0 || h > 23)) { setErr("태어난 시(0~23시)를 알려주거나 '모름'을 선택해줘."); return; }
@@ -1265,6 +1289,7 @@ export default function App() {
 
   const judge = async (hi, quick = false) => {
     if (!q.trim() || busy) return;
+    track("question_asked", { mode: quick ? "quick" : "ritual", qlen: q.trim().length, ritual: !!hi });
     setBusy(true); setErr(""); setRes(null); setDetail(null); setWhy(false); setFlip(false); setCardOn(false); reactRef.current = null; setIntroSeen(true);
     try {
       const mp = moonPlacements(+birth.y, +birth.m, +birth.d, +birth.h || 12, +birth.min || 0, !!birth.noHour); // v22
@@ -1291,6 +1316,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
       const { json: r1 } = await callClaude(system, [...priorConvo, concludeMsg], 320);
       // L1 등장 연출(짧게)
       agitateRef.current = true; setRes(r1);
+      track("verdict_shown", { dir: r1.direction, cat: r1.category, tone: r1.tone, against: r1.against, total: r1.total, mode: quick ? "quick" : "ritual" });
       reactRef.current = { dir: r1.direction, t0: performance.now() };   // v28: 수호신이 판결을 연기
       setTimeout(() => { agitateRef.current = false; }, 700);
       setTimeout(() => { setCardOn(true); }, 1400);                       // 몸짓을 보여준 뒤 카드
@@ -1317,6 +1343,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
   const lastRec = records.length ? records[records.length - 1] : null;
   const askback = returning && lastRec && lastRec.followUp === null && Date.now() - lastRec.at >= 6 * 3600 * 1000 ? lastRec : null;
   const answerAskback = (fu, note) => {
+    track("followup_answered", { result: fu });
     setRecords(prev => prev.map((r, i) => (i === prev.length - 1 ? { ...r, followUp: fu, note: note || "" } : r)));
     setNoting(false); setAskNote("");
   };
@@ -1347,7 +1374,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
           <p className="line d1">어른이 된다는 건, 나를 이루던 것들이 조금씩 흩어지는 일이야.</p>
           <p className="line d2">나는 그 흩어진 조각들이야. 네가 모아주면, 다시 너의 곁이 될 수 있어.</p>
           <div className="row gap lateIn">
-            <button className="btn gold" onClick={() => setStep(1)}>조각을 모으러 갈래</button>
+            <button className="btn gold" onClick={() => { track("onboard_start"); setStep(1); }}>조각을 모으러 갈래</button>
           </div>
           <p className="brand-mark">비나리 BINARI</p>
         </section>
@@ -1492,7 +1519,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
           <p className="fine">{vstage === 0 ? `${vals8.length} / 6` : vstage === 1 ? `${vals4.length} / 3` : core ? `핵심 — ${core}` : "하나를 골라줘"}</p>
           {vstage === 0 && vals8.length === 6 && <button className="btn gold mt" onClick={() => setVstage(1)}>여섯 개 골랐어</button>}
           {vstage === 1 && vals4.length === 3 && <button className="btn gold mt" onClick={() => setVstage(2)}>셋을 남겼어</button>}
-          {vstage === 2 && core && <button className="btn gold mt" onClick={() => setStep(3)}>수호신 깨우기</button>}
+          {vstage === 2 && core && <button className="btn gold mt" onClick={() => { track("guardian_awaken"); setStep(3); }}>수호신 깨우기</button>}
           </div>
         </section>
       )}
@@ -1560,7 +1587,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                 </div>
               )}
               {!ritual && <p className="gintro dim2">{isNight ? "밤이 깊었네. 이 시간의 물음은 마음이 먼저 기울어 있기 마련이야." : "그래서, 요즘 뭘 망설이고 있어?"}</p>}
-              {!ritual && <textarea className="qbox" rows={2} maxLength={100} value={q} placeholder={'"밤 11시, 전남친에게 카톡 보낼까?"'} onChange={e => setQ(e.target.value)} />}
+              {!ritual && <textarea className="qbox" rows={2} maxLength={100} value={q} placeholder={`"${qhint}"`} onChange={e => setQ(e.target.value)} />}
               {!ritual && (() => { const qk = looksQuick(q); return (
                 <div className="w100">
                   <div className="row gap center">
@@ -1658,7 +1685,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                   <p className={`vv ${res.direction === "GO" ? "go" : res.direction === "HOLD" ? "hold" : ""} ${(res.verdict || "").length > 40 ? "s" : (res.verdict || "").length > 22 ? "m" : ""}`}>{res.verdict}</p>
                   {/* L2 왜 (클릭) */}
                   {!why ? (
-                    <button className="whybtn" onClick={(e) => { e.stopPropagation(); setWhy(true); }}>왜 이렇게 봤어?</button>
+                    <button className="whybtn" onClick={(e) => { e.stopPropagation(); track("why_opened"); setWhy(true); }}>왜 이렇게 봤어?</button>
                   ) : (
                     <div className="l2 fade">
                       {detail && detail._quick
@@ -1683,7 +1710,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
               </div>
             </div>
           )}
-          {res && cardOn && !bujeok && <button className="btn ghost mt" onClick={() => setBujeok(true)}>수호신의 부적 받기</button>}
+          {res && cardOn && !bujeok && <button className="btn ghost mt" onClick={() => { track("bujeok_opened"); setBujeok(true); }}>수호신의 부적 받기</button>}
           {res && cardOn && bujeok && (
             <div className="fade bwrap">
               <BujeokCanvas saju={saju} direction={res.direction} seed={q + (res.verdict || "")} />
@@ -1692,7 +1719,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
               <p className="fine">질문은 이미지에 담기지 않아 — 문양과 판결의 방향만.</p>
             </div>
           )}
-          {res && cardOn && <button className="btn ghost mt" onClick={() => { setRes(null); setDetail(null); setWhy(false); setDetailBusy(false); setQ(""); setCardOn(false); setRitual(false); setTosses([]); setHexInfo(null); setBujeok(false); }}>다른 걸 물어볼래</button>}
+          {res && cardOn && <button className="btn ghost mt" onClick={() => { track("another_question", { after_why: why }); setRes(null); setDetail(null); setWhy(false); setDetailBusy(false); setQ(""); setCardOn(false); setRitual(false); setTosses([]); setHexInfo(null); setBujeok(false); }}>다른 걸 물어볼래</button>}
         </section>
       )}
     </div>
