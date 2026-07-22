@@ -980,7 +980,7 @@ const SYS = `당신은 유저의 '수호신' 비나리다. 어릴 때 곁에 있
 ## 질문 분류
 A.큰 결정(이직·이사·결혼·이별·큰 투자) / B.감정 충동(연락·지름·한마디) / C.일상 소분(메뉴·옷·약속)
 ## 층위·가중치
-기질 층(MBTI·별자리·수비학 라이프패스·가치[요즘]·달[달 별자리·나크샤트라=정서와 본능]·마야 문양) / 타이밍 층(사주 오행·대운[현재 인생 시기, 제공 시]·달 위상·삼재[해당 연도만]·주역 괘[유저가 동전으로 청한 경우만]). A: 기질50/타이밍50, B: 타이밍55/기질45, C: 타이밍만. 정령: 달 별자리의 기운을 빌린 곁의 장난꾸러기 — 판결 미반영, funLine 재미 한마디 전용. 능청·너스레·짓궂은 농담 환영.
+기질 층(MBTI·별자리·수비학 라이프패스·가치[요즘]·달[달 별자리·나크샤트라=정서와 본능]·마야 문양) / 타이밍 층(사주 오행·대운[현재 인생 시기, 제공 시]·달 위상·삼재[해당 연도만]·주역 괘[유저가 동전으로 청한 경우만]). A: 기질50/타이밍50, B: 타이밍55/기질45, C: 타이밍만. 정령: 수호신을 복원할 때 조각 하나가 달빛에 물들어 돌아가지 않고 곁에 남은 것 — 유저의 달 별자리 기운을 띤 장난꾸러기. 판결 미반영, funLine 재미 한마디 전용. 능청·너스레·짓궂은 농담 환영.
 ## 3화법
 단호(해로운 선택 앞: "보내지 마. 끝.") / 격려(두려움에 좋은 선택을 망설일 때) / 충고(스스로를 속일 때, 따끔하되 존중).
 ## 경험 편향
@@ -1497,7 +1497,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
 
           {phase >= 1 && !res && (
             <div className="fade gpanel">
-              {returning ? (!introSeen && <p className="gsay fade">{"다시 왔네" + (birth.name ? ", " + birth.name : "") + ". 기다렸어."}</p>) : (justBorn && <p className="gsay fade">{guardianIntro}</p>)}
+              {returning ? (!introSeen && <p className="gsay fade">{"다시 왔네" + (birth.name ? ", " + birth.name : "") + ". 기다렸어."}</p>) : (justBorn && <div className="fade"><p className="gsay">{guardianIntro}</p><p className="gsay sprite">아, 조각 하나는 달빛에 물들어서 내게 돌아오지 않았어 — 곁에서 까불 거야. '정령'이라 불러.</p></div>)}
               {returning && !res && !busy && !ritual && (!birth.name || !birth.sex) && (addOpen ? (
                 <div className="addpanel fade">
                   {!birth.name && <input className="in wide center" lang="ko" placeholder="너를 뭐라고 부를까?" maxLength={12} value={addName} onChange={e => setAddName(e.target.value)} />}
@@ -1767,6 +1767,7 @@ const CSS = `
 @keyframes formPulse{0%,100%{opacity:.5}50%{opacity:1}}
 .gname{font-size:14px;line-height:1.9;color:#f0e2b8;margin:0;text-shadow:0 2px 18px rgba(5,4,8,.95),0 0 26px rgba(245,217,139,.28);background:rgba(5,4,8,.5);padding:8px 16px;border-radius:14px}
 .gsay{font-size:14.5px;line-height:1.8;color:#f0e2b8;margin:2px 0 10px;text-align:center}
+.gsay.sprite{font-size:12.5px;color:#9d8fb5;margin:-4px 0 10px}
 .gintro.dim2{color:#c9b98f;font-size:14px;margin:2px 0 12px}
 .hexpanel{display:flex;flex-direction:column;align-items:center;gap:8px;margin-top:6px;width:100%}
 .hexlines{display:flex;flex-direction:column-reverse;gap:8px;margin:6px 0;min-height:88px}
