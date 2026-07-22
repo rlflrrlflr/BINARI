@@ -1197,7 +1197,6 @@ export default function App() {
   const [openRec, setOpenRec] = useState(-1);                 // 판결록 행 클릭 → 다시 읽기
   const [streak, setStreak] = useState(mem?.streak || null);  // v16(B7): 연속 방문 {last, count}
   const [dailyOpen, setDailyOpen] = useState(false);          // v18: 아침 문안 노크형 — 청해야 펼친다
-  const [tjOpen, setTjOpen] = useState(false);                // v18: 토정비결 옵트인
   const agitateRef = useRef(false);
   const reactRef = useRef(null);                 // v28: 판결 방향(GO/STOP/HOLD) 반응
   const [introSeen, setIntroSeen] = useState(false); // v28: 수호신 자기소개는 첫 만남 1회만
@@ -1557,14 +1556,14 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
               {returning && streak && streak.count >= 2 && !res && (
                 <p className="streak">수호신과 연결된 지 {streak.count}일째</p>
               )}
-              {dailyData && !ritual && !res && !dailyOpen && (
+              {dailyData && !ritual && !res && !askback && !dailyOpen && (
                 <button className="knock fade" onClick={() => setDailyOpen(true)}>수호신이 오늘의 하늘을 봐뒀어 — 들을래?</button>
               )}
-              {dailyData && !ritual && !res && dailyOpen && (
+              {dailyData && !ritual && !res && !askback && dailyOpen && (
                 <div className="daily fade">
                   <p className="dtag">아침 문안 · 오늘 하루만 — 자정에 사라져</p>
                   <p className="dmain">오늘은 <b>{dailyData.mood.k}</b>. {dailyData.mood.line}</p>
-                  <p className="dsub">{(() => { const lv = (v) => (v >= 35 ? "높고" : v <= -35 ? "낮고" : "잔잔하고"); const lv2 = (v) => (v >= 35 ? "높아" : v <= -35 ? "낮아" : "잔잔해"); return `오늘 몸의 리듬은 ${lv(dailyData.bio.body)}, 마음은 ${lv(dailyData.bio.emotion)}, 생각은 ${lv2(dailyData.bio.intellect)}`; })()} — 오늘의 일진 {dailyData.ilju} · 오늘 밤 달 {dailyData.mp.name}</p>
+                  <p className="dsub">오늘의 일진 {dailyData.ilju} · 오늘 밤 달 {dailyData.mp.name}</p>
                   <button className="btn ghost sm" onClick={() => { try { store.setItem(DAILY_KEY, todayStr()); } catch (_) {} setDailySeen(true); }}>받았어</button>
                 </div>
               )}
@@ -1597,10 +1596,6 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                   <p className="fine">{qk ? "이 정도는 묻지 않아도 보여 — 가볍게 답할게. 무게를 실으려면 동전을 청해." : "무게 있는 물음엔 동전 의식을 — 가벼운 건 가볍게 물어도 돼."}</p>
                 </div>
               ); })()}
-              {!ritual && tj && !tjOpen && (
-                <button className="resetlink" onClick={() => setTjOpen(true)}>올해의 흐름도 봐줄까? — 토정비결</button>
-              )}
-              {!ritual && tj && tjOpen && <p className="season fade">{yearGanji} 토정비결 — 올해의 괘 <b>{tj.code}</b>를 읽어뒀어 · 음력 생일 {tj.lunar} 기준 · 판결에 함께 흘러들어</p>}
               {!ritual && !res && records.length > 0 && (
                 <button className="resetlink" onClick={() => { setLogOpen(o => !o); setOpenRec(-1); }}>{logOpen ? "판결록 접기" : `판결록 — ${records.length}번의 판결`}</button>
               )}

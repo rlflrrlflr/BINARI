@@ -102,7 +102,7 @@ try {
   // v18 모를 권리: 자동 펼침이 아니라 노크 → 탭해야 카드
   check("재회: 아침 문안 노크(자동 펼침 아님)", await page.getByText("수호신이 오늘의 하늘을 봐뒀어").isVisible());
   check("노크 전 카드 미노출(모를 권리)", (await page.getByText("아침 문안").count()) === 0);
-  check("토정비결 접힘(모를 권리)", (await page.getByText("새해의 괘").count()) === 0 && (await page.getByText("올해의 흐름도 봐줄까?").count()) === 1);
+  check("토정비결 읽기UI 제거(운세 카탈로그 정리)", (await page.getByText("올해의 흐름도 봐줄까?").count()) === 0 && (await page.getByText("새해의 괘").count()) === 0);
   await page.getByText("수호신이 오늘의 하늘을 봐뒀어").click();
   await page.waitForTimeout(400);
   check("노크 후 아침 문안 펼침", await page.getByText("아침 문안").isVisible());
