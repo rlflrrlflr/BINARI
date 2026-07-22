@@ -600,7 +600,7 @@ void main(){
   P.xz=mat2(cos(ay),-sin(ay),sin(ay),cos(ay))*P.xz;
   float dcam=2.4;                                             // 원근(근/원 크기차 = 입체 단서)
   float sc=dcam/(dcam+P.z);
-  gl_Position=vec4(P.xy*sc*0.64,0.0,1.0);                     // 0.45→0.64 확대(너무 작던 것 보정)
+  gl_Position=vec4(P.xy*sc*0.48,0.0,1.0);                     // 0.45→0.64 확대(너무 작던 것 보정)
   gl_PointSize=u_ps*u_psMul*(0.6+a_r0.w)*(0.5+0.55*depth)*sc;
   float twk=mix(1.0,0.55+0.45*sin(t*5.0+a_r0.w*44.0),u_twk);
   float life=0.78+0.22*sin(t*3.6+a_r1.x*22.0);                                  // 잔잔한 생명 깜빡임
@@ -1488,16 +1488,16 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
         <section className="scene fade">
           <div className={`halo wide ${busy || (res && !cardOn) ? "busy" : ""} ${res && cardOn ? "dimmed" : ""}`}>
             {phase === 0
-              ? <BirthCanvas tint={saju ? EL_COLOR[saju.main] : undefined} size={Math.min(typeof window !== "undefined" ? window.innerWidth * 0.92 : 360, typeof window !== "undefined" ? window.innerHeight * 0.44 : 360, 560)} />
-              : <div className="fade"><Guardian saju={saju} zo={zo} mbti={mbti} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} restRef={restRef} size={Math.min(typeof window !== "undefined" ? window.innerWidth * 0.92 : 360, typeof window !== "undefined" ? window.innerHeight * 0.44 : 360, 560)} /></div>}
+              ? <BirthCanvas tint={saju ? EL_COLOR[saju.main] : undefined} size={Math.min(typeof window !== "undefined" ? window.innerWidth * 1.1 : 400, typeof window !== "undefined" ? window.innerHeight * 0.57 : 400, 640)} />
+              : <div className="fade"><Guardian saju={saju} zo={zo} mbti={mbti} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} restRef={restRef} size={Math.min(typeof window !== "undefined" ? window.innerWidth * 1.1 : 400, typeof window !== "undefined" ? window.innerHeight * 0.57 : 400, 640)} /></div>}
             <div className="gtext up">
-              {phase === 0 && <p className="forming">흩어져 있던 조각들이<br />너를 향해 모이고 있어…</p>}
+              {phase === 0 && <p className="forming">흩어져 있던 조각들이<br />너를 향해 모이고 있어…<br />너의 수호신이 돌아오는 중이야.</p>}
             </div>
           </div>
 
           {phase >= 1 && !res && (
             <div className="fade gpanel">
-              {returning ? (!introSeen && <p className="gsay fade">{"다시 왔네" + (birth.name ? ", " + birth.name : "") + ". 기다렸어."}</p>) : (justBorn && <div className="fade"><p className="gsay">{guardianIntro}</p><p className="gsay sprite">아, 조각 하나는 달빛에 물들어서 내게 돌아오지 않았어 — 곁에서 까불 거야. '정령'이라 불러.</p></div>)}
+              {returning ? (!introSeen && <p className="gsay fade">{"다시 왔네" + (birth.name ? ", " + birth.name : "") + ". 기다렸어."}</p>) : (justBorn && <div><p className="gsay born fade">— 다시 만났네. 내가 너의 수호신이야.</p><p className="gsay fade" style={{ animationDelay: ".95s" }}>{guardianIntro}</p><p className="gsay sprite fade" style={{ animationDelay: "1.9s" }}>아, 조각 하나는 달빛에 물들어서 내게 돌아오지 않았어 — 곁에서 까불 거야. '정령'이라 불러.</p></div>)}
               {returning && !res && !busy && !ritual && (!birth.name || !birth.sex) && (addOpen ? (
                 <div className="addpanel fade">
                   {!birth.name && <input className="in wide center" lang="ko" placeholder="너를 뭐라고 부를까?" maxLength={12} value={addName} onChange={e => setAddName(e.target.value)} />}
@@ -1689,7 +1689,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600;900&display=swap');
 *{box-sizing:border-box} 
-.stage{min-height:100vh;background:radial-gradient(130% 100% at 50% 0%,#141021,#0a0812 55%,#050408);color:#d8cfe6;font-family:'Noto Serif KR',serif;display:flex;justify-content:center;padding:36px 20px 80px;position:relative;overflow:hidden}
+.stage{min-height:100vh;background:radial-gradient(130% 100% at 50% 0%,#141021,#0a0812 55%,#050408);color:#d8cfe6;font-family:'Noto Serif KR',serif;display:flex;justify-content:center;padding:26px 20px 70px;position:relative;overflow:hidden}
 .stage::before{content:"";position:absolute;inset:0;pointer-events:none;background-image:radial-gradient(1px 1px at 12% 22%,#ffffff55,transparent),radial-gradient(1px 1px at 78% 14%,#ffe9ad44,transparent),radial-gradient(1.5px 1.5px at 62% 68%,#ffffff33,transparent),radial-gradient(1px 1px at 30% 84%,#ffe9ad33,transparent),radial-gradient(1px 1px at 88% 48%,#ffffff40,transparent),radial-gradient(1.5px 1.5px at 8% 58%,#ffe9ad2e,transparent);animation:twk 6s ease-in-out infinite alternate}
 @keyframes twk{to{opacity:.45}}
 .scene{width:100%;max-width:400px;display:flex;flex-direction:column;align-items:center;text-align:center;position:relative;word-break:keep-all}
@@ -1751,7 +1751,7 @@ const CSS = `
 .cell:hover{border-color:rgba(245,217,139,.5)}
 .cell.sel{border-color:#ffe9ad;color:#ffe9ad;box-shadow:0 0 14px rgba(245,217,139,.3),inset 0 0 10px rgba(245,217,139,.08)}
 .halo{position:relative;filter:drop-shadow(0 0 30px rgba(245,217,139,.15));margin:8px 0;transition:filter .6s}
-.halo.wide{width:100vw;margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);display:flex;justify-content:center}
+.halo.wide{width:100vw;margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);display:flex;justify-content:center;margin-top:calc(min(110vw,57vh,640px)*-0.09);margin-bottom:calc(min(110vw,57vh,640px)*-0.24)}
 .halo.busy{animation:haloPulse 1.4s ease-in-out infinite}
 @keyframes haloPulse{0%,100%{filter:drop-shadow(0 0 26px rgba(245,217,139,.14))}50%{filter:drop-shadow(0 0 46px rgba(245,217,139,.34))}}
 .halo.dimmed{opacity:.32;filter:blur(2px) drop-shadow(0 0 30px rgba(245,217,139,.2));transition:opacity .6s,filter .6s}
@@ -1768,6 +1768,7 @@ const CSS = `
 .gname{font-size:14px;line-height:1.9;color:#f0e2b8;margin:0;text-shadow:0 2px 18px rgba(5,4,8,.95),0 0 26px rgba(245,217,139,.28);background:rgba(5,4,8,.5);padding:8px 16px;border-radius:14px}
 .gsay{font-size:14.5px;line-height:1.8;color:#f0e2b8;margin:2px 0 10px;text-align:center}
 .gsay.sprite{font-size:12.5px;color:#9d8fb5;margin:-4px 0 10px}
+.gsay.born{font-weight:600;color:#ffe9ad;text-shadow:0 0 18px rgba(245,217,139,.35)}
 .gintro.dim2{color:#c9b98f;font-size:14px;margin:2px 0 12px}
 .hexpanel{display:flex;flex-direction:column;align-items:center;gap:8px;margin-top:6px;width:100%}
 .hexlines{display:flex;flex-direction:column-reverse;gap:8px;margin:6px 0;min-height:88px}
@@ -1790,7 +1791,7 @@ const CSS = `
 .wrapc{flex-wrap:wrap}
 .bwrap{display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:16px;filter:drop-shadow(0 0 18px rgba(245,217,139,.2))}
 .persp{perspective:1100px;margin-top:22px;cursor:pointer;-webkit-tap-highlight-color:transparent}
-.persp.cardIn{animation:cardIn .95s cubic-bezier(.16,.9,.24,1) both;margin-top:calc(min(92vw,44vh,560px)/-2 - 120px);position:relative;z-index:2}
+.persp.cardIn{animation:cardIn .95s cubic-bezier(.16,.9,.24,1) both;margin-top:calc(min(110vw,57vh,640px)*-0.33 - 120px);position:relative;z-index:2}
 @keyframes cardIn{0%{opacity:0;transform:perspective(1100px) rotateX(58deg) translateY(-76px) scale(.55);filter:brightness(3) blur(14px)}45%{opacity:1;filter:brightness(1.7) blur(3px)}72%{transform:perspective(1100px) rotateX(-6deg) translateY(4px) scale(1.02);filter:brightness(1.1) blur(0)}100%{opacity:1;transform:none;filter:none}}
 .gateflash{position:fixed;inset:0;pointer-events:none;background:radial-gradient(circle at 50% 30%,rgba(255,233,173,.55),rgba(255,233,173,.12) 34%,transparent 65%);animation:gf .9s ease-out forwards;z-index:5}
 @keyframes gf{0%{opacity:0}35%{opacity:1}100%{opacity:0}}
