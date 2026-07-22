@@ -233,7 +233,7 @@ const LP_READ = {
 };
 
 /* ───── v7 지표: 바이오리듬 · 삼재 · 가치 ───── */
-const VALUES16 = ["안정", "성장", "자유", "인정", "관계", "성취", "즐거움", "의미", "돈", "건강", "용기", "정직", "창조", "평온", "가족", "몰입"]; // v22: 24→16 통합
+const VALUES16 = ["안정", "성장", "자유", "인정", "관계", "성취", "즐거움", "의미", "돈", "건강", "용기", "정직", "창조", "평온", "몰입"]; // v22: 24→16 통합 / v36: 가족 제외(마지막에 버리기 부담)
 function biorhythm(y, m, d) { // 출생일 기준 23/28/33일 주기 — 정확 계산
   const days = (Date.now() - new Date(y, m - 1, d).getTime()) / 86400000;
   const f = (p) => Math.round(Math.sin(2 * Math.PI * (days / p)) * 100);
@@ -554,14 +554,18 @@ void main(){
       +vec2(sin(s*8.0+t+a_r1.x),cos(s*7.0-t))*0.05*s*u_chaos;
     depth=0.5+0.5*(1.0-s);
     v_a=(0.4+0.6*(1.0-s*0.55))*(0.4+0.6*smoothstep(0.0,0.2,s));
-  } else if(u_form<3.5){ // 금 — 나선 빛줄기 (은하 팔: 구멍·오므림 제거, 입자가 팔 따라 바깥으로 흐름)
-    float arm=mod(strand,u_arms);
-    float sf=fract(a_r0.z+t*0.025*(0.6+a_r0.y));
-    float r=mix(0.1,0.98,pow(sf,0.85))*(0.9+0.2*fract(sin(arm*7.13)*17.9));
-    float ang=arm/u_arms*6.2832+sf*(1.5+u_twist*0.45)+t*0.2+(a_r0.x-0.5)*(0.12+0.55*sf)/max(r,0.2);
-    p=vec2(cos(ang),sin(ang)*0.92)*r;
-    depth=0.45+0.55*(1.0-sf);
-    v_a=(0.5+0.5*(1.0-sf*0.5))*smoothstep(0.0,0.1,sf)*smoothstep(1.0,0.82,sf);
+  } else if(u_form<3.5){ // 금 — 흘러내리는 용융 금속 (가닥이 굽이쳐 쏟아지며 아래로 수렴, 금속 광택 반짝임)
+    float str=strand;
+    float sh=fract(sin(str*12.9898)*43758.5453);
+    float s=fract(a_r0.y+t*0.075*(0.7+0.5*sh));            // 위→아래 흐름(쏟아짐)
+    float y=mix(1.0,-1.0,s);
+    float lane=(str/max(u_strands,1.0)-0.5)*1.1;           // 가닥 별 가로 위치
+    float coil=sin(y*3.0+str*2.4+t*1.3)*(0.13+0.09*u_twist)*(0.4+0.6*s); // 흘러내리며 감김
+    float x=lane*(1.0-0.35*s)+coil+(a_r0.x-0.5)*0.05;      // 아래로 갈수록 모임(수렴)
+    p=vec2(x,y);
+    depth=0.5+0.5*sh;
+    float glint=step(0.93,a_r1.x)*1.6;                     // 금속 광택 반짝임
+    v_a=((0.5+0.5*(1.0-abs(x)*0.5))+glint)*smoothstep(0.0,0.07,s)*smoothstep(1.0,0.9,s);
   } else { // 토 — 중심 없는 난류 융기
     float rr=pow(a_r0.z,0.75)*0.88;
     float ang=a_r0.x*6.2832+t*0.05;
@@ -573,7 +577,7 @@ void main(){
     v_a=0.55+0.45*(1.0-rr*0.7);
   }
   // ── 살아있는 방향성 흐름 ── 등방성 노이즈(지직) → 코히런트 컬노이즈(연기·불 결) + 형태 방향
-  vec2 fdir = u_form<0.5 ? vec2(0.0,1.0) : u_form<1.5 ? vec2(1.0,0.1) : u_form<2.5 ? vec2(0.15,1.0) : u_form<3.5 ? vec2(0.0,0.0) : vec2(0.0,0.55); // 화 위·수 옆·목 위·금 나선·토 피어오름
+  vec2 fdir = u_form<0.5 ? vec2(0.0,1.0) : u_form<1.5 ? vec2(1.0,0.1) : u_form<2.5 ? vec2(0.15,1.0) : u_form<3.5 ? vec2(0.0,-1.0) : vec2(0.0,0.55); // 화 위·수 옆·목 위·금 쏟아짐·토 피어오름
   vec2 cflow = curl2(p*1.8 + fdir*(t*0.22) + vec2(0.0, t*0.12));               // 코히런트 흐름장(결이 뭉쳐 흐름)
   p += (0.05+0.04*u_chaos) * cflow;                                            // 결 따라 흐름(F=더)
   p += fdir * 0.03 * (0.55+0.45*sin(t*0.8+a_r0.w*6.283));                      // 형태 방향 드리프트
@@ -590,7 +594,7 @@ void main(){
   // 공간감: 얇은 부피 + 형태별 기울기(원반=타원 foreshorten) + 좌우 흔들림 시차 + 강한 원근
   float zc=(a_r0.w-0.5)*0.6+(depth-0.5)*0.3;
   vec3 P=vec3(p,zc);
-  float ax = u_form<0.5 ? 0.42 : u_form<1.5 ? 0.9 : u_form<2.5 ? 0.46 : u_form<3.5 ? 0.8 : 0.74; // 화·수·목·금·토
+  float ax = u_form<0.5 ? 0.42 : u_form<1.5 ? 0.9 : u_form<2.5 ? 0.46 : u_form<3.5 ? 0.4 : 0.74; // 화·수·목·금(기둥)·토
   P.yz=mat2(cos(ax),-sin(ax),sin(ax),cos(ax))*P.yz;          // X축 기울기
   float ay=0.16*sin(t*0.5);                                  // 미세 시차만(강체 스윙 축소 — '두둥실' 제거)
   P.xz=mat2(cos(ay),-sin(ay),sin(ay),cos(ay))*P.xz;
@@ -682,7 +686,7 @@ function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactR
       gl.uniform1f(L.u_arms, arms); gl.uniform1f(L.u_strands, strands); gl.uniform1f(L.u_twist, twist);
       gl.uniform1f(L.u_speed, P ? 1.15 : 0.78); gl.uniform1f(L.u_chaos, T ? 0.6 : 1.35); gl.uniform1f(L.u_focal, E ? 0.12 : 0.88); // I=구심점(모임)·E=무구심점(흩어짐)
       gl.uniform1f(L.u_nayF, nayF); gl.uniform1f(L.u_nayA, nayA);
-      const F_AL = { 화: 0.58, 수: 0.5, 목: 0.52, 금: 0.3, 토: 0.4 }[saju.main] || 0.5;  // 가산 백화 방지: 밀집 형태일수록 낮게
+      const F_AL = { 화: 0.58, 수: 0.5, 목: 0.52, 금: 0.46, 토: 0.4 }[saju.main] || 0.5;  // 가산 백화 방지: 밀집 형태일수록 낮게
       const F_PS = { 금: 0.82, 토: 0.9 }[saju.main] || 1;
       gl.uniform1f(L.u_ps, (T ? 2.1 : 2.8) * dpr * F_PS); gl.uniform1f(L.u_psMul, 1); gl.uniform1f(L.u_lum, lum); gl.uniform1f(L.u_twk, N ? 1 : 0);
       gl.uniform3fv(L.u_c1, c1); gl.uniform3fv(L.u_c2, c2); gl.uniform3fv(L.u_acc, acc);
