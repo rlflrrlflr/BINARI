@@ -519,7 +519,8 @@ const GL_VERT = `
 precision highp float;
 attribute vec4 a_r0; // x:u y:v z:s w:size·위상
 attribute vec4 a_r1; // x:ph y:dly z:colorPick w:strandPick
-uniform float u_t,u_form,u_R,u_arms,u_strands,u_twist,u_speed,u_chaos,u_nayF,u_nayA,u_expand,u_agi,u_k,u_ps,u_lum,u_twk,u_psMul,u_focal;
+uniform float u_t,u_form,u_R,u_arms,u_strands,u_twist,u_speed,u_chaos,u_nayF,u_nayA,u_expand,u_agi,u_k,u_ps,u_lum,u_twk,u_psMul,u_focal,u_touchAmt;
+uniform vec2 u_touch;
 varying float v_a; varying float v_pick;
 float hash21(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
 float vnoise(vec2 p){ vec2 i=floor(p),f=fract(p); f=f*f*(3.0-2.0*f); float a=hash21(i),b=hash21(i+vec2(1.0,0.0)),c=hash21(i+vec2(0.0,1.0)),d=hash21(i+vec2(1.0,1.0)); return mix(mix(a,b,f.x),mix(c,d,f.x),f.y); }
@@ -600,12 +601,15 @@ void main(){
   P.xz=mat2(cos(ay),-sin(ay),sin(ay),cos(ay))*P.xz;
   float dcam=2.4;                                             // 원근(근/원 크기차 = 입체 단서)
   float sc=dcam/(dcam+P.z);
-  gl_Position=vec4(P.xy*sc*0.48,0.0,1.0);                     // 0.45→0.64 확대(너무 작던 것 보정)
-  gl_PointSize=u_ps*u_psMul*(0.6+a_r0.w)*(0.5+0.55*depth)*sc;
+  vec2 spos=P.xy*sc*0.48;
+  vec2 td=u_touch-spos; float tp=u_touchAmt*exp(-dot(td,td)*7.0);   // 손끝 근접도(가우시안)
+  spos+=td*tp*0.28;                                                 // 살짝 끌려와 모임(반응)
+  gl_Position=vec4(spos,0.0,1.0);
+  gl_PointSize=u_ps*u_psMul*(0.6+a_r0.w)*(0.5+0.55*depth)*sc*(1.0+tp*1.3);
   float twk=mix(1.0,0.55+0.45*sin(t*5.0+a_r0.w*44.0),u_twk);
   float life=0.78+0.22*sin(t*3.6+a_r1.x*22.0);                                  // 잔잔한 생명 깜빡임
   float core=1.0+u_focal*0.45*smoothstep(0.5,0.0,rl);                           // I: 코어 발광(구심점, 백화 완화)
-  v_a*=(0.25+0.75*k)*u_lum*depth*twk*clamp(sc*0.66,0.34,1.34)*life*core;
+  v_a*=(0.25+0.75*k)*u_lum*depth*twk*clamp(sc*0.66,0.34,1.34)*life*core*(1.0+tp*2.2);
   v_pick=a_r1.z;
 }`;
 const GL_FRAG = `
@@ -637,6 +641,11 @@ function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactR
     if (!gl) { fail(); return; }
     lostFn = (e) => { e.preventDefault(); fail(); };
     cv.addEventListener("webglcontextlost", lostFn);
+    const touch = { x: 0, y: 0, amt: 0, target: 0 };                  // 손끝 반응 상태
+    const onMove = (e) => { const r = cv.getBoundingClientRect(); const cx = e.clientX, cy = e.clientY; if (cx == null) return; touch.x = (cx - r.left) / r.width * 2 - 1; touch.y = -((cy - r.top) / r.height * 2 - 1); touch.target = 1; };
+    const onLeave = () => { touch.target = 0; };
+    cv.addEventListener("pointermove", onMove); cv.addEventListener("pointerdown", onMove);
+    cv.addEventListener("pointerleave", onLeave); cv.addEventListener("pointerup", onLeave); cv.addEventListener("pointercancel", onLeave);
     try {
       // ── 지표 → 지문 (Canvas2D와 동일 파생, 시드 재현) ──
       const E = mbti?.[0] === "E", N = mbti?.[1] === "N", T = mbti?.[2] === "T", P = mbti?.[3] === "P";
@@ -680,7 +689,7 @@ function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactR
       gl.useProgram(prog);
       const buf = (name, arr) => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, arr, gl.STATIC_DRAW); const loc = gl.getAttribLocation(prog, name); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 4, gl.FLOAT, false, 0, 0); return b; };
       buf("a_r0", r0); buf("a_r1", r1);
-      const L = {}; ["u_t","u_form","u_R","u_arms","u_strands","u_twist","u_speed","u_chaos","u_nayF","u_nayA","u_expand","u_agi","u_k","u_ps","u_lum","u_twk","u_psMul","u_focal","u_c1","u_c2","u_acc","u_bright","u_alpha"].forEach(k => { L[k] = gl.getUniformLocation(prog, k); });
+      const L = {}; ["u_t","u_form","u_R","u_arms","u_strands","u_twist","u_speed","u_chaos","u_nayF","u_nayA","u_expand","u_agi","u_k","u_ps","u_lum","u_twk","u_psMul","u_focal","u_touch","u_touchAmt","u_c1","u_c2","u_acc","u_bright","u_alpha"].forEach(k => { L[k] = gl.getUniformLocation(prog, k); });
       gl.uniform1f(L.u_form, FORM_I[saju.main] ?? 4);
       gl.uniform1f(L.u_R, 0.8 * (E ? 1.0 : 0.9));
       gl.uniform1f(L.u_arms, arms); gl.uniform1f(L.u_strands, strands); gl.uniform1f(L.u_twist, twist);
@@ -690,6 +699,7 @@ function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactR
       const F_PS = { 금: 0.82, 토: 0.9 }[saju.main] || 1;
       gl.uniform1f(L.u_ps, (T ? 2.1 : 2.8) * dpr * F_PS); gl.uniform1f(L.u_psMul, 1); gl.uniform1f(L.u_lum, lum); gl.uniform1f(L.u_twk, N ? 1 : 0);
       gl.uniform3fv(L.u_c1, c1); gl.uniform3fv(L.u_c2, c2); gl.uniform3fv(L.u_acc, acc);
+      gl.uniform2f(L.u_touch, 0, 0); gl.uniform1f(L.u_touchAmt, 0);
       gl.disable(gl.DEPTH_TEST);
       gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE); // 가산 발광
       gl.clearColor(0, 0, 0, 0);
@@ -711,11 +721,12 @@ function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactR
           }
         }
         const restMs = restRef && restRef.current ? restRef.current : 0;
-        if (restMs && !agi && !reacting && now - lastHeavy < restMs) { raf = requestAnimationFrame(draw); return; }
+        if (restMs && !agi && !reacting && touch.amt < 0.02 && now - lastHeavy < restMs) { raf = requestAnimationFrame(draw); return; }
         lastHeavy = now;
         const t = (now - born) / 1000;
         gl.uniform1f(L.u_k, Math.min(1, t / 2.6));
         gl.uniform1f(L.u_agi, agi); gl.uniform1f(L.u_expand, expand); gl.uniform1f(L.u_bright, bright);
+        touch.amt += (touch.target - touch.amt) * 0.18; gl.uniform2f(L.u_touch, touch.x, touch.y); gl.uniform1f(L.u_touchAmt, touch.amt);
         gl.clear(gl.COLOR_BUFFER_BIT);
         gl.uniform1f(L.u_t, t); gl.uniform1f(L.u_psMul, 3.2); gl.uniform1f(L.u_alpha, 0.1 * F_AL); gl.drawArrays(gl.POINTS, 0, n); // 광휘(유사 블룸)
         gl.uniform1f(L.u_psMul, 1); gl.uniform1f(L.u_alpha, 1.5 * F_AL); gl.drawArrays(gl.POINTS, 0, n);        // 본체
@@ -728,10 +739,12 @@ function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactR
     return () => {
       dead = true; if (raf) cancelAnimationFrame(raf);
       if (lostFn) cv.removeEventListener("webglcontextlost", lostFn);
+      cv.removeEventListener("pointermove", onMove); cv.removeEventListener("pointerdown", onMove);
+      cv.removeEventListener("pointerleave", onLeave); cv.removeEventListener("pointerup", onLeave); cv.removeEventListener("pointercancel", onLeave);
       try { const ext = gl.getExtension("WEBGL_lose_context"); ext && ext.loseContext(); } catch (_) {}
     };
   }, [saju, zo, mbti, size, birth && birth.y, birth && birth.sex, birth && birth.name]);
-  return <canvas ref={ref} data-renderer="webgl" width={size} height={size} style={{ display: "block", width: size + "px", height: size + "px", WebkitMaskImage: "radial-gradient(circle at 50% 50%, #000 66%, transparent 94%)", maskImage: "radial-gradient(circle at 50% 50%, #000 66%, transparent 94%)" }} />;
+  return <canvas ref={ref} data-renderer="webgl" width={size} height={size} style={{ display: "block", width: size + "px", height: size + "px", touchAction: "none", cursor: "pointer", WebkitMaskImage: "radial-gradient(circle at 50% 50%, #000 66%, transparent 94%)", maskImage: "radial-gradient(circle at 50% 50%, #000 66%, transparent 94%)" }} />;
 }
 /* WebGL 우선, 불가·실패 시 Canvas2D — 기존 버전은 그대로 보존(폴백+비교용) */
 function Guardian(props) {
