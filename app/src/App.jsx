@@ -622,14 +622,17 @@ void main(){
   float dcam=2.4;                                             // 원근(근/원 크기차 = 입체 단서)
   float sc=dcam/(dcam+P.z);
   vec2 spos=P.xy*sc*0.48;
-  vec2 td=u_touch-spos; float tp=u_touchAmt*exp(-dot(td,td)*3.5);   // 손끝 근접도(가우시안, v56 더 넓게)
-  spos+=td*tp*0.42;                                                 // 손끝 따라 끌려와 모임(v56 강화)
+  spos+=vec2(sin(t*0.11+1.3)*0.11, sin(t*0.17)*0.07);              // v57: 은은한 부유(리사주 드리프트)
+  vec2 td=u_touch-spos; float tp=u_touchAmt*exp(-dot(td,td)*3.2);   // 손끝 근접도(가우시안)
+  vec2 nd=td/(length(td)+0.0015);                                   // 손끝 방향(정규화)
+  spos-=nd*tp*0.09;                                                 // v57 파문: 손끝에서 밀려남
+  spos+=vec2(-nd.y, nd.x)*tp*0.07;                                  // v57 소용돌이: 손끝 둘레로 흐름
   gl_Position=vec4(spos,0.0,1.0);
-  gl_PointSize=u_ps*u_psMul*(0.6+a_r0.w)*(0.5+0.55*depth)*sc*(1.0+tp*1.8);
+  gl_PointSize=u_ps*u_psMul*(0.6+a_r0.w)*(0.5+0.55*depth)*sc*(1.0+tp*0.6);
   float twk=mix(1.0,0.55+0.45*sin(t*5.0+a_r0.w*44.0),u_twk);
   float life=0.78+0.22*sin(t*3.6+a_r1.x*22.0);                                  // 잔잔한 생명 깜빡임
   float core=1.0+u_focal*0.45*smoothstep(0.5,0.0,rl);                           // I: 코어 발광(구심점, 백화 완화)
-  v_a*=(0.25+0.75*k)*u_lum*depth*twk*clamp(sc*0.66,0.34,1.34)*life*core*(1.0+tp*3.2);
+  v_a*=(0.25+0.75*k)*u_lum*depth*twk*clamp(sc*0.66,0.34,1.34)*life*core*(1.0+tp*0.4);
   v_pick=a_r1.z;
 }`;
 const GL_FRAG = `
