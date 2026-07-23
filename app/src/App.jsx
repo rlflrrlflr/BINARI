@@ -540,7 +540,7 @@ precision highp float;
 attribute vec4 a_r0; // x:u y:v z:s w:size·위상
 attribute vec4 a_r1; // x:ph y:dly z:colorPick w:strandPick
 uniform float u_t,u_form,u_R,u_arms,u_strands,u_twist,u_speed,u_chaos,u_nayF,u_nayA,u_expand,u_agi,u_k,u_ps,u_lum,u_twk,u_psMul,u_focal,u_touchAmt;
-uniform vec2 u_touch;
+uniform vec2 u_touch,u_touchVel;
 varying float v_a; varying float v_pick;
 float hash21(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
 float vnoise(vec2 p){ vec2 i=floor(p),f=fract(p); f=f*f*(3.0-2.0*f); float a=hash21(i),b=hash21(i+vec2(1.0,0.0)),c=hash21(i+vec2(0.0,1.0)),d=hash21(i+vec2(1.0,1.0)); return mix(mix(a,b,f.x),mix(c,d,f.x),f.y); }
@@ -623,10 +623,10 @@ void main(){
   float sc=dcam/(dcam+P.z);
   vec2 spos=P.xy*sc*0.48;
   spos+=vec2(sin(t*0.11+1.3)*0.11, sin(t*0.17)*0.07);              // v57: 은은한 부유(리사주 드리프트)
-  vec2 td=u_touch-spos; float tp=u_touchAmt*exp(-dot(td,td)*3.2);   // 손끝 근접도(가우시안)
-  vec2 nd=td/(length(td)+0.0015);                                   // 손끝 방향(정규화)
-  spos-=nd*tp*0.09;                                                 // v57 파문: 손끝에서 밀려남
-  spos+=vec2(-nd.y, nd.x)*tp*0.07;                                  // v57 소용돌이: 손끝 둘레로 흐름
+  vec2 td=u_touch-spos; float tp=u_touchAmt*exp(-dot(td,td)*3.4);   // 손끝 근접도(가우시안)
+  spos+=td*tp*0.62;                                                 // v58 확 몰림: 터치 지점으로 국소 응집
+  float vmag=min(length(u_touchVel),0.13);
+  spos+=(u_touchVel*2.6 + vec2(a_r1.x-0.5, a_r1.y-0.5)*vmag*6.5)*tp; // v58 발산: 이동방향 + 랜덤 스프레이(트레일)
   gl_Position=vec4(spos,0.0,1.0);
   gl_PointSize=u_ps*u_psMul*(0.6+a_r0.w)*(0.5+0.55*depth)*sc*(1.0+tp*0.6);
   float twk=mix(1.0,0.55+0.45*sin(t*5.0+a_r0.w*44.0),u_twk);
@@ -664,7 +664,7 @@ function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactR
     if (!gl) { fail(); return; }
     lostFn = (e) => { e.preventDefault(); fail(); };
     cv.addEventListener("webglcontextlost", lostFn);
-    const touch = { x: 0, y: 0, amt: 0, target: 0 };                  // 손끝 반응 상태
+    const touch = { x: 0, y: 0, amt: 0, target: 0, vx: 0, vy: 0, lx: 0, ly: 0 };  // 손끝 반응 상태(v58: 속도)
     const onMove = (e) => { const r = cv.getBoundingClientRect(); const cx = e.clientX, cy = e.clientY; if (cx == null) return; touch.x = (cx - r.left) / r.width * 2 - 1; touch.y = -((cy - r.top) / r.height * 2 - 1); touch.target = 1.35; };  // v56: 홀드 점증
     const onLeave = () => { touch.target = 0; };
     cv.addEventListener("pointermove", onMove); cv.addEventListener("pointerdown", onMove);
@@ -712,7 +712,7 @@ function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactR
       gl.useProgram(prog);
       const buf = (name, arr) => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, arr, gl.STATIC_DRAW); const loc = gl.getAttribLocation(prog, name); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 4, gl.FLOAT, false, 0, 0); return b; };
       buf("a_r0", r0); buf("a_r1", r1);
-      const L = {}; ["u_t","u_form","u_R","u_arms","u_strands","u_twist","u_speed","u_chaos","u_nayF","u_nayA","u_expand","u_agi","u_k","u_ps","u_lum","u_twk","u_psMul","u_focal","u_touch","u_touchAmt","u_c1","u_c2","u_acc","u_bright","u_alpha"].forEach(k => { L[k] = gl.getUniformLocation(prog, k); });
+      const L = {}; ["u_t","u_form","u_R","u_arms","u_strands","u_twist","u_speed","u_chaos","u_nayF","u_nayA","u_expand","u_agi","u_k","u_ps","u_lum","u_twk","u_psMul","u_focal","u_touch","u_touchVel","u_touchAmt","u_c1","u_c2","u_acc","u_bright","u_alpha"].forEach(k => { L[k] = gl.getUniformLocation(prog, k); });
       gl.uniform1f(L.u_form, FORM_I[saju.main] ?? 4);
       gl.uniform1f(L.u_R, 0.8 * (E ? 1.0 : 0.9));
       gl.uniform1f(L.u_arms, arms); gl.uniform1f(L.u_strands, strands); gl.uniform1f(L.u_twist, twist);
@@ -722,7 +722,7 @@ function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactR
       const F_PS = { 금: 0.82, 토: 0.9 }[saju.main] || 1;
       gl.uniform1f(L.u_ps, (T ? 2.1 : 2.8) * dpr * F_PS); gl.uniform1f(L.u_psMul, 1); gl.uniform1f(L.u_lum, lum); gl.uniform1f(L.u_twk, N ? 1 : 0);
       gl.uniform3fv(L.u_c1, c1); gl.uniform3fv(L.u_c2, c2); gl.uniform3fv(L.u_acc, acc);
-      gl.uniform2f(L.u_touch, 0, 0); gl.uniform1f(L.u_touchAmt, 0);
+      gl.uniform2f(L.u_touch, 0, 0); gl.uniform2f(L.u_touchVel, 0, 0); gl.uniform1f(L.u_touchAmt, 0);
       gl.disable(gl.DEPTH_TEST);
       gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE); // 가산 발광
       gl.clearColor(0, 0, 0, 0);
@@ -749,7 +749,10 @@ function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactR
         const t = (now - born) / 1000;
         gl.uniform1f(L.u_k, Math.min(1, t / 2.6));
         gl.uniform1f(L.u_agi, agi); gl.uniform1f(L.u_expand, expand); gl.uniform1f(L.u_bright, bright);
-        touch.amt += (touch.target - touch.amt) * 0.1; gl.uniform2f(L.u_touch, touch.x, touch.y); gl.uniform1f(L.u_touchAmt, touch.amt);
+        touch.amt += (touch.target - touch.amt) * 0.25;                                   // v58 빠른 attack(확 몰림)
+        const dvx = touch.x - touch.lx, dvy = touch.y - touch.ly; touch.lx = touch.x; touch.ly = touch.y;
+        touch.vx += (dvx - touch.vx) * 0.35; touch.vy += (dvy - touch.vy) * 0.35;          // 손끝 속도(평활)
+        gl.uniform2f(L.u_touch, touch.x, touch.y); gl.uniform1f(L.u_touchAmt, touch.amt); gl.uniform2f(L.u_touchVel, touch.vx, touch.vy);
         gl.clear(gl.COLOR_BUFFER_BIT);
         gl.uniform1f(L.u_t, t); gl.uniform1f(L.u_psMul, 3.2); gl.uniform1f(L.u_alpha, 0.1 * F_AL); gl.drawArrays(gl.POINTS, 0, n); // 광휘(유사 블룸)
         gl.uniform1f(L.u_psMul, 1); gl.uniform1f(L.u_alpha, 1.5 * F_AL); gl.drawArrays(gl.POINTS, 0, n);        // 본체
