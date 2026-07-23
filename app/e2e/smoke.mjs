@@ -58,12 +58,18 @@ try {
   await shot("04_values");
   await page.getByRole("button", { name: "수호신 깨우기" }).click();
 
-  // 5. 수호신 형성(3.2s) → 질문 UI
-  await page.waitForSelector("textarea.qbox", { timeout: 12000 });
+  // 5. 수호신 형성(3.2s) → 로비(질문 감춤) → 두 번 두드려 깨움 → 질문 UI
+  await page.waitForSelector("text=두 번 두드리면", { timeout: 12000 });
   await page.waitForTimeout(800);
-  check("수호신 형성 후 질문 UI", await page.locator("textarea.qbox").isVisible());
+  check("로비: 질문 UI 감춰짐(깨우기 전)", (await page.locator("textarea.qbox").count()) === 0);
+  check("로비: 깨우기 힌트 노출", await page.getByText("두 번 두드리면").isVisible());
+  await shot("05_lobby");
+  await page.locator("canvas").first().dblclick(); // 두 번 두드려 깨움
+  await page.waitForTimeout(1000);
+  check("깨운 뒤 질문 UI 노출", await page.locator("textarea.qbox").isVisible());
+  check("깨운 뒤 로비 힌트 사라짐", (await page.getByText("두 번 두드리면").count()) === 0);
   check("첫 방문엔 데일리 카드 없음", (await page.locator(".daily").count()) === 0);
-  await shot("05_guardian");
+  await shot("05b_awake");
 
   // 6. 속결 모드 — C형 힌트면 '가볍게'가 gold, 실패해도 데드엔드 없음
   await page.locator("textarea.qbox").fill("점심 뭐 먹지");
@@ -96,9 +102,14 @@ try {
   const stored = await page.evaluate(() => localStorage.getItem("binari.v1"));
   check("localStorage 저장됨", !!stored, stored ? `${stored.length} bytes` : "없음");
   await page.reload();
-  await page.waitForTimeout(1500);
-  check("재회: 온보딩 생략(질문 UI 직행)", await page.locator("textarea.qbox").isVisible());
-  check("재회 인사", await page.getByText("다시 왔네. 기다렸어.").isVisible());
+  await page.waitForTimeout(1600);
+  // v52: 재방문도 로비 직행 — 인사·힌트만, 질문/데일리는 깨운 뒤
+  check("재회: 로비 직행(온보딩 생략)", await page.getByText("두 번 두드리면").isVisible() && (await page.locator("textarea.qbox").count()) === 0);
+  check("재회 인사(로비)", await page.getByText("다시 왔네. 기다렸어.").isVisible());
+  await shot("08_lobby_return");
+  await page.locator("canvas").first().dblclick(); // 깨움 → 방 진입
+  await page.waitForTimeout(1000);
+  check("깨운 뒤 질문 UI", await page.locator("textarea.qbox").isVisible());
   // v18 모를 권리: 자동 펼침이 아니라 노크 → 탭해야 카드
   check("재회: 아침 문안 노크(자동 펼침 아님)", await page.getByText("수호신이 오늘의 하늘을 봐뒀어").isVisible());
   check("노크 전 카드 미노출(모를 권리)", (await page.getByText("아침 문안").count()) === 0);
@@ -111,7 +122,9 @@ try {
   await page.waitForTimeout(400);
   check("데일리 수령 후 카드 소멸", (await page.getByText("아침 문안").count()) === 0);
   await page.reload();
-  await page.waitForTimeout(1500);
+  await page.waitForTimeout(1600);
+  await page.locator("canvas").first().dblclick(); // 재재방문 로비 → 깨움
+  await page.waitForTimeout(1000);
   check("재재방문: 노크·카드 재노출 없음", (await page.getByText("수호신이 오늘의 하늘을 봐뒀어").count()) === 0 && (await page.getByText("아침 문안").count()) === 0);
   check("리셋 링크 존재", await page.getByText("다른 사람이야?").isVisible());
   await shot("09_return_after_daily");

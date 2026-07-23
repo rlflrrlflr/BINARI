@@ -1181,6 +1181,7 @@ export default function App() {
   const [err, setErr] = useState("");
   const [flip, setFlip] = useState(false);
   const [phase, setPhase] = useState(0);        // v6: 0=수호신 형성 중, 1=완성
+  const [awake, setAwake] = useState(false);    // v52: 로비→두 번 두드려 깨움 후 질문 UI 노출
   const [cardOn, setCardOn] = useState(false);  // v6: 판결 카드 등장 게이트
   const [ritual, setRitual] = useState(false);  // v6(D2): 주역 동전 의식
   const [tosses, setTosses] = useState([]);
@@ -1289,6 +1290,12 @@ export default function App() {
     setDetailBusy(false);
   };
 
+  const wakeTapRef = useRef(0);
+  const tryWake = () => {                                   // v52: 수동 더블탭(모바일·데스크탑 동일)
+    const now = performance.now();
+    if (now - wakeTapRef.current < 350) { wakeTapRef.current = 0; if (!awake) { setAwake(true); track("guardian_wake"); } }
+    else { wakeTapRef.current = now; }
+  };
   const judge = async (hi, quick = false) => {
     if (!q.trim() || busy) return;
     track("question_asked", { mode: quick ? "quick" : "ritual", qlen: q.trim().length, ritual: !!hi });
@@ -1527,8 +1534,8 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
       )}
 
       {step === 3 && (
-        <section className="scene fade">
-          <div className={`halo wide ${busy || (res && !cardOn) ? "busy" : ""} ${res && cardOn ? "dimmed" : ""}`}>
+        <section className={`scene fade ${phase >= 1 && !res && !awake ? "lobby" : ""}`} onClick={phase >= 1 && !res && !awake ? tryWake : undefined}>
+          <div className={`halo wide ${!awake && phase >= 1 && !res ? "lobbyscale" : ""} ${busy || (res && !cardOn) ? "busy" : ""} ${res && cardOn ? "dimmed" : ""}`}>
             {phase === 0
               ? <BirthCanvas tint={saju ? EL_COLOR[saju.main] : undefined} size={Math.min(typeof window !== "undefined" ? window.innerWidth * 1.1 : 400, typeof window !== "undefined" ? window.innerHeight * 0.57 : 400, 640)} />
               : <div className="fade"><Guardian saju={saju} zo={zo} mbti={mbti} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} restRef={restRef} size={Math.min(typeof window !== "undefined" ? window.innerWidth * 1.1 : 400, typeof window !== "undefined" ? window.innerHeight * 0.57 : 400, 640)} /></div>}
@@ -1537,9 +1544,18 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
             </div>
           </div>
 
-          {phase >= 1 && !res && (
+          {phase >= 1 && !res && !awake && (
+            <div className="lobbypanel fade">
+              {returning ? (
+                <p className="gsay fade">{"다시 왔네" + (birth.name ? ", " + birth.name : "") + ". 기다렸어."}</p>
+              ) : justBorn ? (
+                <div><p className="gsay born fade">— 다시 만났네. 내가 너의 수호신이야.</p><p className="gsay fade" style={{ animationDelay: ".95s" }}>{guardianIntro}</p><p className="gsay sprite fade" style={{ animationDelay: "1.9s" }}>아, 조각 하나는 달빛에 물들어 곁에 남았어. 까불 거야 — '정령'이야.</p></div>
+              ) : null}
+              <p className="wakehint">두 번 두드리면 — 깨어나 물음을 들어</p>
+            </div>
+          )}
+          {phase >= 1 && !res && awake && (
             <div className="fade gpanel">
-              {returning ? (!introSeen && <p className="gsay fade">{"다시 왔네" + (birth.name ? ", " + birth.name : "") + ". 기다렸어."}</p>) : (justBorn && <div><p className="gsay born fade">— 다시 만났네. 내가 너의 수호신이야.</p><p className="gsay fade" style={{ animationDelay: ".95s" }}>{guardianIntro}</p><p className="gsay sprite fade" style={{ animationDelay: "1.9s" }}>아, 조각 하나는 달빛에 물들어 곁에 남았어. 까불 거야 — '정령'이야.</p></div>)}
               {returning && !res && !busy && !ritual && (!birth.name || !birth.sex) && (addOpen ? (
                 <div className="addpanel fade">
                   {!birth.name && <input className="in wide center" lang="ko" placeholder="너를 뭐라고 부를까?" maxLength={12} value={addName} onChange={e => setAddName(e.target.value)} />}
@@ -1790,7 +1806,12 @@ const CSS = `
 .cell:hover{border-color:rgba(245,217,139,.5)}
 .cell.sel{border-color:#ffe9ad;color:#ffe9ad;box-shadow:0 0 14px rgba(245,217,139,.3),inset 0 0 10px rgba(245,217,139,.08)}
 .halo{position:relative;filter:drop-shadow(0 0 30px rgba(245,217,139,.15));margin:8px 0;transition:filter .6s}
-.halo.wide{width:100vw;margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);display:flex;justify-content:center;margin-top:calc(min(110vw,57vh,640px)*-0.09);margin-bottom:calc(min(110vw,57vh,640px)*-0.16)}
+.halo.wide{width:100vw;margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);display:flex;justify-content:center;margin-top:calc(min(110vw,57vh,640px)*-0.09);margin-bottom:calc(min(110vw,57vh,640px)*-0.16);transition:filter .6s,transform .9s cubic-bezier(.2,.8,.2,1)}
+.halo.wide.lobbyscale{transform:translateY(13vh) scale(1.42)}
+.scene.lobby{position:relative;min-height:calc(100dvh - 96px);cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.lobbypanel{position:absolute;left:0;right:0;bottom:7vh;z-index:2;display:flex;flex-direction:column;align-items:center;width:100%;padding:0 16px}
+.wakehint{font-family:sans-serif;font-size:12px;letter-spacing:.16em;color:#d8c79a;margin-top:22px;animation:wakePulse 2.4s ease-in-out infinite;text-shadow:0 1px 10px rgba(4,3,10,.85)}
+@keyframes wakePulse{0%,100%{opacity:.4}50%{opacity:.95}}
 .halo.busy{animation:haloPulse 1.4s ease-in-out infinite}
 @keyframes haloPulse{0%,100%{filter:drop-shadow(0 0 26px rgba(245,217,139,.14))}50%{filter:drop-shadow(0 0 46px rgba(245,217,139,.34))}}
 .halo.dimmed{opacity:.32;filter:blur(2px) drop-shadow(0 0 30px rgba(245,217,139,.2));transition:opacity .6s,filter .6s}

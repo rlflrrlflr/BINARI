@@ -30,6 +30,8 @@ async function onboard(page) {
   await page.getByRole("button", { name: "셋을 남겼어" }).click(); await page.waitForTimeout(200);
   await page.getByRole("button", { name: "안정", exact: true }).click();
   await page.getByRole("button", { name: "수호신 깨우기" }).click();
+  await page.waitForSelector("text=두 번 두드리면", { timeout: 12000 });        // v52: 로비
+  await page.locator("canvas").first().dblclick();                              // 두 번 두드려 깨움
   await page.waitForSelector("textarea.qbox", { timeout: 12000 });
 }
 const brightness = (page) => page.evaluate(() => {
