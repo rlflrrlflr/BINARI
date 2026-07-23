@@ -622,14 +622,14 @@ void main(){
   float dcam=2.4;                                             // 원근(근/원 크기차 = 입체 단서)
   float sc=dcam/(dcam+P.z);
   vec2 spos=P.xy*sc*0.48;
-  vec2 td=u_touch-spos; float tp=u_touchAmt*exp(-dot(td,td)*7.0);   // 손끝 근접도(가우시안)
-  spos+=td*tp*0.28;                                                 // 살짝 끌려와 모임(반응)
+  vec2 td=u_touch-spos; float tp=u_touchAmt*exp(-dot(td,td)*3.5);   // 손끝 근접도(가우시안, v56 더 넓게)
+  spos+=td*tp*0.42;                                                 // 손끝 따라 끌려와 모임(v56 강화)
   gl_Position=vec4(spos,0.0,1.0);
-  gl_PointSize=u_ps*u_psMul*(0.6+a_r0.w)*(0.5+0.55*depth)*sc*(1.0+tp*1.3);
+  gl_PointSize=u_ps*u_psMul*(0.6+a_r0.w)*(0.5+0.55*depth)*sc*(1.0+tp*1.8);
   float twk=mix(1.0,0.55+0.45*sin(t*5.0+a_r0.w*44.0),u_twk);
   float life=0.78+0.22*sin(t*3.6+a_r1.x*22.0);                                  // 잔잔한 생명 깜빡임
   float core=1.0+u_focal*0.45*smoothstep(0.5,0.0,rl);                           // I: 코어 발광(구심점, 백화 완화)
-  v_a*=(0.25+0.75*k)*u_lum*depth*twk*clamp(sc*0.66,0.34,1.34)*life*core*(1.0+tp*2.2);
+  v_a*=(0.25+0.75*k)*u_lum*depth*twk*clamp(sc*0.66,0.34,1.34)*life*core*(1.0+tp*3.2);
   v_pick=a_r1.z;
 }`;
 const GL_FRAG = `
@@ -662,7 +662,7 @@ function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactR
     lostFn = (e) => { e.preventDefault(); fail(); };
     cv.addEventListener("webglcontextlost", lostFn);
     const touch = { x: 0, y: 0, amt: 0, target: 0 };                  // 손끝 반응 상태
-    const onMove = (e) => { const r = cv.getBoundingClientRect(); const cx = e.clientX, cy = e.clientY; if (cx == null) return; touch.x = (cx - r.left) / r.width * 2 - 1; touch.y = -((cy - r.top) / r.height * 2 - 1); touch.target = 1; };
+    const onMove = (e) => { const r = cv.getBoundingClientRect(); const cx = e.clientX, cy = e.clientY; if (cx == null) return; touch.x = (cx - r.left) / r.width * 2 - 1; touch.y = -((cy - r.top) / r.height * 2 - 1); touch.target = 1.35; };  // v56: 홀드 점증
     const onLeave = () => { touch.target = 0; };
     cv.addEventListener("pointermove", onMove); cv.addEventListener("pointerdown", onMove);
     cv.addEventListener("pointerleave", onLeave); cv.addEventListener("pointerup", onLeave); cv.addEventListener("pointercancel", onLeave);
@@ -746,7 +746,7 @@ function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactR
         const t = (now - born) / 1000;
         gl.uniform1f(L.u_k, Math.min(1, t / 2.6));
         gl.uniform1f(L.u_agi, agi); gl.uniform1f(L.u_expand, expand); gl.uniform1f(L.u_bright, bright);
-        touch.amt += (touch.target - touch.amt) * 0.18; gl.uniform2f(L.u_touch, touch.x, touch.y); gl.uniform1f(L.u_touchAmt, touch.amt);
+        touch.amt += (touch.target - touch.amt) * 0.1; gl.uniform2f(L.u_touch, touch.x, touch.y); gl.uniform1f(L.u_touchAmt, touch.amt);
         gl.clear(gl.COLOR_BUFFER_BIT);
         gl.uniform1f(L.u_t, t); gl.uniform1f(L.u_psMul, 3.2); gl.uniform1f(L.u_alpha, 0.1 * F_AL); gl.drawArrays(gl.POINTS, 0, n); // 광휘(유사 블룸)
         gl.uniform1f(L.u_psMul, 1); gl.uniform1f(L.u_alpha, 1.5 * F_AL); gl.drawArrays(gl.POINTS, 0, n);        // 본체
@@ -1323,6 +1323,10 @@ export default function App() {
     if (now - wakeTapRef.current < 350) { wakeTapRef.current = 0; if (!awake) { setAwake(true); track("guardian_wake"); } }
     else { wakeTapRef.current = now; }
   };
+  const backToLobby = () => {                               // v56: 판결 화면 탈출구(X · 로비 복귀)
+    track("another_question", { after_why: why });
+    setRes(null); setDetail(null); setWhy(false); setDetailBusy(false); setQ(""); setCardOn(false); setRitual(false); setTosses([]); setHexInfo(null); setBujeok(false); setLean(""); setPaywall(""); setAwake(false);
+  };
   const judge = async (hi, quick = false) => {
     if (!q.trim() || busy) return;
     track("question_asked", { mode: quick ? "quick" : "ritual", qlen: q.trim().length, ritual: !!hi, lean: lean || "skip" });
@@ -1726,6 +1730,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
           )}
 
           {res && !cardOn && <div className="gateflash" />}
+          {res && cardOn && <button className="escx" onClick={backToLobby} aria-label="닫기">✕</button>}
           {res && cardOn && (
             <div className="persp cardIn" onClick={() => { if (why && (detailBusy || (detail && !detail._err && !detail._quick))) setFlip(f => !f); }}>
               <div className="vcard" style={{ transform: `rotateY(${flip ? 180 : 0}deg)` }}>
@@ -1769,14 +1774,6 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
               </div>
             </div>
           )}
-          {res && cardOn && hexInfo && (paywall !== "done" ? (
-            <div className="payrow fade">
-              <button className="btn ghost sm" onClick={() => { track("paywall_click", { type: "boksae", lean: lean || "skip", direction: res.direction }); setPaywall("done"); }}>복채 올리기 — 1,900원</button>
-              <button className="btn ghost sm" onClick={() => { track("paywall_click", { type: "deep", lean: lean || "skip", direction: res.direction }); setPaywall("done"); }}>심층 풀이 받기 — 3,900원</button>
-            </div>
-          ) : (
-            <p className="fine fade">아직 준비 중이야 — 마음만 받을게 ✦</p>
-          ))}
           {res && cardOn && !bujeok && <button className="btn ghost mt" onClick={() => { track("bujeok_opened"); setBujeok(true); }}>수호신의 부적 받기</button>}
           {res && cardOn && bujeok && (
             <div className="fade bwrap">
@@ -1787,7 +1784,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
             </div>
           )}
           {res && cardOn && <button className="btn ghost mt" onClick={shareVerdict}>{shared ? "복사했어 — 붙여넣으면 돼" : "이 판결, 누구에게 보여줄래?"}</button>}
-          {res && cardOn && <button className="btn ghost mt" onClick={() => { track("another_question", { after_why: why }); setRes(null); setDetail(null); setWhy(false); setDetailBusy(false); setQ(""); setCardOn(false); setRitual(false); setTosses([]); setHexInfo(null); setBujeok(false); setLean(""); setPaywall(""); setAwake(false); }}>다른 걸 물어볼래</button>}
+          {res && cardOn && <button className="btn ghost mt" onClick={backToLobby}>다른 걸 물어볼래</button>}
         </section>
       )}
     </div>
@@ -1861,7 +1858,7 @@ const CSS = `
 .cell.sel{border-color:#ffe9ad;color:#ffe9ad;box-shadow:0 0 14px rgba(245,217,139,.3),inset 0 0 10px rgba(245,217,139,.08)}
 .halo{position:relative;filter:drop-shadow(0 0 30px rgba(245,217,139,.15));margin:8px 0;transition:filter .6s}
 .halo.wide{width:100vw;margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);display:flex;justify-content:center;margin-top:calc(min(110vw,57vh,640px)*-0.09);margin-bottom:calc(min(110vw,57vh,640px)*-0.16);transition:filter .6s,transform .9s cubic-bezier(.2,.8,.2,1),opacity .8s ease}
-.halo.wide.lobbyscale{transform:translateY(13vh) scale(1.42)}
+.halo.wide.lobbyscale{transform:translateY(7vh) scale(1.52)}
 .halo.wide.dissolved{opacity:0;transform:scale(1.7);filter:blur(7px);pointer-events:none}
 .residue{position:fixed;inset:0;z-index:0;pointer-events:none;background:radial-gradient(56% 40% at 50% 40%,var(--elc),transparent 66%);opacity:.28;mix-blend-mode:screen;animation:residueDrift 9s ease-in-out infinite}
 @keyframes residueDrift{0%,100%{opacity:.18;transform:scale(1)}50%{opacity:.4;transform:scale(1.12)}}
@@ -1869,9 +1866,11 @@ const CSS = `
 .gpanel.asking .gintro.dim2{font-size:16.5px;color:#ede0c2;margin-bottom:16px;text-shadow:0 1px 14px rgba(4,3,10,.9)}
 .gpanel.asking .qbox{font-size:19px;padding:20px 16px;min-height:104px}
 .scene.lobby{position:relative;min-height:calc(100dvh - 96px);cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
-.lobbypanel{position:absolute;left:0;right:0;bottom:7vh;z-index:2;display:flex;flex-direction:column;align-items:center;width:100%;padding:0 16px}
+.lobbypanel{position:absolute;left:0;right:0;bottom:calc(14vh + env(safe-area-inset-bottom, 0px));z-index:2;display:flex;flex-direction:column;align-items:center;width:100%;padding:0 16px}
 .wakehint{font-family:sans-serif;font-size:12px;letter-spacing:.16em;color:#d8c79a;margin-top:22px;animation:wakePulse 2.4s ease-in-out infinite;text-shadow:0 1px 10px rgba(4,3,10,.85)}
 @keyframes wakePulse{0%,100%{opacity:.4}50%{opacity:.95}}
+.escx{position:fixed;top:calc(14px + env(safe-area-inset-top,0px));right:16px;z-index:30;width:40px;height:40px;border-radius:50%;border:1px solid rgba(245,217,139,.3);background:rgba(10,8,18,.55);color:#c9b98f;font-size:16px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);-webkit-tap-highlight-color:transparent;transition:all .2s}
+.escx:hover{border-color:#ffe9ad;color:#ffe9ad}
 .leanrow{margin:-4px 0 12px;display:flex;flex-direction:column;align-items:center;gap:7px}
 .leanlab{font-family:sans-serif;font-size:11px;letter-spacing:.12em;color:#8a7f95}
 .payrow{display:flex;gap:10px;margin-top:14px;justify-content:center;flex-wrap:wrap}
