@@ -625,8 +625,8 @@ void main(){
   float ta=clamp(u_touchAmt,0.0,1.0);
   spos+=vec2(sin(t*0.11+1.3)*0.11, sin(t*0.17)*0.07)*(1.0-ta);      // 부유 — 터치 중엔 멈춤
   vec2 td=u_touch-spos;
-  float gv=u_touchAmt*(0.2+0.8*exp(-dot(td,td)*1.4));               // v59 넓게 모임(전역 바닥+국소)
-  spos=mix(spos, u_touch, clamp(gv*0.62,0.0,0.9));                  // v59 행동 멈추고 확 모임(대부분 모여듦)
+  float gv=u_touchAmt*(0.45+0.55*exp(-dot(td,td)*1.0));            // v60 더 넓게·세게 모임(전역 바닥↑)
+  spos=mix(spos, u_touch, clamp(gv*0.85,0.0,0.93));                 // v60 행동 멈추고 확 모임(흡인 강)
   float tp=u_touchAmt*exp(-dot(td,td)*3.0);                         // 발산용 국소 가중
   float vmag=min(length(u_touchVel),0.13);
   spos+=(u_touchVel*2.6 + vec2(a_r1.x-0.5, a_r1.y-0.5)*vmag*6.5)*tp; // 드래그 발산: 이동방향+랜덤 산개
@@ -754,7 +754,7 @@ function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactR
         const t = (now - born) / 1000;
         gl.uniform1f(L.u_k, Math.min(1, t / 2.6));
         gl.uniform1f(L.u_agi, agi); gl.uniform1f(L.u_expand, expand); gl.uniform1f(L.u_bright, bright);
-        touch.amt += (touch.target - touch.amt) * 0.25;                                   // v58 빠른 attack(확 몰림)
+        touch.amt += (touch.target - touch.amt) * 0.34;                                   // v60 더 빠른 attack(멈춤·모임 확실)
         const dvx = touch.x - touch.lx, dvy = touch.y - touch.ly; touch.lx = touch.x; touch.ly = touch.y;
         touch.vx += (dvx - touch.vx) * 0.35; touch.vy += (dvy - touch.vy) * 0.35;          // 손끝 속도(평활)
         gl.uniform2f(L.u_touch, touch.x, touch.y); gl.uniform1f(L.u_touchAmt, touch.amt); gl.uniform2f(L.u_touchVel, touch.vx, touch.vy);
