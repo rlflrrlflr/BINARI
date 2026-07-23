@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const appDir = join(dirname(fileURLToPath(import.meta.url)), "..");
-execSync("npx esbuild src/App.jsx --format=esm --jsx=automatic --outfile=.mansae-test.tmp.mjs", { cwd: appDir });
+// import.meta.env는 Node ESM엔 없으므로 스텁 주입(휴면 계측: AKEY=undefined → 완전 무동작)
+execSync("npx esbuild src/App.jsx --format=esm --jsx=automatic --define:import.meta.env={} --outfile=.mansae-test.tmp.mjs", { cwd: appDir });
 const { calcSaju, sunLongitude, equationOfTime, cityLon, moonLongitude, tzolkin, lunar2solar, solar2lunar, daeun } = await import(join(appDir, ".mansae-test.tmp.mjs"));
 
 const results = [];
@@ -105,6 +106,13 @@ let mpi = -1; for (let i = 0; i < 60; i++) if (gi[i % 10] + ji[i % 12] === mp90)
 const expectFwd = gi[(mpi + 1) % 60 % 10] + ji[(mpi + 1) % 60 % 12];
 const duFirst = daeun(1990, 6, 15, 12, 0, false, lon, true, 1990 + duM.num); // 대운수 나이 → 첫 대운
 check("순행 첫 대운 = 월주 다음 간지", duFirst.pre === false && duFirst.ganji === expectFwd, `${duFirst.ganji} (월주 ${mp90} → 기대 ${expectFwd})`);
+
+// 18. 주기운=일간(v51) — 연지 대리(1994.12.09 11:00): 프로 만세력과 여덟 글자·오행 완전 일치, 일간 己土 → main=토
+const yj = calcSaju(1994, 12, 9, 11, 0, false, cityLon("서울"));
+check("연지 사주: 년 갑술·월 병자·일 기사·시 기사", yj.pillars.년 === "갑술" && yj.pillars.월 === "병자" && yj.pillars.일 === "기사" && yj.pillars.시 === "기사", `${yj.pillars.년} ${yj.pillars.월} ${yj.pillars.일} ${yj.pillars.시}`);
+check("연지 오행: 목1 화3 토3 금0 수1", yj.counts.목 === 1 && yj.counts.화 === 3 && yj.counts.토 === 3 && yj.counts.금 === 0 && yj.counts.수 === 1, JSON.stringify(yj.counts));
+check("연지 일간(나) = 기", yj.dayGan === "기", yj.dayGan);
+check("주기운=일간 오행: 화3=토3 동점이어도 己土 → main=토(최다카운트 아님)", yj.main === "토", `main=${yj.main}`);
 
 execSync("rm -f .mansae-test.tmp.mjs", { cwd: appDir });
 const fails = results.filter(r => !r).length;

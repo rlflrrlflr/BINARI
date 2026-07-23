@@ -177,7 +177,7 @@ function calcSaju(y, m, d, h, mi, hourUnknown, lon = 126.978) {
   [[yG, yJ], [mG, mJ], [dG, dJ], ...(hG !== null ? [[hG, hJ]] : [])].forEach(([gg, jj]) => {
     cnt[GAN_EL[gg]]++; cnt[JI_EL[jj]]++;
   });
-  const main = Object.entries(cnt).sort((a, b) => b[1] - a[1])[0][0];
+  const main = GAN_EL[dG];   // v51: 나 = 일간(日干)의 오행(명리 정통). 오행 분포(counts)는 강조색으로 별도 반영
   return {
     pillars: { 년: GAN[yG] + JI[yJ], 월: GAN[mG] + JI[mJ], 일: GAN[dG] + JI[dJ], 시: hG !== null ? GAN[hG] + JI[hJ] : "미상" },
     counts: cnt, main, dayGan: GAN[dG], yJ,
@@ -1063,7 +1063,10 @@ function loadMemory() {
     const raw = store.getItem(STORE_KEY);
     if (!raw) return null;
     const m = JSON.parse(raw);
-    return m && m.saju && m.mbti && m.core ? m : null;   // 필수 조각 검증 — 손상 시 새 출발 (v24: 혈액형 불요구, 구버전 저장분 호환)
+    if (!(m && m.saju && m.mbti && m.core)) return null;   // 필수 조각 검증 — 손상 시 새 출발 (구버전 저장분 호환)
+    // v51: 주기운 기준을 '최다 오행'→'일간(나)'으로 교정 — 저장된 dayGan으로 소급 보정(멱등)
+    if (m.saju.dayGan) { const _di = GAN.indexOf(m.saju.dayGan); if (_di >= 0) m.saju.main = GAN_EL[_di]; }
+    return m;
   } catch (_) { return null; }
 }
 function saveMemory(m) { try { store.setItem(STORE_KEY, JSON.stringify(m)); } catch (_) {} }
@@ -1296,7 +1299,7 @@ export default function App() {
       const sj = samjae(saju.yJ, new Date().getFullYear());
       const du = birth.sex ? daeun(+birth.y, +birth.m, +birth.d, birth.noHour ? 12 : +birth.h, birth.noHour || birth.min === "" ? 0 : +birth.min, !!birth.noHour, cityLon(birth.city), birth.sex === "M", new Date().getFullYear()) : null; // v25: 대운
       // v14: 세션 내내 고정인 프로필(주역 제외)은 system에 담아 프롬프트 캐싱 → 2번째 질문부터 빨라짐
-      const profile = `${birth.name ? `호칭: ${birth.name}\n` : ""}${birth.sex ? `성별: ${birth.sex === "M" ? "남" : "여"}\n` : ""}사주: ${saju.pillars.년}년 ${saju.pillars.월}월 ${saju.pillars.일}일 ${saju.pillars.시}시 / 오행 ${Object.entries(saju.counts).map(([k, v]) => k + v).join(" ")} / 주기운 ${saju.main}${saju.nayin ? ` / 납음 ${saju.nayin}` : ""}
+      const profile = `${birth.name ? `호칭: ${birth.name}\n` : ""}${birth.sex ? `성별: ${birth.sex === "M" ? "남" : "여"}\n` : ""}사주: ${saju.pillars.년}년 ${saju.pillars.월}월 ${saju.pillars.일}일 ${saju.pillars.시}시 / 오행 ${Object.entries(saju.counts).map(([k, v]) => k + v).join(" ")} / 일간(나) ${saju.dayGan || "?"}·오행중심 ${saju.main}${saju.nayin ? ` / 납음 ${saju.nayin}` : ""}
 별자리: ${zo.name}(${zo.el}) / 달: 태어난 밤의 위상 ${moon.name} · 달 별자리 ${mp.moonSign}(정서·내면) · 나크샤트라 ${mp.nakshatra}(베다 27수)
 마야 촐킨: ${tzk.tone}의 톤 · ${tzk.sign}
 MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ? `\n대운: 아직 첫 대운 전 — 대운수 ${du.num}세부터 ${du.dir}(지금은 월주 기운이 지배)` : `\n대운(현재 인생 시기): ${du.ganji}(${du.el}) 대운 · ${du.startAge}~${du.endAge}세 · ${du.dir} — 10년 단위 큰 흐름`) : ""}${sj ? `\n삼재: 올해 ${sj} (입춘 경계 근사)` : ""}${tj ? `\n토정비결(당년 신수): 괘상수 ${tj.code} (상${tj.sang} 중${tj.jung} 하${tj.ha}), 음력 생일 ${tj.lunar}` : ""}${core ? `\n가치여정(워드소팅 16→6→3→1): 핵심 ${core} / 지킨 가치 ${vals4.filter(v => v !== core).join("·")} / 마지막에 내려놓은 ${vals8.filter(v => !vals4.includes(v)).join("·")}` : ""}`;
@@ -1466,7 +1469,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                 <div className="bars">{Object.entries(saju.counts).map(([k, v]) => (
                   <div key={k} className="bar"><span>{k}</span><i style={{ width: `${v * 14}%`, background: EL_COLOR[k][0] }} /><b>{v}</b></div>
                 ))}</div>
-                <p className="refline">주기운 {saju.main} — {EL_READ[saju.main]}</p>
+                <p className="refline">{saju.dayGan ? `일간 ${saju.dayGan}(${saju.main})` : `주기운 ${saju.main}`} — {EL_READ[saju.main]}</p>
                 <p className="refline">{ZO_READ[zo.el]}</p>
                 <p className="refline">{moon.read}</p>
                 <p className="refline">{LP_READ[num]}</p>
