@@ -1,13 +1,16 @@
 /* 비나리 판결 프록시 — API 키는 이 함수(서버) 안에서만 산다.
-   Vercel 환경변수: ANTHROPIC_API_KEY(필수) · BINARI_MODEL(선택, 기본 claude-sonnet-4-6) · ALLOWED_ORIGIN(선택)
-   보호: max_tokens 상한 + 메시지 수 상한 + (선택) Origin 검사.
-   정교한 rate limit은 트래픽이 생긴 뒤의 문제 — 지금의 1차 방어선은 Anthropic 콘솔의 월 지출 한도다. */
+   Vercel 환경변수: ANTHROPIC_API_KEY(필수) · BINARI_MODEL(선택, 기본 claude-sonnet-5) · ALLOWED_ORIGIN(선택, 미설정 시 기본 허용 목록)
+   방어(v54): Origin 필수+허용목록 · 본문 크기 상한 · max_tokens 클램프 · SYS 프리픽스 대조(임의 프롬프트 주입 차단).
+   한계: Origin은 브라우저 밖(curl)에선 위조 가능 — 최종 방어선은 Anthropic 콘솔의 월 지출 한도다. */
+const SYS_PREFIX = "당신은 유저의 '수호신' 비나리다";
+const DEFAULT_ORIGINS = ["https://binari-sepia.vercel.app", "http://localhost:5173", "http://localhost:4173"];
+
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: { message: "POST만 받아" } });
 
-  const allowed = process.env.ALLOWED_ORIGIN;
+  const allowed = process.env.ALLOWED_ORIGIN ? [process.env.ALLOWED_ORIGIN] : DEFAULT_ORIGINS;
   const origin = req.headers.origin || "";
-  if (allowed && origin && origin !== allowed) return res.status(403).json({ error: { message: "허용되지 않은 출처" } });
+  if (!origin || !allowed.includes(origin)) return res.status(403).json({ error: { message: "허용되지 않은 출처" } });
 
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) return res.status(500).json({ error: { message: "서버에 ANTHROPIC_API_KEY가 없어 — Vercel 환경변수를 확인해" } });
@@ -15,7 +18,10 @@ export default async function handler(req, res) {
   const { system, messages, max_tokens } = req.body || {};
   if (!Array.isArray(messages) || messages.length === 0) return res.status(400).json({ error: { message: "messages가 비었어" } });
   if (messages.length > 40) return res.status(400).json({ error: { message: "대화가 너무 길어" } });
-  const mt = Math.min(Math.max(parseInt(max_tokens, 10) || 320, 1), 2000);
+  try { if (JSON.stringify(req.body).length > 60000) return res.status(400).json({ error: { message: "요청이 너무 커" } }); } catch { return res.status(400).json({ error: { message: "본문을 읽을 수 없어" } }); }
+  const sysText = Array.isArray(system) && system[0] && typeof system[0].text === "string" ? system[0].text : "";
+  if (!sysText.startsWith(SYS_PREFIX)) return res.status(400).json({ error: { message: "판결 형식이 아니야" } });
+  const mt = Math.min(Math.max(parseInt(max_tokens, 10) || 320, 1), 1600);
 
   try {
     const r = await fetch("https://api.anthropic.com/v1/messages", {

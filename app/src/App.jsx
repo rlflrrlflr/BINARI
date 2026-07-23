@@ -1164,7 +1164,7 @@ export default function App() {
   const [addOpen, setAddOpen] = useState(false); const [addName, setAddName] = useState(""); const [addSex, setAddSex] = useState(""); // v26: 조각 보태기
   const QHINTS = ["밤 11시, 전남친에게 카톡 보낼까?", "받은 이직 제안, 수락할까?", "지금 이 회사 그만둘까?", "3주째 답 없는 썸, 한 번 더 연락할까?", "무리해서 이 집 계약할까?"];
   const [qhint] = useState(() => QHINTS[Math.floor((typeof window!=="undefined"?(window.history.length||0):0)) % QHINTS.length]);
-  useEffect(() => { _initAnalytics(); track("app_open", { returning }); }, []); // 계측: 세션 시작
+  useEffect(() => { _initAnalytics(); let ref = "direct"; try { const sp = new URLSearchParams(window.location.search); ref = sp.get("ref") || sp.get("utm_source") || "direct"; } catch (_) {} track("app_open", { returning, ref }); }, []); // 계측: 세션 시작 + 유입 어트리뷰션(파라미터만, 원문 없음)
   const [saju, setSaju] = useState(mem?.saju || null);
   const [zo, setZo] = useState(mem?.zo || null);
   const [moon, setMoon] = useState(mem?.moon || null);
@@ -1291,15 +1291,31 @@ export default function App() {
   };
 
   const [shared, setShared] = useState(false);   // v53: 판결 공유 피드백
+  const [lean, setLean] = useState("");          // v54: 판결 전 내심(계측 전용 — 프롬프트에 안 들어감)
+  const [paywall, setPaywall] = useState("");    // v54: 복채/심층 fake-door
   const shareVerdict = async () => {
     if (!res) return;
     track("verdict_shared", { dir: res.direction, mode: hexInfo ? "ritual" : "quick" });
     const text = `"${q}"\n→ ${res.direction}. ${res.verdict}\n\n— 내 수호신의 판결, 비나리`;
-    const url = "https://binari-sepia.vercel.app/";
+    const url = "https://binari-sepia.vercel.app/?ref=share";
     try {
       if (navigator.share) { await navigator.share({ title: "비나리 — 수호신의 판결", text, url }); return; }
     } catch (_) { return; } // 유저 취소 포함 — 조용히
     try { await navigator.clipboard.writeText(`${text}\n${url}`); setShared(true); setTimeout(() => setShared(false), 2200); } catch (_) {}
+  };
+  const exportMemory = () => {                             // v54: iOS 7일 localStorage 소멸 임시 방어
+    try {
+      const data = {};
+      for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf("binari.") === 0) data[k] = localStorage.getItem(k); }
+      const blob = new Blob([JSON.stringify({ _binari: 1, at: new Date().toISOString(), data })], { type: "application/json" });
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "binari-memory.json"; document.body.appendChild(a); a.click(); a.remove();
+      track("profile_exported");
+    } catch (_) {}
+  };
+  const importMemory = (file) => {
+    const rd = new FileReader();
+    rd.onload = () => { try { const j = JSON.parse(String(rd.result)); if (!j || j._binari !== 1 || !j.data) return; Object.keys(j.data).forEach((k) => { if (k.indexOf("binari.") === 0) localStorage.setItem(k, j.data[k]); }); track("profile_imported"); window.location.reload(); } catch (_) {} };
+    rd.readAsText(file);
   };
   const wakeTapRef = useRef(0);
   const tryWake = () => {                                   // v52: 수동 더블탭(모바일·데스크탑 동일)
@@ -1309,7 +1325,7 @@ export default function App() {
   };
   const judge = async (hi, quick = false) => {
     if (!q.trim() || busy) return;
-    track("question_asked", { mode: quick ? "quick" : "ritual", qlen: q.trim().length, ritual: !!hi });
+    track("question_asked", { mode: quick ? "quick" : "ritual", qlen: q.trim().length, ritual: !!hi, lean: lean || "skip" });
     setBusy(true); setErr(""); setRes(null); setDetail(null); setWhy(false); setFlip(false); setCardOn(false); reactRef.current = null; setIntroSeen(true);
     try {
       const mp = moonPlacements(+birth.y, +birth.m, +birth.d, +birth.h || 12, +birth.min || 0, !!birth.noHour); // v22
@@ -1336,7 +1352,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
       const { json: r1 } = await callClaude(system, [...priorConvo, concludeMsg], 320);
       // L1 등장 연출(짧게)
       agitateRef.current = true; setRes(r1);
-      track("verdict_shown", { dir: r1.direction, cat: r1.category, tone: r1.tone, against: r1.against, total: r1.total, mode: quick ? "quick" : "ritual" });
+      track("verdict_shown", { dir: r1.direction, cat: r1.category, tone: r1.tone, against: r1.against, total: r1.total, mode: quick ? "quick" : "ritual", lean: lean || "skip" });
       reactRef.current = { dir: r1.direction, t0: performance.now() };   // v28: 수호신이 판결을 연기
       setTimeout(() => { agitateRef.current = false; }, 700);
       setTimeout(() => { setCardOn(true); }, 1400);                       // 몸짓을 보여준 뒤 카드
@@ -1363,7 +1379,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
   const lastRec = records.length ? records[records.length - 1] : null;
   const askback = returning && lastRec && lastRec.followUp === null && Date.now() - lastRec.at >= 6 * 3600 * 1000 ? lastRec : null;
   const answerAskback = (fu, note) => {
-    track("followup_answered", { result: fu });
+    track("followup_answered", { result: fu, direction: (records[records.length - 1] || {}).direction || null });
     setRecords(prev => prev.map((r, i) => (i === prev.length - 1 ? { ...r, followUp: fu, note: note || "" } : r)));
     setNoting(false); setAskNote("");
   };
@@ -1617,6 +1633,16 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
               )}
               {!ritual && <p className="gintro dim2">{isNight ? "밤이 깊었네. 이 시간의 물음은 마음이 먼저 기울어 있기 마련이야." : "그래서, 요즘 뭘 망설이고 있어?"}</p>}
               {!ritual && <textarea className="qbox" rows={2} maxLength={100} value={q} placeholder={`"${qhint}"`} onChange={e => setQ(e.target.value)} />}
+              {!ritual && !res && q.trim().length > 0 && (
+                <div className="leanrow fade">
+                  <span className="leanlab">지금 마음은 어느 쪽으로 기울어 있어?</span>
+                  <div className="row gap center">
+                    {[["go", "하는 쪽"], ["stop", "멈추는 쪽"], ["unsure", "모르겠어"]].map(([v, t]) => (
+                      <button key={v} type="button" className={"calbtn " + (lean === v ? "on" : "")} onClick={() => setLean(lean === v ? "" : v)}>{t}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {!ritual && (() => { const qk = looksQuick(q); return (
                 <div className="w100">
                   <div className="row gap center">
@@ -1655,6 +1681,12 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
               ) : (
                 <button className="resetlink" onClick={() => setResetAsk(true)}>다른 사람이야? — 처음부터 다시</button>
               ))}
+              {!ritual && returning && !res && (
+                <div className="memrow">
+                  <button className="resetlink" onClick={exportMemory}>수호신 기억 보관하기</button>
+                  <label className="resetlink" style={{ cursor: "pointer" }}>기억 불러오기<input type="file" accept="application/json" style={{ display: "none" }} onChange={(e) => e.target.files && e.target.files[0] && importMemory(e.target.files[0])} /></label>
+                </div>
+              )}
               {ritual && !res && (
                 <div className="hexpanel fade">
                   <p className="qquote">“{q}”</p>
@@ -1735,6 +1767,14 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
               </div>
             </div>
           )}
+          {res && cardOn && hexInfo && (paywall !== "done" ? (
+            <div className="payrow fade">
+              <button className="btn ghost sm" onClick={() => { track("paywall_click", { type: "boksae", lean: lean || "skip", direction: res.direction }); setPaywall("done"); }}>복채 올리기 — 1,900원</button>
+              <button className="btn ghost sm" onClick={() => { track("paywall_click", { type: "deep", lean: lean || "skip", direction: res.direction }); setPaywall("done"); }}>심층 풀이 받기 — 3,900원</button>
+            </div>
+          ) : (
+            <p className="fine fade">아직 준비 중이야 — 마음만 받을게 ✦</p>
+          ))}
           {res && cardOn && !bujeok && <button className="btn ghost mt" onClick={() => { track("bujeok_opened"); setBujeok(true); }}>수호신의 부적 받기</button>}
           {res && cardOn && bujeok && (
             <div className="fade bwrap">
@@ -1745,7 +1785,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
             </div>
           )}
           {res && cardOn && <button className="btn ghost mt" onClick={shareVerdict}>{shared ? "복사했어 — 붙여넣으면 돼" : "이 판결, 누구에게 보여줄래?"}</button>}
-          {res && cardOn && <button className="btn ghost mt" onClick={() => { track("another_question", { after_why: why }); setRes(null); setDetail(null); setWhy(false); setDetailBusy(false); setQ(""); setCardOn(false); setRitual(false); setTosses([]); setHexInfo(null); setBujeok(false); }}>다른 걸 물어볼래</button>}
+          {res && cardOn && <button className="btn ghost mt" onClick={() => { track("another_question", { after_why: why }); setRes(null); setDetail(null); setWhy(false); setDetailBusy(false); setQ(""); setCardOn(false); setRitual(false); setTosses([]); setHexInfo(null); setBujeok(false); setLean(""); setPaywall(""); }}>다른 걸 물어볼래</button>}
         </section>
       )}
     </div>
@@ -1824,6 +1864,10 @@ const CSS = `
 .lobbypanel{position:absolute;left:0;right:0;bottom:7vh;z-index:2;display:flex;flex-direction:column;align-items:center;width:100%;padding:0 16px}
 .wakehint{font-family:sans-serif;font-size:12px;letter-spacing:.16em;color:#d8c79a;margin-top:22px;animation:wakePulse 2.4s ease-in-out infinite;text-shadow:0 1px 10px rgba(4,3,10,.85)}
 @keyframes wakePulse{0%,100%{opacity:.4}50%{opacity:.95}}
+.leanrow{margin:-4px 0 12px;display:flex;flex-direction:column;align-items:center;gap:7px}
+.leanlab{font-family:sans-serif;font-size:11px;letter-spacing:.12em;color:#8a7f95}
+.payrow{display:flex;gap:10px;margin-top:14px;justify-content:center;flex-wrap:wrap}
+.memrow{display:flex;gap:18px;justify-content:center}
 .halo.busy{animation:haloPulse 1.4s ease-in-out infinite}
 @keyframes haloPulse{0%,100%{filter:drop-shadow(0 0 26px rgba(245,217,139,.14))}50%{filter:drop-shadow(0 0 46px rgba(245,217,139,.34))}}
 .halo.dimmed{opacity:.32;filter:blur(2px) drop-shadow(0 0 30px rgba(245,217,139,.2));transition:opacity .6s,filter .6s}
