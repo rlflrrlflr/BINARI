@@ -52,7 +52,10 @@ const b = await chromium.launch();
   await page.locator("textarea.qbox").fill("전남친에게 연락할까?"); await page.waitForTimeout(300);
   await page.getByRole("button", { name: "가볍게 물을래" }).click();
   ck("S1 속결 판결(콜1)", await waitVerdict(page), await vvText(page));
-  await page.getByRole("button", { name: "다른 걸 물어볼래" }).click(); await page.waitForTimeout(400);
+  await page.getByRole("button", { name: "다른 걸 물어볼래" }).click(); await page.waitForTimeout(500);
+  await page.waitForSelector("text=두 번 두드리면", { timeout: 8000 }); // v55: 판결 후 로비 복귀
+  await page.locator("canvas").first().dblclick(); // 다시 깨움
+  await page.waitForSelector("textarea.qbox", { timeout: 8000 });
   await page.locator("textarea.qbox").fill("이직할까 크게 고민이야"); await page.waitForTimeout(300);
   await page.getByRole("button", { name: "판결을 청한다" }).click();
   await page.waitForSelector("text=동전 셋", { timeout: 5000 });

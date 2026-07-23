@@ -101,7 +101,7 @@ try {
   // 8. 재회 — localStorage 복원
   const stored = await page.evaluate(() => localStorage.getItem("binari.v1"));
   check("localStorage 저장됨", !!stored, stored ? `${stored.length} bytes` : "없음");
-  await page.reload();
+  await page.reload({ waitUntil: "domcontentloaded", timeout: 20000 });
   await page.waitForTimeout(1600);
   // v52: 재방문도 로비 직행 — 인사·힌트만, 질문/데일리는 깨운 뒤
   check("재회: 로비 직행(온보딩 생략)", await page.getByText("두 번 두드리면").isVisible() && (await page.locator("textarea.qbox").count()) === 0);
@@ -121,7 +121,7 @@ try {
   await page.getByRole("button", { name: "받았어" }).click();
   await page.waitForTimeout(400);
   check("데일리 수령 후 카드 소멸", (await page.getByText("아침 문안").count()) === 0);
-  await page.reload();
+  await page.reload({ waitUntil: "domcontentloaded", timeout: 20000 });
   await page.waitForTimeout(1600);
   await page.locator("canvas").first().dblclick(); // 재재방문 로비 → 깨움
   await page.waitForTimeout(1000);

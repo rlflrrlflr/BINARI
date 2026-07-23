@@ -1384,6 +1384,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
     setNoting(false); setAskNote("");
   };
 
+  const asking = phase >= 1 && awake && !res && !busy && !ritual;   // v55: 수호신이 물러난 순수 질문입력 구간
   const dailyData = returning && !dailySeen && birth.y ? (() => {
     const bio = biorhythm(+birth.y, +birth.m, +birth.d);
     const d = new Date();
@@ -1562,7 +1563,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
 
       {step === 3 && (
         <section className={`scene fade ${phase >= 1 && !res && !awake ? "lobby" : ""}`} onClick={phase >= 1 && !res && !awake ? tryWake : undefined}>
-          <div className={`halo wide ${!awake && phase >= 1 && !res ? "lobbyscale" : ""} ${busy || (res && !cardOn) ? "busy" : ""} ${res && cardOn ? "dimmed" : ""}`}>
+          <div className={`halo wide ${!awake && phase >= 1 && !res ? "lobbyscale" : ""} ${asking ? "dissolved" : ""} ${busy || (res && !cardOn) ? "busy" : ""} ${res && cardOn ? "dimmed" : ""}`}>
             {phase === 0
               ? <BirthCanvas tint={saju ? EL_COLOR[saju.main] : undefined} size={Math.min(typeof window !== "undefined" ? window.innerWidth * 1.1 : 400, typeof window !== "undefined" ? window.innerHeight * 0.57 : 400, 640)} />
               : <div className="fade"><Guardian saju={saju} zo={zo} mbti={mbti} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} restRef={restRef} size={Math.min(typeof window !== "undefined" ? window.innerWidth * 1.1 : 400, typeof window !== "undefined" ? window.innerHeight * 0.57 : 400, 640)} /></div>}
@@ -1581,8 +1582,9 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
               <p className="wakehint">두 번 두드리면 — 깨어나 물음을 들어</p>
             </div>
           )}
+          {asking && <div className="residue" style={{ "--elc": saju ? EL_COLOR[saju.main][0] : "#f5d98b" }} />}
           {phase >= 1 && !res && awake && (
-            <div className="fade gpanel">
+            <div className={`fade gpanel ${asking ? "asking" : ""}`}>
               {returning && !res && !busy && !ritual && (!birth.name || !birth.sex) && (addOpen ? (
                 <div className="addpanel fade">
                   {!birth.name && <input className="in wide center" lang="ko" placeholder="너를 뭐라고 부를까?" maxLength={12} value={addName} onChange={e => setAddName(e.target.value)} />}
@@ -1785,7 +1787,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
             </div>
           )}
           {res && cardOn && <button className="btn ghost mt" onClick={shareVerdict}>{shared ? "복사했어 — 붙여넣으면 돼" : "이 판결, 누구에게 보여줄래?"}</button>}
-          {res && cardOn && <button className="btn ghost mt" onClick={() => { track("another_question", { after_why: why }); setRes(null); setDetail(null); setWhy(false); setDetailBusy(false); setQ(""); setCardOn(false); setRitual(false); setTosses([]); setHexInfo(null); setBujeok(false); setLean(""); setPaywall(""); }}>다른 걸 물어볼래</button>}
+          {res && cardOn && <button className="btn ghost mt" onClick={() => { track("another_question", { after_why: why }); setRes(null); setDetail(null); setWhy(false); setDetailBusy(false); setQ(""); setCardOn(false); setRitual(false); setTosses([]); setHexInfo(null); setBujeok(false); setLean(""); setPaywall(""); setAwake(false); }}>다른 걸 물어볼래</button>}
         </section>
       )}
     </div>
@@ -1858,8 +1860,14 @@ const CSS = `
 .cell:hover{border-color:rgba(245,217,139,.5)}
 .cell.sel{border-color:#ffe9ad;color:#ffe9ad;box-shadow:0 0 14px rgba(245,217,139,.3),inset 0 0 10px rgba(245,217,139,.08)}
 .halo{position:relative;filter:drop-shadow(0 0 30px rgba(245,217,139,.15));margin:8px 0;transition:filter .6s}
-.halo.wide{width:100vw;margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);display:flex;justify-content:center;margin-top:calc(min(110vw,57vh,640px)*-0.09);margin-bottom:calc(min(110vw,57vh,640px)*-0.16);transition:filter .6s,transform .9s cubic-bezier(.2,.8,.2,1)}
+.halo.wide{width:100vw;margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);display:flex;justify-content:center;margin-top:calc(min(110vw,57vh,640px)*-0.09);margin-bottom:calc(min(110vw,57vh,640px)*-0.16);transition:filter .6s,transform .9s cubic-bezier(.2,.8,.2,1),opacity .8s ease}
 .halo.wide.lobbyscale{transform:translateY(13vh) scale(1.42)}
+.halo.wide.dissolved{opacity:0;transform:scale(1.7);filter:blur(7px);pointer-events:none}
+.residue{position:fixed;inset:0;z-index:0;pointer-events:none;background:radial-gradient(56% 40% at 50% 40%,var(--elc),transparent 66%);opacity:.28;mix-blend-mode:screen;animation:residueDrift 9s ease-in-out infinite}
+@keyframes residueDrift{0%,100%{opacity:.18;transform:scale(1)}50%{opacity:.4;transform:scale(1.12)}}
+.gpanel.asking{position:relative;z-index:1}
+.gpanel.asking .gintro.dim2{font-size:16.5px;color:#ede0c2;margin-bottom:16px;text-shadow:0 1px 14px rgba(4,3,10,.9)}
+.gpanel.asking .qbox{font-size:19px;padding:20px 16px;min-height:104px}
 .scene.lobby{position:relative;min-height:calc(100dvh - 96px);cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .lobbypanel{position:absolute;left:0;right:0;bottom:7vh;z-index:2;display:flex;flex-direction:column;align-items:center;width:100%;padding:0 16px}
 .wakehint{font-family:sans-serif;font-size:12px;letter-spacing:.16em;color:#d8c79a;margin-top:22px;animation:wakePulse 2.4s ease-in-out infinite;text-shadow:0 1px 10px rgba(4,3,10,.85)}
