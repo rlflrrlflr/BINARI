@@ -1787,7 +1787,7 @@ const CSS = `
 .cell:hover{border-color:rgba(245,217,139,.5)}
 .cell.sel{border-color:#ffe9ad;color:#ffe9ad;box-shadow:0 0 14px rgba(245,217,139,.3),inset 0 0 10px rgba(245,217,139,.08)}
 .halo{position:relative;filter:drop-shadow(0 0 30px rgba(245,217,139,.15));margin:8px 0;transition:filter .6s}
-.halo.wide{width:100vw;margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);display:flex;justify-content:center;margin-top:calc(min(110vw,57vh,640px)*-0.09);margin-bottom:calc(min(110vw,57vh,640px)*-0.24)}
+.halo.wide{width:100vw;margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);display:flex;justify-content:center;margin-top:calc(min(110vw,57vh,640px)*-0.09);margin-bottom:calc(min(110vw,57vh,640px)*-0.16)}
 .halo.busy{animation:haloPulse 1.4s ease-in-out infinite}
 @keyframes haloPulse{0%,100%{filter:drop-shadow(0 0 26px rgba(245,217,139,.14))}50%{filter:drop-shadow(0 0 46px rgba(245,217,139,.34))}}
 .halo.dimmed{opacity:.32;filter:blur(2px) drop-shadow(0 0 30px rgba(245,217,139,.2));transition:opacity .6s,filter .6s}
@@ -1798,14 +1798,15 @@ const CSS = `
 .w100{width:100%;display:flex;flex-direction:column;align-items:center}
 .gtext{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;pointer-events:none;padding:0 34px}
 .gtext.up{padding-bottom:150px}
-.gpanel{position:relative;margin:-26px auto 0;width:min(92vw,430px);display:flex;flex-direction:column;align-items:center;z-index:3;padding:0 4px}
+.gpanel{position:relative;margin:-12px auto 0;width:min(92vw,430px);display:flex;flex-direction:column;align-items:center;z-index:3;padding:0 4px}
+.gpanel::before{content:"";position:absolute;left:50%;top:-28px;transform:translateX(-50%);width:120%;max-width:540px;height:170px;background:radial-gradient(ellipse 60% 100% at 50% 42%,rgba(6,4,12,.9),rgba(6,4,12,.46) 45%,transparent 70%);z-index:-1;pointer-events:none}
 .forming{font-size:13px;line-height:2.1;color:#cfc4e2;letter-spacing:.14em;margin:0;text-shadow:0 0 16px rgba(245,217,139,.4);animation:formPulse 2.1s ease-in-out infinite;background:rgba(5,4,8,.45);padding:10px 18px;border-radius:14px}
 @keyframes formPulse{0%,100%{opacity:.5}50%{opacity:1}}
 .gname{font-size:14px;line-height:1.9;color:#f0e2b8;margin:0;text-shadow:0 2px 18px rgba(5,4,8,.95),0 0 26px rgba(245,217,139,.28);background:rgba(5,4,8,.5);padding:8px 16px;border-radius:14px}
-.gsay{font-size:14.5px;line-height:1.8;color:#f0e2b8;margin:2px 0 10px;text-align:center}
+.gsay{font-size:14.5px;line-height:1.8;color:#f0e2b8;margin:2px 0 10px;text-align:center;text-shadow:0 1px 12px rgba(4,3,10,.8)}
 .gsay.sprite{font-size:12.5px;color:#9d8fb5;margin:-4px 0 10px}
 .gsay.born{font-weight:600;color:#ffe9ad;text-shadow:0 0 18px rgba(245,217,139,.35)}
-.gintro.dim2{color:#c9b98f;font-size:14px;margin:2px 0 12px}
+.gintro.dim2{color:#dcc99a;font-size:14px;margin:2px 0 12px;text-shadow:0 1px 12px rgba(4,3,10,.85),0 0 4px rgba(4,3,10,.7)}
 .hexpanel{display:flex;flex-direction:column;align-items:center;gap:8px;margin-top:6px;width:100%}
 .hexlines{display:flex;flex-direction:column-reverse;gap:8px;margin:6px 0;min-height:88px}
 .hline{position:relative;width:86px;height:8px;display:flex;justify-content:center}
