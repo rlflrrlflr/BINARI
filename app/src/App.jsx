@@ -1290,6 +1290,17 @@ export default function App() {
     setDetailBusy(false);
   };
 
+  const [shared, setShared] = useState(false);   // v53: 판결 공유 피드백
+  const shareVerdict = async () => {
+    if (!res) return;
+    track("verdict_shared", { dir: res.direction, mode: hexInfo ? "ritual" : "quick" });
+    const text = `"${q}"\n→ ${res.direction}. ${res.verdict}\n\n— 내 수호신의 판결, 비나리`;
+    const url = "https://binari-sepia.vercel.app/";
+    try {
+      if (navigator.share) { await navigator.share({ title: "비나리 — 수호신의 판결", text, url }); return; }
+    } catch (_) { return; } // 유저 취소 포함 — 조용히
+    try { await navigator.clipboard.writeText(`${text}\n${url}`); setShared(true); setTimeout(() => setShared(false), 2200); } catch (_) {}
+  };
   const wakeTapRef = useRef(0);
   const tryWake = () => {                                   // v52: 수동 더블탭(모바일·데스크탑 동일)
     const now = performance.now();
@@ -1733,6 +1744,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
               <p className="fine">질문은 이미지에 담기지 않아 — 문양과 판결의 방향만.</p>
             </div>
           )}
+          {res && cardOn && <button className="btn ghost mt" onClick={shareVerdict}>{shared ? "복사했어 — 붙여넣으면 돼" : "이 판결, 누구에게 보여줄래?"}</button>}
           {res && cardOn && <button className="btn ghost mt" onClick={() => { track("another_question", { after_why: why }); setRes(null); setDetail(null); setWhy(false); setDetailBusy(false); setQ(""); setCardOn(false); setRitual(false); setTosses([]); setHexInfo(null); setBujeok(false); }}>다른 걸 물어볼래</button>}
         </section>
       )}
