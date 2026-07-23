@@ -362,6 +362,8 @@ const DIMQ = [   // v24: MBTI 픽션 — 한 기억씩 순차로 묻는다
 ];
 /* v14: 지표별 독립 시각축을 위한 색 유틸 — 원소 기본색을 별자리로 hue 회전 */
 const ZO_ORDER = ["양자리","황소자리","쌍둥이자리","게자리","사자자리","처녀자리","천칭자리","전갈자리","사수자리","염소자리","물병자리","물고기자리"];
+const ZODIAC_ANIMAL = ["쥐","소","호랑이","토끼","용","뱀","말","양","원숭이","닭","개","돼지"];  // v64 연지(yJ) → 띠
+const WISP_GAIT = ["종종거리다 다다닥 내달릴","느긋하게 뚜벅뚜벅 걸을","숨죽였다 덮치듯 뛰어오를","깡충깡충 뛰어다닐","길게 굽이치며 헤엄칠","스르르 미끄러질","바람처럼 내달릴","총총 뛰다 폴짝 옆걸음질할","그네 타듯 휙휙 방향을 바꿀","콕콕 쪼다 푸드덕거릴","달려왔다 저만치 갔다 할","뒤뚱뒤뚱 걸을"];  // 셰이더 12 시그니처와 1:1
 function _hexToHsl(hex){const r=parseInt(hex.slice(1,3),16)/255,g=parseInt(hex.slice(3,5),16)/255,b=parseInt(hex.slice(5,7),16)/255;const mx=Math.max(r,g,b),mn=Math.min(r,g,b);let h=0,s=0,l=(mx+mn)/2;if(mx!==mn){const d=mx-mn;s=l>0.5?d/(2-mx-mn):d/(mx+mn);h=mx===r?(g-b)/d+(g<b?6:0):mx===g?(b-r)/d+2:(r-g)/d+4;h/=6;}return[h*360,s,l];}
 function _hslToHex(h,s,l){h=(((h%360)+360)%360)/360;const q=l<0.5?l*(1+s):l+s-l*s,p=2*l-q,f=(t)=>{t=(t+1)%1;return t<1/6?p+(q-p)*6*t:t<1/2?q:t<2/3?p+(q-p)*(2/3-t)*6:p;},to=(x)=>Math.round(f(x)*255).toString(16).padStart(2,"0");return"#"+to(h+1/3)+to(h)+to(h-1/3);}
 const rotHue=(hex,deg)=>{const[h,s,l]=_hexToHsl(hex);return _hslToHex(h+deg,s,l);};
@@ -539,117 +541,212 @@ const GL_VERT = `
 precision highp float;
 attribute vec4 a_r0; // x:u y:v z:s w:size·위상
 attribute vec4 a_r1; // x:ph y:dly z:colorPick w:strandPick
-uniform float u_t,u_form,u_R,u_arms,u_strands,u_twist,u_speed,u_chaos,u_nayF,u_nayA,u_expand,u_agi,u_k,u_ps,u_lum,u_twk,u_psMul,u_focal,u_touchAmt;
+uniform float u_t,u_form,u_R,u_arms,u_strands,u_twist,u_speed,u_chaos,u_nayF,u_nayA,u_expand,u_agi,u_k,u_ps,u_lum,u_twk,u_psMul,u_focal,u_touchAmt,u_breath,u_trailLive,u_zodiac;
 uniform vec2 u_touch,u_touchVel;
-varying float v_a; varying float v_pick;
+uniform vec4 u_trail[10];
+varying float v_a; varying float v_pick; varying float v_star;
 float hash21(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
 float vnoise(vec2 p){ vec2 i=floor(p),f=fract(p); f=f*f*(3.0-2.0*f); float a=hash21(i),b=hash21(i+vec2(1.0,0.0)),c=hash21(i+vec2(0.0,1.0)),d=hash21(i+vec2(1.0,1.0)); return mix(mix(a,b,f.x),mix(c,d,f.x),f.y); }
 vec2 curl2(vec2 p){ float e=0.12; float x1=vnoise(p+vec2(0.0,e)),x2=vnoise(p-vec2(0.0,e)),y1=vnoise(p+vec2(e,0.0)),y2=vnoise(p-vec2(e,0.0)); return vec2(x1-x2,-(y1-y2))/(2.0*e); }
+// ─── v64 띠 정령: 12지지 걸음걸이 시그니처. 닫힌형 경로(위상 워핑)라 stateless 연속 ───
+vec2 wispLeader(float tt){
+  float zi=u_zodiac;
+  float w0=0.3; float th=0.0; vec2 loc=vec2(0.0); float Rorb=0.5;  // v65 궤도주기 12s+ 테더링(명상 위계)
+  if(zi<0.5){        th=tt*w0*1.3+0.4*sin(tt*1.1)+0.15*sin(tt*4.7+1.3); loc.y+=0.008*sin(tt*21.0); Rorb*=0.94+0.05*sin(tt*3.3); }      // 자·쥐 종종+다다닥
+  else if(zi<1.5){   th=tt*w0*0.42; loc.y+=-0.012+0.02*abs(sin(tt*0.85)); }                                                            // 축·소 뚜벅뚜벅
+  else if(zi<2.5){   float po=pow(max(0.0,sin(tt*0.42)),8.0); th=tt*w0*0.7+0.85*po; Rorb*=1.0-0.22*po; }                               // 인·호랑이 잠행→도약
+  else if(zi<3.5){   float hp=fract(tt*0.5); float hop=4.0*hp*(1.0-hp); th=tt*w0*0.9+0.22*hop*sin(hp*3.1416); loc.y+=0.055*hop; }      // 묘·토끼 깡충
+  else if(zi<4.5){   th=tt*w0*0.55; loc.y+=0.10*sin(th*2.0-tt*1.2); loc.x+=0.05*sin(th*3.0+tt*0.8); }                                  // 진·용 굽이침
+  else if(zi<5.5){   th=tt*w0*0.75; loc+=vec2(cos(th),sin(th))*0.03*sin(tt*3.4); }                                                     // 사·뱀 미끄러짐
+  else if(zi<6.5){   th=tt*w0*1.7+0.12*sin(tt*2.6); loc.y+=0.022*abs(sin(tt*2.6+0.7)); }                                               // 오·말 질주 캔터
+  else if(zi<7.5){   float cp=pow(0.5+0.5*sin(tt*0.37+2.0),10.0); th=tt*w0*0.8+0.1*sin(tt*2.1); loc.y+=0.02*abs(sin(tt*2.1)); Rorb*=1.0+0.09*cp; } // 미·양 총총+옆폴짝
+  else if(zi<8.5){   th=tt*w0+0.95*sin(tt*0.7)+0.25*sin(tt*1.9+0.8); loc.y+=-0.03*abs(cos(tt*1.7)); }                                  // 신·원숭이 그네 스윙
+  else if(zi<9.5){   float pk=pow(max(0.0,sin(tt*4.2)),6.0)*step(0.2,sin(tt*0.7)); th=tt*w0*0.85+0.05*sin(tt*4.2); loc.y+=-0.05*pk; }  // 유·닭 콕콕(간헐·깊게)
+  else if(zi<10.5){  th=tt*w0*1.4+0.2*sin(tt*0.9); loc.y+=0.018*abs(sin(tt*3.4)); Rorb*=0.8+0.2*sin(tt*0.5); }                         // 술·개 곁↔저만치
+  else {             th=tt*w0*0.55; loc.x+=0.026*sin(tt*1.3); loc.y+=0.012*abs(sin(tt*2.6)); }                                         // 해·돼지 뒤뚱
+  return vec2(cos(th),sin(th)*0.82)*Rorb+loc;
+}
 void main(){
+  if(a_r1.w>1.5){                                        // ── v64 띠 정령 위스프(선두 1.5%, 지연 평가 꼬리) ──
+    float zi=u_zodiac;
+    float tailLen=(zi>3.5&&zi<4.5)?1.5:((zi>4.5&&zi<5.5)?1.1:0.9);   // 꼬리를 잔상 오프셋보다 길게(점선 방지)
+    float lag=pow(a_r0.y,1.6)*tailLen;
+    float lg=lag/tailLen;
+    float tt=u_t-lag;
+    vec2 lead=wispLeader(tt);
+    vec2 tang=wispLeader(tt+0.06)-lead;
+    tang=tang/max(length(tang),1e-4);
+    vec2 nrm=vec2(-tang.y,tang.x);
+    float spread=0.012+0.034*lg;
+    vec2 body=tang*(a_r0.z-0.5)*spread*1.6+nrm*(a_r0.w-0.5)*spread;
+    if(zi>4.5&&zi<5.5) body+=nrm*0.02*sin(u_t*3.4-lg*11.0);
+    if(zi>3.5&&zi<4.5) body+=nrm*0.045*sin(u_t*1.6-lg*7.0);
+    if(zi>8.5&&zi<9.5){ float flap=pow(0.5+0.5*sin(u_t*0.31),8.0); body*=1.0+1.6*flap; }
+    vec2 wp=lead+body;
+    float ta0=clamp(u_touchAmt,0.0,1.0);
+    float startle=smoothstep(0.05,0.35,ta0)*smoothstep(0.95,0.45,ta0);
+    if(zi<0.5||(zi>2.5&&zi<3.5)) wp+=nrm*0.08*startle*sin(u_t*14.0);
+    float tg=smoothstep(0.15,0.9,ta0);
+    if(zi>9.5&&zi<10.5) tg=smoothstep(0.05,0.5,ta0);
+    if(zi>1.5&&zi<2.5) tg=smoothstep(0.45,1.0,ta0);
+    wp=mix(wp, u_touch+lead*1.1+body, tg);                           // 터치: 은하 림 바깥을 공전
+    gl_Position=vec4(wp,0.0,1.0);
+    float head=1.0-lg;
+    gl_PointSize=u_ps*u_psMul*(0.7+1.3*head*head);                   // 크고 부드러운 글로우(포화 슬랩 방지)
+    float appear=smoothstep(0.78,1.0,u_k);
+    float shimmer=0.85+0.15*sin(u_t*2.2+a_r1.x*20.0);
+    v_a=(0.14+0.26*head*head)*appear*shimmer*u_lum*(0.82+0.18*u_breath); // 위계 7:3 + 호흡 동기
+    v_pick=-1.0; v_star=1.0;
+    return;
+  }
   float t=u_t*u_speed;
   float strand=floor(a_r1.w*u_strands+0.0001);
   float sOff=strand/max(u_strands,1.0);
   vec2 p; float depth=1.0;
   if(u_form<0.5){ // 화 — 꼬여 오르는 리본 기둥 (가닥 해시로 유기화)
     float sh=fract(sin(strand*12.9898)*43758.5453);
-    float s=fract(a_r0.y+t*(0.045+0.035*sh)*(0.5+a_r0.z));
+    float s=fract(a_r0.y+t*(0.032+0.022*sh)*(0.5+a_r0.z));
     float y=mix(-1.05,1.05,s);
-    float tw=s*u_twist*6.2832+t*(0.4+0.3*sh)+sOff*6.2832+sh*3.1;
-    float rad=(0.13+0.1*sin(s*5.0+t*1.1+a_r1.x))*(0.5+0.9*a_r0.x)*(0.7+0.6*sh);
-    p=vec2(sin(tw)*rad*2.1+0.16*sin(y*1.6+t*0.3+sh*6.2)+sin(s*3.0+t*0.4+sOff*9.0)*0.12*u_chaos, y);
+    float tw=s*u_twist*6.2832+t*(0.18+0.12*sh)+sOff*6.2832+sh*3.1;
+    float rad=(0.13+0.1*sin(s*5.0+t*0.45+a_r1.x))*(0.5+0.9*a_r0.x)*(0.7+0.6*sh);
+    p=vec2(sin(tw)*rad*2.1+0.16*sin(y*1.6+t*0.14+sh*6.2)+sin(s*3.0+t*0.2+sOff*9.0)*0.12*u_chaos, y);
     depth=0.45+0.55*(0.5+0.5*cos(tw));
     v_a=0.5+0.5*s;
   } else if(u_form<1.5){ // 수 — 흐르는 물결 층
     float dir=mod(strand,2.0)<0.5?1.0:-1.0;
-    float x=mix(-1.25,1.25,fract(a_r0.x+t*0.045*dir*(0.6+a_r0.z)));
+    float x=mix(-1.25,1.25,fract(a_r0.x+t*0.03*dir*(0.6+a_r0.z)));
     float band=(sOff-0.5)*1.5;
-    p=vec2(x, band+0.11*sin(x*3.6+t*1.5+a_r1.x)+(a_r0.y-0.5)*0.16);
+    p=vec2(x, band+0.11*sin(x*3.6+t*0.55+a_r1.x)+(a_r0.y-0.5)*0.16);
     depth=0.5+0.5*a_r0.z;
     v_a=(1.0-abs(x)*0.45)*0.9;
   } else if(u_form<2.5){ // 목 — 뻗어 오르는 가지 흐름
     float br=mod(strand,u_arms);
-    float ang=1.5708+(br-(u_arms-1.0)*0.5)*0.42+0.09*sin(t*0.9+br*2.0);
-    float s=fract(a_r0.y+t*0.05*(0.5+a_r0.z));
+    float ang=1.5708+(br-(u_arms-1.0)*0.5)*0.42+0.05*sin(t*0.35+br*2.0);
+    float s=fract(a_r0.y+t*0.035*(0.5+a_r0.z));
     vec2 d=vec2(cos(ang),sin(ang));
     p=vec2((a_r0.x-0.5)*0.62,-0.8)+d*(s*1.8)+vec2(-d.y,d.x)*(a_r0.x-0.5)*(0.12+s*0.55)
-      +vec2(sin(s*8.0+t+a_r1.x),cos(s*7.0-t))*0.05*s*u_chaos;
+      +vec2(sin(s*8.0+t*0.5+a_r1.x),cos(s*7.0-t*0.5))*0.05*s*u_chaos;
     depth=0.5+0.5*(1.0-s);
     v_a=(0.4+0.6*(1.0-s*0.55))*(0.4+0.6*smoothstep(0.0,0.2,s));
   } else if(u_form<3.5){ // 금 — 흘러내리는 용융 금속 (가닥이 굽이쳐 쏟아지며 아래로 수렴, 금속 광택 반짝임)
     float str=strand;
     float sh=fract(sin(str*12.9898)*43758.5453);
-    float s=fract(a_r0.y+t*0.075*(0.7+0.5*sh));            // 위→아래 흐름(쏟아짐)
+    float s=fract(a_r0.y+t*0.05*(0.7+0.5*sh));             // 위→아래 흐름(쏟아짐)
     float y=mix(1.0,-1.0,s);
     float lane=(str/max(u_strands,1.0)-0.5)*1.1;           // 가닥 별 가로 위치
-    float coil=sin(y*3.0+str*2.4+t*1.3)*(0.13+0.09*u_twist)*(0.4+0.6*s); // 흘러내리며 감김
-    float x=lane*(1.0-0.35*s)+coil+(a_r0.x-0.5)*0.05;      // 아래로 갈수록 모임(수렴)
+    float coil=sin(y*3.0+str*2.4+t*0.5)*(0.13+0.09*u_twist)*(0.4+0.6*s); // 흘러내리며 감김
+    float x=lane*(1.0-0.35*s)+coil+(a_r0.x-0.5)*0.14;      // 아래로 갈수록 모임(레인 지터로 평행 줄무늬 완화)
     p=vec2(x,y);
     depth=0.5+0.5*sh;
-    float glint=step(0.93,a_r1.x)*1.6;                     // 금속 광택 반짝임
+    float glint=step(0.93,a_r1.x)*0.7;                     // 금속 광택 반짝임(백화 완화)
     v_a=((0.5+0.5*(1.0-abs(x)*0.5))+glint)*smoothstep(0.0,0.07,s)*smoothstep(1.0,0.9,s);
   } else { // 토 — 중심 없는 난류 융기
     float rr=pow(a_r0.z,0.75)*0.88;
     float ang=a_r0.x*6.2832+t*0.05;
     p=vec2(cos(ang),sin(ang)*0.92)*rr;
-    p+=u_chaos*0.16*vec2(sin(p.y*2.1+t*0.45+a_r1.x),cos(p.x*1.9-t*0.4+a_r0.y*6.0));
-    p+=u_chaos*0.06*vec2(sin(p.y*5.3-t*0.7+a_r0.w*9.0),cos(p.x*4.7+t*0.6+a_r1.x*3.0));
-    p*=1.0+0.04*sin(t*0.8);
+    p+=u_chaos*0.16*vec2(sin(p.y*2.1+t*0.2+a_r1.x),cos(p.x*1.9-t*0.18+a_r0.y*6.0));
+    p+=u_chaos*0.06*vec2(sin(p.y*5.3-t*0.3+a_r0.w*9.0),cos(p.x*4.7+t*0.26+a_r1.x*3.0));
+    p*=1.0+0.03*sin(t*0.4);
     depth=0.5+0.5*a_r0.y;
     v_a=0.55+0.45*(1.0-rr*0.7);
   }
+  float halo=step(0.84,a_r1.y);                              // v64 성간 먼지 헤일로(입자 16% 재배정)
+  if(halo>0.5){
+    float hr=0.55+1.05*pow(a_r0.z,0.6);                      // 0.55~1.6 광역 타원 원반
+    float ha=a_r0.x*6.2832 + t*(0.05/(0.3+hr));              // 느린 차등 공전
+    p=vec2(cos(ha),sin(ha)*0.62)*hr;
+    depth=0.35+0.3*a_r0.y;
+    v_a=0.10+0.10*a_r0.w;                                     // 본체의 ~1/8 밝기
+  }
   // ── 살아있는 방향성 흐름 ── 등방성 노이즈(지직) → 코히런트 컬노이즈(연기·불 결) + 형태 방향
   vec2 fdir = u_form<0.5 ? vec2(0.0,1.0) : u_form<1.5 ? vec2(1.0,0.1) : u_form<2.5 ? vec2(0.15,1.0) : u_form<3.5 ? vec2(0.0,-1.0) : vec2(0.0,0.55); // 화 위·수 옆·목 위·금 쏟아짐·토 피어오름
-  vec2 cflow = curl2(p*1.8 + fdir*(t*0.22) + vec2(0.0, t*0.12));               // 코히런트 흐름장(결이 뭉쳐 흐름)
-  p += (0.05+0.04*u_chaos) * cflow;                                            // 결 따라 흐름(F=더)
-  p += fdir * 0.03 * (0.55+0.45*sin(t*0.8+a_r0.w*6.283));                      // 형태 방향 드리프트
+  vec2 cflow = curl2(p*1.8 + fdir*(t*0.14) + vec2(0.0, t*0.08));               // 코히런트 흐름장(결이 뭉쳐 흐름)
+  p += (0.034+0.026*u_chaos) * cflow;                                          // 결 따라 흐름(저주파 진폭 감쇠)
+  p += fdir * 0.02 * (0.55+0.45*sin(t*0.3+a_r0.w*6.283));                      // 형태 방향 드리프트
   // 구심점(I/E): I=코어로 모임, E=중심 없이 흩어져 떠돎
   p*=mix(1.14,0.9,u_focal);
   p+=(1.0-u_focal)*0.2*vec2(sin(t*0.24+1.7),sin(t*0.19+0.3));                   // E: 오프센터 유동
   float rl=length(p);
   p+=u_nayA*0.055*vec2(sin(t*u_nayF+a_r0.w*6.2832),cos(t*u_nayF*1.1+a_r1.x)); // 납음 결
   p+=u_agi*0.05*vec2(sin(t*9.0+a_r0.w*40.0),cos(t*8.0+a_r1.x*40.0));          // 의식 요동
-  p*=(1.0+u_expand)*(1.0+0.028*sin(t*1.7))*u_R;                                 // 판결 팽창/수축 + 숨쉬는 맥동
+  p*=(1.0+u_expand)*(1.0+0.075*u_breath)*u_R;                                   // 판결 팽창/수축 + 9초 이완 호흡(지배 모드)
   vec2 scat=vec2(cos(a_r1.x*6.2832),sin(a_r1.x*6.2832))*(1.15+a_r0.z*0.75);    // 어셈블 시작점
   float k=clamp((u_k-a_r1.y*0.35)/0.65,0.0,1.0); k=1.0-(1.0-k)*(1.0-k)*(1.0-k);
   p=mix(scat,p,k);
   // 공간감: 얇은 부피 + 형태별 기울기(원반=타원 foreshorten) + 좌우 흔들림 시차 + 강한 원근
   float zc=(a_r0.w-0.5)*0.6+(depth-0.5)*0.3;
   vec3 P=vec3(p,zc);
+  float dwr=t*(0.07/(0.35+rl));                              // v64 차등 서행 공전(안쪽 빠르고 바깥 느림)
+  float cwr=cos(dwr), swr=sin(dwr);
+  P.xz=mat2(cwr,-swr,swr,cwr)*P.xz;
+  if(u_form>3.5){ float d2=dwr*0.6; P.xy=mat2(cos(d2),-sin(d2),sin(d2),cos(d2))*P.xy; } // 토: 화면면 소용돌이 가산
   float ax = u_form<0.5 ? 0.42 : u_form<1.5 ? 0.9 : u_form<2.5 ? 0.46 : u_form<3.5 ? 0.4 : 0.74; // 화·수·목·금(기둥)·토
   P.yz=mat2(cos(ax),-sin(ax),sin(ax),cos(ax))*P.yz;          // X축 기울기
-  float ay=0.16*sin(t*0.5);                                  // 미세 시차만(강체 스윙 축소 — '두둥실' 제거)
+  float ay=0.06*sin(t*0.5);                                  // 미세 시차(차등 공전이 시차를 대신)
   P.xz=mat2(cos(ay),-sin(ay),sin(ay),cos(ay))*P.xz;
   float dcam=2.4;                                             // 원근(근/원 크기차 = 입체 단서)
   float sc=dcam/(dcam+P.z);
   vec2 spos=P.xy*sc*0.48;
   float ta=clamp(u_touchAmt,0.0,1.0);
-  spos+=vec2(sin(t*0.11+1.3)*0.11, sin(t*0.17)*0.07)*(1.0-ta);      // 부유 — 터치 중엔 멈춤
-  float st=a_r1.z*0.5;                                              // v62 입자별 시차(유입 모션)
-  float g=clamp((ta-st)/(1.0-st+0.001),0.0,1.0); g=g*g*(3.0-2.0*g);
-  float rad=0.012+a_r0.z*a_r0.z*0.46;                              // v63 궤도 반경(min↓→코어 구멍 메움)
-  float arms=3.0;                                                   // 나선팔 3갈래
-  float armId=floor(a_r1.w*arms);                                   // 입자를 팔에 배정
-  float baseAng=armId/arms*6.2832 + (a_r0.x-0.5)*0.7;              // 팔 기준각 + 폭(스캐터)
-  float omega=1.7/(0.28+rad*2.2);                                  // 내부 빠름(차등회전)
-  float ang=baseAng + rad*11.0 + t*omega;                          // v63 나선 감김(rad*11→팔 뚜렷)+회전
-  vec2 galaxy=u_touch + vec2(cos(ang),sin(ang))*rad - u_touchVel*(0.6+a_r0.w*1.6);  // 나선 은하 + 드래그 트레일
-  spos=mix(spos, galaxy, g);                                        // v63 형태→나선 은하 소용돌이(3팔)
+  spos+=vec2(sin(t*0.11+1.3)*0.11, sin(t*0.17)*0.07+0.012*u_breath)*(1.0-ta);   // 부유+호흡 — 터치 중엔 멈춤
+  float st=a_r1.z*0.68;                                             // 입자별 시차(파도식 도착 순서)
+  float g=clamp((ta-st)/0.28,0.0,1.0); g=g*g*(3.0-2.0*g);           // v66 고정 비행창 — 모임·풀림 모두 낱알 파도로
+  float rad=0.02+0.05*a_r1.x+pow(a_r0.z,1.6)*0.40;                  // v65 최소반경 지터(배제 원반·검은 구멍 제거)
+  float armId=floor(a_r1.w*3.0);                                    // 나선팔 3갈래 배정
+  float armW=0.55+rad*0.9+0.5*smoothstep(0.12,0.02,rad);            // 코어에선 팔 폭 넓혀 둥근 발광핵
+  float baseAng=armId/3.0*6.2832 + (a_r0.x-0.5)*armW;
+  float ang=baseAng + rad*7.5 + t*0.9 + sin(t*0.22)*rad*1.5;        // 고정 감김+강체 서행+숨쉬는 전단
+  vec2 galaxy=u_touch + vec2(cos(ang),sin(ang))*rad
+            - u_touchVel*(0.15+a_r0.w*0.35)*smoothstep(0.05,0.2,rad); // 코어는 시어 제외(갈고리 방지)
+  vec2 rel=mix(spos,galaxy,g)-u_touch;
+  float swl=g*(1.0-g)*2.4;                                          // 유입 중에만 이는 소용돌이 호(양끝 0)
+  rel=mat2(cos(swl),-sin(swl),sin(swl),cos(swl))*rel;
+  spos=u_touch+rel;                                                 // 알알이 나선을 그리며 손끝으로
+  float wglow=0.0;
+  if(u_trailLive>0.5){                                              // v65 MUNG 궤적 와류(특이점 제거)
+    for(int i=0;i<10;i++){
+      vec4 tr=u_trail[i];
+      vec2 dv=spos-tr.xy; float r2=dot(dv,dv); float r=sqrt(r2)+1e-4;
+      float w=tr.w*exp(-tr.z*0.75)*exp(-r2*26.0)*smoothstep(0.012,0.09,r); // 중심 특이점 소프트닝
+      spos+=vec2(-dv.y,dv.x)/r*w*(0.045+0.03*sin(u_t*1.7+r*10.0-tr.z*2.5+a_r1.x*3.0));
+      spos-=dv/r*w*0.018;
+      wglow+=w;
+    }
+    float wk=step(0.88,fract(a_r0.w*43.1));                         // v65 12% 리본 입자 — 궤적 위에 남아 요동
+    if(wk>0.5){
+      float js=floor(fract(a_r1.x*7.3)*10.0);
+      vec4 A=vec4(0.0);
+      for(int i=0;i<10;i++){ if(float(i)==js) A=u_trail[i]; }
+      float str=A.w*exp(-A.z*0.55)*smoothstep(0.05,0.14,length(A.xy-u_touch)); // 손끝 근처 제외(코어 백화 방지)
+      if(str>0.02){
+        vec2 rp=A.xy + vec2(a_r0.x-0.5,a_r0.y-0.5)*(0.045+A.z*0.10) // 나이 들수록 확산
+              + vec2(sin(u_t*2.2+a_r1.x*9.0),cos(u_t*1.9+a_r0.x*7.0))*0.02; // 요동
+        spos=mix(spos, rp, min(1.0,str*1.6)*0.9);
+        wglow+=str*0.7;                                             // 스트로크 잔광
+      }
+    }
+  }
   float tp=g;                                                       // 다운스트림(밝기/크기)
   gl_Position=vec4(spos,0.0,1.0);
-  gl_PointSize=u_ps*u_psMul*(0.6+a_r0.w)*(0.5+0.55*depth)*sc*(1.0+tp*0.3);
-  float twk=mix(1.0,0.55+0.45*sin(t*5.0+a_r0.w*44.0),u_twk);
-  float life=0.78+0.22*sin(t*3.6+a_r1.x*22.0);                                  // 잔잔한 생명 깜빡임
-  float core=1.0+u_focal*0.45*smoothstep(0.5,0.0,rl);                           // I: 코어 발광(구심점, 백화 완화)
-  v_a*=(0.25+0.75*k)*u_lum*depth*twk*clamp(sc*0.66,0.34,1.34)*life*core*(1.0-tp*0.35);
+  float star=step(0.87,fract(a_r1.w*61.7));                         // v64 13% 별·87% 먼지(알알이 위계)
+  v_star=star;
+  gl_PointSize=u_ps*u_psMul*(0.6+a_r0.w)*(0.5+0.55*depth)*sc*(1.0-tp*0.22)*mix(0.72,1.5,star)*mix(1.0,0.6,halo);
+  float twk=mix(1.0,0.78+0.22*sin(t*1.5+a_r0.w*44.0),u_twk*star);   // 반짝임은 별만, 느리게
+  float life=0.90+0.10*sin(t*1.1+a_r1.x*22.0);                      // 잔잔한 생명 숨결
+  float core=1.0+u_focal*0.22*smoothstep(0.6,0.0,rl);               // I: 코어 발광(과포화 억제)
+  v_a*=(0.25+0.75*k)*u_lum*depth*twk*clamp(sc*0.66,0.34,1.34)*life*core
+     *mix(0.30,1.9,star)*(0.90+0.10*u_breath)*(1.0+min(wglow,0.8)*0.9)
+     *(1.0-g*0.45*smoothstep(0.24,0.05,rad))                        // 코어 감광 강화(드래그 백화 방지)
+     *(1.0-0.30*g*(1.0-g)*4.0);                                     // 비행 중 감광(플래시 방지)
   v_pick=a_r1.z;
 }`;
 const GL_FRAG = `
 precision mediump float;
-uniform vec3 u_c1,u_c2,u_acc; uniform float u_bright,u_alpha;
-varying float v_a; varying float v_pick;
+uniform vec3 u_c1,u_c2,u_acc,u_wispCol; uniform float u_bright,u_alpha;
+varying float v_a; varying float v_pick; varying float v_star;
 void main(){
-  float m=smoothstep(0.5,0.05,length(gl_PointCoord-0.5));
-  vec3 col=v_pick>0.76?u_acc:(v_pick>0.38?u_c2:u_c1);
+  float m=smoothstep(0.5,mix(0.33,0.07,v_star),length(gl_PointCoord-0.5));   // 먼지=또렷한 알, 별=부드러운 헤일로
+  vec3 col=v_pick<0.0?u_wispCol:(v_pick>0.76?u_acc:(v_pick>0.38?u_c2:u_c1));
   float a=m*v_a*u_alpha;
   gl_FragColor=vec4(col*a*u_bright,a);
 }`;
@@ -674,8 +771,8 @@ function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactR
     cv.addEventListener("webglcontextlost", lostFn);
     const touch = { x: 0, y: 0, amt: 0, target: 0, vx: 0, vy: 0, lx: 0, ly: 0, pressed: false };  // v59: 눌렀을 때만
     const setPos = (e) => { const r = cv.getBoundingClientRect(); const cx = e.clientX, cy = e.clientY; if (cx == null) return; touch.x = (cx - r.left) / r.width * 2 - 1; touch.y = -((cy - r.top) / r.height * 2 - 1); };
-    const onDown = (e) => { touch.pressed = true; setPos(e); touch.lx = touch.x; touch.ly = touch.y; touch.vx = 0; touch.vy = 0; touch.target = 1.35; };  // 눌러야 발동(데스크탑 호버 무시)
-    const onMove = (e) => { if (!touch.pressed) return; setPos(e); touch.target = 1.35; };
+    const onDown = (e) => { touch.pressed = true; setPos(e); touch.lx = touch.x; touch.ly = touch.y; touch.vx = 0; touch.vy = 0; touch.target = 1.15; };  // 눌러야 발동(데스크탑 호버 무시)
+    const onMove = (e) => { if (!touch.pressed) return; setPos(e); touch.target = 1.15; };
     const onUp = () => { touch.pressed = false; touch.target = 0; };
     cv.addEventListener("pointerdown", onDown); cv.addEventListener("pointermove", onMove);
     cv.addEventListener("pointerup", onUp); cv.addEventListener("pointerleave", onUp); cv.addEventListener("pointercancel", onUp);
@@ -688,7 +785,7 @@ function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactR
       const _jd = _b.y ? jdn(+_b.y, +_b.m, +_b.d) : 0, _nn = _jd - 584283;
       const tzSign = (((_nn + 19) % 20) + 20) % 20, tzTone = (((_nn + 3) % 13) + 13) % 13 + 1;
       const nayinIdx = Math.max(0, NAYIN.indexOf(saju.nayin));
-      const nayF = 0.4 + (nayinIdx % 10) * 0.14, nayA = 0.32 + Math.floor(nayinIdx / 10) * 0.26;
+      const nayF = 0.3 + (nayinIdx % 10) * 0.07, nayA = 0.32 + Math.floor(nayinIdx / 10) * 0.26;
       let nakIdx = 0, duEl = null;
       try { const _mp = moonPlacements(+_b.y, +_b.m, +_b.d, +_b.h || 12, +_b.min || 0, !!_b.noHour); nakIdx = Math.max(0, NAKSHATRA.indexOf(_mp.nakshatra)); } catch (_) {}
       try { if (_b.sex) { const _du = daeun(+_b.y, +_b.m, +_b.d, _b.noHour ? 12 : +_b.h, _b.noHour || _b.min === "" ? 0 : +_b.min, !!_b.noHour, cityLon(_b.city), _b.sex === "M", new Date().getFullYear()); if (_du && !_du.pre) duEl = _du.el; } } catch (_) {}
@@ -714,6 +811,8 @@ function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactR
         r0[i * 4] = srnd(); r0[i * 4 + 1] = srnd(); r0[i * 4 + 2] = srnd(); r0[i * 4 + 3] = srnd();
         r1[i * 4] = srnd(); r1[i * 4 + 1] = srnd(); r1[i * 4 + 2] = srnd(); r1[i * 4 + 3] = srnd();
       }
+      const nW = Math.max(240, Math.round(n * 0.015));               // v64 띠 정령 위스프(선두 블록=워프 코히런트)
+      for (let i = 0; i < nW; i++) r1[i * 4 + 3] += 2.0;             // 센티널(>1.5), 소수부 랜덤 보존
       const mk = (ty, s) => { const sh = gl.createShader(ty); gl.shaderSource(sh, s); gl.compileShader(sh); if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh) || "shader"); return sh; };
       const prog = gl.createProgram();
       gl.attachShader(prog, mk(gl.VERTEX_SHADER, GL_VERT)); gl.attachShader(prog, mk(gl.FRAGMENT_SHADER, GL_FRAG));
@@ -722,17 +821,22 @@ function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactR
       gl.useProgram(prog);
       const buf = (name, arr) => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, arr, gl.STATIC_DRAW); const loc = gl.getAttribLocation(prog, name); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 4, gl.FLOAT, false, 0, 0); return b; };
       buf("a_r0", r0); buf("a_r1", r1);
-      const L = {}; ["u_t","u_form","u_R","u_arms","u_strands","u_twist","u_speed","u_chaos","u_nayF","u_nayA","u_expand","u_agi","u_k","u_ps","u_lum","u_twk","u_psMul","u_focal","u_touch","u_touchVel","u_touchAmt","u_c1","u_c2","u_acc","u_bright","u_alpha"].forEach(k => { L[k] = gl.getUniformLocation(prog, k); });
+      const L = {}; ["u_t","u_form","u_R","u_arms","u_strands","u_twist","u_speed","u_chaos","u_nayF","u_nayA","u_expand","u_agi","u_k","u_ps","u_lum","u_twk","u_psMul","u_focal","u_touch","u_touchVel","u_touchAmt","u_breath","u_trailLive","u_zodiac","u_c1","u_c2","u_acc","u_wispCol","u_bright","u_alpha"].forEach(k => { L[k] = gl.getUniformLocation(prog, k); });
+      L.u_trail = gl.getUniformLocation(prog, "u_trail[0]");
       gl.uniform1f(L.u_form, FORM_I[saju.main] ?? 4);
       gl.uniform1f(L.u_R, 0.8 * (E ? 1.0 : 0.9));
       gl.uniform1f(L.u_arms, arms); gl.uniform1f(L.u_strands, strands); gl.uniform1f(L.u_twist, twist);
-      gl.uniform1f(L.u_speed, P ? 1.15 : 0.78); gl.uniform1f(L.u_chaos, T ? 0.6 : 1.35); gl.uniform1f(L.u_focal, E ? 0.12 : 0.88); // I=구심점(모임)·E=무구심점(흩어짐)
+      gl.uniform1f(L.u_speed, P ? 0.42 : 0.30); gl.uniform1f(L.u_chaos, T ? 0.6 : 1.35); gl.uniform1f(L.u_focal, E ? 0.12 : 0.88); // v65 명상 템포(2차 감속) // I=구심점·E=무구심점
       gl.uniform1f(L.u_nayF, nayF); gl.uniform1f(L.u_nayA, nayA);
-      const F_AL = { 화: 0.58, 수: 0.5, 목: 0.52, 금: 0.46, 토: 0.4 }[saju.main] || 0.5;  // 가산 백화 방지: 밀집 형태일수록 낮게
+      const F_AL = { 화: 0.36, 수: 0.31, 목: 0.32, 금: 0.29, 토: 0.26 }[saju.main] || 0.31;  // v64 노출 예산(백화 해소, 낱알 위계)
       const F_PS = { 금: 0.82, 토: 0.9 }[saju.main] || 1;
-      gl.uniform1f(L.u_ps, (T ? 2.1 : 2.8) * dpr * F_PS); gl.uniform1f(L.u_psMul, 1); gl.uniform1f(L.u_lum, lum); gl.uniform1f(L.u_twk, N ? 1 : 0);
+      gl.uniform1f(L.u_ps, (T ? 1.6 : 2.0) * dpr * F_PS); gl.uniform1f(L.u_psMul, 1); gl.uniform1f(L.u_lum, lum); gl.uniform1f(L.u_twk, N ? 1 : 0);
       gl.uniform3fv(L.u_c1, c1); gl.uniform3fv(L.u_c2, c2); gl.uniform3fv(L.u_acc, acc);
       gl.uniform2f(L.u_touch, 0, 0); gl.uniform2f(L.u_touchVel, 0, 0); gl.uniform1f(L.u_touchAmt, 0);
+      gl.uniform1f(L.u_breath, 0); gl.uniform1f(L.u_trailLive, 0); gl.uniform1f(L.u_zodiac, saju.yJ ?? 0);
+      gl.uniform3fv(L.u_wispCol, [0.50 + c1[0] * 0.28, 0.55 + c1[1] * 0.26, 0.66 + c1[2] * 0.20]); // 달빛 은백(#D8E0EA 톤, LED 백색 방지)
+      const trailArr = new Float32Array(40); let trailHead = 0, lastDrop = 0;  // v64 궤적 링버퍼 10점
+      gl.uniform4fv(L.u_trail, trailArr);
       gl.disable(gl.DEPTH_TEST);
       gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE); // 가산 발광
       gl.clearColor(0, 0, 0, 0);
@@ -757,17 +861,29 @@ function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactR
         if (restMs && !agi && !reacting && touch.amt < 0.02 && now - lastHeavy < restMs) { raf = requestAnimationFrame(draw); return; }
         lastHeavy = now;
         const t = (now - born) / 1000;
-        gl.uniform1f(L.u_k, Math.min(1, t / 2.6));
+        const dt = Math.min(0.05, Math.max(0.001, t - (draw._lt ?? t - 0.016))); draw._lt = t;  // v64 dt 기반(60/120Hz 동일 거동)
+        gl.uniform1f(L.u_k, Math.min(1, t / 3.4));
         gl.uniform1f(L.u_agi, agi); gl.uniform1f(L.u_expand, expand); gl.uniform1f(L.u_bright, bright);
-        touch.amt += (touch.target - touch.amt) * 0.34;                                   // v60 더 빠른 attack(멈춤·모임 확실)
+        const bph = now * Math.PI * 2 / 9000;                                             // 9초 이완 호흡(들숨 짧고 날숨 긴 비대칭)
+        gl.uniform1f(L.u_breath, Math.sin(bph - 0.35 * Math.sin(bph)));
+        const tau = touch.target > touch.amt ? 0.55 : 1.60;                               // v66 모임 ~1.6s 파도·풀림 ~4.8s
+        touch.amt += (touch.target - touch.amt) * (1 - Math.exp(-dt / tau));
         const dvx = touch.x - touch.lx, dvy = touch.y - touch.ly; touch.lx = touch.x; touch.ly = touch.y;
-        touch.vx += (dvx - touch.vx) * 0.35; touch.vy += (dvy - touch.vy) * 0.35;          // 손끝 속도(평활)
+        const kv = 1 - Math.exp(-dt / 0.06);
+        touch.vx += (dvx - touch.vx) * kv; touch.vy += (dvy - touch.vy) * kv;              // 손끝 속도(평활)
+        let live = 0;                                                                      // v64 MUNG 궤적 링버퍼
+        for (let i = 0; i < 10; i++) { trailArr[i * 4 + 2] += dt; if (trailArr[i * 4 + 3] * Math.exp(-trailArr[i * 4 + 2] * 0.75) > 0.02) live = 1; }
+        if (touch.pressed && now - lastDrop > 45) {
+          trailArr.set([touch.x, touch.y, 0, Math.min(1, Math.hypot(touch.vx, touch.vy) * 22 + 0.15)], trailHead * 4);
+          trailHead = (trailHead + 1) % 10; lastDrop = now; live = 1;
+        }
+        gl.uniform4fv(L.u_trail, trailArr); gl.uniform1f(L.u_trailLive, live);
         gl.uniform2f(L.u_touch, touch.x, touch.y); gl.uniform1f(L.u_touchAmt, touch.amt); gl.uniform2f(L.u_touchVel, touch.vx, touch.vy);
         gl.clear(gl.COLOR_BUFFER_BIT);
-        gl.uniform1f(L.u_t, t); gl.uniform1f(L.u_psMul, 3.2); gl.uniform1f(L.u_alpha, 0.1 * F_AL); gl.drawArrays(gl.POINTS, 0, n); // 광휘(유사 블룸)
-        gl.uniform1f(L.u_psMul, 1); gl.uniform1f(L.u_alpha, 1.5 * F_AL); gl.drawArrays(gl.POINTS, 0, n);        // 본체
-        gl.uniform1f(L.u_t, t - 0.055); gl.uniform1f(L.u_alpha, 0.62 * F_AL); gl.drawArrays(gl.POINTS, 0, n);   // 잔상 1
-        gl.uniform1f(L.u_t, t - 0.11); gl.uniform1f(L.u_alpha, 0.26 * F_AL); gl.drawArrays(gl.POINTS, 0, n);    // 잔상 2
+        gl.uniform1f(L.u_t, t); gl.uniform1f(L.u_psMul, 3.6); gl.uniform1f(L.u_alpha, 0.05 * F_AL); gl.drawArrays(gl.POINTS, 0, n); // 광휘(더 넓고 어둡게)
+        gl.uniform1f(L.u_psMul, 1); gl.uniform1f(L.u_alpha, 0.72 * F_AL); gl.drawArrays(gl.POINTS, 0, n);        // 본체
+        gl.uniform1f(L.u_t, t - 0.22); gl.uniform1f(L.u_alpha, 0.30 * F_AL); gl.drawArrays(gl.POINTS, 0, n);   // 비단결 꼬리 1
+        gl.uniform1f(L.u_t, t - 0.50); gl.uniform1f(L.u_alpha, 0.13 * F_AL); gl.drawArrays(gl.POINTS, 0, n);    // 비단결 꼬리 2
         raf = requestAnimationFrame(draw);
       };
       draw();
@@ -780,7 +896,7 @@ function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactR
       try { const ext = gl.getExtension("WEBGL_lose_context"); ext && ext.loseContext(); } catch (_) {}
     };
   }, [saju, zo, mbti, size, birth && birth.y, birth && birth.sex, birth && birth.name]);
-  return <canvas ref={ref} data-renderer="webgl" width={size} height={size} style={{ display: "block", width: size + "px", height: size + "px", touchAction: "none", cursor: "pointer", WebkitMaskImage: "radial-gradient(circle at 50% 50%, #000 66%, transparent 94%)", maskImage: "radial-gradient(circle at 50% 50%, #000 66%, transparent 94%)" }} />;
+  return <canvas ref={ref} data-renderer="webgl" width={size} height={size} style={{ display: "block", width: size + "px", height: size + "px", touchAction: "none", cursor: "pointer", WebkitMaskImage: "radial-gradient(circle at 50% 50%, #000 74%, transparent 100%)", maskImage: "radial-gradient(circle at 50% 50%, #000 74%, transparent 100%)" }} />;
 }
 /* WebGL 우선, 불가·실패 시 Canvas2D — 기존 버전은 그대로 보존(폴백+비교용) */
 function Guardian(props) {
@@ -1597,7 +1713,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
               {returning ? (
                 <p className="gsay fade">{"다시 왔네" + (birth.name ? ", " + birth.name : "") + ". 기다렸어."}</p>
               ) : justBorn ? (
-                <div><p className="gsay born fade">— 다시 만났네. 내가 너의 수호신이야.</p><p className="gsay fade" style={{ animationDelay: ".95s" }}>{guardianIntro}</p><p className="gsay sprite fade" style={{ animationDelay: "1.9s" }}>아, 조각 하나는 달빛에 물들어 곁에 남았어. 까불 거야 — '정령'이야.</p></div>
+                <div><p className="gsay born fade">— 다시 만났네. 내가 너의 수호신이야.</p><p className="gsay fade" style={{ animationDelay: ".95s" }}>{guardianIntro}</p><p className="gsay sprite fade" style={{ animationDelay: "1.9s" }}>{`아, 조각 하나는 달빛에 물들어 곁에 남았어 — '정령'이야. 네 띠를 물려받아 ${ZODIAC_ANIMAL[saju?.yJ ?? 0]}처럼 ${WISP_GAIT[saju?.yJ ?? 0]} 거야.`}</p></div>
               ) : null}
               <p className="wakehint">두 번 두드리면 — 깨어나 물음을 들어</p>
             </div>
@@ -1881,7 +1997,7 @@ const CSS = `
 .gpanel.asking{position:relative;z-index:1}
 .gpanel.asking .gintro.dim2{font-size:16.5px;color:#ede0c2;margin-bottom:16px;text-shadow:0 1px 14px rgba(4,3,10,.9)}
 .gpanel.asking .qbox{font-size:19px;padding:20px 16px;min-height:104px}
-.scene.lobby{position:relative;min-height:calc(100dvh - 96px);cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.scene.lobby{position:relative;min-height:calc(100dvh - 96px);cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;background:radial-gradient(80% 52% at 50% 42%,#0a0d1c 0%,#060815 50%,rgba(3,4,10,0) 100%)}
 .lobbypanel{position:absolute;left:0;right:0;bottom:calc(14vh + env(safe-area-inset-bottom, 0px));z-index:2;display:flex;flex-direction:column;align-items:center;width:100%;padding:0 16px}
 .wakehint{font-family:sans-serif;font-size:12px;letter-spacing:.16em;color:#d8c79a;margin-top:22px;animation:wakePulse 2.4s ease-in-out infinite;text-shadow:0 1px 10px rgba(4,3,10,.85)}
 @keyframes wakePulse{0%,100%{opacity:.4}50%{opacity:.95}}
