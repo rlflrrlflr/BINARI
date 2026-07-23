@@ -624,20 +624,23 @@ void main(){
   vec2 spos=P.xy*sc*0.48;
   float ta=clamp(u_touchAmt,0.0,1.0);
   spos+=vec2(sin(t*0.11+1.3)*0.11, sin(t*0.17)*0.07)*(1.0-ta);      // 부유 — 터치 중엔 멈춤
-  float st=a_r1.z*0.55;                                             // v61 입자별 시차(모이는 모션)
-  float g=clamp((ta-st)/(1.0-st+0.001),0.0,1.0); g=g*g*(3.0-2.0*g); // ease-in 붕괴 진행
-  float sp=min(length(u_touchVel),0.14);
-  vec2 bk = sp>0.0006 ? -(u_touchVel/sp) : vec2(0.0,0.0);           // 이동 반대방향(트레일)
-  vec2 knot = u_touch + bk*(a_r1.x*sp*11.0) + (vec2(a_r0.z,a_r0.w)-0.5)*(0.06+sp*2.2);  // 매듭+궤적 트레일
-  vec2 toK=knot-spos;
-  spos=mix(spos, knot + vec2(-toK.y,toK.x)*0.35*(1.0-g), g);        // v61 형태 해체→점 붕괴 + 진입 소용돌이
+  float st=a_r1.z*0.5;                                              // v62 입자별 시차(유입 모션)
+  float g=clamp((ta-st)/(1.0-st+0.001),0.0,1.0); g=g*g*(3.0-2.0*g);
+  float rad=0.012+a_r0.z*a_r0.z*0.46;                              // v63 궤도 반경(min↓→코어 구멍 메움)
+  float arms=3.0;                                                   // 나선팔 3갈래
+  float armId=floor(a_r1.w*arms);                                   // 입자를 팔에 배정
+  float baseAng=armId/arms*6.2832 + (a_r0.x-0.5)*0.7;              // 팔 기준각 + 폭(스캐터)
+  float omega=1.7/(0.28+rad*2.2);                                  // 내부 빠름(차등회전)
+  float ang=baseAng + rad*11.0 + t*omega;                          // v63 나선 감김(rad*11→팔 뚜렷)+회전
+  vec2 galaxy=u_touch + vec2(cos(ang),sin(ang))*rad - u_touchVel*(0.6+a_r0.w*1.6);  // 나선 은하 + 드래그 트레일
+  spos=mix(spos, galaxy, g);                                        // v63 형태→나선 은하 소용돌이(3팔)
   float tp=g;                                                       // 다운스트림(밝기/크기)
   gl_Position=vec4(spos,0.0,1.0);
   gl_PointSize=u_ps*u_psMul*(0.6+a_r0.w)*(0.5+0.55*depth)*sc*(1.0+tp*0.3);
   float twk=mix(1.0,0.55+0.45*sin(t*5.0+a_r0.w*44.0),u_twk);
   float life=0.78+0.22*sin(t*3.6+a_r1.x*22.0);                                  // 잔잔한 생명 깜빡임
   float core=1.0+u_focal*0.45*smoothstep(0.5,0.0,rl);                           // I: 코어 발광(구심점, 백화 완화)
-  v_a*=(0.25+0.75*k)*u_lum*depth*twk*clamp(sc*0.66,0.34,1.34)*life*core*(1.0-tp*0.5);
+  v_a*=(0.25+0.75*k)*u_lum*depth*twk*clamp(sc*0.66,0.34,1.34)*life*core*(1.0-tp*0.35);
   v_pick=a_r1.z;
 }`;
 const GL_FRAG = `
