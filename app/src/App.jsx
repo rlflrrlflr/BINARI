@@ -622,11 +622,14 @@ void main(){
   float dcam=2.4;                                             // 원근(근/원 크기차 = 입체 단서)
   float sc=dcam/(dcam+P.z);
   vec2 spos=P.xy*sc*0.48;
-  spos+=vec2(sin(t*0.11+1.3)*0.11, sin(t*0.17)*0.07);              // v57: 은은한 부유(리사주 드리프트)
-  vec2 td=u_touch-spos; float tp=u_touchAmt*exp(-dot(td,td)*3.4);   // 손끝 근접도(가우시안)
-  spos+=td*tp*0.62;                                                 // v58 확 몰림: 터치 지점으로 국소 응집
+  float ta=clamp(u_touchAmt,0.0,1.0);
+  spos+=vec2(sin(t*0.11+1.3)*0.11, sin(t*0.17)*0.07)*(1.0-ta);      // 부유 — 터치 중엔 멈춤
+  vec2 td=u_touch-spos;
+  float gv=u_touchAmt*(0.2+0.8*exp(-dot(td,td)*1.4));               // v59 넓게 모임(전역 바닥+국소)
+  spos=mix(spos, u_touch, clamp(gv*0.62,0.0,0.9));                  // v59 행동 멈추고 확 모임(대부분 모여듦)
+  float tp=u_touchAmt*exp(-dot(td,td)*3.0);                         // 발산용 국소 가중
   float vmag=min(length(u_touchVel),0.13);
-  spos+=(u_touchVel*2.6 + vec2(a_r1.x-0.5, a_r1.y-0.5)*vmag*6.5)*tp; // v58 발산: 이동방향 + 랜덤 스프레이(트레일)
+  spos+=(u_touchVel*2.6 + vec2(a_r1.x-0.5, a_r1.y-0.5)*vmag*6.5)*tp; // 드래그 발산: 이동방향+랜덤 산개
   gl_Position=vec4(spos,0.0,1.0);
   gl_PointSize=u_ps*u_psMul*(0.6+a_r0.w)*(0.5+0.55*depth)*sc*(1.0+tp*0.6);
   float twk=mix(1.0,0.55+0.45*sin(t*5.0+a_r0.w*44.0),u_twk);
@@ -664,11 +667,13 @@ function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactR
     if (!gl) { fail(); return; }
     lostFn = (e) => { e.preventDefault(); fail(); };
     cv.addEventListener("webglcontextlost", lostFn);
-    const touch = { x: 0, y: 0, amt: 0, target: 0, vx: 0, vy: 0, lx: 0, ly: 0 };  // 손끝 반응 상태(v58: 속도)
-    const onMove = (e) => { const r = cv.getBoundingClientRect(); const cx = e.clientX, cy = e.clientY; if (cx == null) return; touch.x = (cx - r.left) / r.width * 2 - 1; touch.y = -((cy - r.top) / r.height * 2 - 1); touch.target = 1.35; };  // v56: 홀드 점증
-    const onLeave = () => { touch.target = 0; };
-    cv.addEventListener("pointermove", onMove); cv.addEventListener("pointerdown", onMove);
-    cv.addEventListener("pointerleave", onLeave); cv.addEventListener("pointerup", onLeave); cv.addEventListener("pointercancel", onLeave);
+    const touch = { x: 0, y: 0, amt: 0, target: 0, vx: 0, vy: 0, lx: 0, ly: 0, pressed: false };  // v59: 눌렀을 때만
+    const setPos = (e) => { const r = cv.getBoundingClientRect(); const cx = e.clientX, cy = e.clientY; if (cx == null) return; touch.x = (cx - r.left) / r.width * 2 - 1; touch.y = -((cy - r.top) / r.height * 2 - 1); };
+    const onDown = (e) => { touch.pressed = true; setPos(e); touch.lx = touch.x; touch.ly = touch.y; touch.vx = 0; touch.vy = 0; touch.target = 1.35; };  // 눌러야 발동(데스크탑 호버 무시)
+    const onMove = (e) => { if (!touch.pressed) return; setPos(e); touch.target = 1.35; };
+    const onUp = () => { touch.pressed = false; touch.target = 0; };
+    cv.addEventListener("pointerdown", onDown); cv.addEventListener("pointermove", onMove);
+    cv.addEventListener("pointerup", onUp); cv.addEventListener("pointerleave", onUp); cv.addEventListener("pointercancel", onUp);
     try {
       // ── 지표 → 지문 (Canvas2D와 동일 파생, 시드 재현) ──
       const E = mbti?.[0] === "E", N = mbti?.[1] === "N", T = mbti?.[2] === "T", P = mbti?.[3] === "P";
@@ -765,8 +770,8 @@ function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactR
     return () => {
       dead = true; if (raf) cancelAnimationFrame(raf);
       if (lostFn) cv.removeEventListener("webglcontextlost", lostFn);
-      cv.removeEventListener("pointermove", onMove); cv.removeEventListener("pointerdown", onMove);
-      cv.removeEventListener("pointerleave", onLeave); cv.removeEventListener("pointerup", onLeave); cv.removeEventListener("pointercancel", onLeave);
+      cv.removeEventListener("pointerdown", onDown); cv.removeEventListener("pointermove", onMove);
+      cv.removeEventListener("pointerup", onUp); cv.removeEventListener("pointerleave", onUp); cv.removeEventListener("pointercancel", onUp);
       try { const ext = gl.getExtension("WEBGL_lose_context"); ext && ext.loseContext(); } catch (_) {}
     };
   }, [saju, zo, mbti, size, birth && birth.y, birth && birth.sex, birth && birth.name]);
