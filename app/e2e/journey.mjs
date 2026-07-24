@@ -52,7 +52,7 @@ await page.getByRole("button", { name: "안정", exact: true }).click();
 await page.waitForTimeout(300); await shot("j08_가치_단하나");
 await page.getByRole("button", { name: "수호신 깨우기" }).click();
 await page.waitForTimeout(1600); await shot("j09_수호신_형성중");
-await page.waitForSelector("text=두 번 두드리면", { timeout: 12000 });          // v52: 로비
+await page.waitForSelector("text=두 번 두드려", { timeout: 12000 });          // v52: 로비
 await page.waitForTimeout(2400); await shot("j09b_로비");
 await page.locator("canvas").first().dblclick();                               // 두 번 두드려 깨움
 await page.waitForSelector("textarea.qbox", { timeout: 12000 });

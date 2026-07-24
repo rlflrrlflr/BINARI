@@ -31,7 +31,7 @@ async function onboard(page) {
   await page.getByRole("button", { name: "셋을 남겼어" }).click(); await page.waitForTimeout(300);
   await page.getByRole("button", { name: "안정", exact: true }).click();
   await page.getByRole("button", { name: "수호신 깨우기" }).click();
-  await page.waitForSelector("text=두 번 두드리면", { timeout: 12000 });        // v52: 로비
+  await page.waitForSelector("text=두 번 두드려", { timeout: 12000 });        // v52: 로비
   await page.locator("canvas").first().dblclick();                              // 두 번 두드려 깨움
   await page.waitForSelector("textarea.qbox", { timeout: 12000 }); await page.waitForTimeout(600);
 }
@@ -53,7 +53,7 @@ const b = await chromium.launch();
   await page.getByRole("button", { name: "가볍게 물을래" }).click();
   ck("S1 속결 판결(콜1)", await waitVerdict(page), await vvText(page));
   await page.getByRole("button", { name: "다른 걸 물어볼래" }).click(); await page.waitForTimeout(500);
-  await page.waitForSelector("text=두 번 두드리면", { timeout: 8000 }); // v55: 판결 후 로비 복귀
+  await page.waitForSelector("text=두 번 두드려", { timeout: 8000 }); // v55: 판결 후 로비 복귀
   await page.locator("canvas").first().dblclick(); // 다시 깨움
   await page.waitForSelector("textarea.qbox", { timeout: 8000 });
   await page.locator("textarea.qbox").fill("이직할까 크게 고민이야"); await page.waitForTimeout(300);
