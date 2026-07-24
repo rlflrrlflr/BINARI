@@ -1771,6 +1771,7 @@ export default function App() {
   };
 
   const [shared, setShared] = useState(false);   // v53: 판결 공유 피드백
+  const [rated, setRated] = useState(0);         // v75: 판결 평가(1 빗나감 · 2 글쎄 · 3 딱) — 0=미평가
   const [lean, setLean] = useState("");          // v54: 판결 전 내심 → v72 프롬프트 반영(어조 참고용)
   const [hesit, setHesit] = useState("");        // v72: 왜 망설이는지(고민 종결 근거)
   const [paywall, setPaywall] = useState("");    // v54: 복채/심층 fake-door
@@ -1809,12 +1810,18 @@ export default function App() {
   };
   const backToLobby = () => {                               // v56: 판결 화면 탈출구(X · 로비 복귀)
     track("another_question", { after_why: why });
-    setRes(null); setDetail(null); setWhy(false); setDetailBusy(false); setQ(""); setCardOn(false); setRitual(false); setTosses([]); setHexInfo(null); setBujeok(false); setLean(""); setHesit(""); setPaywall(""); setAwake(false);
+    setRes(null); setDetail(null); setWhy(false); setDetailBusy(false); setQ(""); setCardOn(false); setRitual(false); setTosses([]); setHexInfo(null); setBujeok(false); setLean(""); setHesit(""); setPaywall(""); setAwake(false); setRated(0);
+  };
+  const rateVerdict = (score) => {                          // v75: 판결 평가 — 정확도 피드백 수집(계측 + 기록에 부착)
+    if (rated) return;
+    setRated(score);
+    track("verdict_rated", { score, dir: res?.direction, mode: hexInfo ? "ritual" : "quick" });
+    setRecords(prev => { if (!prev.length) return prev; const nx = prev.slice(); nx[nx.length - 1] = { ...nx[nx.length - 1], rating: score }; return nx; });
   };
   const judge = async (hi, quick = false) => {
     if (!q.trim() || busy) return;
     track("question_asked", { mode: quick ? "quick" : "ritual", qlen: q.trim().length, ritual: !!hi, lean: lean || "skip" });
-    setBusy(true); setErr(""); setRes(null); setDetail(null); setWhy(false); setFlip(false); setCardOn(false); reactRef.current = null; setIntroSeen(true);
+    setBusy(true); setErr(""); setRes(null); setDetail(null); setWhy(false); setFlip(false); setCardOn(false); setRated(0); reactRef.current = null; setIntroSeen(true);
     try {
       const mp = moonPlacements(+birth.y, +birth.m, +birth.d, +birth.h || 12, +birth.min || 0, !!birth.noHour); // v22
       const tzk = tzolkin(jdn(+birth.y, +birth.m, +birth.d));                                                   // v22
@@ -1848,7 +1855,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
       setTimeout(() => { setCardOn(true); }, 1400);                       // 몸짓을 보여준 뒤 카드
       // 대화 기억: 깨끗한 질문 + 확정 결론만 저장(이어묻기용)
       setConvo(prev => [...prev, { role: "user", content: userText }, { role: "assistant", content: `판결: ${r1.direction} — ${r1.verdict} (${r1.total}중 ${r1.against} 반대)` }].slice(-12));
-      setRecords(prev => [...prev, { at: Date.now(), q: q.slice(0, 60), direction: r1.direction, verdict: r1.verdict, cat: r1.category, actionable: isDecisionQ(q), followUp: null, note: "" }].slice(-50)); // v16(B3) · v73 actionable
+      setRecords(prev => [...prev, { at: Date.now(), q: q.slice(0, 60), direction: r1.direction, verdict: r1.verdict, cat: r1.category, actionable: isDecisionQ(q), followUp: null, note: "", rating: 0 }].slice(-50)); // v16(B3) · v73 actionable · v75 rating
       setBusy(false);
       // ── 콜2: 근거는 백그라운드로 미리 로드(유저가 '왜?' 읽는 사이 완성) ──
       if (quick) { setDetail({ _quick: true }); }            // v16(B5): 속결은 콜2 생략 — 원가 절반
@@ -2296,6 +2303,23 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
               </div>
             </div>
           )}
+          {res && cardOn && (
+            <div className="raterow fade">
+              {rated ? (
+                <p className="ratedone">고마워 — 담아뒀어. 다음 판결이 더 맞아질 거야.</p>
+              ) : (
+                <>
+                  <span className="ratelab">이 판결, 어땠어?</span>
+                  <div className="row gap center">
+                    <button type="button" className="calbtn sm" onClick={() => rateVerdict(1)}>빗나갔어</button>
+                    <button type="button" className="calbtn sm" onClick={() => rateVerdict(2)}>글쎄</button>
+                    <button type="button" className="calbtn sm" onClick={() => rateVerdict(3)}>딱이야</button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+          {res && cardOn && <button className="btn gold mt" onClick={shareVerdict}>{shared ? "복사했어 — 붙여넣으면 돼" : "카톡·라인으로 판결 보내기"}</button>}
           {res && cardOn && !bujeok && <button className="btn ghost mt" onClick={() => { track("bujeok_opened"); setBujeok(true); }}>수호신의 부적 받기</button>}
           {res && cardOn && bujeok && (
             <div className="fade bwrap">
@@ -2305,7 +2329,6 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
               <p className="fine">질문은 이미지에 담기지 않아 — 문양과 판결의 방향만.</p>
             </div>
           )}
-          {res && cardOn && <button className="btn ghost mt" onClick={shareVerdict}>{shared ? "복사했어 — 붙여넣으면 돼" : "이 판결, 누구에게 보여줄래?"}</button>}
           {res && cardOn && <button className="btn ghost mt" onClick={backToLobby}>다른 걸 물어볼래</button>}
         </section>
       )}
@@ -2414,6 +2437,10 @@ const CSS = `
 .sharedsub{font-size:13px;line-height:1.7;color:#b3a9c8;margin:16px 0 0;max-width:18em}
 .sharedcta{margin-top:40px}
 .sharedfoot{margin-top:30px;font-size:10.5px;letter-spacing:.32em;color:#7c7290;font-family:sans-serif}
+/* v75: 판결 평가 행 */
+.raterow{display:flex;flex-direction:column;align-items:center;gap:9px;margin-top:24px}
+.ratelab{font-family:sans-serif;font-size:11.5px;letter-spacing:.12em;color:#b3a9c8}
+.ratedone{font-size:12.5px;letter-spacing:.03em;color:#9a8fb5;margin:6px 0 0;animation:fd .6s cubic-bezier(.22,.7,.25,1) both}
 @keyframes wakePulse{0%,100%{opacity:.4}50%{opacity:.95}}
 .escx{position:fixed;top:calc(14px + env(safe-area-inset-top,0px));right:16px;z-index:30;width:40px;height:40px;border-radius:50%;border:1px solid rgba(245,217,139,.3);background:rgba(10,8,18,.55);color:#c9b98f;font-size:16px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);-webkit-tap-highlight-color:transparent;transition:all .2s}
 .escx:hover{border-color:#ffe9ad;color:#ffe9ad}
