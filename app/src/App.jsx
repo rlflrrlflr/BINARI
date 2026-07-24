@@ -980,7 +980,7 @@ void computeShape(vec4 a_r0, vec4 a_r1, out vec2 spos, out float depth, out floa
   spos+=vec2(sin(t*0.11+1.3)*0.11, sin(t*0.17)*0.07+0.012*u_breath)*(1.0-ta);
 }`;
 const SIM_VERT = `attribute vec2 a_q; void main(){ gl_Position=vec4(a_q,0.0,1.0); }`;
-const SIM_FRAG = `precision highp float;\n` + SHAPE_UNI + `\nuniform sampler2D u_state,u_r0,u_r1; uniform vec2 u_texdim,u_touchVel; uniform float u_dt;\n` + SHAPE_FN + `
+const SIM_FRAG = `precision highp float;\n` + SHAPE_UNI + `\nuniform sampler2D u_state,u_r0,u_r1; uniform vec2 u_texdim,u_touchVel; uniform float u_dt,u_bloom;\n` + SHAPE_FN + `
 void main(){
   vec2 uv=gl_FragCoord.xy/u_texdim;
   vec4 st=texture2D(u_state,uv); vec4 a_r0=texture2D(u_r0,uv); vec4 a_r1=texture2D(u_r1,uv);
@@ -992,21 +992,22 @@ void main(){
   float stg=a_r1.z*0.68; float g=clamp((ta-stg)/0.28,0.0,1.0); g=g*g*(3.0-2.0*g);
   if(g>0.001){
     float bang=a_r1.w*6.2832+(a_r0.y-0.5)*0.22;
-    float bR=0.05+0.46*smoothstep(0.34,1.0,g);
-    float rr=0.12+0.88*a_r0.z;
+    float bR=0.03+0.24*u_bloom;                                 // 모일 땐 작은 구슬 → 다 모인 뒤(bloom)만 방사
+    float rr=0.10+0.90*a_r0.z;
     vec2 burst=u_touch+vec2(cos(bang),sin(bang))*(rr*bR);
     target=mix(target,burst,g);
   }
-  float spd=min(length(u_touchVel),0.05);
-  float k=mix(8.0,15.0,g)-spd*90.0; k=max(k,2.5);              // 빠른 드래그일수록 느슨(잔상)
-  float damp=mix(4.6,5.4,g);
+  float spd=min(length(u_touchVel),0.06);
+  float k=mix(14.0,11.0,g)-spd*130.0; k=max(k,2.0);            // 대기 강성↑(형태에 밀착=크리스프), 드래그 시 느슨(잔상 랙)
+  float damp=mix(9.0,6.0,g)-spd*70.0; damp=max(damp,2.5);      // 드래그 감쇠↓ → 관성으로 흘러 퍼짐
   vec2 acc=(target-pos)*k - vel*damp;
   vel+=acc*u_dt;
-  float vm=length(vel); if(vm>7.0) vel*=7.0/vm;                // 폭주 방지
+  if(g>0.3){ vec2 od=(pos-u_touch)/(length(pos-u_touch)+1e-4); vel+=od*spd*6.0; }  // 드래그 궤적 발산(밖으로 튐)
+  float vm=length(vel); if(vm>8.0) vel*=8.0/vm;                // 폭주 방지
   pos+=vel*u_dt;
   gl_FragColor=vec4(pos,vel);
 }`;
-const RND_VERT = SHAPE_UNI + `\nuniform sampler2D u_state; uniform vec2 u_texdim; uniform float u_ps,u_psMul,u_lum,u_twk,u_k;\nattribute vec4 a_r0,a_r1; attribute float a_idx;\nvarying float v_a,v_pick,v_star;\n` + SHAPE_FN + `
+const RND_VERT = SHAPE_UNI + `\nuniform sampler2D u_state; uniform vec2 u_texdim; uniform float u_ps,u_psMul,u_lum,u_twk,u_k,u_bloom;\nattribute vec4 a_r0,a_r1; attribute float a_idx;\nvarying float v_a,v_pick,v_star;\n` + SHAPE_FN + `
 void main(){
   vec2 spos; float depth,va0,sc,rl;
   computeShape(a_r0,a_r1,spos,depth,va0,sc,rl);
@@ -1023,10 +1024,10 @@ void main(){
   float life=0.90+0.10*sin(t*1.1+a_r1.x*22.0);
   float core=1.0+u_focal*0.22*smoothstep(0.6,0.0,rl);
   float rr=length(pos-u_touch);
-  float er=clamp(rr/0.5,0.0,1.0);
-  float emitB=mix(1.0,0.5+1.25*(1.0-er)*(1.0-er),g);                 // B: 중심 밝고 바깥 감쇠(빛 발산)
+  float er=clamp(rr/0.30,0.0,1.0);
+  float emitB=mix(1.0,0.55+1.05*(1.0-er)*(1.0-er),g);                // B: 중심 밝고 바깥 감쇠(빛 발산)
   float asm=clamp(u_k,0.0,1.0);
-  v_a=va0*(0.25+0.75*asm)*u_lum*depth*twk*clamp(sc*0.66,0.34,1.34)*life*core*mix(0.30,1.9,star)*(0.90+0.10*u_breath)*emitB;
+  v_a=va0*(0.25+0.75*asm)*u_lum*depth*twk*clamp(sc*0.66,0.34,1.34)*life*core*mix(0.42,1.7,star)*(0.90+0.10*u_breath)*emitB;
   v_pick=a_r1.z;
 }`;
 const RND_FRAG = `precision mediump float;
@@ -1108,8 +1109,8 @@ function GuardianCanvasSim({ saju, zo, mbti, num, moon, birth, agitateRef, react
       const r0Buf = mkBuf(r0.subarray(0, n * 4)), r1Buf = mkBuf(r1.subarray(0, n * 4)), idxBuf = mkBuf(idxArr);
       const uni = (pr, names) => { const m = {}; names.forEach((k) => m[k] = gl.getUniformLocation(pr, k)); return m; };
       const SHU = ["u_t", "u_speed", "u_form", "u_R", "u_arms", "u_strands", "u_twist", "u_chaos", "u_nayF", "u_nayA", "u_expand", "u_agi", "u_focal", "u_breath", "u_touchAmt", "u_touch"];
-      const simU = uni(simP, [...SHU, "u_state", "u_r0", "u_r1", "u_texdim", "u_touchVel", "u_dt"]);
-      const rndU = uni(rndP, [...SHU, "u_state", "u_texdim", "u_ps", "u_psMul", "u_lum", "u_twk", "u_k", "u_c1", "u_c2", "u_acc", "u_bright", "u_alpha"]);
+      const simU = uni(simP, [...SHU, "u_state", "u_r0", "u_r1", "u_texdim", "u_touchVel", "u_dt", "u_bloom"]);
+      const rndU = uni(rndP, [...SHU, "u_state", "u_texdim", "u_ps", "u_psMul", "u_lum", "u_twk", "u_k", "u_bloom", "u_c1", "u_c2", "u_acc", "u_bright", "u_alpha"]);
       const simA = { a_q: gl.getAttribLocation(simP, "a_q") };
       const rndA = { a_r0: gl.getAttribLocation(rndP, "a_r0"), a_r1: gl.getAttribLocation(rndP, "a_r1"), a_idx: gl.getAttribLocation(rndP, "a_idx") };
       const F_AL = { 화: 0.36, 수: 0.31, 목: 0.32, 금: 0.29, 토: 0.26 }[saju.main] || 0.31;
@@ -1128,7 +1129,7 @@ function GuardianCanvasSim({ saju, zo, mbti, num, moon, birth, agitateRef, react
         gl.uniform1f(U.u_t, t); gl.uniform1f(U.u_expand, expand); gl.uniform1f(U.u_agi, agi); gl.uniform1f(U.u_breath, breath);
         gl.uniform1f(U.u_touchAmt, touch.amt); gl.uniform2f(U.u_touch, touch.x, touch.y);
       };
-      let src = 0, dst = 1;
+      let src = 0, dst = 1, bloom = 0;
       const born = performance.now();
       const draw = () => {
         if (dead) return;
@@ -1142,8 +1143,10 @@ function GuardianCanvasSim({ saju, zo, mbti, num, moon, birth, agitateRef, react
           if (rt < 1.8) { const env = Math.max(0, 1 - rt / 1.7) * Math.min(1, rt / 0.18); const dir = reactRef.current.dir;
             if (dir === "GO") { expand = env * 0.5; bright = 1 + env * 0.5; } else if (dir === "STOP") { expand = -env * 0.45; bright = 1 - env * 0.55; } else { expand = env * 0.1 * Math.sin(rt * 5); bright = 1 - env * 0.12; } }
         }
-        const tau = touch.target > touch.amt ? 0.30 : 1.60;
+        const tau = touch.target > touch.amt ? 0.55 : 1.60;                  // v69 모임 더 느리게(~1.6s)
         touch.amt += (touch.target - touch.amt) * (1 - Math.exp(-dt / tau));
+        const bloomT = touch.amt > 0.88 ? 1 : 0;                             // 다 모인 뒤에만 방사 개화
+        bloom += (bloomT - bloom) * (1 - Math.exp(-dt / (bloomT > bloom ? 0.9 : 0.45)));
         const dvx = touch.x - touch.lx, dvy = touch.y - touch.ly; touch.lx = touch.x; touch.ly = touch.y;
         const kv = 1 - Math.exp(-dt / 0.06); touch.vx += (dvx - touch.vx) * kv; touch.vy += (dvy - touch.vy) * kv;
         const bph = now * Math.PI * 2 / 9000; const breath = Math.sin(bph - 0.35 * Math.sin(bph));
@@ -1154,7 +1157,7 @@ function GuardianCanvasSim({ saju, zo, mbti, num, moon, birth, agitateRef, react
         gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf); gl.enableVertexAttribArray(simA.a_q); gl.vertexAttribPointer(simA.a_q, 2, gl.FLOAT, false, 0, 0);
         gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, r0Tex); gl.uniform1i(simU.u_r0, 1);
         gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, r1Tex); gl.uniform1i(simU.u_r1, 2);
-        gl.uniform2f(simU.u_touchVel, touch.vx, touch.vy);
+        gl.uniform2f(simU.u_touchVel, touch.vx, touch.vy); gl.uniform1f(simU.u_bloom, bloom);
         const sub = 2, sdt = dt / sub;                                       // 서브스텝(스프링 안정)
         for (let s = 0; s < sub; s++) {
           gl.bindFramebuffer(gl.FRAMEBUFFER, fbo[dst]); gl.viewport(0, 0, W, H);
@@ -1171,7 +1174,7 @@ function GuardianCanvasSim({ saju, zo, mbti, num, moon, birth, agitateRef, react
         gl.bindBuffer(gl.ARRAY_BUFFER, r1Buf); gl.enableVertexAttribArray(rndA.a_r1); gl.vertexAttribPointer(rndA.a_r1, 4, gl.FLOAT, false, 0, 0);
         gl.bindBuffer(gl.ARRAY_BUFFER, idxBuf); gl.enableVertexAttribArray(rndA.a_idx); gl.vertexAttribPointer(rndA.a_idx, 1, gl.FLOAT, false, 0, 0);
         gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, stateTex[src]); gl.uniform1i(rndU.u_state, 0);
-        setDyn(rndU, t, expand, agi, breath, bright); gl.uniform1f(rndU.u_k, uk); gl.uniform1f(rndU.u_bright, bright);
+        setDyn(rndU, t, expand, agi, breath, bright); gl.uniform1f(rndU.u_k, uk); gl.uniform1f(rndU.u_bloom, bloom); gl.uniform1f(rndU.u_bright, bright);
         gl.uniform1f(rndU.u_psMul, 3.6); gl.uniform1f(rndU.u_alpha, 0.05 * F_AL); gl.drawArrays(gl.POINTS, 0, n);  // 광휘
         gl.uniform1f(rndU.u_psMul, 1.8); gl.uniform1f(rndU.u_alpha, 0.22 * F_AL); gl.drawArrays(gl.POINTS, 0, n);  // 소프트 헤일로
         gl.uniform1f(rndU.u_psMul, 1.0); gl.uniform1f(rndU.u_alpha, 0.85 * F_AL); gl.drawArrays(gl.POINTS, 0, n);  // 본체
