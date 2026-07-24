@@ -1862,7 +1862,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
           )}
           {bstep === 1 && (
             <div className="bscene" key={1}>
-              <p className="line">네가 태어난 순간의 하늘로 데려가 줘.</p>
+              <p className="line">{birth.name.trim() ? `${birth.name.trim()}, 이제 네가 태어난 순간의 하늘로 데려가 줘.` : "네가 태어난 순간의 하늘로 데려가 줘."}</p>
               <div className="row gap center">
                 <input className="in" placeholder="1993" inputMode="numeric" maxLength={4} value={birth.y} onChange={e => setBirth({ ...birth, y: e.target.value })} /><span className="unit">년</span>
                 <input className="in sm" placeholder="7" inputMode="numeric" maxLength={2} value={birth.m} onChange={e => setBirth({ ...birth, m: e.target.value })} /><span className="unit">월</span>
@@ -1893,7 +1893,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
           )}
           {bstep === 3 && (
             <div className="bscene" key={3}>
-              <p className="line">마지막 조각 — 하늘은 너를 어느 흐름에 실어 보냈을까.</p>
+              <p className="line">{birth.name.trim() ? `${birth.name.trim()}, 마지막 조각이야 — 하늘은 너를 어느 흐름에 실어 보냈을까.` : "마지막 조각 — 하늘은 너를 어느 흐름에 실어 보냈을까."}</p>
               <p className="sub2">음과 양의 흐름은 인생의 계절(대운)을 읽는 열쇠야.<br />말하고 싶지 않으면 그냥 열어도 돼.</p>
               <div className="row gap center">
                 <button type="button" className={"calbtn " + (birth.sex === "M" ? "on" : "")} onClick={() => setBirth({ ...birth, sex: birth.sex === "M" ? "" : "M" })}>남</button>
