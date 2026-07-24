@@ -1701,7 +1701,8 @@ export default function App() {
   };
 
   const doReveal = () => {
-    track("birth_submitted", { noHour: !!birth.noHour, cal: birth.cal, hasName: !!birth.name, hasSex: !!birth.sex });
+    const ageNow = birth.y ? new Date().getFullYear() - (+birth.y) + 1 : null; // 세는나이 근사
+    track("birth_submitted", { noHour: !!birth.noHour, cal: birth.cal, hasName: !!birth.name, sex: birth.sex || null, age: ageNow, job: birth.job || null, rel: birth.rel || null });
     const y = +birth.y, m = +birth.m, d = +birth.d, h = birth.noHour ? 12 : +birth.h, mi = birth.noHour || birth.min === "" ? 0 : +birth.min;
     if (!y || !m || !d || y < 1900 || y > new Date().getFullYear() || m < 1 || m > 12 || d < 1 || d > 31) { setErr("생년월일을 확인해줘. 너를 또렷하게 보려면 정확해야 해."); return; }
     if (!birth.noHour && (birth.h === "" || h < 0 || h > 23)) { setErr("태어난 시(0~23시)를 알려주거나 '모름'을 선택해줘."); return; }
@@ -1787,7 +1788,7 @@ export default function App() {
   };
   const judge = async (hi, quick = false) => {
     if (!q.trim() || busy) return;
-    track("question_asked", { mode: quick ? "quick" : "ritual", qlen: q.trim().length, ritual: !!hi, lean: lean || "skip" });
+    track("question_asked", { mode: quick ? "quick" : "ritual", qlen: q.trim().length, ritual: !!hi, lean: lean || "skip", sex: birth.sex || null, age: birth.y ? new Date().getFullYear() - (+birth.y) + 1 : null, job: birth.job || null, rel: birth.rel || null, hesit: hesit || null });
     setBusy(true); setErr(""); setRes(null); setDetail(null); setWhy(false); setFlip(false); setCardOn(false); reactRef.current = null; setIntroSeen(true);
     try {
       const mp = moonPlacements(+birth.y, +birth.m, +birth.d, +birth.h || 12, +birth.min || 0, !!birth.noHour); // v22
@@ -1816,7 +1817,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
       const { json: r1 } = await callClaude(system, [...priorConvo, concludeMsg], 320);
       // L1 등장 연출(짧게)
       agitateRef.current = true; setRes(r1);
-      track("verdict_shown", { dir: r1.direction, cat: r1.category, tone: r1.tone, against: r1.against, total: r1.total, mode: quick ? "quick" : "ritual", lean: lean || "skip" });
+      track("verdict_shown", { dir: r1.direction, cat: r1.category, tone: r1.tone, against: r1.against, total: r1.total, mode: quick ? "quick" : "ritual", lean: lean || "skip", verdict: r1.verdict || null });
       reactRef.current = { dir: r1.direction, t0: performance.now() };   // v28: 수호신이 판결을 연기
       setTimeout(() => { agitateRef.current = false; }, 700);
       setTimeout(() => { setCardOn(true); }, 1400);                       // 몸짓을 보여준 뒤 카드
@@ -1843,7 +1844,8 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
   const lastRec = records.length ? records[records.length - 1] : null;
   const askback = returning && lastRec && lastRec.followUp === null && Date.now() - lastRec.at >= 6 * 3600 * 1000 ? lastRec : null;
   const answerAskback = (fu, note) => {
-    track("followup_answered", { result: fu, direction: (records[records.length - 1] || {}).direction || null });
+    const lastRec = records[records.length - 1] || {};
+    track("followup_answered", { result: fu, direction: lastRec.direction || null, cat: lastRec.cat || null, hasNote: !!note });
     setRecords(prev => prev.map((r, i) => (i === prev.length - 1 ? { ...r, followUp: fu, note: note || "" } : r)));
     setNoting(false); setAskNote("");
   };
