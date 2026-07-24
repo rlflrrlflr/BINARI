@@ -53,12 +53,12 @@ await page.getByRole("button", { name: "안정", exact: true }).click();
 await page.getByRole("button", { name: "수호신 깨우기" }).click();
 
 // ── ② 자기소개: 탄생(3.2s) 직후 로비에서 노출(v52) ──
-await page.waitForSelector("text=두 번 두드려", { timeout: 12000 });
+await page.waitForSelector("text=두드려봐", { timeout: 12000 });
 await page.waitForTimeout(1200); // 탄생 페이드 + justBorn
 const introVisible = await page.locator(".gsay").first().isVisible().catch(() => false);
 const introText = (await page.locator(".gsay").allTextContents()).join(" ");
 ck("② 탄생 직후 자기소개(로비) 노출", introVisible, introText.slice(0, 40));
-await page.locator("canvas").first().dblclick(); // 두 번 두드려 깨움
+await page.locator("canvas").first().dblclick(); // 두드려봐 깨움
 await page.waitForSelector("textarea.qbox", { timeout: 12000 });
 await page.waitForTimeout(300);
 

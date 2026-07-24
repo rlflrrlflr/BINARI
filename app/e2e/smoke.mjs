@@ -59,16 +59,16 @@ try {
   await shot("04_values");
   await page.getByRole("button", { name: "수호신 깨우기" }).click();
 
-  // 5. 수호신 형성(3.2s) → 로비(질문 감춤) → 두 번 두드려 깨움 → 질문 UI
-  await page.waitForSelector("text=두 번 두드려", { timeout: 12000 });
+  // 5. 수호신 형성(3.2s) → 로비(질문 감춤) → 두드려봐 깨움 → 질문 UI
+  await page.waitForSelector("text=두드려봐", { timeout: 12000 });
   await page.waitForTimeout(800);
   check("로비: 질문 UI 감춰짐(깨우기 전)", (await page.locator("textarea.qbox").count()) === 0);
-  check("로비: 깨우기 힌트 노출", await page.getByText("두 번 두드려").isVisible());
+  check("로비: 깨우기 힌트 노출", await page.getByText("두드려봐").isVisible());
   await shot("05_lobby");
-  await page.locator("canvas").first().dblclick(); // 두 번 두드려 깨움
+  await page.locator("canvas").first().dblclick(); // 두드려봐 깨움
   await page.waitForTimeout(1000);
   check("깨운 뒤 질문 UI 노출", await page.locator("textarea.qbox").isVisible());
-  check("깨운 뒤 로비 힌트 사라짐", (await page.getByText("두 번 두드려").count()) === 0);
+  check("깨운 뒤 로비 힌트 사라짐", (await page.getByText("두드려봐").count()) === 0);
   check("첫 방문엔 데일리 카드 없음", (await page.locator(".daily").count()) === 0);
   await shot("05b_awake");
 
@@ -105,7 +105,7 @@ try {
   await page.reload({ waitUntil: "domcontentloaded", timeout: 20000 });
   await page.waitForTimeout(1600);
   // v52: 재방문도 로비 직행 — 인사·힌트만, 질문/데일리는 깨운 뒤
-  check("재회: 로비 직행(온보딩 생략)", await page.getByText("두 번 두드려").isVisible() && (await page.locator("textarea.qbox").count()) === 0);
+  check("재회: 로비 직행(온보딩 생략)", await page.getByText("두드려봐").isVisible() && (await page.locator("textarea.qbox").count()) === 0);
   check("재회 인사(로비)", await page.getByText("다시 왔네. 기다렸어.").isVisible());
   await shot("08_lobby_return");
   await page.locator("canvas").first().dblclick(); // 깨움 → 방 진입

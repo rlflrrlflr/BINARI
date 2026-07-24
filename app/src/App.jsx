@@ -1508,8 +1508,18 @@ const store = (() => {
 /* v16(B5): 속결 모드 — "이 정도는 묻지 않아도 보여". C형 힌트면 속결이 기본, 동전 의식은 선택 */
 const QUICK_HINTS = ["먹을", "먹지", "메뉴", "점심", "저녁", "야식", "마실", "입을", "입지", "커피", "디저트", "시킬까"];
 const looksQuick = (s) => s.trim().length <= 25 && QUICK_HINTS.some((k) => s.includes(k));
-/* v73: 질문이 '할까 말까' 결정형인지 — 일상(뭐먹지)·열린질문·예측(사랑할까·잘될까)엔 내심·되물음이 안 맞으니 숨긴다 */
-const isDecisionQ = (s) => { const t = (s || "").trim(); if (!t || looksQuick(t)) return false; if (/잘 ?될|잘될|사랑|좋아하|좋아할|미워|싫어하|붙을|떨어질|합격|불합격|올까|어떨까|괜찮을까|바랄까|생각할까|생각해|어떻게 생각/.test(t)) return false; if (/뭐|뭘|무엇|어디|언제|누구|몇|어떤|어느|어떻게|왜/.test(t)) return false; return true; };
+/* v74: 질문이 '할까 말까' 결정형인지 — denylist(제외 안 되면 참)면 '이얏호오' 같은 헛소리·감탄도 통과한다.
+   그래서 긍정 신호(결정·망설임 마커)가 있을 때만 참. 일상(뭐먹지)·열린질문·예측(사랑할까·잘될까)은 여전히 배제 */
+const isDecisionQ = (s) => {
+  const t = (s || "").trim();
+  if (!t || looksQuick(t)) return false;
+  // 예측·평가형(잘될까·사랑할까·합격할까…)엔 내심·되물음이 안 맞는다
+  if (/잘 ?될|잘될|사랑|좋아하|좋아할|미워|싫어하|붙을|떨어질|합격|불합격|올까|어떨까|괜찮을까|바랄까|생각할까|생각해|어떻게 생각/.test(t)) return false;
+  // 열린 wh 질문(뭐/어디/언제…)에도 안 뜬다
+  if (/뭐|뭘|무엇|어디|언제|누구|몇|어떤|어느|어떻게|왜/.test(t)) return false;
+  // 여기부터는 '결정/망설임' 긍정 신호가 있어야만 뜬다 (헛소리·감탄·단문은 여기서 걸러진다)
+  return /말까|말지|해야|고민|결정|선택|이직|퇴사|고백|헤어질|헤어져|그만둘|그만둬|그만둬야|받아들|사귈|사귀|연락할|참을|살까|팔까|바꿀까|갈까|말어|까\s*[?.!…]*\s*$|[을ㄹ]지\s*[?.!…]*\s*$/.test(t);
+};
 
 /* v16(B2): 아침 문안 — 오늘 하루짜리 카드. 매일 값이 바뀌는 유일한 지표(바이오리듬)를 UI로 승격 */
 const DAILY_KEY = "binari.daily.v1";
@@ -2063,7 +2073,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
               ) : justBorn ? (
                 <div><p className="gsay born fade">— 다시 만났네. 내가 너의 수호신이야.</p><p className="gsay fade" style={{ animationDelay: ".95s" }}>{guardianIntro}</p><p className="gsay sprite fade" style={{ animationDelay: "1.9s" }}>아, 조각 하나는 달빛에 물들어 곁에 남았어. 까불 거야 — '정령'이야.</p></div>
               ) : null}
-              <p className="wakehint">두 번 두드려 — 답은 여기 있어</p>
+              <p className="wakehint">두드려봐 — 답은 거기 있어</p>
             </div>
           )}
           {ritual && <div className="residue" style={{ "--elc": saju ? EL_COLOR[saju.main][0] : "#f5d98b" }} />}
