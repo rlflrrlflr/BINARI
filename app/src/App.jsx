@@ -991,18 +991,25 @@ void main(){
   float ta=clamp(u_touchAmt,0.0,1.0);
   float stg=a_r1.z*0.68; float g=clamp((ta-stg)/0.28,0.0,1.0); g=g*g*(3.0-2.0*g);
   if(g>0.001){
-    float bang=a_r1.w*6.2832+(a_r0.y-0.5)*0.22;
-    float bR=0.03+0.24*u_bloom;                                 // 모일 땐 작은 구슬 → 다 모인 뒤(bloom)만 방사
-    float rr=0.10+0.90*a_r0.z;
+    float bang=a_r1.w*6.2832;
+    float bR=0.02+0.12*u_bloom;                                 // v70 작은 불씨 코어(방사 대폭 축소)
+    float rr=0.2+0.8*a_r0.z;
     vec2 burst=u_touch+vec2(cos(bang),sin(bang))*(rr*bR);
     target=mix(target,burst,g);
   }
   float spd=min(length(u_touchVel),0.06);
-  float k=mix(14.0,11.0,g)-spd*130.0; k=max(k,2.0);            // 대기 강성↑(형태에 밀착=크리스프), 드래그 시 느슨(잔상 랙)
-  float damp=mix(9.0,6.0,g)-spd*70.0; damp=max(damp,2.5);      // 드래그 감쇠↓ → 관성으로 흘러 퍼짐
+  float k=mix(14.0,10.0,g)-spd*120.0; k=max(k,2.0);           // 대기 강성↑(크리스프), 드래그 시 느슨(잔상)
+  float damp=mix(9.0,5.5,g)-spd*60.0; damp=max(damp,2.5);
   vec2 acc=(target-pos)*k - vel*damp;
+  if(g>0.15){                                                  // v70 시계방향 불꽃 스파크(방사 대신 튐)
+    vec2 d=pos-u_touch; float dl=length(d)+1e-4; vec2 dn=d/dl;
+    vec2 cw=vec2(dn.y,-dn.x);                                  // 시계방향 접선
+    float amt=g*(3.5+spd*380.0);                               // 드래그일수록 더 튐
+    acc += cw*amt;                                             // 시계방향 스월
+    float spark=step(0.6,fract(a_r0.w*17.1+floor(u_t*9.0)*0.37+a_r1.x*3.0));
+    acc += (dn*1.3+cw)*spark*amt*1.5;                          // 간헐 불꽃 튐(바깥+시계)
+  }
   vel+=acc*u_dt;
-  if(g>0.3){ vec2 od=(pos-u_touch)/(length(pos-u_touch)+1e-4); vel+=od*spd*6.0; }  // 드래그 궤적 발산(밖으로 튐)
   float vm=length(vel); if(vm>8.0) vel*=8.0/vm;                // 폭주 방지
   pos+=vel*u_dt;
   gl_FragColor=vec4(pos,vel);
@@ -1024,8 +1031,8 @@ void main(){
   float life=0.90+0.10*sin(t*1.1+a_r1.x*22.0);
   float core=1.0+u_focal*0.22*smoothstep(0.6,0.0,rl);
   float rr=length(pos-u_touch);
-  float er=clamp(rr/0.30,0.0,1.0);
-  float emitB=mix(1.0,0.55+1.05*(1.0-er)*(1.0-er),g);                // B: 중심 밝고 바깥 감쇠(빛 발산)
+  float er=clamp(rr/0.18,0.0,1.0);
+  float emitB=mix(1.0,0.6+1.0*(1.0-er)*(1.0-er),g);                  // B: 작은 코어 밝고 스파크로 갈수록 감쇠
   float asm=clamp(u_k,0.0,1.0);
   v_a=va0*(0.25+0.75*asm)*u_lum*depth*twk*clamp(sc*0.66,0.34,1.34)*life*core*mix(0.42,1.7,star)*(0.90+0.10*u_breath)*emitB;
   v_pick=a_r1.z;
