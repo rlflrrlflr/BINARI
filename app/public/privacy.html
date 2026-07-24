@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>개인정보처리방침 — 비나리</title>
+<style>
+  body{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;max-width:720px;margin:0 auto;padding:32px 20px 80px;line-height:1.7;color:#1a1a1a;background:#fafafa}
+  h1{font-size:22px;margin-bottom:4px}
+  .updated{color:#777;font-size:13px;margin-bottom:32px}
+  h2{font-size:17px;margin-top:36px;border-bottom:1px solid #ddd;padding-bottom:6px}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:14px}
+  th,td{border:1px solid #ddd;padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:#f0f0f0}
+  .note{background:#fff3cd;border:1px solid #ffe69c;border-radius:8px;padding:12px 14px;font-size:13px;margin:16px 0}
+  code{background:#eee;padding:1px 5px;border-radius:4px;font-size:13px}
+</style>
+</head>
+<body>
+
+<h1>개인정보처리방침 (초안)</h1>
+<div class="updated">시행일: 2026-XX-XX · 최종 수정: 2026-07-24</div>
+
+<div class="note">
+⚠️ 이 문서는 <strong>초안</strong>입니다. 실제 서비스 배포 전에 (1) 사업자 정보(상호·대표자·연락처)를 채우고,
+(2) 변호사 또는 개인정보보호 전문가의 검토를 받고, (3) 앱/웹 화면에 실제로 링크를 걸고 동의 절차를 붙여야 합니다.
+</div>
+
+<p>
+비나리(이하 "서비스")는 이용자의 개인정보를 소중히 다루며, 「개인정보 보호법」 등 관련 법령을 준수합니다.
+본 방침은 서비스가 수집하는 정보의 항목, 목적, 보관 기간 및 이용자의 권리를 설명합니다.
+</p>
+
+<h2>1. 수집하는 개인정보 항목</h2>
+<table>
+<tr><th>항목</th><th>수집 시점</th><th>필수/선택</th></tr>
+<tr><td>생년월일, 태어난 시각, 성별</td><td>온보딩(사주 계산)</td><td>필수(시각·성별 일부는 선택)</td></tr>
+<tr><td>이름 또는 별명</td><td>온보딩</td><td>선택</td></tr>
+<tr><td>태어난 도시</td><td>온보딩</td><td>선택</td></tr>
+<tr><td>직업 카테고리(학생/직장인/사업가/프리랜서/주부/쉬는 중)</td><td>온보딩</td><td>선택</td></tr>
+<tr><td>관계 상태 카테고리(연애 중/솔로/결혼/이혼·이별)</td><td>온보딩</td><td>선택</td></tr>
+<tr><td>MBTI, 가치관 선택 결과</td><td>온보딩</td><td>선택</td></tr>
+<tr><td>질문 입력 시 나이·성별·직업·관계상태, 질문의 글자 수, 망설임 사유 카테고리</td><td>질문 시</td><td>자동 기록</td></tr>
+<tr><td>AI가 생성한 판결 결과(방향·분류·판결 문구)</td><td>질문 응답 시</td><td>자동 기록</td></tr>
+<tr><td>판결 이행 여부(따랐음/거슬렀음/보류) 및 서술 메모 작성 여부</td><td>후속 답변 시</td><td>자동 기록</td></tr>
+<tr><td>서비스 이용 기록(접속 경로, 방문 시각, 클릭 등 일부 UI 상호작용)</td><td>서비스 이용 중</td><td>자동 기록</td></tr>
+</table>
+
+<p><strong>수집하지 않는 정보:</strong> 질문 원문(자유롭게 입력한 고민 텍스트), 후속 답변의 자유 서술 메모(따른 결과에 대한 상세 설명)는
+서버나 분석 도구로 전송되지 않으며 이용자의 기기에만 저장됩니다.</p>
+
+<h2>2. 개인정보 수집 방법</h2>
+<p>이용자가 온보딩 화면에서 직접 입력하거나 버튼으로 선택하는 방식으로 수집하며, 서비스 이용 과정에서 자동으로 생성되는
+이벤트(질문 여부, 판결 결과 등)를 분석 도구를 통해 함께 수집합니다.</p>
+
+<h2>3. 개인정보 이용 목적</h2>
+<ul>
+<li>사주·운세 판결 결과 산출 및 개인화된 응답 제공</li>
+<li>서비스 이용 패턴 분석을 통한 기능 개선(연령대·성별·직업군별 이용 경향 파악 등)</li>
+<li>AI 판결 품질 검증 및 개선(판결 결과와 실제 이행 여부 비교)</li>
+<li>서비스 장애 대응 및 부정 이용 방지</li>
+</ul>
+
+<h2>4. 보유 및 이용 기간</h2>
+<p>회원 탈퇴 또는 서비스 이용 종료 시까지 보유하며, 분석 목적으로 수집된 이벤트 데이터는 수집일로부터
+<strong>[협의 필요 — 예: 2년]</strong> 이 지나면 자동 파기하거나 통계적으로만 활용 가능한 형태로 비식별화합니다.
+로컬(브라우저 저장소)에 저장된 사주 프로필·대화 기록은 이용자가 직접 삭제하거나 브라우저 데이터를 지울 때까지 이용자의
+기기에만 보관되며 서비스 운영자가 별도로 서버에 보관하지 않습니다.</p>
+
+<h2>5. 제3자 제공 및 처리위탁</h2>
+<table>
+<tr><th>수탁업체</th><th>위탁 업무</th><th>처리 위치</th></tr>
+<tr><td>PostHog, Inc.</td><td>서비스 이용 분석(이벤트 계측)</td><td>미국</td></tr>
+<tr><td>Anthropic, PBC</td><td>질문에 대한 AI 판결 생성(질문 원문 및 사주 프로필 전송)</td><td>미국</td></tr>
+<tr><td>Vercel Inc.</td><td>웹 호스팅 및 서버 운영</td><td>미국</td></tr>
+</table>
+<p>※ 위 업체들은 이용자의 개인정보를 자체 마케팅 목적으로 이용하지 않으며, 서비스 제공을 위한 위탁 처리만 수행합니다.
+질문 원문은 판결 생성을 위해 Anthropic으로 전송되나, 분석 도구(PostHog)로는 전송되지 않습니다.</p>
+
+<h2>6. 이용자의 권리</h2>
+<p>이용자는 언제든지 자신의 개인정보에 대한 열람, 정정, 삭제, 처리 정지를 요청할 수 있습니다.
+아래 연락처로 문의해 주시면 지체 없이 조치하겠습니다.</p>
+
+<h2>7. 만 14세 미만 아동의 개인정보</h2>
+<p>본 서비스는 만 14세 미만 아동을 대상으로 하지 않으며, 아동의 개인정보를 의도적으로 수집하지 않습니다.</p>
+
+<h2>8. 개인정보 보호책임자</h2>
+<p>
+성명: <strong>[이름 입력 필요]</strong><br/>
+연락처: <strong>[이메일 입력 필요]</strong>
+</p>
+
+<h2>9. 고지의 의무</h2>
+<p>본 방침은 법령·정책 변경에 따라 개정될 수 있으며, 변경 시 서비스 내 공지사항을 통해 고지합니다.</p>
+
+</body>
+</html>
