@@ -362,6 +362,7 @@ const DIMQ = [   // v24: MBTI 픽션 — 한 기억씩 순차로 묻는다
 ];
 /* v14: 지표별 독립 시각축을 위한 색 유틸 — 원소 기본색을 별자리로 hue 회전 */
 const ZO_ORDER = ["양자리","황소자리","쌍둥이자리","게자리","사자자리","처녀자리","천칭자리","전갈자리","사수자리","염소자리","물병자리","물고기자리"];
+const FORM_STEPS = ["사주 여덟 글자를 세는 중", "달의 자리를 맞추는 중", "별자리를 포개는 중", "타고난 결을 읽는 중", "수(數)의 울림을 듣는 중", "흐름을 짚어 매듭짓는 중"];  // v70 형성 로딩 — 실제로 읽는 지표들
 const ZODIAC_ANIMAL = ["쥐","소","호랑이","토끼","용","뱀","말","양","원숭이","닭","개","돼지"];  // v64 연지(yJ) → 띠
 const WISP_GAIT = ["종종거리다 다다닥 내달릴","느긋하게 뚜벅뚜벅 걸을","숨죽였다 덮치듯 뛰어오를","깡충깡충 뛰어다닐","길게 굽이치며 헤엄칠","스르르 미끄러질","바람처럼 내달릴","총총 뛰다 폴짝 옆걸음질할","그네 타듯 휙휙 방향을 바꿀","콕콕 쪼다 푸드덕거릴","달려왔다 저만치 갔다 할","뒤뚱뒤뚱 걸을"];  // 셰이더 12 시그니처와 1:1
 function _hexToHsl(hex){const r=parseInt(hex.slice(1,3),16)/255,g=parseInt(hex.slice(3,5),16)/255,b=parseInt(hex.slice(5,7),16)/255;const mx=Math.max(r,g,b),mn=Math.min(r,g,b);let h=0,s=0,l=(mx+mn)/2;if(mx!==mn){const d=mx-mn;s=l>0.5?d/(2-mx-mn):d/(mx+mn);h=mx===r?(g-b)/d+(g<b?6:0):mx===g?(b-r)/d+2:(r-g)/d+4;h/=6;}return[h*360,s,l];}
@@ -1616,6 +1617,7 @@ export default function App() {
   const [err, setErr] = useState("");
   const [flip, setFlip] = useState(false);
   const [phase, setPhase] = useState(0);        // v6: 0=수호신 형성 중, 1=완성
+  const [formStep, setFormStep] = useState(0);  // v70: 형성 중 단계별 '읽는 중' 연출
   const [awake, setAwake] = useState(false);    // v52: 로비→두 번 두드려 깨움 후 질문 UI 노출
   const [cardOn, setCardOn] = useState(false);  // v6: 판결 카드 등장 게이트
   const [ritual, setRitual] = useState(false);  // v6(D2): 주역 동전 의식
@@ -1645,7 +1647,7 @@ export default function App() {
   const restRef = useRef(false);                 // v29: 판결 대기·정독 중 캔버스 저프레임(메인스레드 양보)
   const detailArgsRef = useRef(null);            // v16: 콜2 재시도용 인자 보관
 
-  useEffect(() => { if (step === 3) { if (returning) { setPhase(1); return; } setPhase(0); const tm = setTimeout(() => { setPhase(1); setJustBorn(true); }, 3200); const tb = setTimeout(() => setJustBorn(false), 10500); return () => { clearTimeout(tm); clearTimeout(tb); }; } }, [step, returning]);
+  useEffect(() => { if (step === 3) { if (returning) { setPhase(1); return; } setPhase(0); setFormStep(0); const si = setInterval(() => setFormStep(s => Math.min(s + 1, FORM_STEPS.length - 1)), 520); const tm = setTimeout(() => { setPhase(1); setJustBorn(true); clearInterval(si); }, 3200); const tb = setTimeout(() => setJustBorn(false), 10500); return () => { clearInterval(si); clearTimeout(tm); clearTimeout(tb); }; } }, [step, returning]);
   useEffect(() => { restRef.current = (res && cardOn) ? 300 : (busy || res) ? 46 : 0; }, [busy, res, cardOn]); // v30: 카드 뜨면 수호신 사실상 정지(스크롤·클릭 회복)
 
   // v16(B7): 스트릭 최소형 — 방문일 카운터만. 어제에 이어졌으면 +1, 끊겼으면 1부터
@@ -2007,7 +2009,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
               ? <BirthCanvas tint={saju ? EL_COLOR[saju.main] : undefined} size={Math.min(typeof window !== "undefined" ? window.innerWidth * 1.1 : 400, typeof window !== "undefined" ? window.innerHeight * 0.57 : 400, 640)} />
               : <div className="fade"><Guardian saju={saju} zo={zo} mbti={mbti} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} restRef={restRef} size={Math.min(typeof window !== "undefined" ? window.innerWidth * 1.1 : 400, typeof window !== "undefined" ? window.innerHeight * 0.57 : 400, 640)} /></div>}
             <div className="gtext up">
-              {phase === 0 && <p className="forming">흩어져 있던 조각들이<br />너를 향해 모이고 있어…<br />너의 수호신이 돌아오는 중이야.</p>}
+              {phase === 0 && <div className="formwrap"><p className="forming">{birth.name ? `${birth.name}, 흩어져 있던 조각들이` : "흩어져 있던 조각들이"}<br />너를 향해 모이고 있어…<br />너의 수호신이 돌아오는 중이야.</p><ul className="formsteps">{FORM_STEPS.map((s, i) => <li key={i} className={i < formStep ? "done" : i === formStep ? "now" : ""}>{i < formStep ? "✓" : i === formStep ? "✦" : "·"} {s}{i === formStep ? "…" : ""}</li>)}</ul></div>}
             </div>
           </div>
 
@@ -2323,6 +2325,11 @@ const CSS = `
 .gpanel{position:relative;margin:-12px auto 0;width:min(92vw,430px);display:flex;flex-direction:column;align-items:center;z-index:3;padding:0 4px}
 .gpanel::before{content:"";position:absolute;left:50%;top:-28px;transform:translateX(-50%);width:120%;max-width:540px;height:170px;background:radial-gradient(ellipse 60% 100% at 50% 42%,rgba(6,4,12,.9),rgba(6,4,12,.46) 45%,transparent 70%);z-index:-1;pointer-events:none}
 .forming{font-size:13px;line-height:2.1;color:#cfc4e2;letter-spacing:.14em;margin:0;text-shadow:0 0 16px rgba(245,217,139,.4);animation:formPulse 2.1s ease-in-out infinite;background:rgba(5,4,8,.45);padding:10px 18px;border-radius:14px}
+.formwrap{display:flex;flex-direction:column;align-items:center;gap:14px}
+.formsteps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px;text-align:left;min-width:220px}
+.formsteps li{font-size:11.5px;letter-spacing:.06em;color:#5b5470;transition:color .5s,transform .5s;transform:translateY(1px)}
+.formsteps li.done{color:#8a7fa6}
+.formsteps li.now{color:#f5d98b;text-shadow:0 0 12px rgba(245,217,139,.5);transform:translateY(0)}
 @keyframes formPulse{0%,100%{opacity:.5}50%{opacity:1}}
 .gname{font-size:14px;line-height:1.9;color:#f0e2b8;margin:0;text-shadow:0 2px 18px rgba(5,4,8,.95),0 0 26px rgba(245,217,139,.28);background:rgba(5,4,8,.5);padding:8px 16px;border-radius:14px}
 .gsay{font-size:14.5px;line-height:1.8;color:#f0e2b8;margin:2px 0 10px;text-align:center;text-shadow:0 1px 12px rgba(4,3,10,.8)}
