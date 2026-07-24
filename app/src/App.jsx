@@ -667,7 +667,7 @@ void main(){
   p += fdir * 0.02 * (0.55+0.45*sin(t*0.3+a_r0.w*6.283));                      // 형태 방향 드리프트
   // 구심점(I/E): I=코어로 모임, E=중심 없이 흩어져 떠돎
   p*=mix(1.14,0.9,u_focal);
-  p+=(1.0-u_focal)*0.2*vec2(sin(t*0.24+1.7),sin(t*0.19+0.3));                   // E: 오프센터 유동
+  p+=(1.0-u_focal)*0.2*smoothstep(0.0,3.5,u_t)*vec2(sin(t*0.24+1.7),sin(t*0.19+0.3));                   // E: 오프센터 유동
   float rl=length(p);
   p+=u_nayA*0.055*vec2(sin(t*u_nayF+a_r0.w*6.2832),cos(t*u_nayF*1.1+a_r1.x)); // 납음 결
   p+=u_agi*0.05*vec2(sin(t*9.0+a_r0.w*40.0),cos(t*8.0+a_r1.x*40.0));          // 의식 요동
@@ -690,7 +690,7 @@ void main(){
   float sc=dcam/(dcam+P.z);
   vec2 spos=P.xy*sc*0.48;
   float ta=clamp(u_touchAmt,0.0,1.0);
-  spos+=vec2(sin(t*0.11+1.3)*0.11, sin(t*0.17)*0.07+0.012*u_breath)*(1.0-ta);   // 부유+호흡 — 터치 중엔 멈춤
+  spos+=vec2(sin(t*0.11+1.3)*0.11, sin(t*0.17)*0.07+0.012*u_breath)*(1.0-ta)*smoothstep(0.0,3.5,u_t);   // 부유+호흡 — 터치 중엔 멈춤
   float st=a_r1.z*0.68;                                             // 입자별 시차(파도식 도착 순서)
   float g=clamp((ta-st)/0.28,0.0,1.0); g=g*g*(3.0-2.0*g);           // v66 고정 비행창 — 모임·풀림 모두 낱알 파도로
   // ── B상태: 중앙점으로 모여 빛이 방사로 발산 (문양·회전 없음 — 입자단위 재정렬) ──
@@ -961,7 +961,7 @@ void computeShape(vec4 a_r0, vec4 a_r1, out vec2 spos, out float depth, out floa
   p += (0.034+0.026*u_chaos) * cflow;
   p += fdir * 0.02 * (0.55+0.45*sin(t*0.3+a_r0.w*6.283));
   p*=mix(1.14,0.9,u_focal);
-  p+=(1.0-u_focal)*0.2*vec2(sin(t*0.24+1.7),sin(t*0.19+0.3));
+  p+=(1.0-u_focal)*0.2*smoothstep(0.0,3.5,u_t)*vec2(sin(t*0.24+1.7),sin(t*0.19+0.3));
   rl=length(p);
   p+=u_nayA*0.055*vec2(sin(t*u_nayF+a_r0.w*6.2832),cos(t*u_nayF*1.1+a_r1.x));
   p+=u_agi*0.05*vec2(sin(t*9.0+a_r0.w*40.0),cos(t*8.0+a_r1.x*40.0));
@@ -979,7 +979,7 @@ void computeShape(vec4 a_r0, vec4 a_r1, out vec2 spos, out float depth, out floa
   float dcam=2.4; sc=dcam/(dcam+P.z);
   spos=P.xy*sc*0.48;
   float ta=clamp(u_touchAmt,0.0,1.0);
-  spos+=vec2(sin(t*0.11+1.3)*0.11, sin(t*0.17)*0.07+0.012*u_breath)*(1.0-ta);
+  spos+=vec2(sin(t*0.11+1.3)*0.11, sin(t*0.17)*0.07+0.012*u_breath)*(1.0-ta)*smoothstep(0.0,3.5,u_t);
 }`;
 const SIM_VERT = `attribute vec2 a_q; void main(){ gl_Position=vec4(a_q,0.0,1.0); }`;
 const SIM_FRAG = `precision highp float;\n` + SHAPE_UNI + `\nuniform sampler2D u_state,u_r0,u_r1; uniform vec2 u_texdim,u_touchVel; uniform float u_dt,u_bloom; uniform vec4 u_trail[12];\n` + SHAPE_FN + `
@@ -1005,15 +1005,15 @@ void main(){
   vec2 acc=(target-pos)*k - vel*damp;
   if(g>0.15){
     vec2 d=pos-u_touch; float dl=length(d)+1e-4; vec2 dn=d/dl; vec2 cw=vec2(dn.y,-dn.x); // 시계방향 접선
-    acc += cw*g*2.2*exp(-dl*dl*90.0);                          // 정지 시 코어 둘레 시계 크래클
+    acc += cw*g*2.2*exp(-dl*dl*90.0)*u_bloom;                  // v73 방사/크래클은 다 모인 뒤(bloom)에만 시작
     for(int i=0;i<12;i++){                                     // v72 궤적(족적) 따라 불꽃 튐
       vec4 tr=u_trail[i];
       float fresh=tr.w*exp(-tr.z*1.3)*step(0.02,tr.w);         // 족적 신선도(오래되면 사그라듦)
       vec2 tv=pos-tr.xy; float tr2=dot(tv,tv); float trl=sqrt(tr2)+1e-4;
       float nearT=exp(-tr2*70.0);
-      acc += -tv*nearT*fresh*7.0;                              // 족적으로 모임(궤적 연결성)
+      acc += -tv*nearT*fresh*7.0;                              // 족적으로 모임(궤적 연결성) — 항상
       float crackle=step(0.72,fract(a_r0.w*23.1+floor(u_t*16.0)*0.41+float(i)*0.17+a_r1.x*2.0));
-      acc += (tv/trl+cw*0.4)*nearT*fresh*crackle*34.0;         // 족적에서 파파파박 튐
+      acc += (tv/trl+cw*0.4)*nearT*fresh*crackle*34.0*u_bloom; // 족적 불꽃 튐 — 도착(bloom) 후
     }
   }
   vel+=acc*u_dt;
@@ -1167,8 +1167,10 @@ function GuardianCanvasSim({ saju, zo, mbti, num, moon, birth, agitateRef, react
         const kv = 1 - Math.exp(-dt / 0.06); touch.vx += (dvx - touch.vx) * kv; touch.vy += (dvy - touch.vy) * kv;
         const bph = now * Math.PI * 2 / 9000; const breath = Math.sin(bph - 0.35 * Math.sin(bph));
         const uk = Math.min(1, t / 3.4);
-        for (let i = 0; i < 12; i++) trailArr[i * 4 + 2] += dt;               // v72 족적 나이 증가
-        if (touch.pressed && now - lastDrop > 28) {                          // 28ms마다 족적 남김
+        for (let i = 0; i < 12; i++) trailArr[i * 4 + 2] += dt;               // 족적 나이 증가
+        const _li = ((trailHead + 11) % 12) * 4;
+        const _moved = Math.hypot(touch.x - trailArr[_li], touch.y - trailArr[_li + 1]);
+        if (touch.pressed && (now - lastDrop > 14 || _moved > 0.045)) {       // v73 빠른 이동도 거리기반으로 촘촘히 따라감
           trailArr[trailHead * 4] = touch.x; trailArr[trailHead * 4 + 1] = touch.y; trailArr[trailHead * 4 + 2] = 0; trailArr[trailHead * 4 + 3] = 1;
           trailHead = (trailHead + 1) % 12; lastDrop = now;
         }
@@ -1802,8 +1804,8 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
       const fuRec = [...records].reverse().find(r => r.followUp && r.followUp !== "later");
       const fuLine = fuRec ? `\n[지난 판결 이행] "${fuRec.q}" → ${fuRec.direction}, 유저는 ${fuRec.followUp === "did" ? "따랐다" : `거슬렀다${fuRec.note ? ` (그 후: ${fuRec.note})` : ""}`}` : "";
       const _nd = new Date(); const _tmoon = moonPhase(_nd.getFullYear(), _nd.getMonth() + 1, _nd.getDate());
-      const LEAN_L = { go: "하는 쪽", stop: "멈추는 쪽", unsure: "모르겠다" };
-      const innerLine = (lean || hesit) ? `\n[유저 내심 — 판결 근거 아님, 어조·공감 참고용] ${lean ? `마음은 ${LEAN_L[lean]}으로 기욺` : ""}${lean && hesit ? " / " : ""}${hesit ? `망설이는 이유: ${hesit}` : ""} — 내심에 영합하지 말고 지표로 판결하되, 망설이는 지점은 어루만진다` : "";
+      // lean(어느 쪽)은 프롬프트에 넣지 않는다 — 유저 결론에 앵무새처럼 영합하는 걸 막고, 방향은 오직 지표로.
+      const innerLine = hesit ? `\n[유저의 망설임 — 판결 방향엔 영향 없음, 어조·공감만] 망설이는 이유: ${hesit} — 방향은 오직 지표로 정하고, 이 두려움/막힘은 판결의 어조로만 어루만진다` : "";
       const userText = `질문: ${q}${qExtra}\n[오늘] ${_nd.getFullYear()}년 ${_nd.getMonth() + 1}월 ${_nd.getDate()}일 ${_nd.getHours()}시 · 오늘 밤 달 ${_tmoon.name}${innerLine}${fuLine}`;
       const system = [{ type: "text",
         text: `${SYS}\n\n## 대화 연속성\n이전 대화가 있으면 흐름을 이어 자연스럽게 응대한다(단, 판결 근거는 늘 아래 지표다). 같은 고민의 재질문이면 앞선 판결과 일관되게, 명백히 새 고민이면 처음부터 새로 판정한다.\n\n---\n유저 프로필(고정):\n${profile}`,
@@ -2113,14 +2115,14 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                       <button key={v} type="button" className={"calbtn " + (lean === v ? "on" : "")} onClick={() => setLean(lean === v ? "" : v)}>{t}</button>
                     ))}
                   </div>
-                  {lean && <div className="hesitrow fade">
+                  <div className="hesitrow fade">
                     <span className="leanlab">왜 망설여? <em className="dim">(안 골라도 돼)</em></span>
                     <div className="row gap center wrap">
                       {["두려워서", "남 눈치", "정보가 부족해", "자신이 없어서", "후회할까 봐"].map((t) => (
                         <button key={t} type="button" className={"calbtn sm " + (hesit === t ? "on" : "")} onClick={() => setHesit(hesit === t ? "" : t)}>{t}</button>
                       ))}
                     </div>
-                  </div>}
+                  </div>
                 </div>
               )}
               {!ritual && (() => { const qk = looksQuick(q); return (
