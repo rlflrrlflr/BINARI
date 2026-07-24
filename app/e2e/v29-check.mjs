@@ -26,6 +26,7 @@ await page.getByRole("button", { name: "이 하늘이야" }).click();
 const tins = page.locator("input.in:not(.wide)");
 await tins.nth(0).fill("14"); await tins.nth(1).fill("30");
 await page.getByRole("button", { name: "기억났어" }).click();
+await page.getByRole("button", { name: "다음" }).click();
 await page.getByRole("button", { name: "하늘을 열기" }).click();
 
 // ── ① v30 순차: 회상 나레이션 단계 → "응, 기억나" 탭 → 문항 단계(나레이션 숨김) ──

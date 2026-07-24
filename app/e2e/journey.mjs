@@ -31,6 +31,7 @@ await tins.nth(0).fill("14"); await tins.nth(1).fill("30");
 await page.getByRole("button", { name: "기억났어" }).click(); await page.waitForTimeout(400);
 await shot("j02c_흐름장면");
 await page.getByRole("button", { name: "여", exact: true }).click();
+await page.getByRole("button", { name: "다음" }).click();
 await page.getByRole("button", { name: "하늘을 열기" }).click();
 await page.waitForTimeout(1600); await shot("j03_리빌_중간");
 await page.getByRole("button", { name: "응, 기억나" }).click({ timeout: 15000 }); // v30: 회상 나레이션 넘기기

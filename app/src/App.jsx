@@ -1931,15 +1931,19 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
           {bstep === 3 && (
             <div className="bscene" key={3}>
               <p className="line">{birth.name.trim() ? `${birth.name.trim()}, 마지막 조각이야 — 하늘은 너를 어느 흐름에 실어 보냈을까.` : "마지막 조각 — 하늘은 너를 어느 흐름에 실어 보냈을까."}</p>
-              <p className="sub2">음과 양의 흐름은 인생의 계절(대운)을 읽는 열쇠야.<br />말하고 싶지 않으면 그냥 열어도 돼.</p>
+              <p className="sub2">음과 양의 흐름은 인생의 계절(대운)을 읽는 열쇠야.<br />말하고 싶지 않으면 그냥 넘어가도 돼.</p>
               <div className="row gap center">
                 <button type="button" className={"calbtn " + (birth.sex === "M" ? "on" : "")} onClick={() => setBirth({ ...birth, sex: birth.sex === "M" ? "" : "M" })}>남</button>
                 <button type="button" className={"calbtn " + (birth.sex === "F" ? "on" : "")} onClick={() => setBirth({ ...birth, sex: birth.sex === "F" ? "" : "F" })}>여</button>
               </div>
-              <div className="ctxsep" />
+              <button className="btn gold mt" onClick={() => { setErr(""); setBstep(4); }}>다음</button>
+            </div>
+          )}
+          {bstep === 4 && (
+            <div className="bscene" key={4}>
+              <p className="line">그래 — 너에 대한 기억이 돌아오고 있어.</p>
+              <p className="sub2">지금의 넌 어떻게 컸어? 지금 널 알면 판결이 더 맞아져.<br />말하고 싶지 않으면 그냥 열어도 돼.</p>
               <div className="ctxblock">
-                <p className="ctxhead">그래 — 너에 대한 기억이 돌아오고 있어.</p>
-                <p className="fine ctxlab">지금의 넌 어떻게 컸어? 지금 널 알면 판결이 더 맞아져 (건너뛰어도 돼)</p>
                 <div className="row gap center wrap">
                   {["학생", "직장인", "사업가", "프리랜서", "주부", "쉬는 중"].map(t => <button key={t} type="button" className={"calbtn sm " + (birth.job === t ? "on" : "")} onClick={() => setBirth({ ...birth, job: birth.job === t ? "" : t })}>{t}</button>)}
                 </div>

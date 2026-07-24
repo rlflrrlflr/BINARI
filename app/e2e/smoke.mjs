@@ -36,6 +36,7 @@ try {
   await tins.nth(0).fill("14"); await tins.nth(1).fill("30");
   await shot("02_birth");
   await page.getByRole("button", { name: "기억났어" }).click();
+  await page.getByRole("button", { name: "다음" }).click();
   await page.getByRole("button", { name: "하늘을 열기" }).click();
 
   // 3. 회상 리빌 → MBTI/혈액형
