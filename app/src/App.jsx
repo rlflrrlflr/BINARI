@@ -1623,6 +1623,13 @@ async function callClaude(system, messages, maxTokens) {
     : (lastErr || new Error("모든 판결 경로가 닿지 않았어"));
 }
 
+/* v75: 공유 판결 인코딩 — 링크에 판결 자체를 실어, 받은 사람이 홈으로 떨어지지 않고
+   '누군가의 수호신이 내린 판결'을 먼저 보게 한다(바이럴 루프 복원). UTF-8 안전 base64url */
+const _b64e = (s) => btoa(String.fromCharCode.apply(null, new TextEncoder().encode(s))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const _b64d = (s) => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0)));
+const encodeShare = (o) => { try { return _b64e(JSON.stringify(o)); } catch (_) { return ""; } };
+const decodeShare = (s) => { try { const o = JSON.parse(_b64d(s)); return o && o.v && o.d ? o : null; } catch (_) { return null; } };
+
 /* ═══════════════ 앱 ═══════════════ */
 export default function App() {
   const [mem] = useState(loadMemory);             // v16(B1): 부팅 시 기억 1회 로드
@@ -1633,7 +1640,9 @@ export default function App() {
   const [bstep, setBstep] = useState(0);                      // v26: 동화 도입부 장면 인덱스
   const [addOpen, setAddOpen] = useState(false); const [addName, setAddName] = useState(""); const [addSex, setAddSex] = useState(""); // v26: 조각 보태기
   const [qhintI, setQhintI] = useState(0);   // v71 질문 힌트 롤링 인덱스
-  useEffect(() => { _initAnalytics(); let ref = "direct"; try { const sp = new URLSearchParams(window.location.search); ref = sp.get("ref") || sp.get("utm_source") || "direct"; } catch (_) {} track("app_open", { returning, ref }); }, []); // 계측: 세션 시작 + 유입 어트리뷰션(파라미터만, 원문 없음)
+  const [sharedIn] = useState(() => { try { const sp = new URLSearchParams(window.location.search); const raw = sp.get("v"); return raw ? decodeShare(raw) : null; } catch (_) { return null; } }); // v75: 공유 링크로 유입 시 담긴 판결
+  const [sharedGone, setSharedGone] = useState(false);  // v75: '나도 물어볼래'로 공유 화면 닫음
+  useEffect(() => { _initAnalytics(); let ref = "direct"; try { const sp = new URLSearchParams(window.location.search); ref = sp.get("ref") || sp.get("utm_source") || (sp.get("v") ? "share" : "direct"); } catch (_) {} track("app_open", { returning, ref }); if (sharedIn) track("shared_verdict_view", { dir: sharedIn.d }); }, []); // 계측: 세션 시작 + 유입 어트리뷰션(파라미터만, 원문 없음)
   const [saju, setSaju] = useState(mem?.saju || null);
   const [zo, setZo] = useState(mem?.zo || null);
   const [moon, setMoon] = useState(mem?.moon || null);
@@ -1769,7 +1778,10 @@ export default function App() {
     if (!res) return;
     track("verdict_shared", { dir: res.direction, mode: hexInfo ? "ritual" : "quick" });
     const text = `"${q}"\n→ ${res.direction}. ${res.verdict}\n\n— 내 수호신의 판결, 비나리`;
-    const url = "https://binari-sepia.vercel.app/?ref=share";
+    // v75: 판결을 링크에 실어 보낸다 — 받은 사람이 홈이 아니라 이 판결을 먼저 보게
+    const payload = { q, d: res.direction, v: res.verdict, s: (detail && !detail._err ? detail.subline : "") || "", n: (birth.name || "").trim(), a: res.against || 0, t: res.total || 0, c: res.category || "" };
+    const enc = encodeShare(payload);
+    const url = enc ? `https://binari-sepia.vercel.app/?v=${enc}` : "https://binari-sepia.vercel.app/?ref=share";
     try {
       if (navigator.share) { await navigator.share({ title: "비나리 — 수호신의 판결", text, url }); return; }
     } catch (_) { return; } // 유저 취소 포함 — 조용히
@@ -1882,6 +1894,26 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
   return (
     <div className="stage">
       <style>{CSS}</style>
+
+      {sharedIn && !sharedGone && (() => {
+        const d = sharedIn.d, isGo = d === "GO", isHold = d === "HOLD";
+        const dcls = isGo ? "go" : isHold ? "hold" : "";
+        const a = +sharedIn.a || 0, t = +sharedIn.t || 0;
+        const dismiss = () => { track("shared_cta", { dir: d }); try { window.history.replaceState({}, "", window.location.pathname); } catch (_) {} setSharedGone(true); };
+        return (
+          <section className="scene fade sharedwrap">
+            <div className="orb"><DustOrb size={148} stage={0} /></div>
+            <p className="sharedeyebrow">{sharedIn.n ? `${sharedIn.n}의 수호신이 이렇게 판결했어` : "어떤 이의 수호신이 이렇게 판결했어"}</p>
+            <p className="sharedq">“{sharedIn.q || "…"}”</p>
+            <p className={`shareddir ${dcls}`}>{d}</p>
+            <p className={`sharedv ${dcls} ${(sharedIn.v || "").length > 22 ? "s" : ""}`}>{sharedIn.v}</p>
+            {t > 0 && a > 0 && a / t >= 0.4 && <p className="sharedsplit">지표가 갈라섰다 · {t - a} : {a}</p>}
+            {sharedIn.s && <p className="sharedsub">“{sharedIn.s}”</p>}
+            <button className="btn gold sharedcta" onClick={dismiss}>나도 내 수호신에게 물어볼래</button>
+            <p className="sharedfoot">비나리 — 답은 거기에 있어</p>
+          </section>
+        );
+      })()}
 
       {step === 0 && (
         <section className="scene fade">
@@ -2367,6 +2399,21 @@ const CSS = `
 .scene.lobby{position:relative;min-height:calc(100dvh - 96px);cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;background:radial-gradient(80% 52% at 50% 42%,#0a0d1c 0%,#060815 50%,rgba(3,4,10,0) 100%)}
 .lobbypanel{position:absolute;left:0;right:0;bottom:calc(14vh + env(safe-area-inset-bottom, 0px));z-index:2;display:flex;flex-direction:column;align-items:center;width:100%;padding:0 16px}
 .wakehint{font-family:sans-serif;font-size:12px;letter-spacing:.16em;color:#d8c79a;margin-top:22px;animation:wakePulse 2.4s ease-in-out infinite;text-shadow:0 1px 10px rgba(4,3,10,.85)}
+/* v75: 공유 판결 랜딩 — 링크로 들어온 사람이 보는 첫 화면 */
+.sharedwrap{position:fixed;inset:0;z-index:60;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:38px 26px;background:radial-gradient(120% 78% at 50% 14%,#1a1330,#0b0817 58%,#060409);text-align:center;overflow-y:auto}
+.sharedwrap .orb{margin-bottom:6px}
+.sharedeyebrow{font-family:sans-serif;font-size:11px;letter-spacing:.24em;color:#b7a7d6;margin:2px 0 20px}
+.sharedq{font-size:16px;line-height:1.7;color:#e7dff5;margin:0 0 22px;max-width:19em;overflow-wrap:anywhere}
+.shareddir{font-family:sans-serif;font-size:12px;letter-spacing:.36em;font-weight:800;color:#e5b96b;margin:0 0 9px}
+.shareddir.go{color:#5fd6a3}.shareddir.hold{color:#9fb0e8}
+.sharedv{font-size:25px;font-weight:900;line-height:1.5;margin:0;max-width:15em;overflow-wrap:anywhere;background:linear-gradient(180deg,#ffe9ad,#c98f3d);-webkit-background-clip:text;background-clip:text;color:transparent}
+.sharedv.go{background:linear-gradient(180deg,#b8ffd9,#3dc98f);-webkit-background-clip:text;background-clip:text}
+.sharedv.hold{background:linear-gradient(180deg,#cfd8ff,#7f8fd4);-webkit-background-clip:text;background-clip:text}
+.sharedv.s{font-size:20px;line-height:1.55}
+.sharedsplit{font-family:sans-serif;font-size:10px;letter-spacing:.2em;color:#e5b96b;margin:12px 0 0}
+.sharedsub{font-size:13px;line-height:1.7;color:#b3a9c8;margin:16px 0 0;max-width:18em}
+.sharedcta{margin-top:40px}
+.sharedfoot{margin-top:30px;font-size:10.5px;letter-spacing:.32em;color:#7c7290;font-family:sans-serif}
 @keyframes wakePulse{0%,100%{opacity:.4}50%{opacity:.95}}
 .escx{position:fixed;top:calc(14px + env(safe-area-inset-top,0px));right:16px;z-index:30;width:40px;height:40px;border-radius:50%;border:1px solid rgba(245,217,139,.3);background:rgba(10,8,18,.55);color:#c9b98f;font-size:16px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);-webkit-tap-highlight-color:transparent;transition:all .2s}
 .escx:hover{border-color:#ffe9ad;color:#ffe9ad}
