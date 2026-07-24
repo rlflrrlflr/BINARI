@@ -691,17 +691,14 @@ void main(){
   spos+=vec2(sin(t*0.11+1.3)*0.11, sin(t*0.17)*0.07+0.012*u_breath)*(1.0-ta);   // 부유+호흡 — 터치 중엔 멈춤
   float st=a_r1.z*0.68;                                             // 입자별 시차(파도식 도착 순서)
   float g=clamp((ta-st)/0.28,0.0,1.0); g=g*g*(3.0-2.0*g);           // v66 고정 비행창 — 모임·풀림 모두 낱알 파도로
-  float rad=0.02+0.05*a_r1.x+pow(a_r0.z,1.6)*0.40;                  // v65 최소반경 지터(배제 원반·검은 구멍 제거)
-  float armId=floor(a_r1.w*3.0);                                    // 나선팔 3갈래 배정
-  float armW=0.55+rad*0.9+0.5*smoothstep(0.12,0.02,rad);            // 코어에선 팔 폭 넓혀 둥근 발광핵
-  float baseAng=armId/3.0*6.2832 + (a_r0.x-0.5)*armW;
-  float ang=baseAng + rad*7.5 + t*0.9 + sin(t*0.22)*rad*1.5;        // 고정 감김+강체 서행+숨쉬는 전단
-  vec2 galaxy=u_touch + vec2(cos(ang),sin(ang))*rad
-            - u_touchVel*(0.15+a_r0.w*0.35)*smoothstep(0.05,0.2,rad); // 코어는 시어 제외(갈고리 방지)
-  vec2 rel=mix(spos,galaxy,g)-u_touch;
-  float swl=g*(1.0-g)*2.4;                                          // 유입 중에만 이는 소용돌이 호(양끝 0)
-  rel=mat2(cos(swl),-sin(swl),sin(swl),cos(swl))*rel;
-  spos=u_touch+rel;                                                 // 알알이 나선을 그리며 손끝으로
+  // ── B상태: 중앙점으로 모여 빛이 방사로 발산 (문양·회전 없음 — 입자단위 재정렬) ──
+  float bang=a_r1.w*6.2832 + (a_r0.y-0.5)*0.22;                     // 입자별 방사각(레이)
+  float bph=fract(a_r0.z*1.7 + t*0.55);                             // 0(중심)→1(바깥) 연속 발산 흐름
+  float bR=0.045 + 0.46*smoothstep(0.34,1.0,g);                     // 먼저 점으로 모임 → 이후 개화(발산)
+  float brad=bph*bph*bR;                                            // 중심 밀집(발광핵) → 바깥 스트림
+  vec2 burst=u_touch + vec2(cos(bang),sin(bang))*brad;             // 방사 발산 좌표
+  spos=mix(spos, burst, g);                                         // 입자단위 직진 재정렬(디졸브 아님)
+  float emit=smoothstep(0.0,0.05,bph)*(1.0-0.7*bph);              // 발산 발광 봉투(재순환 팝 제거)
   float wglow=0.0;
   if(u_trailLive>0.5){                                              // v65 MUNG 궤적 와류(특이점 제거)
     for(int i=0;i<10;i++){
@@ -736,8 +733,9 @@ void main(){
   float core=1.0+u_focal*0.22*smoothstep(0.6,0.0,rl);               // I: 코어 발광(과포화 억제)
   v_a*=(0.25+0.75*k)*u_lum*depth*twk*clamp(sc*0.66,0.34,1.34)*life*core
      *mix(0.30,1.9,star)*(0.90+0.10*u_breath)*(1.0+min(wglow,0.8)*0.9)
-     *(1.0-g*0.45*smoothstep(0.24,0.05,rad))                        // 코어 감광 강화(드래그 백화 방지)
-     *(1.0-0.30*g*(1.0-g)*4.0);                                     // 비행 중 감광(플래시 방지)
+     *mix(1.0, 0.42+1.25*emit, g)                                   // B: 중심 밝고 바깥 감쇠(빛 발산)
+     *(1.0-g*0.34*smoothstep(0.018,0.0,brad))                       // 극중심 화이트아웃만 억제
+     *(1.0-0.26*g*(1.0-g)*4.0);                                     // 비행 중 감광(플래시 방지)
   v_pick=a_r1.z;
 }`;
 const GL_FRAG = `
