@@ -982,7 +982,7 @@ void computeShape(vec4 a_r0, vec4 a_r1, out vec2 spos, out float depth, out floa
   spos+=vec2(sin(t*0.11+1.3)*0.11, sin(t*0.17)*0.07+0.012*u_breath)*(1.0-ta);
 }`;
 const SIM_VERT = `attribute vec2 a_q; void main(){ gl_Position=vec4(a_q,0.0,1.0); }`;
-const SIM_FRAG = `precision highp float;\n` + SHAPE_UNI + `\nuniform sampler2D u_state,u_r0,u_r1; uniform vec2 u_texdim,u_touchVel; uniform float u_dt,u_bloom;\n` + SHAPE_FN + `
+const SIM_FRAG = `precision highp float;\n` + SHAPE_UNI + `\nuniform sampler2D u_state,u_r0,u_r1; uniform vec2 u_texdim,u_touchVel; uniform float u_dt,u_bloom; uniform vec4 u_trail[12];\n` + SHAPE_FN + `
 void main(){
   vec2 uv=gl_FragCoord.xy/u_texdim;
   vec4 st=texture2D(u_state,uv); vec4 a_r0=texture2D(u_r0,uv); vec4 a_r1=texture2D(u_r1,uv);
@@ -994,25 +994,30 @@ void main(){
   float stg=a_r1.z*0.68; float g=clamp((ta-stg)/0.28,0.0,1.0); g=g*g*(3.0-2.0*g);
   if(g>0.001){
     float bang=a_r1.w*6.2832;
-    float bR=0.02+0.12*u_bloom;                                 // v70 작은 불씨 코어(방사 대폭 축소)
-    float rr=0.2+0.8*a_r0.z;
+    float bR=0.014+0.07*u_bloom;                                // v72 방사 더 좁게
+    float rr=0.3+0.7*a_r0.z;
     vec2 burst=u_touch+vec2(cos(bang),sin(bang))*(rr*bR);
     target=mix(target,burst,g);
   }
   float spd=min(length(u_touchVel),0.06);
   float k=mix(14.0,10.0,g)-spd*120.0; k=max(k,2.0);           // 대기 강성↑(크리스프), 드래그 시 느슨(잔상)
-  float damp=mix(9.0,5.5,g)-spd*60.0; damp=max(damp,2.5);
+  float damp=mix(9.0,5.5,g)-spd*55.0; damp=max(damp,2.5);
   vec2 acc=(target-pos)*k - vel*damp;
-  if(g>0.15){                                                  // v70 시계방향 불꽃 스파크(방사 대신 튐)
-    vec2 d=pos-u_touch; float dl=length(d)+1e-4; vec2 dn=d/dl;
-    vec2 cw=vec2(dn.y,-dn.x);                                  // 시계방향 접선
-    float amt=g*(3.5+spd*380.0);                               // 드래그일수록 더 튐
-    acc += cw*amt;                                             // 시계방향 스월
-    float spark=step(0.6,fract(a_r0.w*17.1+floor(u_t*9.0)*0.37+a_r1.x*3.0));
-    acc += (dn*1.3+cw)*spark*amt*1.5;                          // 간헐 불꽃 튐(바깥+시계)
+  if(g>0.15){
+    vec2 d=pos-u_touch; float dl=length(d)+1e-4; vec2 dn=d/dl; vec2 cw=vec2(dn.y,-dn.x); // 시계방향 접선
+    acc += cw*g*2.2*exp(-dl*dl*90.0);                          // 정지 시 코어 둘레 시계 크래클
+    for(int i=0;i<12;i++){                                     // v72 궤적(족적) 따라 불꽃 튐
+      vec4 tr=u_trail[i];
+      float fresh=tr.w*exp(-tr.z*1.3)*step(0.02,tr.w);         // 족적 신선도(오래되면 사그라듦)
+      vec2 tv=pos-tr.xy; float tr2=dot(tv,tv); float trl=sqrt(tr2)+1e-4;
+      float nearT=exp(-tr2*70.0);
+      acc += -tv*nearT*fresh*7.0;                              // 족적으로 모임(궤적 연결성)
+      float crackle=step(0.72,fract(a_r0.w*23.1+floor(u_t*16.0)*0.41+float(i)*0.17+a_r1.x*2.0));
+      acc += (tv/trl+cw*0.4)*nearT*fresh*crackle*34.0;         // 족적에서 파파파박 튐
+    }
   }
   vel+=acc*u_dt;
-  float vm=length(vel); if(vm>8.0) vel*=8.0/vm;                // 폭주 방지
+  float vm=length(vel); if(vm>8.5) vel*=8.5/vm;                // 폭주 방지
   pos+=vel*u_dt;
   gl_FragColor=vec4(pos,vel);
 }`;
@@ -1119,6 +1124,7 @@ function GuardianCanvasSim({ saju, zo, mbti, num, moon, birth, agitateRef, react
       const uni = (pr, names) => { const m = {}; names.forEach((k) => m[k] = gl.getUniformLocation(pr, k)); return m; };
       const SHU = ["u_t", "u_speed", "u_form", "u_R", "u_arms", "u_strands", "u_twist", "u_chaos", "u_nayF", "u_nayA", "u_expand", "u_agi", "u_focal", "u_breath", "u_touchAmt", "u_touch"];
       const simU = uni(simP, [...SHU, "u_state", "u_r0", "u_r1", "u_texdim", "u_touchVel", "u_dt", "u_bloom"]);
+      simU.u_trail = gl.getUniformLocation(simP, "u_trail[0]");
       const rndU = uni(rndP, [...SHU, "u_state", "u_texdim", "u_ps", "u_psMul", "u_lum", "u_twk", "u_k", "u_bloom", "u_c1", "u_c2", "u_acc", "u_bright", "u_alpha"]);
       const simA = { a_q: gl.getAttribLocation(simP, "a_q") };
       const rndA = { a_r0: gl.getAttribLocation(rndP, "a_r0"), a_r1: gl.getAttribLocation(rndP, "a_r1"), a_idx: gl.getAttribLocation(rndP, "a_idx") };
@@ -1139,6 +1145,7 @@ function GuardianCanvasSim({ saju, zo, mbti, num, moon, birth, agitateRef, react
         gl.uniform1f(U.u_touchAmt, touch.amt); gl.uniform2f(U.u_touch, touch.x, touch.y);
       };
       let src = 0, dst = 1, bloom = 0;
+      const trailArr = new Float32Array(48); let trailHead = 0, lastDrop = 0;   // v72 궤적 족적 링버퍼(12점)
       const born = performance.now();
       const draw = () => {
         if (dead) return;
@@ -1160,13 +1167,18 @@ function GuardianCanvasSim({ saju, zo, mbti, num, moon, birth, agitateRef, react
         const kv = 1 - Math.exp(-dt / 0.06); touch.vx += (dvx - touch.vx) * kv; touch.vy += (dvy - touch.vy) * kv;
         const bph = now * Math.PI * 2 / 9000; const breath = Math.sin(bph - 0.35 * Math.sin(bph));
         const uk = Math.min(1, t / 3.4);
+        for (let i = 0; i < 12; i++) trailArr[i * 4 + 2] += dt;               // v72 족적 나이 증가
+        if (touch.pressed && now - lastDrop > 28) {                          // 28ms마다 족적 남김
+          trailArr[trailHead * 4] = touch.x; trailArr[trailHead * 4 + 1] = touch.y; trailArr[trailHead * 4 + 2] = 0; trailArr[trailHead * 4 + 3] = 1;
+          trailHead = (trailHead + 1) % 12; lastDrop = now;
+        }
         // ── SIM 패스 (여러 서브스텝으로 강성 안정화) ──
         gl.useProgram(simP);
         gl.disable(gl.BLEND); gl.viewport(0, 0, W, H);
         gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf); gl.enableVertexAttribArray(simA.a_q); gl.vertexAttribPointer(simA.a_q, 2, gl.FLOAT, false, 0, 0);
         gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, r0Tex); gl.uniform1i(simU.u_r0, 1);
         gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, r1Tex); gl.uniform1i(simU.u_r1, 2);
-        gl.uniform2f(simU.u_touchVel, touch.vx, touch.vy); gl.uniform1f(simU.u_bloom, bloom);
+        gl.uniform2f(simU.u_touchVel, touch.vx, touch.vy); gl.uniform1f(simU.u_bloom, bloom); gl.uniform4fv(simU.u_trail, trailArr);
         const sub = 2, sdt = dt / sub;                                       // 서브스텝(스프링 안정)
         for (let s = 0; s < sub; s++) {
           gl.bindFramebuffer(gl.FRAMEBUFFER, fbo[dst]); gl.viewport(0, 0, W, H);
