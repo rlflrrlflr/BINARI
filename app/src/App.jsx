@@ -1024,32 +1024,27 @@ void main(){
   vec2 target=spos;
   float ta=clamp(u_touchAmt,0.0,1.0);
   float stg=a_r1.z*0.45; float g=clamp((ta-stg)/0.28,0.0,1.0); g=g*g*(3.0-2.0*g);
+  /* v81 '귀의의 물레' — 응시(기울음) → 알알이 응축 → 꽉 찬 숨쉬는 코어 + 영원한 실 유입(전부 타깃 기반) */
+  target+=(u_touch-target)*0.07*ta;                             // 감응: 터치 0프레임에 세계 전체가 나를 향해 살짝 기운다
   if(g>0.001){
     float bang=a_r1.w*6.2832;
-    float rr=a_r0.z*a_r0.z;                                     // v76 중심 밀집 → 빈 도넛 대신 밝은 코어
-    float ph=fract(u_t*0.9);
-    float beat=exp(-ph*9.0)+0.45*exp(-abs(ph-0.22)*20.0);       // v80 럽-덥 심장박동(~54bpm 명상 박자)
-    float bR=0.008*(1.0+0.30*beat*u_bloom);                     // 코어가 심장처럼 부풀었다 가라앉는다 — 살아있는 촉감
-    float pr=step(0.88,fract(a_r0.w*13.7+a_r1.x*5.3));          // v80.1 행렬 전담 입자(~12%) — 나머지 88%는 코어에 남는다
-    float rad=mix(rr*bR, 0.05, pr*u_bloom);                     // 전원 응축 → 완료 후 행렬 입자만 서서히 띠로 나간다
-    vec2 burst=u_touch+vec2(cos(bang),sin(bang))*rad;
-    target=mix(target,burst,g);
+    float rr=a_r0.z*a_r0.z;                                     // 중심 밀집 → 꽉 찬 코어(도넛 원천 차단)
+    float breath=sin(u_t*0.75-cos(u_t*0.75));                   // 비대칭 느린 숨(~8.4s) — 천천히 차오르고 빠르게 가라앉음
+    float coreR=0.009*(1.0+0.10*max(breath,0.0)*u_bloom);
+    vec2 core=u_touch+vec2(cos(bang),sin(bang))*(rr*coreR);
+    float thr=step(0.78,fract(a_r0.w*13.7+a_r1.x*5.3));         // 22% '실' 입자 — 가장자리에서 태어나 코어로 귀의
+    float s=fract(a_r0.x+a_r1.z*0.618+u_t*(0.07+0.11*a_r0.z));  // 낙하 위상 행진(입자별 5.5~12.5s) — 영원히 멈추지 않음
+    float rIn=max((1.0-s)*(1.0-s)*mix(0.09,0.20,a_r0.y),0.004); // 밖→안 r² 낙하(중심 과밀) — 물레가 읽히는 크기로
+    float ang=bang+(1.0-s)*7.5-u_t*0.45;                        // 시계방향으로 감겨들며 낙하 + 전체 시계 회전
+    vec2 wheel=u_touch+vec2(cos(ang),sin(ang))*rIn;
+    target=mix(target,mix(core,wheel,thr*u_bloom),g);           // 응축이 끝난 뒤에야 물레가 열린다
   }
   float spd=min(length(u_touchVel),0.06);
   float k=mix(14.0,15.0,g)-spd*95.0; k=max(k,2.5);           // v79 응답 빠르게(강성↑) + 드래그 잔상(궤적 살림)
   float damp=mix(9.0,6.8,g)-spd*48.0; damp=max(damp,2.8);     // v79 댐핑 낮춰 빠른 정착 → 중심 즉시 채움(눌린 느낌)·드래그 잔상
   vec2 acc=(target-pos)*k - vel*damp;
   if(g>0.15){
-    vec2 d=pos-u_touch; float dl=length(d)+1e-4; vec2 dn=d/dl; vec2 cw=vec2(dn.y,-dn.x); // 시계방향 접선
-    // v80 홀림 모션 — 심장박동 코어 둘레를 '탑돌이'처럼 일정하게 도는 궤도 행렬 + 간헐 불티
-    float ph2=fract(u_t*0.9);
-    float beat2=exp(-ph2*9.0)+0.45*exp(-abs(ph2-0.22)*20.0);
-    float shell=smoothstep(0.012,0.04,dl);                    // 코어(안쪽)는 꽉 찬 채로 — 불티는 코어 밖에서만
-    float pr2=step(0.88,fract(a_r0.w*13.7+a_r1.x*5.3));       // 행렬 전담 입자만 띠 힘을 받는다(코어 88% 보호)
-    float band=exp(-(dl-0.05)*(dl-0.05)*1400.0);
-    acc += cw*band*pr2*g*u_bloom*(13.0+6.0*beat2);            // 경건한 시계방향 행진, 박동마다 힘이 실린다
-    float ember=step(0.93,fract(a_r0.w*31.7+floor(u_t*14.0)*0.5+a_r1.x*3.0));
-    acc += cw*ember*shell*g*u_bloom*exp(-dl*dl*180.0)*16.0;   // 간헐 불티 — 은은하게만 반짝
+    // v81 회전·유입은 전부 타깃 필드가 담당(힘 회전 제거) — 여기는 드래그 족적만
     for(int i=0;i<16;i++){                                     // v75 궤적(족적) 따라 스파클라 불꽃
       vec4 tr=u_trail[i];
       float fresh=tr.w*exp(-tr.z*2.1)*step(0.02,tr.w);         // v79 궤적 되살림 — 뒤에서 서서히 그라데이션 소멸
@@ -1085,10 +1080,13 @@ void main(){
   float rr=length(pos-u_touch);
   float er=clamp(rr/0.18,0.0,1.0);
   float emitB=mix(1.0,0.6+1.0*(1.0-er)*(1.0-er),g);                  // B: 작은 코어 밝고 스파크로 갈수록 감쇠
-  float phb=fract(u_t*0.9); float beatb=exp(-phb*9.0)+0.45*exp(-abs(phb-0.22)*20.0);
-  emitB*=1.0+0.22*beatb*g*u_bloom;                                   // v80 심장박동에 맞춰 코어 광량도 함께 뛴다
+  float brb=sin(u_t*0.75-cos(u_t*0.75));
+  emitB*=1.0+0.20*max(brb,0.0)*g*u_bloom;                            // v81 느린 숨에 맞춰 광량이 차오른다
   float kA=clamp(u_k,0.0,1.0);                                       // v75 'asm'은 GLSL 예약어 → 엄격 드라이버서 sim 폴백, 개명
   v_a=va0*(0.25+0.75*kA)*u_lum*depth*twk*clamp(sc*0.66,0.34,1.34)*life*core*mix(0.42,1.7,star)*(0.90+0.10*u_breath)*emitB;
+  float thrV=step(0.78,fract(a_r0.w*13.7+a_r1.x*5.3));               // v81 '실' 입자(SIM과 동일 해시)
+  float sV=fract(a_r0.x+a_r1.z*0.618+u_t*(0.07+0.11*a_r0.z));
+  v_a*=mix(1.0, smoothstep(0.0,0.20,sV)*(0.55+1.45*sV*sV), thrV*g*u_bloom); // 환생 비행은 어둠 속, 코어에 다가올수록 밝게(목표구배)
   v_pick=a_r1.z;
 }`;
 const RND_FRAG = `precision mediump float;
