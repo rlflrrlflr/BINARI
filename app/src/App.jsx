@@ -3,30 +3,37 @@ import { useState, useRef, useEffect } from "react";
 /* ───── 계측(PostHog) — 휴면-준비: VITE_POSTHOG_KEY 없으면 완전 무동작 ───── */
 const AKEY = import.meta.env.VITE_POSTHOG_KEY;
 let _ph = null, _phInit = false;
-/* 분석 동의(선택 항목) — 명시 동의 전에는 어떤 이벤트도 전송하지 않는다.
-   서비스 제공에 필수가 아니므로 거부해도 판결·기능은 전부 정상 동작한다. */
+/* ── 계측 2단계 구조 ──────────────────────────────────────────────
+   1단계(기본) — 동의 불필요. 서비스 운영·개선에 필요한 최소 통계.
+     이벤트 발생 사실과 비식별 지표(판결 방향·카테고리·톤·만족도 점수·질문 길이 등)만.
+     근거: 개인정보보호법 §15①6 정당한 이익 / §28-2 가명정보 통계작성 + 처리방침 고지.
+     → DAU/MAU·리텐션·퍼널이 전체 사용자 기준으로 정확히 잡힌다.
+   2단계(프로파일) — 선택 동의 필요. 나이·성별·직업·관계·도시·MBTI·가치관·오행,
+     판결 문구, 망설임 사유. 서비스 제공에 필수가 아니고 조합 시 식별성이 커지므로 동의 기반.
+     미동의 시 아래 키만 제거되고 이벤트 자체는 그대로 전송된다.
+   질문 원문·실명·생년월일 원값은 단계 무관하게 절대 전송하지 않는다. */
+const PROFILE_KEYS = new Set(["age", "age_band", "sex", "job", "rel", "city", "mbti", "core_value", "element", "zodiac", "verdict", "hesit"]);
+const stripProfile = (p) => { const o = {}; for (const k in p) if (!PROFILE_KEYS.has(k)) o[k] = p[k]; return o; };
+
 const CONSENT_KEY = "binari.analytics_consent.v1";
-let _consent = false, _declined = false;                          // 미결정 / 동의 / 명시적 거부 3상태
+let _consent = false;                                             // 2단계(프로파일) 동의 여부
 function readConsent() { try { return window.localStorage.getItem(CONSENT_KEY) === "1"; } catch (_) { return false; } }
-function readDeclined() { try { return window.localStorage.getItem(CONSENT_KEY) === "0"; } catch (_) { return false; } }
 function setAnalyticsConsent(on) {
-  _consent = !!on; _declined = !on;
+  _consent = !!on;
   try { window.localStorage.setItem(CONSENT_KEY, on ? "1" : "0"); } catch (_) {}
-  if (on) { _initAnalytics(); _flush(); }                        // 동의 순간, 그 전에 쌓인 것까지 소급 전송
-  else { _q.length = 0; if (_ph) { try { _ph.opt_out_capturing(); } catch (_) {} } }   // 거부 → 큐 폐기
+  if (on) _initAnalytics();
 }
-/* 대기 큐 — posthog는 지연청크라 로드 완료까지 수백 ms가 걸리고, 동의는 온보딩 중간에 떨어진다.
-   그 사이에 발생한 이벤트(app_open·onboard_start 등)를 잃지 않도록 원래 시각과 함께 담아두고,
-   "동의 + 로드 완료"가 모두 충족된 순간에 한 번에 흘려보낸다.
-   미동의 상태로 세션이 끝나면 큐는 전송되지 않고 그대로 버려진다(= 전송 0건). */
+/* 대기 큐 — posthog는 지연청크라 로드 완료까지 수백 ms가 걸린다. 그 사이(특히 마운트 직후의
+   app_open)에 발생한 이벤트를 원래 시각과 함께 담아두고, 로드 완료 시 한 번에 흘려보낸다.
+   1단계는 동의를 기다리지 않으므로 큐는 '로드 대기' 용도만 한다. */
 const _q = [];
 const Q_MAX = 50;
 function _flush() {
-  if (!_ph || !_consent) return;
-  while (_q.length) { const e = _q.shift(); try { _ph.capture(e.ev, e.props, { timestamp: e.at }); } catch (_) {} }
+  if (!_ph) return;
+  while (_q.length) { const e = _q.shift(); try { _ph.capture(e.ev, _consent ? e.props : stripProfile(e.props), { timestamp: e.at }); } catch (_) {} }
 }
 async function _initAnalytics() {
-  if (_phInit || !AKEY || !_consent || typeof window === "undefined") return; _phInit = true;
+  if (_phInit || !AKEY || typeof window === "undefined") return; _phInit = true;
   try {
     const { default: posthog } = await import("posthog-js");
     posthog.init(AKEY, { api_host: import.meta.env.VITE_POSTHOG_HOST || "https://us.i.posthog.com", capture_pageview: false, autocapture: false, persistence: "localStorage" });
@@ -34,13 +41,13 @@ async function _initAnalytics() {
     _flush();                                  // 로드 전에 쌓인 이벤트를 원래 시각으로 전송
   } catch (_) {}
 }
-// 질문 원문·실명은 절대 보내지 않는다(속성 화이트리스트만).
 function track(ev, props) {
   try {
     const p = props || {};
-    if (_ph && _consent) _ph.capture(ev, p);
-    else if (!_declined && _q.length < Q_MAX) _q.push({ ev, props: p, at: new Date() });  // 미결정이면 보류, 거부면 버림
-    if (typeof window !== "undefined" && window.__binariTrackDebug) (window.__binariEvents = window.__binariEvents || []).push({ ev, props: p });
+    const out = _consent ? p : stripProfile(p);                   // 미동의 → 2단계 속성만 제거, 이벤트는 전송
+    if (_ph) _ph.capture(ev, out);
+    else if (_q.length < Q_MAX) _q.push({ ev, props: p, at: new Date() });   // 로드 대기 중 보류
+    if (typeof window !== "undefined" && window.__binariTrackDebug) (window.__binariEvents = window.__binariEvents || []).push({ ev, props: out });
   } catch (_) {}
 }
 if (typeof window !== "undefined" && /[?&]trackdebug/.test(window.location.search)) window.__binariTrackDebug = true;
@@ -1688,7 +1695,8 @@ export default function App() {
   const [agree, setAgree] = useState(() => readConsent());     // 분석 동의(선택) — 거부해도 모든 기능 정상 동작
   const [sharedIn] = useState(() => { try { const sp = new URLSearchParams(window.location.search); const raw = sp.get("v"); return raw ? decodeShare(raw) : null; } catch (_) { return null; } }); // v75: 공유 링크로 유입 시 담긴 판결
   const [sharedGone, setSharedGone] = useState(false);  // v75: '나도 물어볼래'로 공유 화면 닫음
-  useEffect(() => { _consent = readConsent(); _declined = readDeclined(); if (_consent) _initAnalytics(); let ref = "direct"; try { const sp = new URLSearchParams(window.location.search); ref = sp.get("ref") || sp.get("utm_source") || (sp.get("v") ? "share" : "direct"); } catch (_) {} track("app_open", { returning, ref }); if (sharedIn) track("shared_verdict_view", { dir: sharedIn.d }); }, []); // 계측: 세션 시작 + 유입 어트리뷰션(파라미터만, 원문 없음)
+  // 1단계 계측은 동의와 무관하게 항상 켠다(2단계 속성만 동의로 게이트)
+  useEffect(() => { _consent = readConsent(); _initAnalytics(); let ref = "direct"; try { const sp = new URLSearchParams(window.location.search); ref = sp.get("ref") || sp.get("utm_source") || (sp.get("v") ? "share" : "direct"); } catch (_) {} track("app_open", { returning, ref }); if (sharedIn) track("shared_verdict_view", { dir: sharedIn.d }); }, []); // 계측: 세션 시작 + 유입 어트리뷰션(파라미터만, 원문 없음)
   const [saju, setSaju] = useState(mem?.saju || null);
   const [zo, setZo] = useState(mem?.zo || null);
   const [moon, setMoon] = useState(mem?.moon || null);
@@ -2049,8 +2057,8 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
               </div>
               {err && <p className="err">{err}</p>}
               <div className="consent">
-                <label className="chk"><input type="checkbox" checked={agree} onChange={e => { setAgree(e.target.checked); setAnalyticsConsent(e.target.checked); }} /> <span>(선택) 서비스 개선을 위한 이용 분석에 동의해</span></label>
-                <p className="fine">동의하지 않아도 판결은 똑같이 나와. 언제든 바꿀 수 있어.<br />
+                <label className="chk"><input type="checkbox" checked={agree} onChange={e => { setAgree(e.target.checked); setAnalyticsConsent(e.target.checked); }} /> <span>(선택) 나이·직업 같은 내 조각도 분석에 써도 좋아</span></label>
+                <p className="fine">판결이 더 잘 맞게 다듬는 데만 써. 동의하지 않아도 판결은 똑같이 나오고, 언제든 바꿀 수 있어.<br />
                   ‘하늘을 열기’를 누르면 <a className="plink" href="/privacy.html" target="_blank" rel="noreferrer">개인정보처리방침</a>에 동의한 것으로 볼게.</p>
               </div>
               <button className="btn gold mt" onClick={doReveal}>하늘을 열기</button>
