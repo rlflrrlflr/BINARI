@@ -1032,8 +1032,8 @@ void main(){
     target=mix(target,burst,g);
   }
   float spd=min(length(u_touchVel),0.06);
-  float k=mix(14.0,12.0,g)-spd*120.0; k=max(k,2.0);           // 대기 강성↑(크리스프), 드래그 시 느슨(잔상)
-  float damp=mix(9.0,10.0,g)-spd*70.0; damp=max(damp,2.5);    // v76 개화 시 과댐핑 → 코어에 가라앉음(공전링 방지), 드래그 땐 낮아져 잔상
+  float k=mix(14.0,13.0,g)-spd*45.0; k=max(k,3.5);           // v78 드래그해도 코어가 뭉쳐 따라옴(혜성처럼 안 늘어짐)
+  float damp=mix(9.0,10.0,g)-spd*35.0; damp=max(damp,3.5);    // 과댐핑 유지 → 공전링·혜성 방지
   vec2 acc=(target-pos)*k - vel*damp;
   if(g>0.15){
     vec2 d=pos-u_touch; float dl=length(d)+1e-4; vec2 dn=d/dl; vec2 cw=vec2(dn.y,-dn.x); // 시계방향 접선
@@ -1043,13 +1043,13 @@ void main(){
     acc += cw*coreSpk*g*u_bloom*exp(-dl*dl*150.0)*shell*24.0; // 순수 시계방향(바깥0) · bloom으로 응축 후 서서히 시작
     for(int i=0;i<16;i++){                                     // v75 궤적(족적) 따라 스파클라 불꽃
       vec4 tr=u_trail[i];
-      float fresh=tr.w*exp(-tr.z*2.2)*step(0.02,tr.w);         // 오래된(먼) 족적일수록 그라데이션 소멸
+      float fresh=tr.w*exp(-tr.z*3.6)*step(0.02,tr.w);         // v78 꼬리 짧게(혜성처럼 안 늘어지게) — 뒤에서 빨리 사라짐
       vec2 tv=pos-tr.xy; float tr2=dot(tv,tv); float trl=sqrt(tr2)+1e-4; vec2 tvn=tv/trl;
-      float nearT=exp(-tr2*130.0);
-      acc += -tv*nearT*fresh*13.0;                             // v76 족적으로 강하게 모임(궤적이 보이게)
-      float spark=step(0.84,fract(a_r0.w*23.1+floor(u_t*20.0)*0.41+float(i)*0.17+a_r1.x*2.0));
+      float nearT=exp(-tr2*150.0);
+      acc += -tv*nearT*fresh*6.0;                              // v78 족적 인력 약하게 → 코어가 트레일로 안 끌려감
+      float spark=step(0.86,fract(a_r0.w*23.1+floor(u_t*20.0)*0.41+float(i)*0.17+a_r1.x*2.0));
       vec2 perp=vec2(-tvn.y,tvn.x);
-      acc += (tvn+perp*(a_r1.x-0.5)*1.2)*nearT*fresh*spark*42.0; // 스파클라 발사 — 족적에서 바깥으로
+      acc += (tvn+perp*(a_r1.x-0.5)*1.2)*nearT*fresh*spark*22.0; // v78 짧은 스파크(긴 혜성 꼬리 방지)
     }
   }
   vel+=acc*u_dt;
