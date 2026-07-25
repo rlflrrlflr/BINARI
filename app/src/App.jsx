@@ -1511,6 +1511,7 @@ A.큰 결정(이직·이사·결혼·이별·큰 투자) / B.감정 충동(연�
 - 판정 절차(순서 강제): ①각 지표를 질문에 비추어 서로 독립적으로 GO/STOP/중립 판정한다 — 이때 다른 지표의 판정이나 예상 결론을 참조하지 않는다 ②가중 합산으로 direction을 산출한다 ③verdict·subline은 합산 결과를 따른다. 결론을 먼저 정해두고 근거를 끼워 맞추는 것 금지 — 지표끼리 결론이 갈리면 갈린 그대로 보여준다.
 - reasons에는 판결에 참여한 모든 지표를 각 1줄씩 빠짐없이 포함한다 — 사주·달·별자리·MBTI·수비학·마야와, 제공된 경우 삼재·가치·주역·토정비결까지 전부. 달 축은 위상·달 별자리·나크샤트라를 묶어 한 줄로, 사주 축은 납음·대운(제공 시 현재 인생 시기의 기운)을 함께 인용할 수 있다(대운은 별도 축을 신설하지 말고 사주 근거 안에 녹인다). 각 축이 왜 GO/STOP/중립인지 그 지표의 실제 값을 짚어서 말한다.
 - 주역 괘가 제공된 경우: reasons에 '주역' 축을 반드시 포함한다. 단 verdict·subline에는 **괘 이름·효 번호를 절대 쓰지 말고**(둔괘·태괘·수뢰둔·초효 등 금지) 그 괘가 말하는 바만 일상어로 녹인다 — 괘 이름을 짚는 건 reasons(상세)에서만. (X)"둔괘가 말하는 시작의 진통이 있어" (O)"시작에 진통이 따르는 때야".
+- 마야(촐킨) 축은 매 판결 reasons에 반드시 포함한다 — 자주 누락되던 축이니 절대 빼지 말 것. 그 사람의 촐킨 톤(1~13)·날개(20신성)의 실제 값을 짚어 GO/STOP/중립을 말한다(예: "이믹스 날개에 4의 톤 — 터를 다지는 힘이 실린 날이야", "카반 날개의 흔들림이 지금은 발을 붙잡아"). 마야 특유의 신화적·이색적 어감을 살려 한 줄에 재미를 준다.
 - 가치여정이 제공된 경우 최소 1축을 reasons에 포함한다.
 - total은 이번 판결에 참여한 지표 수와 일치시키고, against는 그중 반대표 수다.
 - 토정비결 괘상수가 제공되면 당년 전체 흐름의 참고 지표(타이밍 층)로 쓴다. 단, 해당 괘의 원문 풀이를 확실히 알지 못하면 원문 문장을 지어내 인용하지 말고 흐름 참고로만 쓴다.
@@ -1819,7 +1820,7 @@ export default function App() {
   const fetchDetail = async (system, priorConvo, userText, r1) => {
     setDetailBusy(true);
     try {
-      const explainMsg = { role: "user", content: `${userText}\n\n[이미 확정된 판결] direction=${r1.direction} / verdict="${r1.verdict}" / 총 ${r1.total} 중 반대 ${r1.against}. 이 판결을 절대 뒤집지 말고, 이 결론의 근거만 아래 JSON으로만 응답: {"subline":"수호신의 한 줄","reasons":[{"axis":"사주|달|별자리|MBTI|수비학|주역|가치|삼재|토정비결|마야","vote":"GO|STOP|중립","text":"회상체 근거 1줄(60자 이내)"}],"funLine":"정령(달 별자리) 한마디","disclaimer":"투자·의료·법률일 때만, 없으면 빈 문자열"}. reasons엔 판결에 참여한 지표 전부.` };
+      const explainMsg = { role: "user", content: `${userText}\n\n[이미 확정된 판결] direction=${r1.direction} / verdict="${r1.verdict}" / 총 ${r1.total} 중 반대 ${r1.against}. 이 판결을 절대 뒤집지 말고, 이 결론의 근거만 아래 JSON으로만 응답: {"subline":"수호신의 한 줄","reasons":[{"axis":"사주|달|별자리|MBTI|수비학|주역|가치|삼재|토정비결|마야","vote":"GO|STOP|중립","text":"회상체 근거 1줄(60자 이내)"}],"funLine":"정령(달 별자리) 한마디","disclaimer":"투자·의료·법률일 때만, 없으면 빈 문자열"}. reasons엔 판결에 참여한 지표 전부 — 특히 '마야'(촐킨 톤·날개) 축은 매번 반드시 포함(자주 누락됨).` };
       const { json: r2 } = await callClaude(system, [...priorConvo, explainMsg], 1500);
       setDetail(r2);
     } catch (_) { setDetail({ _err: true }); }
