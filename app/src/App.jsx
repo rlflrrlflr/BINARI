@@ -1026,28 +1026,30 @@ void main(){
   float stg=a_r1.z*0.68; float g=clamp((ta-stg)/0.28,0.0,1.0); g=g*g*(3.0-2.0*g);
   if(g>0.001){
     float bang=a_r1.w*6.2832;
-    float bR=0.007+0.035*u_bloom;                               // v75 방사 원 1/2로(초기 개화가 너무 컸음)
-    float rr=0.3+0.7*a_r0.z;
+    float rr=a_r0.z*a_r0.z;                                     // v76 중심 밀집 → 빈 도넛 대신 밝은 코어
+    float bR=0.008;                                            // v77 고정 소형 코어 — 응축 후 커지는 개화(방사) 제거
     vec2 burst=u_touch+vec2(cos(bang),sin(bang))*(rr*bR);
     target=mix(target,burst,g);
   }
   float spd=min(length(u_touchVel),0.06);
-  float k=mix(14.0,10.0,g)-spd*120.0; k=max(k,2.0);           // 대기 강성↑(크리스프), 드래그 시 느슨(잔상)
-  float damp=mix(9.0,5.5,g)-spd*55.0; damp=max(damp,2.5);
+  float k=mix(14.0,12.0,g)-spd*120.0; k=max(k,2.0);           // 대기 강성↑(크리스프), 드래그 시 느슨(잔상)
+  float damp=mix(9.0,10.0,g)-spd*70.0; damp=max(damp,2.5);    // v76 개화 시 과댐핑 → 코어에 가라앉음(공전링 방지), 드래그 땐 낮아져 잔상
   vec2 acc=(target-pos)*k - vel*damp;
   if(g>0.15){
     vec2 d=pos-u_touch; float dl=length(d)+1e-4; vec2 dn=d/dl; vec2 cw=vec2(dn.y,-dn.x); // 시계방향 접선
-    acc += cw*g*2.2*exp(-dl*dl*90.0)*u_bloom;                  // 중앙 방사/개화는 다 모인 뒤(bloom)에만
+    // v77 응축 먼저 → u_bloom으로 '서서히' 순수 시계방향 회전 스파크(방사 성분 없음)
+    float coreSpk=step(0.90,fract(a_r0.w*31.7+floor(u_t*20.0)*0.5+a_r1.x*3.0));
+    float shell=smoothstep(0.012,0.05,dl);                    // 코어(안쪽) 완전 제외 → 꽉 찬 밝은 코어
+    acc += cw*coreSpk*g*u_bloom*exp(-dl*dl*150.0)*shell*24.0; // 순수 시계방향(바깥0) · bloom으로 응축 후 서서히 시작
     for(int i=0;i<16;i++){                                     // v75 궤적(족적) 따라 스파클라 불꽃
       vec4 tr=u_trail[i];
-      float fresh=tr.w*exp(-tr.z*1.9)*step(0.02,tr.w);         // 오래된(먼) 족적일수록 그라데이션으로 사그라듦
+      float fresh=tr.w*exp(-tr.z*2.2)*step(0.02,tr.w);         // 오래된(먼) 족적일수록 그라데이션 소멸
       vec2 tv=pos-tr.xy; float tr2=dot(tv,tv); float trl=sqrt(tr2)+1e-4; vec2 tvn=tv/trl;
-      float nearT=exp(-tr2*90.0);                              // 족적 반경 더 좁게(촘촘한 궤적에 맞춤)
-      acc += -tv*nearT*fresh*7.0;                              // 족적으로 모임(궤적 연결성) — 항상
-      float spark=step(0.80,fract(a_r0.w*23.1+floor(u_t*22.0)*0.41+float(i)*0.17+a_r1.x*2.0)); // 반짝임 게이트
-      vec2 perp=vec2(-tvn.y,tvn.x);                            // 접선(측면 산포용)
-      vec2 sd=tvn+perp*(a_r1.x-0.5)*1.5;                       // 바깥 + 랜덤 측면 산포(불꽃놀이)
-      acc += sd*nearT*fresh*spark*46.0;                        // v75 스파클라 발사 — 드래그 중 족적에서 바깥으로(bloom 무관)
+      float nearT=exp(-tr2*130.0);
+      acc += -tv*nearT*fresh*13.0;                             // v76 족적으로 강하게 모임(궤적이 보이게)
+      float spark=step(0.84,fract(a_r0.w*23.1+floor(u_t*20.0)*0.41+float(i)*0.17+a_r1.x*2.0));
+      vec2 perp=vec2(-tvn.y,tvn.x);
+      acc += (tvn+perp*(a_r1.x-0.5)*1.2)*nearT*fresh*spark*42.0; // 스파클라 발사 — 족적에서 바깥으로
     }
   }
   vel+=acc*u_dt;
@@ -1074,8 +1076,8 @@ void main(){
   float rr=length(pos-u_touch);
   float er=clamp(rr/0.18,0.0,1.0);
   float emitB=mix(1.0,0.6+1.0*(1.0-er)*(1.0-er),g);                  // B: 작은 코어 밝고 스파크로 갈수록 감쇠
-  float asm=clamp(u_k,0.0,1.0);
-  v_a=va0*(0.25+0.75*asm)*u_lum*depth*twk*clamp(sc*0.66,0.34,1.34)*life*core*mix(0.42,1.7,star)*(0.90+0.10*u_breath)*emitB;
+  float kA=clamp(u_k,0.0,1.0);                                       // v75 'asm'은 GLSL 예약어 → 엄격 드라이버서 sim 폴백, 개명
+  v_a=va0*(0.25+0.75*kA)*u_lum*depth*twk*clamp(sc*0.66,0.34,1.34)*life*core*mix(0.42,1.7,star)*(0.90+0.10*u_breath)*emitB;
   v_pick=a_r1.z;
 }`;
 const RND_FRAG = `precision mediump float;
@@ -1204,7 +1206,7 @@ function GuardianCanvasSim({ saju, zo, mbti, num, moon, birth, agitateRef, react
         for (let i = 0; i < 16; i++) trailArr[i * 4 + 2] += dt;               // 족적 나이 증가
         const _li = ((trailHead + 15) % 16) * 4;
         const _moved = Math.hypot(touch.x - trailArr[_li], touch.y - trailArr[_li + 1]);
-        if (touch.pressed && (now - lastDrop > 8 || _moved > 0.022)) {        // v75 궤적 2배 촘촘(간격 반으로)
+        if (touch.pressed && _moved > 0.018) {                                // v76 거리기반만 — 정지 시 드롭 안 함(방사링 방지), 이동 시 촘촘
           trailArr[trailHead * 4] = touch.x; trailArr[trailHead * 4 + 1] = touch.y; trailArr[trailHead * 4 + 2] = 0; trailArr[trailHead * 4 + 3] = 1;
           trailHead = (trailHead + 1) % 16; lastDrop = now;
         }
