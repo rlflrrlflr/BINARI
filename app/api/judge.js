@@ -1,16 +1,71 @@
 /* 비나리 판결 프록시 — API 키는 이 함수(서버) 안에서만 산다.
    Vercel 환경변수: ANTHROPIC_API_KEY(필수) · BINARI_MODEL(선택, 기본 claude-sonnet-5) · ALLOWED_ORIGIN(선택, 미설정 시 기본 허용 목록)
    방어(v54): Origin 필수+허용목록 · 본문 크기 상한 · max_tokens 클램프 · SYS 프리픽스 대조(임의 프롬프트 주입 차단).
-   한계: Origin은 브라우저 밖(curl)에선 위조 가능 — 최종 방어선은 Anthropic 콘솔의 월 지출 한도다. */
+   방어(v76): CORS 응답 헤더+프리플라이트 · IP 레이트리밋 · 상류 에러 원문 미노출.
+
+   ⚠️ 레이트리밋의 한계 — 프로세스 메모리 기반이라 "인스턴스당" 카운트다.
+      Vercel이 동시에 여러 인스턴스를 띄우면 그 수만큼 한도가 곱해지고, 콜드스타트마다 초기화된다.
+      우발적 폭주·단순 스크립트는 막지만 분산된 고의 공격은 못 막는다.
+      실질 방어가 필요해지면 Upstash/Vercel KV 같은 공유 저장소로 옮길 것.
+      그 전까지의 최종 방어선은 여전히 Anthropic 콘솔의 월 지출 한도다. */
 const SYS_PREFIX = "당신은 유저의 '수호신' 비나리다";
 const DEFAULT_ORIGINS = ["https://binari-sepia.vercel.app", "http://localhost:5173", "http://localhost:4173"];
 
-export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).json({ error: { message: "POST만 받아" } });
+// ── 레이트리밋: IP당 고정 윈도(기본 1분 30회 = 질문 15개분, 판결 1건당 2콜) ──
+//    한국 이동통신은 CGNAT로 다수 사용자가 IP를 공유하므로 너무 조이면 정상 유저가 막힌다.
+//    RL_MAX 환경변수로 배포 후 튜닝 가능.
+const RL_WINDOW_MS = 60_000;
+const RL_MAX = Math.max(1, parseInt(process.env.RL_MAX, 10) || 30);
+const RL_MAX_KEYS = 5000;              // 메모리 상한 — 만료분 정리 후에도 넘치면 오래된 것부터 버림
+const _hits = new Map();               // ip -> { n, resetAt }
 
+function rateLimit(ip) {
+  const now = Date.now();
+  if (_hits.size > RL_MAX_KEYS) {
+    for (const [k, v] of _hits) if (v.resetAt <= now) _hits.delete(k);
+    while (_hits.size > RL_MAX_KEYS) _hits.delete(_hits.keys().next().value);
+  }
+  const cur = _hits.get(ip);
+  if (!cur || cur.resetAt <= now) {
+    _hits.set(ip, { n: 1, resetAt: now + RL_WINDOW_MS });
+    return { ok: true, remaining: RL_MAX - 1, retryAfter: 0 };
+  }
+  cur.n += 1;
+  if (cur.n > RL_MAX) return { ok: false, remaining: 0, retryAfter: Math.ceil((cur.resetAt - now) / 1000) };
+  return { ok: true, remaining: RL_MAX - cur.n, retryAfter: 0 };
+}
+
+const clientIp = (req) =>
+  String(req.headers["x-forwarded-for"] || "").split(",")[0].trim() ||
+  req.headers["x-real-ip"] ||
+  req.socket?.remoteAddress ||
+  "unknown";
+
+export default async function handler(req, res) {
   const allowed = process.env.ALLOWED_ORIGIN ? [process.env.ALLOWED_ORIGIN] : DEFAULT_ORIGINS;
   const origin = req.headers.origin || "";
-  if (!origin || !allowed.includes(origin)) return res.status(403).json({ error: { message: "허용되지 않은 출처" } });
+  const originOk = !!origin && allowed.includes(origin);
+
+  // 허용 목록을 통과한 출처에만 CORS를 되돌려준다(임의 반사 금지).
+  if (originOk) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "content-type");
+    res.setHeader("Access-Control-Max-Age", "86400");
+  }
+
+  if (req.method === "OPTIONS") return res.status(originOk ? 204 : 403).end();
+  if (req.method !== "POST") return res.status(405).json({ error: { message: "POST만 받아" } });
+  if (!originOk) return res.status(403).json({ error: { message: "허용되지 않은 출처" } });
+
+  const rl = rateLimit(clientIp(req));
+  res.setHeader("X-RateLimit-Limit", String(RL_MAX));
+  res.setHeader("X-RateLimit-Remaining", String(rl.remaining));
+  if (!rl.ok) {
+    res.setHeader("Retry-After", String(rl.retryAfter));
+    return res.status(429).json({ error: { message: "잠깐만 — 너무 빨리 물었어. 조금 뒤에 다시 청해줘." } });
+  }
 
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) return res.status(500).json({ error: { message: "서버에 ANTHROPIC_API_KEY가 없어 — Vercel 환경변수를 확인해" } });
@@ -30,6 +85,16 @@ export default async function handler(req, res) {
       body: JSON.stringify({ model: process.env.BINARI_MODEL || "claude-sonnet-5", max_tokens: mt, system, messages, thinking: { type: "disabled" } }),
     });
     const data = await r.json();
+
+    // 상류 실패는 원문을 그대로 흘리지 않는다(내부 모델·조직 정보 노출 방지). 상세는 서버 로그에만.
+    if (!r.ok) {
+      console.error(JSON.stringify({ at: new Date().toISOString(), upstream: r.status, err: data?.error?.type || null }));
+      const msg = r.status === 429 ? "수호신이 지금 너무 바빠 — 잠시 뒤에 다시 물어봐"
+        : r.status >= 500 ? "하늘길이 잠시 막혔어 — 잠시 뒤에 다시 물어봐"
+        : "판결을 불러오지 못했어";
+      return res.status(r.status).json({ error: { message: msg } });
+    }
+
     // 북극성 계측: 카테고리(A/B/C)·방향·토큰 사용량만 로그 — 질문 원문은 남기지 않는다
     try {
       const txt = (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
@@ -37,8 +102,9 @@ export default async function handler(req, res) {
       const dir = (txt.match(/"direction"\s*:\s*"(GO|STOP|HOLD)"/) || [])[1] || null;
       console.log(JSON.stringify({ at: new Date().toISOString(), call: mt <= 400 ? 1 : 2, cat, dir, usage: data.usage || null }));
     } catch {}
-    return res.status(r.status).json(data);
+    return res.status(200).json(data);
   } catch (e) {
-    return res.status(502).json({ error: { message: "상류 호출 실패: " + (e?.message || "unknown") } });
+    console.error("upstream_fetch_failed:", e?.message || e);   // 상세는 서버 로그에만
+    return res.status(502).json({ error: { message: "상류 호출 실패" } });
   }
 }
