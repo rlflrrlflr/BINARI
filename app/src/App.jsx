@@ -1027,22 +1027,30 @@ void main(){
   /* v81 '귀의의 물레' — 응시(기울음) → 알알이 응축 → 꽉 찬 숨쉬는 코어 + 영원한 실 유입(전부 타깃 기반) */
   target+=(u_touch-target)*0.07*ta;                             // 감응: 터치 0프레임에 세계 전체가 나를 향해 살짝 기운다
   float spd=min(length(u_touchVel),0.06);
+  // v83 드래그 강도(0~1) — 손끝 추종에 필요한 강성·물레 접힘·지연보정을 한꺼번에 지배한다
+  float dragF=smoothstep(0.0015,0.020,spd);
+  float k=(mix(14.0,15.0,g))*(1.0+13.0*dragF);                // 드래그 중 대폭 단단하게 → 지연 V·damp/k 를 실제로 없앤다
+  float damp=(mix(9.0,6.8,g))*(1.0+3.4*dragF);
+  // 지연 보정(피드포워드)을 '실제 k·damp'로 계산 — 프레임레이트·강성이 바뀌어도 항상 손끝에 얹힌다
+  vec2 leadV=(u_touchVel/max(u_dt*2.0,1e-4))*(damp/k);
+  float lm=length(leadV); if(lm>0.22) leadV*=0.22/lm;
   if(g>0.001){
     float bang=a_r1.w*6.2832;
     float rr=a_r0.z*a_r0.z;                                     // z² 밀도 — 중심 밝고 바깥으로 흩뿌려지는 그라데이션
     float breath=sin(u_t*0.75-cos(u_t*0.75));                   // 비대칭 느린 숨(~8.4s) — 천천히 차오르고 빠르게 가라앉음
     float coreR=0.048*(1.0+0.12*max(breath,0.0)*u_bloom);       // v82 손가락에 안 가리는 크기의 입자구름 코어
-    vec2 core=u_touch+vec2(cos(bang),sin(bang))*(rr*coreR);
+    // v83 스프링 지연 상쇄(피드포워드): 타깃을 손가락 속도만큼 앞으로 보내야 뭉치가 '손끝 위'에 얹혀 따라온다.
+    // 이게 없으면 정상상태 지연 = V·damp/k 만큼 코어가 뒤처져 손끝이 텅 빈다(블랙홀의 진짜 원인).
+    vec2 tc=u_touch+leadV;
+    vec2 core=tc+vec2(cos(bang),sin(bang))*(rr*coreR);
     float thr=step(0.78,fract(a_r0.w*13.7+a_r1.x*5.3));         // 22% '실' 입자 — 가장자리에서 태어나 코어로 귀의
     float s=fract(a_r0.x+a_r1.z*0.618+u_t*(0.07+0.11*a_r0.z));  // 낙하 위상 행진(입자별 5.5~12.5s) — 영원히 멈추지 않음
     float rIn=max((1.0-s)*(1.0-s)*mix(0.10,0.21,a_r0.y),0.004); // 밖→안 r² 낙하(중심 과밀)
-    rIn*=1.0-0.72*smoothstep(0.004,0.028,spd);                  // v82 이동 중엔 물레가 접혀 머리에 붙는다(빈 링/블랙홀 방지)
+    rIn*=1.0-0.94*dragF;                                        // v83 움직이면 물레가 확실히 접혀 머리에 붙는다(링/블랙홀 방지)
     float ang=bang+(1.0-s)*7.5-u_t*0.45;                        // 시계방향으로 감겨들며 낙하 + 전체 시계 회전
-    vec2 wheel=u_touch+vec2(cos(ang),sin(ang))*rIn;
+    vec2 wheel=tc+vec2(cos(ang),sin(ang))*rIn;
     target=mix(target,mix(core,wheel,thr*u_bloom),g);           // 응축이 끝난 뒤에야 물레가 열린다
   }
-  float k=mix(14.0,15.0,g)-spd*95.0; k=max(k,2.5);           // v79 응답 빠르게(강성↑) + 드래그 잔상(궤적 살림)
-  float damp=mix(9.0,6.8,g)-spd*48.0; damp=max(damp,2.8);     // v79 댐핑 낮춰 빠른 정착 → 중심 즉시 채움(눌린 느낌)·드래그 잔상
   vec2 acc=(target-pos)*k - vel*damp;
   if(g>0.15){
     // v81 회전·유입은 전부 타깃 필드가 담당(힘 회전 제거) — 여기는 드래그 족적만
@@ -1052,9 +1060,12 @@ void main(){
       vec2 tv=pos-tr.xy; float tr2=dot(tv,tv); float trl=sqrt(tr2)+1e-4; vec2 tvn=tv/trl;
       float nearT=exp(-tr2*130.0);
       acc += -tv*nearT*fresh*12.0;                             // v79 족적 인력 복원(궤적이 보이게)
+      // v83 핵심: 스파크의 바깥 성분이 '손가락 밑 최신 족적'에서 터지면 중심을 비워 블랙홀이 된다.
+      //          → 뒤에 남은 오래된 족적에서만 튀게 하고(aged), 손끝 자리는 인력만 남겨 꽉 채운다.
+      float aged=smoothstep(0.05,0.20,tr.z);
       float spark=step(0.84,fract(a_r0.w*23.1+floor(u_t*20.0)*0.41+float(i)*0.17+a_r1.x*2.0));
       vec2 perp=vec2(-tvn.y,tvn.x);
-      acc += (tvn+perp*(a_r1.x-0.5)*1.2)*nearT*fresh*spark*40.0; // v79 스파클라 발사 복원(궤적에서 불꽃 튐)
+      acc += (tvn*0.55+perp*(a_r1.x-0.5)*1.6)*nearT*fresh*spark*aged*40.0; // 궤적에서 파파팍(측면 산포 위주)
     }
   }
   vel+=acc*u_dt;
@@ -1271,7 +1282,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v82";
+const APP_VER = "v83";
 function VerBadge() {
   const [r, setR] = useState("");
   useEffect(() => { const t = setInterval(() => { const m = typeof window !== "undefined" && window.__BINARI_R; if (m && m !== r) setR(m); }, 1200); return () => clearInterval(t); }, [r]);
