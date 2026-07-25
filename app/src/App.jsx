@@ -1026,20 +1026,21 @@ void main(){
   float stg=a_r1.z*0.45; float g=clamp((ta-stg)/0.28,0.0,1.0); g=g*g*(3.0-2.0*g);
   /* v81 '귀의의 물레' — 응시(기울음) → 알알이 응축 → 꽉 찬 숨쉬는 코어 + 영원한 실 유입(전부 타깃 기반) */
   target+=(u_touch-target)*0.07*ta;                             // 감응: 터치 0프레임에 세계 전체가 나를 향해 살짝 기운다
+  float spd=min(length(u_touchVel),0.06);
   if(g>0.001){
     float bang=a_r1.w*6.2832;
-    float rr=a_r0.z*a_r0.z;                                     // 중심 밀집 → 꽉 찬 코어(도넛 원천 차단)
+    float rr=a_r0.z*a_r0.z;                                     // z² 밀도 — 중심 밝고 바깥으로 흩뿌려지는 그라데이션
     float breath=sin(u_t*0.75-cos(u_t*0.75));                   // 비대칭 느린 숨(~8.4s) — 천천히 차오르고 빠르게 가라앉음
-    float coreR=0.009*(1.0+0.10*max(breath,0.0)*u_bloom);
+    float coreR=0.048*(1.0+0.12*max(breath,0.0)*u_bloom);       // v82 손가락에 안 가리는 크기의 입자구름 코어
     vec2 core=u_touch+vec2(cos(bang),sin(bang))*(rr*coreR);
     float thr=step(0.78,fract(a_r0.w*13.7+a_r1.x*5.3));         // 22% '실' 입자 — 가장자리에서 태어나 코어로 귀의
     float s=fract(a_r0.x+a_r1.z*0.618+u_t*(0.07+0.11*a_r0.z));  // 낙하 위상 행진(입자별 5.5~12.5s) — 영원히 멈추지 않음
-    float rIn=max((1.0-s)*(1.0-s)*mix(0.09,0.20,a_r0.y),0.004); // 밖→안 r² 낙하(중심 과밀) — 물레가 읽히는 크기로
+    float rIn=max((1.0-s)*(1.0-s)*mix(0.10,0.21,a_r0.y),0.004); // 밖→안 r² 낙하(중심 과밀)
+    rIn*=1.0-0.72*smoothstep(0.004,0.028,spd);                  // v82 이동 중엔 물레가 접혀 머리에 붙는다(빈 링/블랙홀 방지)
     float ang=bang+(1.0-s)*7.5-u_t*0.45;                        // 시계방향으로 감겨들며 낙하 + 전체 시계 회전
     vec2 wheel=u_touch+vec2(cos(ang),sin(ang))*rIn;
     target=mix(target,mix(core,wheel,thr*u_bloom),g);           // 응축이 끝난 뒤에야 물레가 열린다
   }
-  float spd=min(length(u_touchVel),0.06);
   float k=mix(14.0,15.0,g)-spd*95.0; k=max(k,2.5);           // v79 응답 빠르게(강성↑) + 드래그 잔상(궤적 살림)
   float damp=mix(9.0,6.8,g)-spd*48.0; damp=max(damp,2.8);     // v79 댐핑 낮춰 빠른 정착 → 중심 즉시 채움(눌린 느낌)·드래그 잔상
   vec2 acc=(target-pos)*k - vel*damp;
@@ -1270,7 +1271,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v81";
+const APP_VER = "v82";
 function VerBadge() {
   const [r, setR] = useState("");
   useEffect(() => { const t = setInterval(() => { const m = typeof window !== "undefined" && window.__BINARI_R; if (m && m !== r) setR(m); }, 1200); return () => clearInterval(t); }, [r]);
