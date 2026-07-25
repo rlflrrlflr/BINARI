@@ -1637,6 +1637,24 @@ async function callClaude(system, messages, maxTokens) {
    '누군가의 수호신이 내린 판결'을 먼저 보게 한다(바이럴 루프 복원). UTF-8 안전 base64url */
 const _b64e = (s) => btoa(String.fromCharCode.apply(null, new TextEncoder().encode(s))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 const _b64d = (s) => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0)));
+/* 계측용 인구통계 — 만나이(생일 경과 반영)와 10년 버킷.
+   생년월일 원값은 보내지 않는다: 분석에 쓰이는 형태는 나이이고, 원값은 식별성만 키운다. */
+function exactAge(y, m, d) {
+  const yy = +y, mm = +m, dd = +d;
+  if (!yy || !mm || !dd) return null;
+  const n = new Date();
+  let a = n.getFullYear() - yy;
+  const mo = n.getMonth() + 1;
+  if (mo < mm || (mo === mm && n.getDate() < dd)) a -= 1;   // 올해 생일 안 지났으면 -1
+  return a >= 0 && a < 130 ? a : null;
+}
+const ageBand = (a) => (a == null ? null : a < 20 ? "10대 이하" : a >= 70 ? "70대 이상" : `${Math.floor(a / 10) * 10}대`);
+/* 판결 품질을 세그먼트별로 보기 위한 공통 속성 — 질문 원문·이름·생일 원값은 제외 */
+function demoProps(birth, extra) {
+  const a = exactAge(birth.y, birth.m, birth.d);
+  return { sex: birth.sex || null, age: a, age_band: ageBand(a), job: birth.job || null, rel: birth.rel || null, city: birth.city || null, ...(extra || {}) };
+}
+
 const encodeShare = (o) => { try { return _b64e(JSON.stringify(o)); } catch (_) { return ""; } };
 const decodeShare = (s) => { try { const o = JSON.parse(_b64d(s)); return o && o.v && o.d ? o : null; } catch (_) { return null; } };
 
@@ -1735,8 +1753,7 @@ export default function App() {
   };
 
   const doReveal = () => {
-    const ageNow = birth.y ? new Date().getFullYear() - (+birth.y) + 1 : null; // 세는나이 근사
-    track("birth_submitted", { noHour: !!birth.noHour, cal: birth.cal, hasName: !!birth.name, sex: birth.sex || null, age: ageNow, job: birth.job || null, rel: birth.rel || null });
+    track("birth_submitted", demoProps(birth, { noHour: !!birth.noHour, cal: birth.cal, hasName: !!birth.name }));
     const y = +birth.y, m = +birth.m, d = +birth.d, h = birth.noHour ? 12 : +birth.h, mi = birth.noHour || birth.min === "" ? 0 : +birth.min;
     if (!y || !m || !d || y < 1900 || y > new Date().getFullYear() || m < 1 || m > 12 || d < 1 || d > 31) { setErr("생년월일을 확인해줘. 너를 또렷하게 보려면 정확해야 해."); return; }
     if (!birth.noHour && (birth.h === "" || h < 0 || h > 23)) { setErr("태어난 시(0~23시)를 알려주거나 '모름'을 선택해줘."); return; }
@@ -1827,12 +1844,12 @@ export default function App() {
   const rateVerdict = (score) => {                          // v75: 판결 평가 — 정확도 피드백 수집(계측 + 기록에 부착)
     if (rated) return;
     setRated(score);
-    track("verdict_rated", { score, dir: res?.direction, mode: hexInfo ? "ritual" : "quick", cat: res?.category || null, tone: res?.tone || null, sex: birth.sex || null, age: birth.y ? new Date().getFullYear() - (+birth.y) + 1 : null, job: birth.job || null });
+    track("verdict_rated", demoProps(birth, { score, dir: res?.direction, mode: hexInfo ? "ritual" : "quick", cat: res?.category || null, tone: res?.tone || null, mbti: mbti || null, element: saju?.main || null }));
     setRecords(prev => { if (!prev.length) return prev; const nx = prev.slice(); nx[nx.length - 1] = { ...nx[nx.length - 1], rating: score }; return nx; });
   };
   const judge = async (hi, quick = false) => {
     if (!q.trim() || busy) return;
-    track("question_asked", { mode: quick ? "quick" : "ritual", qlen: q.trim().length, ritual: !!hi, lean: lean || "skip", sex: birth.sex || null, age: birth.y ? new Date().getFullYear() - (+birth.y) + 1 : null, job: birth.job || null, rel: birth.rel || null, hesit: hesit || null });
+    track("question_asked", demoProps(birth, { mode: quick ? "quick" : "ritual", qlen: q.trim().length, ritual: !!hi, lean: lean || "skip", hesit: hesit || null, mbti: mbti || null, core_value: core || null, element: saju?.main || null, zodiac: zo?.name || null }));
     setBusy(true); setErr(""); setRes(null); setDetail(null); setWhy(false); setFlip(false); setCardOn(false); setRated(0); reactRef.current = null; setIntroSeen(true);
     try {
       const mp = moonPlacements(+birth.y, +birth.m, +birth.d, +birth.h || 12, +birth.min || 0, !!birth.noHour); // v22
@@ -1861,7 +1878,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
       const { json: r1 } = await callClaude(system, [...priorConvo, concludeMsg], 320);
       // L1 등장 연출(짧게)
       agitateRef.current = true; setRes(r1);
-      track("verdict_shown", { dir: r1.direction, cat: r1.category, tone: r1.tone, against: r1.against, total: r1.total, mode: quick ? "quick" : "ritual", lean: lean || "skip", verdict: r1.verdict || null });
+      track("verdict_shown", demoProps(birth, { dir: r1.direction, cat: r1.category, tone: r1.tone, against: r1.against, total: r1.total, mode: quick ? "quick" : "ritual", lean: lean || "skip", verdict: r1.verdict || null, mbti: mbti || null, element: saju?.main || null }));
       reactRef.current = { dir: r1.direction, t0: performance.now() };   // v28: 수호신이 판결을 연기
       setTimeout(() => { agitateRef.current = false; }, 700);
       setTimeout(() => { setCardOn(true); }, 1400);                       // 몸짓을 보여준 뒤 카드
@@ -1890,7 +1907,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
   const askback = returning && lastRec && lastRec.followUp === null && _lastAct && Date.now() - lastRec.at >= 6 * 3600 * 1000 ? lastRec : null;
   const answerAskback = (fu, note) => {
     const lastRec = records[records.length - 1] || {};
-    track("followup_answered", { result: fu, direction: lastRec.direction || null, cat: lastRec.cat || null, hasNote: !!note });
+    track("followup_answered", demoProps(birth, { result: fu, direction: lastRec.direction || null, cat: lastRec.cat || null, hasNote: !!note }));
     setRecords(prev => prev.map((r, i) => (i === prev.length - 1 ? { ...r, followUp: fu, note: note || "" } : r)));
     setNoting(false); setAskNote("");
   };
