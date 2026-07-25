@@ -1263,9 +1263,18 @@ function GuardianCanvasSim({ saju, zo, mbti, num, moon, birth, agitateRef, react
 /* WebGL 우선: 상태보존 시뮬(v68) → stateless(v67) → Canvas2D. 각 단계 실패 시 자동 강등 */
 function Guardian(props) {
   const [mode, setMode] = useState(() => (glDetect() ? "sim" : "2d"));
+  if (typeof window !== "undefined") window.__BINARI_R = mode;   // 버전 배지용 — 실제 렌더러(sim/gl/2d) 노출
   if (mode === "sim") return <GuardianCanvasSim {...props} onFail={() => setMode("gl")} />;
   if (mode === "gl") return <GuardianCanvasGL {...props} onFail={() => setMode("2d")} />;
   return <GuardianCanvas {...props} />;
+}
+
+/* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
+const APP_VER = "v81";
+function VerBadge() {
+  const [r, setR] = useState("");
+  useEffect(() => { const t = setInterval(() => { const m = typeof window !== "undefined" && window.__BINARI_R; if (m && m !== r) setR(m); }, 1200); return () => clearInterval(t); }, [r]);
+  return <div className="verbadge">{APP_VER}{r ? ` · ${r}` : ""}</div>;
 }
 
 /* ───── 오프닝용 점 구름 (지표 없이 은은하게) ───── */
@@ -1968,6 +1977,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
   return (
     <div className="stage">
       <style>{CSS}</style>
+      <VerBadge />
 
       {sharedIn && !sharedGone && (() => {
         const d = sharedIn.d, isGo = d === "GO", isHold = d === "HOLD";
@@ -2431,6 +2441,7 @@ const CSS = `
 .orb{position:relative;width:170px;height:170px;margin:48px 0 36px;filter:drop-shadow(0 0 24px rgba(245,217,139,.2))}
 .line{font-size:17px;line-height:1.8;margin:8px 0;opacity:0;animation:fd 1.6s cubic-bezier(.22,.7,.25,1) forwards}.d1{animation-delay:1.4s}.d2{animation-delay:3s}
 .brand-mark{margin-top:56px;font-size:11px;letter-spacing:.4em;color:#8a7f95;font-family:sans-serif}
+.verbadge{position:fixed;right:9px;bottom:7px;z-index:70;font-family:sans-serif;font-size:9px;letter-spacing:.08em;color:#575070;pointer-events:none;user-select:none}
 .title{font-size:20px;font-weight:600;color:#f0e2b8;margin:6px 0 4px}
 .sub2{font-size:14px;color:#9d8fb5;line-height:1.7;margin:6px 0 18px}
 .form{display:flex;flex-direction:column;gap:12px;width:100%;margin-bottom:14px}
