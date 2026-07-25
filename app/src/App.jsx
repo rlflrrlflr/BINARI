@@ -3,8 +3,18 @@ import { useState, useRef, useEffect } from "react";
 /* ───── 계측(PostHog) — 휴면-준비: VITE_POSTHOG_KEY 없으면 완전 무동작 ───── */
 const AKEY = import.meta.env.VITE_POSTHOG_KEY;
 let _ph = null, _phInit = false;
+/* 분석 동의(선택 항목) — 명시 동의 전에는 어떤 이벤트도 전송하지 않는다.
+   서비스 제공에 필수가 아니므로 거부해도 판결·기능은 전부 정상 동작한다. */
+const CONSENT_KEY = "binari.analytics_consent.v1";
+let _consent = false;
+function readConsent() { try { return window.localStorage.getItem(CONSENT_KEY) === "1"; } catch (_) { return false; } }
+function setAnalyticsConsent(on) {
+  _consent = !!on;
+  try { window.localStorage.setItem(CONSENT_KEY, on ? "1" : "0"); } catch (_) {}
+  if (on) _initAnalytics(); else if (_ph) { try { _ph.opt_out_capturing(); } catch (_) {} }
+}
 async function _initAnalytics() {
-  if (_phInit || !AKEY || typeof window === "undefined") return; _phInit = true;
+  if (_phInit || !AKEY || !_consent || typeof window === "undefined") return; _phInit = true;
   try {
     const { default: posthog } = await import("posthog-js");
     posthog.init(AKEY, { api_host: import.meta.env.VITE_POSTHOG_HOST || "https://us.i.posthog.com", capture_pageview: false, autocapture: false, persistence: "localStorage" });
@@ -14,7 +24,7 @@ async function _initAnalytics() {
 // 질문 원문·실명은 절대 보내지 않는다(속성 화이트리스트만).
 function track(ev, props) {
   try {
-    if (_ph) _ph.capture(ev, props || {});
+    if (_ph && _consent) _ph.capture(ev, props || {});
     if (typeof window !== "undefined" && window.__binariTrackDebug) (window.__binariEvents = window.__binariEvents || []).push({ ev, props: props || {} });
   } catch (_) {}
 }
@@ -1619,7 +1629,8 @@ export default function App() {
   const [bstep, setBstep] = useState(0);                      // v26: 동화 도입부 장면 인덱스
   const [addOpen, setAddOpen] = useState(false); const [addName, setAddName] = useState(""); const [addSex, setAddSex] = useState(""); // v26: 조각 보태기
   const [qhintI, setQhintI] = useState(0);   // v71 질문 힌트 롤링 인덱스
-  useEffect(() => { _initAnalytics(); let ref = "direct"; try { const sp = new URLSearchParams(window.location.search); ref = sp.get("ref") || sp.get("utm_source") || "direct"; } catch (_) {} track("app_open", { returning, ref }); }, []); // 계측: 세션 시작 + 유입 어트리뷰션(파라미터만, 원문 없음)
+  const [agree, setAgree] = useState(() => readConsent());     // 분석 동의(선택) — 거부해도 모든 기능 정상 동작
+  useEffect(() => { _consent = readConsent(); if (_consent) _initAnalytics(); let ref = "direct"; try { const sp = new URLSearchParams(window.location.search); ref = sp.get("ref") || sp.get("utm_source") || "direct"; } catch (_) {} track("app_open", { returning, ref }); }, []); // 계측: 세션 시작 + 유입 어트리뷰션(파라미터만, 원문 없음)
   const [saju, setSaju] = useState(mem?.saju || null);
   const [zo, setZo] = useState(mem?.zo || null);
   const [moon, setMoon] = useState(mem?.moon || null);
@@ -1943,6 +1954,11 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                 </div>
               </div>
               {err && <p className="err">{err}</p>}
+              <div className="consent">
+                <label className="chk"><input type="checkbox" checked={agree} onChange={e => { setAgree(e.target.checked); setAnalyticsConsent(e.target.checked); }} /> <span>(선택) 서비스 개선을 위한 이용 분석에 동의해</span></label>
+                <p className="fine">동의하지 않아도 판결은 똑같이 나와. 언제든 바꿀 수 있어.<br />
+                  ‘하늘을 열기’를 누르면 <a className="plink" href="/privacy.html" target="_blank" rel="noreferrer">개인정보처리방침</a>에 동의한 것으로 볼게.</p>
+              </div>
               <button className="btn gold mt" onClick={doReveal}>하늘을 열기</button>
             </div>
           )}
@@ -2298,6 +2314,9 @@ const CSS = `
 .calbtn.sm{font-size:12px;padding:5px 13px}
 .row.wrap{flex-wrap:wrap;max-width:340px;gap:6px}
 .ctxblock{display:flex;flex-direction:column;align-items:center;gap:7px;margin-top:4px}
+.consent{display:flex;flex-direction:column;align-items:center;gap:2px;margin-top:16px}
+.consent .fine{margin-top:6px}
+.plink{color:#c9a24b;text-decoration:underline}
 .ctxlab{color:#8a7f95;letter-spacing:.06em;margin:2px 0}
 .hesitrow{display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:8px}
 .bscene{display:flex;flex-direction:column;gap:14px;align-items:center;width:100%;margin-top:6px}
