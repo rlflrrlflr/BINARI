@@ -6,12 +6,24 @@ let _ph = null, _phInit = false;
 /* 분석 동의(선택 항목) — 명시 동의 전에는 어떤 이벤트도 전송하지 않는다.
    서비스 제공에 필수가 아니므로 거부해도 판결·기능은 전부 정상 동작한다. */
 const CONSENT_KEY = "binari.analytics_consent.v1";
-let _consent = false;
+let _consent = false, _declined = false;                          // 미결정 / 동의 / 명시적 거부 3상태
 function readConsent() { try { return window.localStorage.getItem(CONSENT_KEY) === "1"; } catch (_) { return false; } }
+function readDeclined() { try { return window.localStorage.getItem(CONSENT_KEY) === "0"; } catch (_) { return false; } }
 function setAnalyticsConsent(on) {
-  _consent = !!on;
+  _consent = !!on; _declined = !on;
   try { window.localStorage.setItem(CONSENT_KEY, on ? "1" : "0"); } catch (_) {}
-  if (on) _initAnalytics(); else if (_ph) { try { _ph.opt_out_capturing(); } catch (_) {} }
+  if (on) { _initAnalytics(); _flush(); }                        // 동의 순간, 그 전에 쌓인 것까지 소급 전송
+  else { _q.length = 0; if (_ph) { try { _ph.opt_out_capturing(); } catch (_) {} } }   // 거부 → 큐 폐기
+}
+/* 대기 큐 — posthog는 지연청크라 로드 완료까지 수백 ms가 걸리고, 동의는 온보딩 중간에 떨어진다.
+   그 사이에 발생한 이벤트(app_open·onboard_start 등)를 잃지 않도록 원래 시각과 함께 담아두고,
+   "동의 + 로드 완료"가 모두 충족된 순간에 한 번에 흘려보낸다.
+   미동의 상태로 세션이 끝나면 큐는 전송되지 않고 그대로 버려진다(= 전송 0건). */
+const _q = [];
+const Q_MAX = 50;
+function _flush() {
+  if (!_ph || !_consent) return;
+  while (_q.length) { const e = _q.shift(); try { _ph.capture(e.ev, e.props, { timestamp: e.at }); } catch (_) {} }
 }
 async function _initAnalytics() {
   if (_phInit || !AKEY || !_consent || typeof window === "undefined") return; _phInit = true;
@@ -19,13 +31,16 @@ async function _initAnalytics() {
     const { default: posthog } = await import("posthog-js");
     posthog.init(AKEY, { api_host: import.meta.env.VITE_POSTHOG_HOST || "https://us.i.posthog.com", capture_pageview: false, autocapture: false, persistence: "localStorage" });
     _ph = posthog;
+    _flush();                                  // 로드 전에 쌓인 이벤트를 원래 시각으로 전송
   } catch (_) {}
 }
 // 질문 원문·실명은 절대 보내지 않는다(속성 화이트리스트만).
 function track(ev, props) {
   try {
-    if (_ph && _consent) _ph.capture(ev, props || {});
-    if (typeof window !== "undefined" && window.__binariTrackDebug) (window.__binariEvents = window.__binariEvents || []).push({ ev, props: props || {} });
+    const p = props || {};
+    if (_ph && _consent) _ph.capture(ev, p);
+    else if (!_declined && _q.length < Q_MAX) _q.push({ ev, props: p, at: new Date() });  // 미결정이면 보류, 거부면 버림
+    if (typeof window !== "undefined" && window.__binariTrackDebug) (window.__binariEvents = window.__binariEvents || []).push({ ev, props: p });
   } catch (_) {}
 }
 if (typeof window !== "undefined" && /[?&]trackdebug/.test(window.location.search)) window.__binariTrackDebug = true;
@@ -1671,7 +1686,7 @@ export default function App() {
   const [agree, setAgree] = useState(() => readConsent());     // 분석 동의(선택) — 거부해도 모든 기능 정상 동작
   const [sharedIn] = useState(() => { try { const sp = new URLSearchParams(window.location.search); const raw = sp.get("v"); return raw ? decodeShare(raw) : null; } catch (_) { return null; } }); // v75: 공유 링크로 유입 시 담긴 판결
   const [sharedGone, setSharedGone] = useState(false);  // v75: '나도 물어볼래'로 공유 화면 닫음
-  useEffect(() => { _consent = readConsent(); if (_consent) _initAnalytics(); let ref = "direct"; try { const sp = new URLSearchParams(window.location.search); ref = sp.get("ref") || sp.get("utm_source") || (sp.get("v") ? "share" : "direct"); } catch (_) {} track("app_open", { returning, ref }); if (sharedIn) track("shared_verdict_view", { dir: sharedIn.d }); }, []); // 계측: 세션 시작 + 유입 어트리뷰션(파라미터만, 원문 없음)
+  useEffect(() => { _consent = readConsent(); _declined = readDeclined(); if (_consent) _initAnalytics(); let ref = "direct"; try { const sp = new URLSearchParams(window.location.search); ref = sp.get("ref") || sp.get("utm_source") || (sp.get("v") ? "share" : "direct"); } catch (_) {} track("app_open", { returning, ref }); if (sharedIn) track("shared_verdict_view", { dir: sharedIn.d }); }, []); // 계측: 세션 시작 + 유입 어트리뷰션(파라미터만, 원문 없음)
   const [saju, setSaju] = useState(mem?.saju || null);
   const [zo, setZo] = useState(mem?.zo || null);
   const [moon, setMoon] = useState(mem?.moon || null);
