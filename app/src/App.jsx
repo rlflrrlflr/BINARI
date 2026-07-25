@@ -1023,31 +1023,37 @@ void main(){
   computeShape(a_r0,a_r1,spos,depth,v_a,sc,rl);
   vec2 target=spos;
   float ta=clamp(u_touchAmt,0.0,1.0);
-  float stg=a_r1.z*0.68; float g=clamp((ta-stg)/0.28,0.0,1.0); g=g*g*(3.0-2.0*g);
+  float stg=a_r1.z*0.45; float g=clamp((ta-stg)/0.28,0.0,1.0); g=g*g*(3.0-2.0*g);
+  /* v81 '귀의의 물레' — 응시(기울음) → 알알이 응축 → 꽉 찬 숨쉬는 코어 + 영원한 실 유입(전부 타깃 기반) */
+  target+=(u_touch-target)*0.07*ta;                             // 감응: 터치 0프레임에 세계 전체가 나를 향해 살짝 기운다
   if(g>0.001){
     float bang=a_r1.w*6.2832;
-    float bR=0.007+0.035*u_bloom;                               // v75 방사 원 1/2로(초기 개화가 너무 컸음)
-    float rr=0.3+0.7*a_r0.z;
-    vec2 burst=u_touch+vec2(cos(bang),sin(bang))*(rr*bR);
-    target=mix(target,burst,g);
+    float rr=a_r0.z*a_r0.z;                                     // 중심 밀집 → 꽉 찬 코어(도넛 원천 차단)
+    float breath=sin(u_t*0.75-cos(u_t*0.75));                   // 비대칭 느린 숨(~8.4s) — 천천히 차오르고 빠르게 가라앉음
+    float coreR=0.009*(1.0+0.10*max(breath,0.0)*u_bloom);
+    vec2 core=u_touch+vec2(cos(bang),sin(bang))*(rr*coreR);
+    float thr=step(0.78,fract(a_r0.w*13.7+a_r1.x*5.3));         // 22% '실' 입자 — 가장자리에서 태어나 코어로 귀의
+    float s=fract(a_r0.x+a_r1.z*0.618+u_t*(0.07+0.11*a_r0.z));  // 낙하 위상 행진(입자별 5.5~12.5s) — 영원히 멈추지 않음
+    float rIn=max((1.0-s)*(1.0-s)*mix(0.09,0.20,a_r0.y),0.004); // 밖→안 r² 낙하(중심 과밀) — 물레가 읽히는 크기로
+    float ang=bang+(1.0-s)*7.5-u_t*0.45;                        // 시계방향으로 감겨들며 낙하 + 전체 시계 회전
+    vec2 wheel=u_touch+vec2(cos(ang),sin(ang))*rIn;
+    target=mix(target,mix(core,wheel,thr*u_bloom),g);           // 응축이 끝난 뒤에야 물레가 열린다
   }
   float spd=min(length(u_touchVel),0.06);
-  float k=mix(14.0,10.0,g)-spd*120.0; k=max(k,2.0);           // 대기 강성↑(크리스프), 드래그 시 느슨(잔상)
-  float damp=mix(9.0,5.5,g)-spd*55.0; damp=max(damp,2.5);
+  float k=mix(14.0,15.0,g)-spd*95.0; k=max(k,2.5);           // v79 응답 빠르게(강성↑) + 드래그 잔상(궤적 살림)
+  float damp=mix(9.0,6.8,g)-spd*48.0; damp=max(damp,2.8);     // v79 댐핑 낮춰 빠른 정착 → 중심 즉시 채움(눌린 느낌)·드래그 잔상
   vec2 acc=(target-pos)*k - vel*damp;
   if(g>0.15){
-    vec2 d=pos-u_touch; float dl=length(d)+1e-4; vec2 dn=d/dl; vec2 cw=vec2(dn.y,-dn.x); // 시계방향 접선
-    acc += cw*g*2.2*exp(-dl*dl*90.0)*u_bloom;                  // 중앙 방사/개화는 다 모인 뒤(bloom)에만
+    // v81 회전·유입은 전부 타깃 필드가 담당(힘 회전 제거) — 여기는 드래그 족적만
     for(int i=0;i<16;i++){                                     // v75 궤적(족적) 따라 스파클라 불꽃
       vec4 tr=u_trail[i];
-      float fresh=tr.w*exp(-tr.z*1.9)*step(0.02,tr.w);         // 오래된(먼) 족적일수록 그라데이션으로 사그라듦
+      float fresh=tr.w*exp(-tr.z*2.1)*step(0.02,tr.w);         // v79 궤적 되살림 — 뒤에서 서서히 그라데이션 소멸
       vec2 tv=pos-tr.xy; float tr2=dot(tv,tv); float trl=sqrt(tr2)+1e-4; vec2 tvn=tv/trl;
-      float nearT=exp(-tr2*90.0);                              // 족적 반경 더 좁게(촘촘한 궤적에 맞춤)
-      acc += -tv*nearT*fresh*7.0;                              // 족적으로 모임(궤적 연결성) — 항상
-      float spark=step(0.80,fract(a_r0.w*23.1+floor(u_t*22.0)*0.41+float(i)*0.17+a_r1.x*2.0)); // 반짝임 게이트
-      vec2 perp=vec2(-tvn.y,tvn.x);                            // 접선(측면 산포용)
-      vec2 sd=tvn+perp*(a_r1.x-0.5)*1.5;                       // 바깥 + 랜덤 측면 산포(불꽃놀이)
-      acc += sd*nearT*fresh*spark*46.0;                        // v75 스파클라 발사 — 드래그 중 족적에서 바깥으로(bloom 무관)
+      float nearT=exp(-tr2*130.0);
+      acc += -tv*nearT*fresh*12.0;                             // v79 족적 인력 복원(궤적이 보이게)
+      float spark=step(0.84,fract(a_r0.w*23.1+floor(u_t*20.0)*0.41+float(i)*0.17+a_r1.x*2.0));
+      vec2 perp=vec2(-tvn.y,tvn.x);
+      acc += (tvn+perp*(a_r1.x-0.5)*1.2)*nearT*fresh*spark*40.0; // v79 스파클라 발사 복원(궤적에서 불꽃 튐)
     }
   }
   vel+=acc*u_dt;
@@ -1066,7 +1072,7 @@ void main(){
   float halo=step(0.84,a_r1.y);
   float star=step(0.87,fract(a_r1.w*61.7)); v_star=star;
   float ta=clamp(u_touchAmt,0.0,1.0);
-  float stg=a_r1.z*0.68; float g=clamp((ta-stg)/0.28,0.0,1.0); g=g*g*(3.0-2.0*g);
+  float stg=a_r1.z*0.45; float g=clamp((ta-stg)/0.28,0.0,1.0); g=g*g*(3.0-2.0*g);
   gl_PointSize=u_ps*u_psMul*(0.6+a_r0.w)*(0.5+0.55*depth)*sc*mix(0.72,1.5,star)*mix(1.0,0.6,halo);
   float twk=mix(1.0,0.78+0.22*sin(t*1.5+a_r0.w*44.0),u_twk*star);
   float life=0.90+0.10*sin(t*1.1+a_r1.x*22.0);
@@ -1074,8 +1080,13 @@ void main(){
   float rr=length(pos-u_touch);
   float er=clamp(rr/0.18,0.0,1.0);
   float emitB=mix(1.0,0.6+1.0*(1.0-er)*(1.0-er),g);                  // B: 작은 코어 밝고 스파크로 갈수록 감쇠
-  float asm=clamp(u_k,0.0,1.0);
-  v_a=va0*(0.25+0.75*asm)*u_lum*depth*twk*clamp(sc*0.66,0.34,1.34)*life*core*mix(0.42,1.7,star)*(0.90+0.10*u_breath)*emitB;
+  float brb=sin(u_t*0.75-cos(u_t*0.75));
+  emitB*=1.0+0.20*max(brb,0.0)*g*u_bloom;                            // v81 느린 숨에 맞춰 광량이 차오른다
+  float kA=clamp(u_k,0.0,1.0);                                       // v75 'asm'은 GLSL 예약어 → 엄격 드라이버서 sim 폴백, 개명
+  v_a=va0*(0.25+0.75*kA)*u_lum*depth*twk*clamp(sc*0.66,0.34,1.34)*life*core*mix(0.42,1.7,star)*(0.90+0.10*u_breath)*emitB;
+  float thrV=step(0.78,fract(a_r0.w*13.7+a_r1.x*5.3));               // v81 '실' 입자(SIM과 동일 해시)
+  float sV=fract(a_r0.x+a_r1.z*0.618+u_t*(0.07+0.11*a_r0.z));
+  v_a*=mix(1.0, smoothstep(0.0,0.20,sV)*(0.55+1.45*sV*sV), thrV*g*u_bloom); // 환생 비행은 어둠 속, 코어에 다가올수록 밝게(목표구배)
   v_pick=a_r1.z;
 }`;
 const RND_FRAG = `precision mediump float;
@@ -1193,7 +1204,7 @@ function GuardianCanvasSim({ saju, zo, mbti, num, moon, birth, agitateRef, react
           if (rt < 1.8) { const env = Math.max(0, 1 - rt / 1.7) * Math.min(1, rt / 0.18); const dir = reactRef.current.dir;
             if (dir === "GO") { expand = env * 0.5; bright = 1 + env * 0.5; } else if (dir === "STOP") { expand = -env * 0.45; bright = 1 - env * 0.55; } else { expand = env * 0.1 * Math.sin(rt * 5); bright = 1 - env * 0.12; } }
         }
-        const tau = touch.target > touch.amt ? 0.55 : 1.60;                  // v69 모임 더 느리게(~1.6s)
+        const tau = touch.target > touch.amt ? 0.30 : 2.10;                  // v80 모임은 즉각, 풀림은 미련처럼 느리게(여운 → 다시 만지고 싶게)
         touch.amt += (touch.target - touch.amt) * (1 - Math.exp(-dt / tau));
         const bloomT = touch.amt > 0.88 ? 1 : 0;                             // 다 모인 뒤에만 방사 개화
         bloom += (bloomT - bloom) * (1 - Math.exp(-dt / (bloomT > bloom ? 0.9 : 0.45)));
@@ -1204,7 +1215,7 @@ function GuardianCanvasSim({ saju, zo, mbti, num, moon, birth, agitateRef, react
         for (let i = 0; i < 16; i++) trailArr[i * 4 + 2] += dt;               // 족적 나이 증가
         const _li = ((trailHead + 15) % 16) * 4;
         const _moved = Math.hypot(touch.x - trailArr[_li], touch.y - trailArr[_li + 1]);
-        if (touch.pressed && (now - lastDrop > 8 || _moved > 0.022)) {        // v75 궤적 2배 촘촘(간격 반으로)
+        if (touch.pressed && _moved > 0.018) {                                // v76 거리기반만 — 정지 시 드롭 안 함(방사링 방지), 이동 시 촘촘
           trailArr[trailHead * 4] = touch.x; trailArr[trailHead * 4 + 1] = touch.y; trailArr[trailHead * 4 + 2] = 0; trailArr[trailHead * 4 + 3] = 1;
           trailHead = (trailHead + 1) % 16; lastDrop = now;
         }
@@ -1252,9 +1263,18 @@ function GuardianCanvasSim({ saju, zo, mbti, num, moon, birth, agitateRef, react
 /* WebGL 우선: 상태보존 시뮬(v68) → stateless(v67) → Canvas2D. 각 단계 실패 시 자동 강등 */
 function Guardian(props) {
   const [mode, setMode] = useState(() => (glDetect() ? "sim" : "2d"));
+  if (typeof window !== "undefined") window.__BINARI_R = mode;   // 버전 배지용 — 실제 렌더러(sim/gl/2d) 노출
   if (mode === "sim") return <GuardianCanvasSim {...props} onFail={() => setMode("gl")} />;
   if (mode === "gl") return <GuardianCanvasGL {...props} onFail={() => setMode("2d")} />;
   return <GuardianCanvas {...props} />;
+}
+
+/* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
+const APP_VER = "v81";
+function VerBadge() {
+  const [r, setR] = useState("");
+  useEffect(() => { const t = setInterval(() => { const m = typeof window !== "undefined" && window.__BINARI_R; if (m && m !== r) setR(m); }, 1200); return () => clearInterval(t); }, [r]);
+  return <div className="verbadge">{APP_VER}{r ? ` · ${r}` : ""}</div>;
 }
 
 /* ───── 오프닝용 점 구름 (지표 없이 은은하게) ───── */
@@ -1509,6 +1529,7 @@ A.큰 결정(이직·이사·결혼·이별·큰 투자) / B.감정 충동(연�
 - 판정 절차(순서 강제): ①각 지표를 질문에 비추어 서로 독립적으로 GO/STOP/중립 판정한다 — 이때 다른 지표의 판정이나 예상 결론을 참조하지 않는다 ②가중 합산으로 direction을 산출한다 ③verdict·subline은 합산 결과를 따른다. 결론을 먼저 정해두고 근거를 끼워 맞추는 것 금지 — 지표끼리 결론이 갈리면 갈린 그대로 보여준다.
 - reasons에는 판결에 참여한 모든 지표를 각 1줄씩 빠짐없이 포함한다 — 사주·달·별자리·MBTI·수비학·마야와, 제공된 경우 삼재·가치·주역·토정비결까지 전부. 달 축은 위상·달 별자리·나크샤트라를 묶어 한 줄로, 사주 축은 납음·대운(제공 시 현재 인생 시기의 기운)을 함께 인용할 수 있다(대운은 별도 축을 신설하지 말고 사주 근거 안에 녹인다). 각 축이 왜 GO/STOP/중립인지 그 지표의 실제 값을 짚어서 말한다.
 - 주역 괘가 제공된 경우: reasons에 '주역' 축을 반드시 포함한다. 단 verdict·subline에는 **괘 이름·효 번호를 절대 쓰지 말고**(둔괘·태괘·수뢰둔·초효 등 금지) 그 괘가 말하는 바만 일상어로 녹인다 — 괘 이름을 짚는 건 reasons(상세)에서만. (X)"둔괘가 말하는 시작의 진통이 있어" (O)"시작에 진통이 따르는 때야".
+- 마야(촐킨) 축은 매 판결 reasons에 반드시 포함한다 — 자주 누락되던 축이니 절대 빼지 말 것. 그 사람의 촐킨 톤(1~13)·날개(20신성)의 실제 값을 짚어 GO/STOP/중립을 말한다(예: "이믹스 날개에 4의 톤 — 터를 다지는 힘이 실린 날이야", "카반 날개의 흔들림이 지금은 발을 붙잡아"). 마야 특유의 신화적·이색적 어감을 살려 한 줄에 재미를 준다.
 - 가치여정이 제공된 경우 최소 1축을 reasons에 포함한다.
 - total은 이번 판결에 참여한 지표 수와 일치시키고, against는 그중 반대표 수다.
 - 토정비결 괘상수가 제공되면 당년 전체 흐름의 참고 지표(타이밍 층)로 쓴다. 단, 해당 괘의 원문 풀이를 확실히 알지 못하면 원문 문장을 지어내 인용하지 말고 흐름 참고로만 쓴다.
@@ -1817,7 +1838,7 @@ export default function App() {
   const fetchDetail = async (system, priorConvo, userText, r1) => {
     setDetailBusy(true);
     try {
-      const explainMsg = { role: "user", content: `${userText}\n\n[이미 확정된 판결] direction=${r1.direction} / verdict="${r1.verdict}" / 총 ${r1.total} 중 반대 ${r1.against}. 이 판결을 절대 뒤집지 말고, 이 결론의 근거만 아래 JSON으로만 응답: {"subline":"수호신의 한 줄","reasons":[{"axis":"사주|달|별자리|MBTI|수비학|주역|가치|삼재|토정비결|마야","vote":"GO|STOP|중립","text":"회상체 근거 1줄(60자 이내)"}],"funLine":"정령(달 별자리) 한마디","disclaimer":"투자·의료·법률일 때만, 없으면 빈 문자열"}. reasons엔 판결에 참여한 지표 전부.` };
+      const explainMsg = { role: "user", content: `${userText}\n\n[이미 확정된 판결] direction=${r1.direction} / verdict="${r1.verdict}" / 총 ${r1.total} 중 반대 ${r1.against}. 이 판결을 절대 뒤집지 말고, 이 결론의 근거만 아래 JSON으로만 응답: {"subline":"수호신의 한 줄","reasons":[{"axis":"사주|달|별자리|MBTI|수비학|주역|가치|삼재|토정비결|마야","vote":"GO|STOP|중립","text":"회상체 근거 1줄(60자 이내)"}],"funLine":"정령(달 별자리) 한마디","disclaimer":"투자·의료·법률일 때만, 없으면 빈 문자열"}. reasons엔 판결에 참여한 지표 전부 — 특히 '마야'(촐킨 톤·날개) 축은 매번 반드시 포함(자주 누락됨).` };
       const { json: r2 } = await callClaude(system, [...priorConvo, explainMsg], 1500);
       setDetail(r2);
     } catch (_) { setDetail({ _err: true }); }
@@ -1956,6 +1977,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
   return (
     <div className="stage">
       <style>{CSS}</style>
+      <VerBadge />
 
       {sharedIn && !sharedGone && (() => {
         const d = sharedIn.d, isGo = d === "GO", isHold = d === "HOLD";
@@ -2419,6 +2441,7 @@ const CSS = `
 .orb{position:relative;width:170px;height:170px;margin:48px 0 36px;filter:drop-shadow(0 0 24px rgba(245,217,139,.2))}
 .line{font-size:17px;line-height:1.8;margin:8px 0;opacity:0;animation:fd 1.6s cubic-bezier(.22,.7,.25,1) forwards}.d1{animation-delay:1.4s}.d2{animation-delay:3s}
 .brand-mark{margin-top:56px;font-size:11px;letter-spacing:.4em;color:#8a7f95;font-family:sans-serif}
+.verbadge{position:fixed;right:9px;bottom:7px;z-index:70;font-family:sans-serif;font-size:9px;letter-spacing:.08em;color:#575070;pointer-events:none;user-select:none}
 .title{font-size:20px;font-weight:600;color:#f0e2b8;margin:6px 0 4px}
 .sub2{font-size:14px;color:#9d8fb5;line-height:1.7;margin:6px 0 18px}
 .form{display:flex;flex-direction:column;gap:12px;width:100%;margin-bottom:14px}
