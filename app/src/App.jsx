@@ -1014,7 +1014,7 @@ void computeShape(vec4 a_r0, vec4 a_r1, out vec2 spos, out float depth, out floa
   spos+=vec2(sin(t*0.11+1.3)*0.11, sin(t*0.17)*0.07+0.012*u_breath)*(1.0-ta)*smoothstep(0.0,3.5,u_t);
 }`;
 const SIM_VERT = `attribute vec2 a_q; void main(){ gl_Position=vec4(a_q,0.0,1.0); }`;
-const SIM_FRAG = `precision highp float;\n` + SHAPE_UNI + `\nuniform sampler2D u_state,u_r0,u_r1; uniform vec2 u_texdim,u_touchVel; uniform float u_dt,u_bloom; uniform vec4 u_trail[16];\n` + SHAPE_FN + `
+const SIM_FRAG = `precision highp float;\n` + SHAPE_UNI + `\nuniform sampler2D u_state,u_r0,u_r1; uniform vec2 u_texdim,u_touchVel; uniform float u_dt,u_bloom; uniform vec4 u_trail[12];\n` + SHAPE_FN + `
 void main(){
   vec2 uv=gl_FragCoord.xy/u_texdim;
   vec4 st=texture2D(u_state,uv); vec4 a_r0=texture2D(u_r0,uv); vec4 a_r1=texture2D(u_r1,uv);
@@ -1023,49 +1023,29 @@ void main(){
   computeShape(a_r0,a_r1,spos,depth,v_a,sc,rl);
   vec2 target=spos;
   float ta=clamp(u_touchAmt,0.0,1.0);
-  float stg=a_r1.z*0.45; float g=clamp((ta-stg)/0.28,0.0,1.0); g=g*g*(3.0-2.0*g);
-  /* v81 '귀의의 물레' — 응시(기울음) → 알알이 응축 → 꽉 찬 숨쉬는 코어 + 영원한 실 유입(전부 타깃 기반) */
-  target+=(u_touch-target)*0.07*ta;                             // 감응: 터치 0프레임에 세계 전체가 나를 향해 살짝 기운다
-  float spd=min(length(u_touchVel),0.06);
-  // v83 드래그 강도(0~1) — 손끝 추종에 필요한 강성·물레 접힘·지연보정을 한꺼번에 지배한다
-  float dragF=smoothstep(0.0015,0.020,spd);
-  float k=(mix(14.0,15.0,g))*(1.0+13.0*dragF);                // 드래그 중 대폭 단단하게 → 지연 V·damp/k 를 실제로 없앤다
-  float damp=(mix(9.0,6.8,g))*(1.0+3.4*dragF);
-  // 지연 보정(피드포워드)을 '실제 k·damp'로 계산 — 프레임레이트·강성이 바뀌어도 항상 손끝에 얹힌다
-  vec2 leadV=(u_touchVel/max(u_dt*2.0,1e-4))*(damp/k);
-  float lm=length(leadV); if(lm>0.22) leadV*=0.22/lm;
+  float stg=a_r1.z*0.68; float g=clamp((ta-stg)/0.28,0.0,1.0); g=g*g*(3.0-2.0*g);
   if(g>0.001){
     float bang=a_r1.w*6.2832;
-    float rr=a_r0.z*a_r0.z;                                     // z² 밀도 — 중심 밝고 바깥으로 흩뿌려지는 그라데이션
-    float breath=sin(u_t*0.75-cos(u_t*0.75));                   // 비대칭 느린 숨(~8.4s) — 천천히 차오르고 빠르게 가라앉음
-    float coreR=0.048*(1.0+0.12*max(breath,0.0)*u_bloom);       // v82 손가락에 안 가리는 크기의 입자구름 코어
-    // v83 스프링 지연 상쇄(피드포워드): 타깃을 손가락 속도만큼 앞으로 보내야 뭉치가 '손끝 위'에 얹혀 따라온다.
-    // 이게 없으면 정상상태 지연 = V·damp/k 만큼 코어가 뒤처져 손끝이 텅 빈다(블랙홀의 진짜 원인).
-    vec2 tc=u_touch+leadV;
-    vec2 core=tc+vec2(cos(bang),sin(bang))*(rr*coreR);
-    float thr=step(0.78,fract(a_r0.w*13.7+a_r1.x*5.3));         // 22% '실' 입자 — 가장자리에서 태어나 코어로 귀의
-    float s=fract(a_r0.x+a_r1.z*0.618+u_t*(0.07+0.11*a_r0.z));  // 낙하 위상 행진(입자별 5.5~12.5s) — 영원히 멈추지 않음
-    float rIn=max((1.0-s)*(1.0-s)*mix(0.10,0.21,a_r0.y),0.004); // 밖→안 r² 낙하(중심 과밀)
-    rIn*=1.0-0.94*dragF;                                        // v83 움직이면 물레가 확실히 접혀 머리에 붙는다(링/블랙홀 방지)
-    float ang=bang+(1.0-s)*7.5-u_t*0.45;                        // 시계방향으로 감겨들며 낙하 + 전체 시계 회전
-    vec2 wheel=tc+vec2(cos(ang),sin(ang))*rIn;
-    target=mix(target,mix(core,wheel,thr*u_bloom),g);           // 응축이 끝난 뒤에야 물레가 열린다
+    float bR=0.014+0.07*u_bloom;                                // v72 방사 더 좁게
+    float rr=0.3+0.7*a_r0.z;
+    vec2 burst=u_touch+vec2(cos(bang),sin(bang))*(rr*bR);
+    target=mix(target,burst,g);
   }
+  float spd=min(length(u_touchVel),0.06);
+  float k=mix(14.0,10.0,g)-spd*120.0; k=max(k,2.0);           // 대기 강성↑(크리스프), 드래그 시 느슨(잔상)
+  float damp=mix(9.0,5.5,g)-spd*55.0; damp=max(damp,2.5);
   vec2 acc=(target-pos)*k - vel*damp;
   if(g>0.15){
-    // v81 회전·유입은 전부 타깃 필드가 담당(힘 회전 제거) — 여기는 드래그 족적만
-    for(int i=0;i<16;i++){                                     // v75 궤적(족적) 따라 스파클라 불꽃
+    vec2 d=pos-u_touch; float dl=length(d)+1e-4; vec2 dn=d/dl; vec2 cw=vec2(dn.y,-dn.x); // 시계방향 접선
+    acc += cw*g*2.2*exp(-dl*dl*90.0)*u_bloom;                  // v73 방사/크래클은 다 모인 뒤(bloom)에만 시작
+    for(int i=0;i<12;i++){                                     // v72 궤적(족적) 따라 불꽃 튐
       vec4 tr=u_trail[i];
-      float fresh=tr.w*exp(-tr.z*2.1)*step(0.02,tr.w);         // v79 궤적 되살림 — 뒤에서 서서히 그라데이션 소멸
-      vec2 tv=pos-tr.xy; float tr2=dot(tv,tv); float trl=sqrt(tr2)+1e-4; vec2 tvn=tv/trl;
-      float nearT=exp(-tr2*130.0);
-      acc += -tv*nearT*fresh*12.0;                             // v79 족적 인력 복원(궤적이 보이게)
-      // v83 핵심: 스파크의 바깥 성분이 '손가락 밑 최신 족적'에서 터지면 중심을 비워 블랙홀이 된다.
-      //          → 뒤에 남은 오래된 족적에서만 튀게 하고(aged), 손끝 자리는 인력만 남겨 꽉 채운다.
-      float aged=smoothstep(0.05,0.20,tr.z);
-      float spark=step(0.84,fract(a_r0.w*23.1+floor(u_t*20.0)*0.41+float(i)*0.17+a_r1.x*2.0));
-      vec2 perp=vec2(-tvn.y,tvn.x);
-      acc += (tvn*0.55+perp*(a_r1.x-0.5)*1.6)*nearT*fresh*spark*aged*40.0; // 궤적에서 파파팍(측면 산포 위주)
+      float fresh=tr.w*exp(-tr.z*1.3)*step(0.02,tr.w);         // 족적 신선도(오래되면 사그라듦)
+      vec2 tv=pos-tr.xy; float tr2=dot(tv,tv); float trl=sqrt(tr2)+1e-4;
+      float nearT=exp(-tr2*70.0);
+      acc += -tv*nearT*fresh*7.0;                              // 족적으로 모임(궤적 연결성) — 항상
+      float crackle=step(0.72,fract(a_r0.w*23.1+floor(u_t*16.0)*0.41+float(i)*0.17+a_r1.x*2.0));
+      acc += (tv/trl+cw*0.4)*nearT*fresh*crackle*34.0*u_bloom; // 족적 불꽃 튐 — 도착(bloom) 후
     }
   }
   vel+=acc*u_dt;
@@ -1084,7 +1064,7 @@ void main(){
   float halo=step(0.84,a_r1.y);
   float star=step(0.87,fract(a_r1.w*61.7)); v_star=star;
   float ta=clamp(u_touchAmt,0.0,1.0);
-  float stg=a_r1.z*0.45; float g=clamp((ta-stg)/0.28,0.0,1.0); g=g*g*(3.0-2.0*g);
+  float stg=a_r1.z*0.68; float g=clamp((ta-stg)/0.28,0.0,1.0); g=g*g*(3.0-2.0*g);
   gl_PointSize=u_ps*u_psMul*(0.6+a_r0.w)*(0.5+0.55*depth)*sc*mix(0.72,1.5,star)*mix(1.0,0.6,halo);
   float twk=mix(1.0,0.78+0.22*sin(t*1.5+a_r0.w*44.0),u_twk*star);
   float life=0.90+0.10*sin(t*1.1+a_r1.x*22.0);
@@ -1092,13 +1072,8 @@ void main(){
   float rr=length(pos-u_touch);
   float er=clamp(rr/0.18,0.0,1.0);
   float emitB=mix(1.0,0.6+1.0*(1.0-er)*(1.0-er),g);                  // B: 작은 코어 밝고 스파크로 갈수록 감쇠
-  float brb=sin(u_t*0.75-cos(u_t*0.75));
-  emitB*=1.0+0.20*max(brb,0.0)*g*u_bloom;                            // v81 느린 숨에 맞춰 광량이 차오른다
   float kA=clamp(u_k,0.0,1.0);                                       // v75 'asm'은 GLSL 예약어 → 엄격 드라이버서 sim 폴백, 개명
   v_a=va0*(0.25+0.75*kA)*u_lum*depth*twk*clamp(sc*0.66,0.34,1.34)*life*core*mix(0.42,1.7,star)*(0.90+0.10*u_breath)*emitB;
-  float thrV=step(0.78,fract(a_r0.w*13.7+a_r1.x*5.3));               // v81 '실' 입자(SIM과 동일 해시)
-  float sV=fract(a_r0.x+a_r1.z*0.618+u_t*(0.07+0.11*a_r0.z));
-  v_a*=mix(1.0, smoothstep(0.0,0.20,sV)*(0.55+1.45*sV*sV), thrV*g*u_bloom); // 환생 비행은 어둠 속, 코어에 다가올수록 밝게(목표구배)
   v_pick=a_r1.z;
 }`;
 const RND_FRAG = `precision mediump float;
@@ -1202,7 +1177,7 @@ function GuardianCanvasSim({ saju, zo, mbti, num, moon, birth, agitateRef, react
         gl.uniform1f(U.u_touchAmt, touch.amt); gl.uniform2f(U.u_touch, touch.x, touch.y);
       };
       let src = 0, dst = 1, bloom = 0;
-      const trailArr = new Float32Array(64); let trailHead = 0, lastDrop = 0;   // v75 궤적 족적 링버퍼(16점)
+      const trailArr = new Float32Array(48); let trailHead = 0, lastDrop = 0;   // v72 궤적 족적 링버퍼(12점)
       const born = performance.now();
       const draw = () => {
         if (dead) return;
@@ -1216,7 +1191,7 @@ function GuardianCanvasSim({ saju, zo, mbti, num, moon, birth, agitateRef, react
           if (rt < 1.8) { const env = Math.max(0, 1 - rt / 1.7) * Math.min(1, rt / 0.18); const dir = reactRef.current.dir;
             if (dir === "GO") { expand = env * 0.5; bright = 1 + env * 0.5; } else if (dir === "STOP") { expand = -env * 0.45; bright = 1 - env * 0.55; } else { expand = env * 0.1 * Math.sin(rt * 5); bright = 1 - env * 0.12; } }
         }
-        const tau = touch.target > touch.amt ? 0.30 : 2.10;                  // v80 모임은 즉각, 풀림은 미련처럼 느리게(여운 → 다시 만지고 싶게)
+        const tau = touch.target > touch.amt ? 0.55 : 1.60;                  // v69 모임 더 느리게(~1.6s)
         touch.amt += (touch.target - touch.amt) * (1 - Math.exp(-dt / tau));
         const bloomT = touch.amt > 0.88 ? 1 : 0;                             // 다 모인 뒤에만 방사 개화
         bloom += (bloomT - bloom) * (1 - Math.exp(-dt / (bloomT > bloom ? 0.9 : 0.45)));
@@ -1224,12 +1199,12 @@ function GuardianCanvasSim({ saju, zo, mbti, num, moon, birth, agitateRef, react
         const kv = 1 - Math.exp(-dt / 0.06); touch.vx += (dvx - touch.vx) * kv; touch.vy += (dvy - touch.vy) * kv;
         const bph = now * Math.PI * 2 / 9000; const breath = Math.sin(bph - 0.35 * Math.sin(bph));
         const uk = Math.min(1, t / 3.4);
-        for (let i = 0; i < 16; i++) trailArr[i * 4 + 2] += dt;               // 족적 나이 증가
-        const _li = ((trailHead + 15) % 16) * 4;
+        for (let i = 0; i < 12; i++) trailArr[i * 4 + 2] += dt;               // 족적 나이 증가
+        const _li = ((trailHead + 11) % 12) * 4;
         const _moved = Math.hypot(touch.x - trailArr[_li], touch.y - trailArr[_li + 1]);
-        if (touch.pressed && _moved > 0.018) {                                // v76 거리기반만 — 정지 시 드롭 안 함(방사링 방지), 이동 시 촘촘
+        if (touch.pressed && (now - lastDrop > 14 || _moved > 0.045)) {       // v73 빠른 이동도 거리기반으로 촘촘히 따라감
           trailArr[trailHead * 4] = touch.x; trailArr[trailHead * 4 + 1] = touch.y; trailArr[trailHead * 4 + 2] = 0; trailArr[trailHead * 4 + 3] = 1;
-          trailHead = (trailHead + 1) % 16; lastDrop = now;
+          trailHead = (trailHead + 1) % 12; lastDrop = now;
         }
         // ── SIM 패스 (여러 서브스텝으로 강성 안정화) ──
         gl.useProgram(simP);
@@ -1282,7 +1257,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v83";
+const APP_VER = "v85 · B=v74";
 function VerBadge() {
   const [r, setR] = useState("");
   useEffect(() => { const t = setInterval(() => { const m = typeof window !== "undefined" && window.__BINARI_R; if (m && m !== r) setR(m); }, 1200); return () => clearInterval(t); }, [r]);
@@ -1961,7 +1936,9 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
   // v16(B2): 아침 문안 데이터 — 재회 유저가 오늘 처음 열었을 때만. 전부 순수 함수(API 0콜)
   // v16(B3): 되물음 — 마지막 판결이 6시간 넘게 미보고면 수호신이 먼저 묻는다(모든 판결을 열린 고리로)
   const lastRec = records.length ? records[records.length - 1] : null;
-  const _lastAct = lastRec && (lastRec.actionable !== undefined ? lastRec.actionable : isDecisionQ(lastRec.q));  // v73: 되물음은 '따를 수 있는' 결정에만
+  // v84: 되물음은 '따를 수 있는 결정'에만 — 저장된 옛 판정(actionable)을 믿지 않고 현재 로직으로 매번 재판정한다
+  //      (예전 기록의 actionable:true 때문에 "이얏호오" 같은 헛소리에 '따랐어?'가 뜨던 문제)
+  const _lastAct = !!lastRec && isDecisionQ(lastRec.q) && lastRec.actionable !== false;
   const askback = returning && lastRec && lastRec.followUp === null && _lastAct && Date.now() - lastRec.at >= 6 * 3600 * 1000 ? lastRec : null;
   const answerAskback = (fu, note) => {
     const lastRec = records[records.length - 1] || {};
@@ -2256,7 +2233,9 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
               {askback && !ritual && !res && (
                 <div className="daily fade">
                   <p className="dtag">지난 판결 · {askback.direction}</p>
-                  <p className="dmain">지난번 물음 — "{askback.q}"<br />그래서, 결국 어떻게 했어?</p>
+                  <p className="dmain">지난번 물음 — "{askback.q}"</p>
+                  {askback.verdict && <p className="dverdict">내가 이렇게 말했지 — "{askback.verdict}"</p>}
+                  <p className="dmain">그래서, 결국 어떻게 했어?</p>
                   {!noting ? (
                     <div className="row gap center">
                       <button className="btn ghost sm" onClick={() => answerAskback("did")}>따랐어</button>
@@ -2655,6 +2634,7 @@ const CSS = `
 .daily{width:100%;border:1px solid rgba(245,217,139,.28);border-radius:14px;padding:14px 16px;margin:2px 0 14px;background:linear-gradient(160deg,#1c173066,#120e1e88)}
 .dtag{font-family:sans-serif;font-size:9.5px;letter-spacing:.22em;color:#c9b98f;margin:0 0 8px}
 .dmain{font-size:14.5px;line-height:1.8;color:#e8dff5;margin:0}.dmain b{color:#ffe9ad;font-weight:600}
+.dverdict{font-size:13.5px;line-height:1.75;color:#e5b96b;margin:6px 0 10px;overflow-wrap:anywhere}
 .dsub{font-family:sans-serif;font-size:10.5px;color:#8a7f95;line-height:1.7;margin:8px 0 10px}
 .btn.sm{padding:8px 18px;font-size:12px;letter-spacing:.08em}
 .knock{background:none;border:1px dashed rgba(245,217,139,.35);border-radius:999px;padding:10px 22px;margin:2px 0 14px;color:#c9b98f;font-family:inherit;font-size:13px;letter-spacing:.04em;cursor:pointer;transition:all .3s}
