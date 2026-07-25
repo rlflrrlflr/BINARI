@@ -12,8 +12,50 @@ let _ph = null, _phInit = false;
      판결 문구, 망설임 사유. 서비스 제공에 필수가 아니고 조합 시 식별성이 커지므로 동의 기반.
      미동의 시 아래 키만 제거되고 이벤트 자체는 그대로 전송된다.
    질문 원문·실명·생년월일 원값은 단계 무관하게 절대 전송하지 않는다. */
-const PROFILE_KEYS = new Set(["age", "age_band", "sex", "job", "rel", "city", "mbti", "core_value", "element", "zodiac", "verdict", "hesit"]);
+const PROFILE_KEYS = new Set(["age", "age_band", "sex", "job", "rel", "city", "mbti", "core_value", "element", "zodiac", "verdict", "hesit", "belief"]);
 const stripProfile = (p) => { const o = {}; for (const k in p) if (!PROFILE_KEYS.has(k)) o[k] = p[k]; return o; };
+
+/* ── D1·D2: 모든 이벤트에 따라붙는 고정 속성(super property) ────────────────
+   동의와 무관하게 붙는다. 개인의 신상이 아니라 "이 트래픽이 내부인지"와
+   "최초 유입이 어디였는지"라는 측정 메타데이터라서 PROFILE_KEYS에 넣지 않는다.
+   식별자 원값(fbclid/gclid)은 저장하지 않고 존재 여부만 남긴다. */
+const INTERNAL_KEY = "binari.internal.v1";
+const FIRSTTOUCH_KEY = "binari.firsttouch.v1";
+let _superProps = {};
+
+function _initSuperProps() {
+  if (typeof window === "undefined") return;
+  let sp; try { sp = new URLSearchParams(window.location.search); } catch (_) { sp = new URLSearchParams(""); }
+  const g = (k) => sp.get(k) || null;
+
+  // D1 — 내부 트래픽: ?i=1 로 한 번 들어오면 그 브라우저는 이후 영구히 내부로 표시된다.
+  let internal = false;
+  try {
+    if (g("i") === "1") window.localStorage.setItem(INTERNAL_KEY, "1");
+    internal = window.localStorage.getItem(INTERNAL_KEY) === "1";
+  } catch (_) { internal = g("i") === "1"; }
+
+  // D2 — first-touch: 최초 1회만 기록하고 이후 절대 덮어쓰지 않는다.
+  //   재방문 시 URL에 파라미터가 없어 direct로 덮이던 문제(=소재별 D7 귀속 불가)를 막는다.
+  let ft = null;
+  try { ft = JSON.parse(window.localStorage.getItem(FIRSTTOUCH_KEY) || "null"); } catch (_) {}
+  if (!ft || !ft.ft_source) {
+    ft = {
+      ft_source: g("utm_source") || g("ref") || (g("fbclid") ? "meta" : null) || (g("gclid") ? "google" : null) || (g("v") ? "share" : "direct"),
+      ft_medium: g("utm_medium"),
+      ft_campaign: g("utm_campaign"),
+      ft_content: g("utm_content"),          // 소재 단위 — 이 값이 있어야 소재별 성과가 갈린다
+      ft_term: g("utm_term"),
+      ft_click: g("fbclid") ? "fbclid" : (g("gclid") ? "gclid" : null),   // 원값 아닌 종류만
+      ft_date: new Date().toISOString().slice(0, 10),
+    };
+    try { window.localStorage.setItem(FIRSTTOUCH_KEY, JSON.stringify(ft)); } catch (_) {}
+  }
+
+  _superProps = { is_internal: internal, ...ft };
+  const b = readBelief();                     // D3 — 답했으면 이후 모든 이벤트에 따라붙는다
+  if (b) _superProps.belief = b;
+}
 
 const CONSENT_KEY = "binari.analytics_consent.v1";
 let _consent = false;                                             // 2단계(프로파일) 동의 여부
@@ -43,7 +85,7 @@ async function _initAnalytics() {
 }
 function track(ev, props) {
   try {
-    const p = props || {};
+    const p = { ..._superProps, ...(props || {}) };               // 고정 속성(내부여부·first-touch·신념)을 먼저 깔고 개별 속성으로 덮는다
     const out = _consent ? p : stripProfile(p);                   // 미동의 → 2단계 속성만 제거, 이벤트는 전송
     if (_ph) _ph.capture(ev, out);
     else if (_q.length < Q_MAX) _q.push({ ev, props: p, at: new Date() });   // 로드 대기 중 보류
@@ -51,6 +93,18 @@ function track(ev, props) {
   } catch (_) {}
 }
 if (typeof window !== "undefined" && /[?&]trackdebug/.test(window.location.search)) window.__binariTrackDebug = true;
+
+/* D3 — 신자/비신자 1문항. 첫 판결 직후 1탭으로 한 번만 묻고, 이후 모든 이벤트에 따라붙는다.
+   G2 게이트("비신자도 돌아오는가")를 재는 유일한 축이다.
+   ※ '신념'은 개인정보보호법 §23 민감정보로 해석될 여지가 있어 PROFILE_KEYS(선택 동의)에 넣어 두었다.
+      동의자 한정으로만 집계되므로, 전체 집계가 필요하면 PROFILE_KEYS에서 "belief"를 빼면 된다. */
+const BELIEF_KEY = "binari.belief.v1";
+function readBelief() { try { return window.localStorage.getItem(BELIEF_KEY) || ""; } catch (_) { return ""; } }
+function saveBelief(v) {
+  try { window.localStorage.setItem(BELIEF_KEY, v); } catch (_) {}
+  _superProps.belief = v;
+}
+_initSuperProps();
 
 /* ═══════════════ 비나리 BINARI · 웹앱 (v16-dev · 0단계: 아티팩트 탈출) ═══════════════
    온보딩(재회→의식→회상개봉) → 파라메트릭 수호신 → AI 판결(v2 수호신 프롬프트)
@@ -1729,7 +1783,8 @@ export default function App() {
   const [sharedIn] = useState(() => { try { const sp = new URLSearchParams(window.location.search); const raw = sp.get("v"); return raw ? decodeShare(raw) : null; } catch (_) { return null; } }); // v75: 공유 링크로 유입 시 담긴 판결
   const [sharedGone, setSharedGone] = useState(false);  // v75: '나도 물어볼래'로 공유 화면 닫음
   // 1단계 계측은 동의와 무관하게 항상 켠다(2단계 속성만 동의로 게이트)
-  useEffect(() => { _consent = readConsent(); _initAnalytics(); let ref = "direct"; try { const sp = new URLSearchParams(window.location.search); ref = sp.get("ref") || sp.get("utm_source") || (sp.get("v") ? "share" : "direct"); } catch (_) {} track("app_open", { returning, ref }); if (sharedIn) track("shared_verdict_view", { dir: sharedIn.d }); }, []); // 계측: 세션 시작 + 유입 어트리뷰션(파라미터만, 원문 없음)
+  // 계측: 세션 시작. 유입은 first-touch(_superProps.ft_*)가 고정 부착하므로 여기선 이번 방문 경로(ref)만 참고용으로 남긴다.
+  useEffect(() => { _consent = readConsent(); _initAnalytics(); let ref = "direct"; try { const sp = new URLSearchParams(window.location.search); ref = sp.get("ref") || sp.get("utm_source") || (sp.get("v") ? "share" : "direct"); } catch (_) {} track("app_open", { returning, ref }); if (sharedIn) track("shared_verdict_view", { dir: sharedIn.d }); }, []);
   const [saju, setSaju] = useState(mem?.saju || null);
   const [zo, setZo] = useState(mem?.zo || null);
   const [moon, setMoon] = useState(mem?.moon || null);
@@ -1862,6 +1917,8 @@ export default function App() {
   const [lean, setLean] = useState("");          // v54: 판결 전 내심 → v72 프롬프트 반영(어조 참고용)
   const [hesit, setHesit] = useState("");        // v72: 왜 망설이는지(고민 종결 근거)
   const [paywall, setPaywall] = useState("");    // v54: 복채/심층 fake-door
+  const [belief, setBelief] = useState(() => readBelief());   // D3: 신자/비신자 — 한 번만 묻는다
+  const [letter, setLetter] = useState(false);                // D4: 서신 fake-door — 판결마다 초기화
   const shareVerdict = async () => {
     if (!res) return;
     track("verdict_shared", { dir: res.direction, mode: hexInfo ? "ritual" : "quick" });
@@ -1897,7 +1954,7 @@ export default function App() {
   };
   const backToLobby = () => {                               // v56: 판결 화면 탈출구(X · 로비 복귀)
     track("another_question", { after_why: why });
-    setRes(null); setDetail(null); setWhy(false); setDetailBusy(false); setQ(""); setCardOn(false); setRitual(false); setTosses([]); setHexInfo(null); setBujeok(false); setLean(""); setHesit(""); setPaywall(""); setAwake(false); setRated(0);
+    setRes(null); setDetail(null); setWhy(false); setDetailBusy(false); setQ(""); setCardOn(false); setRitual(false); setTosses([]); setHexInfo(null); setBujeok(false); setLean(""); setHesit(""); setPaywall(""); setAwake(false); setRated(0); setLetter(false);
   };
   const rateVerdict = (score) => {                          // v75: 판결 평가 — 정확도 피드백 수집(계측 + 기록에 부착)
     if (rated) return;
@@ -1905,10 +1962,25 @@ export default function App() {
     track("verdict_rated", demoProps(birth, { score, dir: res?.direction, mode: hexInfo ? "ritual" : "quick", cat: res?.category || null, tone: res?.tone || null, mbti: mbti || null, element: saju?.main || null }));
     setRecords(prev => { if (!prev.length) return prev; const nx = prev.slice(); nx[nx.length - 1] = { ...nx[nx.length - 1], rating: score }; return nx; });
   };
+
+  // D3 — 신념 1문항. 한 번 답하면 고정 속성이 되어 이후 모든 이벤트에 따라붙는다(리텐션을 신념별로 가르는 축).
+  const answerBelief = (v) => {
+    if (belief) return;
+    saveBelief(v); setBelief(v);
+    track("belief_answered", { belief: v, after_verdicts: records.length });
+  };
+
+  // D4 — 결제 fake-door. 클릭만 세고 결제는 만들지 않는다.
+  //   노출 = verdict_shown 이므로 클릭률 = letter_clicked / verdict_shown 으로 계산된다.
+  const openLetter = () => {
+    if (letter) return;
+    setLetter(true);
+    track("letter_clicked", demoProps(birth, { dir: res?.direction || null, cat: res?.category || null, mode: hexInfo ? "ritual" : "quick", nth_verdict: records.length }));
+  };
   const judge = async (hi, quick = false) => {
     if (!q.trim() || busy) return;
     track("question_asked", demoProps(birth, { mode: quick ? "quick" : "ritual", qlen: q.trim().length, ritual: !!hi, lean: lean || "skip", hesit: hesit || null, mbti: mbti || null, core_value: core || null, element: saju?.main || null, zodiac: zo?.name || null }));
-    setBusy(true); setErr(""); setRes(null); setDetail(null); setWhy(false); setFlip(false); setCardOn(false); setRated(0); reactRef.current = null; setIntroSeen(true);
+    setBusy(true); setErr(""); setRes(null); setDetail(null); setWhy(false); setFlip(false); setCardOn(false); setRated(0); setLetter(false); reactRef.current = null; setIntroSeen(true);
     try {
       const mp = moonPlacements(+birth.y, +birth.m, +birth.d, +birth.h || 12, +birth.min || 0, !!birth.noHour); // v22
       const tzk = tzolkin(jdn(+birth.y, +birth.m, +birth.d));                                                   // v22
@@ -2424,7 +2496,27 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
               )}
             </div>
           )}
+          {/* D3: 신자/비신자 1문항 — 첫 판결 직후 한 번만. 온보딩이 아닌 여기 두는 건
+              광고 유입자의 온보딩 이탈을 건드리지 않기 위해서다. */}
+          {res && cardOn && !belief && (
+            <div className="raterow fade">
+              <span className="ratelab">이런 거, 원래 믿는 편이야?</span>
+              <div className="row gap center">
+                {[["believer", "믿는 편"], ["mixed", "반반"], ["skeptic", "안 믿는 편"]].map(([v, label]) => (
+                  <button key={v} type="button" className="calbtn sm" onClick={() => answerBelief(v)}>{label}</button>
+                ))}
+              </div>
+            </div>
+          )}
           {res && cardOn && <button className="btn gold mt" onClick={shareVerdict}>{shared ? "복사했어 — 붙여넣으면 돼" : "카톡·라인으로 판결 보내기"}</button>}
+          {/* D4: 결제 fake-door — 지불 의사만 잰다. 결제 인프라는 만들지 않는다. */}
+          {res && cardOn && (
+            letter ? (
+              <p className="ratedone">아직 준비 중이야 — 수호신이 서신을 쓰는 법을 익히고 있어.</p>
+            ) : (
+              <button className="btn ghost mt" onClick={openLetter}>수호신의 서신 받기 — 이 판결의 깊은 풀이</button>
+            )
+          )}
           {res && cardOn && !bujeok && <button className="btn ghost mt" onClick={() => { track("bujeok_opened"); setBujeok(true); }}>수호신의 부적 받기</button>}
           {res && cardOn && bujeok && (
             <div className="fade bwrap">
