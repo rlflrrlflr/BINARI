@@ -1027,8 +1027,12 @@ void main(){
   if(g>0.001){
     float bang=a_r1.w*6.2832;
     float rr=a_r0.z*a_r0.z;                                     // v76 중심 밀집 → 빈 도넛 대신 밝은 코어
-    float bR=0.008;                                            // v77 고정 소형 코어 — 응축 후 커지는 개화(방사) 제거
-    vec2 burst=u_touch+vec2(cos(bang),sin(bang))*(rr*bR);
+    float ph=fract(u_t*0.9);
+    float beat=exp(-ph*9.0)+0.45*exp(-abs(ph-0.22)*20.0);       // v80 럽-덥 심장박동(~54bpm 명상 박자)
+    float bR=0.008*(1.0+0.30*beat*u_bloom);                     // 코어가 심장처럼 부풀었다 가라앉는다 — 살아있는 촉감
+    float pr=step(0.88,fract(a_r0.w*13.7+a_r1.x*5.3));          // v80.1 행렬 전담 입자(~12%) — 나머지 88%는 코어에 남는다
+    float rad=mix(rr*bR, 0.05, pr*u_bloom);                     // 전원 응축 → 완료 후 행렬 입자만 서서히 띠로 나간다
+    vec2 burst=u_touch+vec2(cos(bang),sin(bang))*rad;
     target=mix(target,burst,g);
   }
   float spd=min(length(u_touchVel),0.06);
@@ -1037,10 +1041,15 @@ void main(){
   vec2 acc=(target-pos)*k - vel*damp;
   if(g>0.15){
     vec2 d=pos-u_touch; float dl=length(d)+1e-4; vec2 dn=d/dl; vec2 cw=vec2(dn.y,-dn.x); // 시계방향 접선
-    // v77 응축 먼저 → u_bloom으로 '서서히' 순수 시계방향 회전 스파크(방사 성분 없음)
-    float coreSpk=step(0.90,fract(a_r0.w*31.7+floor(u_t*20.0)*0.5+a_r1.x*3.0));
-    float shell=smoothstep(0.012,0.05,dl);                    // 코어(안쪽) 완전 제외 → 꽉 찬 밝은 코어
-    acc += cw*coreSpk*g*u_bloom*exp(-dl*dl*150.0)*shell*24.0; // 순수 시계방향(바깥0) · bloom으로 응축 후 서서히 시작
+    // v80 홀림 모션 — 심장박동 코어 둘레를 '탑돌이'처럼 일정하게 도는 궤도 행렬 + 간헐 불티
+    float ph2=fract(u_t*0.9);
+    float beat2=exp(-ph2*9.0)+0.45*exp(-abs(ph2-0.22)*20.0);
+    float shell=smoothstep(0.012,0.04,dl);                    // 코어(안쪽)는 꽉 찬 채로 — 불티는 코어 밖에서만
+    float pr2=step(0.88,fract(a_r0.w*13.7+a_r1.x*5.3));       // 행렬 전담 입자만 띠 힘을 받는다(코어 88% 보호)
+    float band=exp(-(dl-0.05)*(dl-0.05)*1400.0);
+    acc += cw*band*pr2*g*u_bloom*(13.0+6.0*beat2);            // 경건한 시계방향 행진, 박동마다 힘이 실린다
+    float ember=step(0.93,fract(a_r0.w*31.7+floor(u_t*14.0)*0.5+a_r1.x*3.0));
+    acc += cw*ember*shell*g*u_bloom*exp(-dl*dl*180.0)*16.0;   // 간헐 불티 — 은은하게만 반짝
     for(int i=0;i<16;i++){                                     // v75 궤적(족적) 따라 스파클라 불꽃
       vec4 tr=u_trail[i];
       float fresh=tr.w*exp(-tr.z*2.1)*step(0.02,tr.w);         // v79 궤적 되살림 — 뒤에서 서서히 그라데이션 소멸
@@ -1076,6 +1085,8 @@ void main(){
   float rr=length(pos-u_touch);
   float er=clamp(rr/0.18,0.0,1.0);
   float emitB=mix(1.0,0.6+1.0*(1.0-er)*(1.0-er),g);                  // B: 작은 코어 밝고 스파크로 갈수록 감쇠
+  float phb=fract(u_t*0.9); float beatb=exp(-phb*9.0)+0.45*exp(-abs(phb-0.22)*20.0);
+  emitB*=1.0+0.22*beatb*g*u_bloom;                                   // v80 심장박동에 맞춰 코어 광량도 함께 뛴다
   float kA=clamp(u_k,0.0,1.0);                                       // v75 'asm'은 GLSL 예약어 → 엄격 드라이버서 sim 폴백, 개명
   v_a=va0*(0.25+0.75*kA)*u_lum*depth*twk*clamp(sc*0.66,0.34,1.34)*life*core*mix(0.42,1.7,star)*(0.90+0.10*u_breath)*emitB;
   v_pick=a_r1.z;
@@ -1195,7 +1206,7 @@ function GuardianCanvasSim({ saju, zo, mbti, num, moon, birth, agitateRef, react
           if (rt < 1.8) { const env = Math.max(0, 1 - rt / 1.7) * Math.min(1, rt / 0.18); const dir = reactRef.current.dir;
             if (dir === "GO") { expand = env * 0.5; bright = 1 + env * 0.5; } else if (dir === "STOP") { expand = -env * 0.45; bright = 1 - env * 0.55; } else { expand = env * 0.1 * Math.sin(rt * 5); bright = 1 - env * 0.12; } }
         }
-        const tau = touch.target > touch.amt ? 0.30 : 1.60;                  // v79 모임 빠르게(~0.9s) → 눌렀을 때 즉각 반응·중심 채움
+        const tau = touch.target > touch.amt ? 0.30 : 2.10;                  // v80 모임은 즉각, 풀림은 미련처럼 느리게(여운 → 다시 만지고 싶게)
         touch.amt += (touch.target - touch.amt) * (1 - Math.exp(-dt / tau));
         const bloomT = touch.amt > 0.88 ? 1 : 0;                             // 다 모인 뒤에만 방사 개화
         bloom += (bloomT - bloom) * (1 - Math.exp(-dt / (bloomT > bloom ? 0.9 : 0.45)));
