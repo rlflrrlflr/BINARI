@@ -1489,8 +1489,10 @@ A.큰 결정(이직·이사·결혼·이별·큰 투자) / B.감정 충동(연�
 - total은 이번 판결에 참여한 지표 수와 일치시키고, against는 그중 반대표 수다.
 - 토정비결 괘상수가 제공되면 당년 전체 흐름의 참고 지표(타이밍 층)로 쓴다. 단, 해당 괘의 원문 풀이를 확실히 알지 못하면 원문 문장을 지어내 인용하지 말고 흐름 참고로만 쓴다.
 - 열린 질문("몇 시까지 일할까", "뭘 먹을까", "언제 갈까")은 GO/STOP 이분법으로 회피하지 말고, 지표를 근거로 구체값 하나를 찍어 verdict로 답한다. (O)"10시까지만. 그 뒤는 내일의 몫이야." (X)"일하지 마." 질문이 요구한 단위(시각·항목·날짜)로 답하는 게 판결이다.
+- 음식·메뉴 질문: verdict에 **구체적 메뉴명 하나를 콕 찍는다**(김치찌개·냉면·돈까스·제육덮밥·마라탕·파스타·초밥·삼겹살·비빔밥·라멘·쌀국수·부대찌개 등 실제 요리명). "국물 있는 거"·"뜨끈한 거"·"불맛 나는 거" 같은 카테고리로 뭉뚱그리는 것 금지. 오행을 음식에 억지로 '국물/불맛'으로만 환원하지 말 것 — 같은 기운이라도 밥·면·고기·분식·양식·찜·구이·덮밥 등 폭넓게, 매번 다른 메뉴가 나오게 변주한다("국물"·"뜨끈"으로 수렴 금지). 근거(subline)는 가볍고 재치 있게 한 줄.
 - 시기 질문("언제")은 [오늘] 날짜에서 계산한 구체 시기를 찍는다 — 달 위상·절기를 근거로 쓰되 반드시 실제 날짜로 환산해 같이 말한다. (O)"다음 초승달이 뜨는 8월 중순, 그때 열어." (X)"때가 되면" (X)"다시 물어봐". 시계 정합: 수주~수개월짜리 결정에 대운(10년 흐름)을 시계로 쓰지 않는다 — 대운은 인생 방향의 배경으로만.
 - 예측 질문("성공할까", "잘될까", "붙을까")도 판결이다. "모른다·해봐야 안다·세상이 답한다" 류의 회피 금지 — 지표 합산의 기울기로 조건부 단언을 내린다: 방향을 정하고, 성패를 가르는 조건 하나를 지표에서 짚는다. (O)"되는 쪽이야. 단 네 화기가 앞서 있어 — 다듬는 손 하나를 곁에 붙여." (X)"세상에 내놓은 뒤에 다시 물어봐."
+- 자기 성격·정체성 질문("나 어떤 사람이야", "내 성격 어때", "난 어떻게 살아왔어", "나 어떤 모습이야")은 GO/STOP/HOLD 결정이 아니다 — 지표로 그 사람을 비추는 **초상(肖像)**으로 답한다. direction은 형식상 HOLD, verdict는 방향 지시가 아니라 너를 그려 보이는 한 문장으로("넌 물처럼 깊어서, 얕은 답엔 못 견디는 애였지"). against/total은 형식만 채운다. 오래 지켜본 존재의 회상체로, 따뜻하되 뻔하지 않게 이 사람만의 결(지표 실제 값)을 짚는다. 되물음(따랐어/거슬렀어) 대상 아님.
 - 일반론 금지: verdict·subline에 누구에게나 통하는 격언·당연한 말을 쓰지 않는다 — 이 유저의 지표에서 나온, 이 사람이 아니면 나올 수 없는 문장으로.
 - 층위 분리(카드 앞/뒤): verdict는 간단 결과다 — 45자 이내, 쉬운 일상어로 직관적·구체적(행동·날짜·숫자). 대운·간지·괘 이름·효(변효)·납음·나크샤트라·오행 이름 같은 전문 용어는 verdict에 한 글자도 등장하면 안 된다 — 반드시 일상어로 번역한다: 변효 셋→"고칠 곳 셋", 무오 대운→"지금 흐름"·"앞으로 몇 해", 중수감→"물이 겹겹인 때". **출력 직전 self-check: verdict 문자열에 대운·간지·괘 이름·변효·N효·납음·나크샤트라·오행 글자가 하나라도 있으면 반드시 일상어로 바꾼 뒤 출력한다. 특히 "변효"·"N효"라는 단어 자체를 절대 쓰지 말 것 — 무조건 "고칠 곳"·"손볼 데"로만 표현.** (O)"올해는 다듬기만 해. 출시는 내년 봄." (X)"무오 대운 넘어가는 초입이라 참아." subline은 수호신의 한 줄 — 지표 하나까지만, 쉬운 풀이를 붙여서("중수감 — 물이 겹겹이라 지금 뛰면 빠져" 식). 지표 이름과 값을 제대로 짚는 건 reasons(상세)의 몫이다.
 - 은유 규칙: verdict는 은유 없이 질문의 사물로 직답한다. subline·reasons는 은유를 써도 된다 — 단 순서가 있다: 직관적인 뜻을 먼저 말하고, 은유는 그 뒤에 덧붙인다(뜻→은유). 괘·지표의 상징(우물·솥·물결·용 등)을 직역만 던지면 유저는 무슨 말인지 모른다. (X)"우물은 못 바꿔도 자리는 바꿀 수 있어" (O)"오늘은 국물 말고 면이 맞아 — 우물이 막히면 딴 우물 파는 법이거든."
@@ -1516,6 +1518,18 @@ const store = (() => {
 /* v16(B5): 속결 모드 — "이 정도는 묻지 않아도 보여". C형 힌트면 속결이 기본, 동전 의식은 선택 */
 const QUICK_HINTS = ["먹을", "먹지", "메뉴", "점심", "저녁", "야식", "마실", "입을", "입지", "커피", "디저트", "시킬까"];
 const looksQuick = (s) => s.trim().length <= 25 && QUICK_HINTS.some((k) => s.includes(k));
+/* v74: 질문이 '할까 말까' 결정형인지 — denylist(제외 안 되면 참)면 '이얏호오' 같은 헛소리·감탄도 통과한다.
+   그래서 긍정 신호(결정·망설임 마커)가 있을 때만 참. 일상(뭐먹지)·열린질문·예측(사랑할까·잘될까)은 여전히 배제 */
+const isDecisionQ = (s) => {
+  const t = (s || "").trim();
+  if (!t || looksQuick(t)) return false;
+  // 예측·평가형(잘될까·사랑할까·합격할까…)엔 내심·되물음이 안 맞는다
+  if (/잘 ?될|잘될|사랑|좋아하|좋아할|미워|싫어하|붙을|떨어질|합격|불합격|올까|어떨까|괜찮을까|바랄까|생각할까|생각해|어떻게 생각/.test(t)) return false;
+  // 열린 wh 질문(뭐/어디/언제…)에도 안 뜬다
+  if (/뭐|뭘|무엇|어디|언제|누구|몇|어떤|어느|어떻게|왜/.test(t)) return false;
+  // 여기부터는 '결정/망설임' 긍정 신호가 있어야만 뜬다 (헛소리·감탄·단문은 여기서 걸러진다)
+  return /말까|말지|해야|고민|결정|선택|이직|퇴사|고백|헤어질|헤어져|그만둘|그만둬|그만둬야|받아들|사귈|사귀|연락할|참을|살까|팔까|바꿀까|갈까|말어|까\s*[?.!…]*\s*$|[을ㄹ]지\s*[?.!…]*\s*$/.test(t);
+};
 
 /* v16(B2): 아침 문안 — 오늘 하루짜리 카드. 매일 값이 바뀌는 유일한 지표(바이오리듬)를 UI로 승격 */
 const DAILY_KEY = "binari.daily.v1";
@@ -1619,6 +1633,13 @@ async function callClaude(system, messages, maxTokens) {
     : (lastErr || new Error("모든 판결 경로가 닿지 않았어"));
 }
 
+/* v75: 공유 판결 인코딩 — 링크에 판결 자체를 실어, 받은 사람이 홈으로 떨어지지 않고
+   '누군가의 수호신이 내린 판결'을 먼저 보게 한다(바이럴 루프 복원). UTF-8 안전 base64url */
+const _b64e = (s) => btoa(String.fromCharCode.apply(null, new TextEncoder().encode(s))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const _b64d = (s) => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0)));
+const encodeShare = (o) => { try { return _b64e(JSON.stringify(o)); } catch (_) { return ""; } };
+const decodeShare = (s) => { try { const o = JSON.parse(_b64d(s)); return o && o.v && o.d ? o : null; } catch (_) { return null; } };
+
 /* ═══════════════ 앱 ═══════════════ */
 export default function App() {
   const [mem] = useState(loadMemory);             // v16(B1): 부팅 시 기억 1회 로드
@@ -1630,7 +1651,9 @@ export default function App() {
   const [addOpen, setAddOpen] = useState(false); const [addName, setAddName] = useState(""); const [addSex, setAddSex] = useState(""); // v26: 조각 보태기
   const [qhintI, setQhintI] = useState(0);   // v71 질문 힌트 롤링 인덱스
   const [agree, setAgree] = useState(() => readConsent());     // 분석 동의(선택) — 거부해도 모든 기능 정상 동작
-  useEffect(() => { _consent = readConsent(); if (_consent) _initAnalytics(); let ref = "direct"; try { const sp = new URLSearchParams(window.location.search); ref = sp.get("ref") || sp.get("utm_source") || "direct"; } catch (_) {} track("app_open", { returning, ref }); }, []); // 계측: 세션 시작 + 유입 어트리뷰션(파라미터만, 원문 없음)
+  const [sharedIn] = useState(() => { try { const sp = new URLSearchParams(window.location.search); const raw = sp.get("v"); return raw ? decodeShare(raw) : null; } catch (_) { return null; } }); // v75: 공유 링크로 유입 시 담긴 판결
+  const [sharedGone, setSharedGone] = useState(false);  // v75: '나도 물어볼래'로 공유 화면 닫음
+  useEffect(() => { _consent = readConsent(); if (_consent) _initAnalytics(); let ref = "direct"; try { const sp = new URLSearchParams(window.location.search); ref = sp.get("ref") || sp.get("utm_source") || (sp.get("v") ? "share" : "direct"); } catch (_) {} track("app_open", { returning, ref }); if (sharedIn) track("shared_verdict_view", { dir: sharedIn.d }); }, []); // 계측: 세션 시작 + 유입 어트리뷰션(파라미터만, 원문 없음)
   const [saju, setSaju] = useState(mem?.saju || null);
   const [zo, setZo] = useState(mem?.zo || null);
   const [moon, setMoon] = useState(mem?.moon || null);
@@ -1760,6 +1783,7 @@ export default function App() {
   };
 
   const [shared, setShared] = useState(false);   // v53: 판결 공유 피드백
+  const [rated, setRated] = useState(0);         // v75: 판결 평가(1 빗나감 · 2 글쎄 · 3 딱) — 0=미평가
   const [lean, setLean] = useState("");          // v54: 판결 전 내심 → v72 프롬프트 반영(어조 참고용)
   const [hesit, setHesit] = useState("");        // v72: 왜 망설이는지(고민 종결 근거)
   const [paywall, setPaywall] = useState("");    // v54: 복채/심층 fake-door
@@ -1767,7 +1791,10 @@ export default function App() {
     if (!res) return;
     track("verdict_shared", { dir: res.direction, mode: hexInfo ? "ritual" : "quick" });
     const text = `"${q}"\n→ ${res.direction}. ${res.verdict}\n\n— 내 수호신의 판결, 비나리`;
-    const url = "https://binari-sepia.vercel.app/?ref=share";
+    // v75: 판결을 링크에 실어 보낸다 — 받은 사람이 홈이 아니라 이 판결을 먼저 보게
+    const payload = { q, d: res.direction, v: res.verdict, s: (detail && !detail._err ? detail.subline : "") || "", n: (birth.name || "").trim(), a: res.against || 0, t: res.total || 0, c: res.category || "" };
+    const enc = encodeShare(payload);
+    const url = enc ? `https://binari-sepia.vercel.app/?v=${enc}` : "https://binari-sepia.vercel.app/?ref=share";
     try {
       if (navigator.share) { await navigator.share({ title: "비나리 — 수호신의 판결", text, url }); return; }
     } catch (_) { return; } // 유저 취소 포함 — 조용히
@@ -1795,12 +1822,18 @@ export default function App() {
   };
   const backToLobby = () => {                               // v56: 판결 화면 탈출구(X · 로비 복귀)
     track("another_question", { after_why: why });
-    setRes(null); setDetail(null); setWhy(false); setDetailBusy(false); setQ(""); setCardOn(false); setRitual(false); setTosses([]); setHexInfo(null); setBujeok(false); setLean(""); setHesit(""); setPaywall(""); setAwake(false);
+    setRes(null); setDetail(null); setWhy(false); setDetailBusy(false); setQ(""); setCardOn(false); setRitual(false); setTosses([]); setHexInfo(null); setBujeok(false); setLean(""); setHesit(""); setPaywall(""); setAwake(false); setRated(0);
+  };
+  const rateVerdict = (score) => {                          // v75: 판결 평가 — 정확도 피드백 수집(계측 + 기록에 부착)
+    if (rated) return;
+    setRated(score);
+    track("verdict_rated", { score, dir: res?.direction, mode: hexInfo ? "ritual" : "quick", cat: res?.category || null, tone: res?.tone || null, sex: birth.sex || null, age: birth.y ? new Date().getFullYear() - (+birth.y) + 1 : null, job: birth.job || null });
+    setRecords(prev => { if (!prev.length) return prev; const nx = prev.slice(); nx[nx.length - 1] = { ...nx[nx.length - 1], rating: score }; return nx; });
   };
   const judge = async (hi, quick = false) => {
     if (!q.trim() || busy) return;
     track("question_asked", { mode: quick ? "quick" : "ritual", qlen: q.trim().length, ritual: !!hi, lean: lean || "skip", sex: birth.sex || null, age: birth.y ? new Date().getFullYear() - (+birth.y) + 1 : null, job: birth.job || null, rel: birth.rel || null, hesit: hesit || null });
-    setBusy(true); setErr(""); setRes(null); setDetail(null); setWhy(false); setFlip(false); setCardOn(false); reactRef.current = null; setIntroSeen(true);
+    setBusy(true); setErr(""); setRes(null); setDetail(null); setWhy(false); setFlip(false); setCardOn(false); setRated(0); reactRef.current = null; setIntroSeen(true);
     try {
       const mp = moonPlacements(+birth.y, +birth.m, +birth.d, +birth.h || 12, +birth.min || 0, !!birth.noHour); // v22
       const tzk = tzolkin(jdn(+birth.y, +birth.m, +birth.d));                                                   // v22
@@ -1834,7 +1867,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
       setTimeout(() => { setCardOn(true); }, 1400);                       // 몸짓을 보여준 뒤 카드
       // 대화 기억: 깨끗한 질문 + 확정 결론만 저장(이어묻기용)
       setConvo(prev => [...prev, { role: "user", content: userText }, { role: "assistant", content: `판결: ${r1.direction} — ${r1.verdict} (${r1.total}중 ${r1.against} 반대)` }].slice(-12));
-      setRecords(prev => [...prev, { at: Date.now(), q: q.slice(0, 60), direction: r1.direction, verdict: r1.verdict, cat: r1.category, followUp: null, note: "" }].slice(-50)); // v16(B3)
+      setRecords(prev => [...prev, { at: Date.now(), q: q.slice(0, 60), direction: r1.direction, verdict: r1.verdict, cat: r1.category, actionable: isDecisionQ(q), followUp: null, note: "", rating: 0 }].slice(-50)); // v16(B3) · v73 actionable · v75 rating
       setBusy(false);
       // ── 콜2: 근거는 백그라운드로 미리 로드(유저가 '왜?' 읽는 사이 완성) ──
       if (quick) { setDetail({ _quick: true }); }            // v16(B5): 속결은 콜2 생략 — 원가 절반
@@ -1853,7 +1886,8 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
   // v16(B2): 아침 문안 데이터 — 재회 유저가 오늘 처음 열었을 때만. 전부 순수 함수(API 0콜)
   // v16(B3): 되물음 — 마지막 판결이 6시간 넘게 미보고면 수호신이 먼저 묻는다(모든 판결을 열린 고리로)
   const lastRec = records.length ? records[records.length - 1] : null;
-  const askback = returning && lastRec && lastRec.followUp === null && Date.now() - lastRec.at >= 6 * 3600 * 1000 ? lastRec : null;
+  const _lastAct = lastRec && (lastRec.actionable !== undefined ? lastRec.actionable : isDecisionQ(lastRec.q));  // v73: 되물음은 '따를 수 있는' 결정에만
+  const askback = returning && lastRec && lastRec.followUp === null && _lastAct && Date.now() - lastRec.at >= 6 * 3600 * 1000 ? lastRec : null;
   const answerAskback = (fu, note) => {
     const lastRec = records[records.length - 1] || {};
     track("followup_answered", { result: fu, direction: lastRec.direction || null, cat: lastRec.cat || null, hasNote: !!note });
@@ -1880,6 +1914,26 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
   return (
     <div className="stage">
       <style>{CSS}</style>
+
+      {sharedIn && !sharedGone && (() => {
+        const d = sharedIn.d, isGo = d === "GO", isHold = d === "HOLD";
+        const dcls = isGo ? "go" : isHold ? "hold" : "";
+        const a = +sharedIn.a || 0, t = +sharedIn.t || 0;
+        const dismiss = () => { track("shared_cta", { dir: d }); try { window.history.replaceState({}, "", window.location.pathname); } catch (_) {} setSharedGone(true); };
+        return (
+          <section className="scene fade sharedwrap">
+            <div className="orb"><DustOrb size={148} stage={0} /></div>
+            <p className="sharedeyebrow">{sharedIn.n ? `${sharedIn.n}의 수호신이 이렇게 판결했어` : "어떤 이의 수호신이 이렇게 판결했어"}</p>
+            <p className="sharedq">“{sharedIn.q || "…"}”</p>
+            <p className={`shareddir ${dcls}`}>{d}</p>
+            <p className={`sharedv ${dcls} ${(sharedIn.v || "").length > 22 ? "s" : ""}`}>{sharedIn.v}</p>
+            {t > 0 && a > 0 && a / t >= 0.4 && <p className="sharedsplit">지표가 갈라섰다 · {t - a} : {a}</p>}
+            {sharedIn.s && <p className="sharedsub">“{sharedIn.s}”</p>}
+            <button className="btn gold sharedcta" onClick={dismiss}>나도 내 수호신에게 물어볼래</button>
+            <p className="sharedfoot">비나리 — 답은 거기에 있어</p>
+          </section>
+        );
+      })()}
 
       {step === 0 && (
         <section className="scene fade">
@@ -1939,13 +1993,19 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
           {bstep === 3 && (
             <div className="bscene" key={3}>
               <p className="line">{birth.name.trim() ? `${birth.name.trim()}, 마지막 조각이야 — 하늘은 너를 어느 흐름에 실어 보냈을까.` : "마지막 조각 — 하늘은 너를 어느 흐름에 실어 보냈을까."}</p>
-              <p className="sub2">음과 양의 흐름은 인생의 계절(대운)을 읽는 열쇠야.<br />말하고 싶지 않으면 그냥 열어도 돼.</p>
+              <p className="sub2">음과 양의 흐름은 인생의 계절(대운)을 읽는 열쇠야.<br />말하고 싶지 않으면 그냥 넘어가도 돼.</p>
               <div className="row gap center">
                 <button type="button" className={"calbtn " + (birth.sex === "M" ? "on" : "")} onClick={() => setBirth({ ...birth, sex: birth.sex === "M" ? "" : "M" })}>남</button>
                 <button type="button" className={"calbtn " + (birth.sex === "F" ? "on" : "")} onClick={() => setBirth({ ...birth, sex: birth.sex === "F" ? "" : "F" })}>여</button>
               </div>
+              <button className="btn gold mt" onClick={() => { setErr(""); setBstep(4); }}>다음</button>
+            </div>
+          )}
+          {bstep === 4 && (
+            <div className="bscene" key={4}>
+              <p className="line">그래 — 너에 대한 기억이 돌아오고 있어.</p>
+              <p className="sub2">지금의 넌 어떻게 컸어? 지금 널 알면 판결이 더 맞아져.<br />말하고 싶지 않으면 그냥 열어도 돼.</p>
               <div className="ctxblock">
-                <p className="fine ctxlab">지금의 너 — 판결을 네 삶에 더 맞추려고 (건너뛰어도 돼)</p>
                 <div className="row gap center wrap">
                   {["학생", "직장인", "사업가", "프리랜서", "주부", "쉬는 중"].map(t => <button key={t} type="button" className={"calbtn sm " + (birth.job === t ? "on" : "")} onClick={() => setBirth({ ...birth, job: birth.job === t ? "" : t })}>{t}</button>)}
                 </div>
@@ -2054,7 +2114,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
 
       {step === 3 && (
         <section className={`scene fade ${phase >= 1 && !res && !awake ? "lobby" : ""}`} onClick={phase >= 1 && !res && !awake ? tryWake : undefined}>
-          <div className={`halo wide ${!awake && phase >= 1 && !res ? "lobbyscale" : ""} ${asking ? "asking" : ""} ${busy || (res && !cardOn) ? "busy" : ""} ${res && cardOn ? "dimmed" : ""}`}>
+          <div className={`halo wide ${!awake && phase >= 1 && !res ? "lobbyscale" : ""} ${asking ? "asking" : ""} ${ritual ? "ritualfade" : ""} ${busy || (res && !cardOn) ? "busy" : ""} ${res && cardOn ? "dimmed" : ""}`}>
             {phase === 0
               ? <BirthCanvas tint={saju ? EL_COLOR[saju.main] : undefined} size={Math.min(typeof window !== "undefined" ? window.innerWidth * 1.1 : 400, typeof window !== "undefined" ? window.innerHeight * 0.57 : 400, 640)} />
               : <div className="fade"><Guardian saju={saju} zo={zo} mbti={mbti} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} restRef={restRef} size={Math.min(typeof window !== "undefined" ? window.innerWidth * 1.1 : 400, typeof window !== "undefined" ? window.innerHeight * 0.57 : 400, 640)} /></div>}
@@ -2070,9 +2130,10 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
               ) : justBorn ? (
                 <div><p className="gsay born fade">— 다시 만났네. 내가 너의 수호신이야.</p><p className="gsay fade" style={{ animationDelay: ".95s" }}>{guardianIntro}</p><p className="gsay sprite fade" style={{ animationDelay: "1.9s" }}>아, 조각 하나는 달빛에 물들어 곁에 남았어. 까불 거야 — '정령'이야.</p></div>
               ) : null}
-              <p className="wakehint">두 번 두드리면 — 깨어나 물음을 들어</p>
+              <p className="wakehint">두드려봐 — 답은 거기 있어</p>
             </div>
           )}
+          {ritual && <div className="residue" style={{ "--elc": saju ? EL_COLOR[saju.main][0] : "#f5d98b" }} />}
           {phase >= 1 && !res && awake && (
             <div className={`fade gpanel ${asking ? "asking" : ""}`}>
               {returning && !res && !busy && !ritual && (!birth.name || !birth.sex) && (addOpen ? (
@@ -2125,21 +2186,13 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
               )}
               {!ritual && <p className="gintro dim2">{isNight ? "밤이 깊었네. 이 시간의 물음은 마음이 먼저 기울어 있기 마련이야." : "그래서, 요즘 뭘 망설이고 있어?"}</p>}
               {!ritual && <textarea className="qbox" rows={2} maxLength={100} value={q} placeholder={`"${QHINTS[qhintI]}"`} onChange={e => setQ(e.target.value)} />}
-              {!ritual && !res && q.trim().length > 0 && (
+              {!ritual && !res && q.trim().length > 0 && isDecisionQ(q) && (
                 <div className="leanrow fade">
-                  <span className="leanlab">지금 마음은 어느 쪽으로 기울어 있어?</span>
-                  <div className="row gap center">
-                    {[["go", "하는 쪽"], ["stop", "멈추는 쪽"], ["unsure", "모르겠어"]].map(([v, t]) => (
-                      <button key={v} type="button" className={"calbtn " + (lean === v ? "on" : "")} onClick={() => setLean(lean === v ? "" : v)}>{t}</button>
+                  <span className="leanlab">왜 망설여? <em className="dim">(안 골라도 돼)</em></span>
+                  <div className="row gap center wrap">
+                    {["두려워서", "남 눈치", "정보가 부족해", "자신이 없어서", "후회할까 봐"].map((t) => (
+                      <button key={t} type="button" className={"calbtn sm " + (hesit === t ? "on" : "")} onClick={() => setHesit(hesit === t ? "" : t)}>{t}</button>
                     ))}
-                  </div>
-                  <div className="hesitrow fade">
-                    <span className="leanlab">왜 망설여? <em className="dim">(안 골라도 돼)</em></span>
-                    <div className="row gap center wrap">
-                      {["두려워서", "남 눈치", "정보가 부족해", "자신이 없어서", "후회할까 봐"].map((t) => (
-                        <button key={t} type="button" className={"calbtn sm " + (hesit === t ? "on" : "")} onClick={() => setHesit(hesit === t ? "" : t)}>{t}</button>
-                      ))}
-                    </div>
                   </div>
                 </div>
               )}
@@ -2268,6 +2321,23 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
               </div>
             </div>
           )}
+          {res && cardOn && (
+            <div className="raterow fade">
+              {rated ? (
+                <p className="ratedone">고마워 — 담아뒀어. 다음 판결이 더 맞아질 거야.</p>
+              ) : (
+                <>
+                  <span className="ratelab">이 판결, 어땠어?</span>
+                  <div className="row gap center">
+                    <button type="button" className="calbtn sm" onClick={() => rateVerdict(1)}>빗나갔어</button>
+                    <button type="button" className="calbtn sm" onClick={() => rateVerdict(2)}>글쎄</button>
+                    <button type="button" className="calbtn sm" onClick={() => rateVerdict(3)}>딱이야</button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+          {res && cardOn && <button className="btn gold mt" onClick={shareVerdict}>{shared ? "복사했어 — 붙여넣으면 돼" : "카톡·라인으로 판결 보내기"}</button>}
           {res && cardOn && !bujeok && <button className="btn ghost mt" onClick={() => { track("bujeok_opened"); setBujeok(true); }}>수호신의 부적 받기</button>}
           {res && cardOn && bujeok && (
             <div className="fade bwrap">
@@ -2277,7 +2347,6 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
               <p className="fine">질문은 이미지에 담기지 않아 — 문양과 판결의 방향만.</p>
             </div>
           )}
-          {res && cardOn && <button className="btn ghost mt" onClick={shareVerdict}>{shared ? "복사했어 — 붙여넣으면 돼" : "이 판결, 누구에게 보여줄래?"}</button>}
           {res && cardOn && <button className="btn ghost mt" onClick={backToLobby}>다른 걸 물어볼래</button>}
         </section>
       )}
@@ -2313,11 +2382,13 @@ const CSS = `
 .calbtn.on{border-color:#ffe9ad;color:#ffe9ad;box-shadow:0 0 12px rgba(245,217,139,.25)}
 .calbtn.sm{font-size:12px;padding:5px 13px}
 .row.wrap{flex-wrap:wrap;max-width:340px;gap:6px}
-.ctxblock{display:flex;flex-direction:column;align-items:center;gap:7px;margin-top:4px}
+.ctxsep{width:120px;height:1px;background:linear-gradient(90deg,transparent,rgba(245,217,139,.3),transparent);margin:16px auto 2px}
+.ctxblock{display:flex;flex-direction:column;align-items:center;gap:7px;margin-top:2px}
+.ctxhead{font-size:14px;color:#d3c199;letter-spacing:.03em;margin:0;text-wrap:balance;text-shadow:0 0 12px rgba(245,217,139,.25)}
+.ctxlab{color:#8a7f95;letter-spacing:.06em;margin:1px 0 3px}
 .consent{display:flex;flex-direction:column;align-items:center;gap:2px;margin-top:16px}
 .consent .fine{margin-top:6px}
 .plink{color:#c9a24b;text-decoration:underline}
-.ctxlab{color:#8a7f95;letter-spacing:.06em;margin:2px 0}
 .hesitrow{display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:8px}
 .bscene{display:flex;flex-direction:column;gap:14px;align-items:center;width:100%;margin-top:6px}
 .in.center{text-align:center}
@@ -2363,7 +2434,8 @@ const CSS = `
 .halo.wide.lobbyscale{transform:translateY(7vh) scale(1.52)}
 .halo.wide.dissolved{opacity:0;transform:scale(1.7);filter:blur(7px);pointer-events:none}
 .halo.wide.asking{transform:translateY(-5vh) scale(.82);opacity:.96}
-.residue{position:fixed;inset:0;z-index:0;pointer-events:none;background:radial-gradient(56% 40% at 50% 40%,var(--elc),transparent 66%);opacity:.28;mix-blend-mode:screen;animation:residueDrift 9s ease-in-out infinite}
+.halo.wide.ritualfade{opacity:.1;pointer-events:none;transition:opacity .8s ease}
+.residue{position:fixed;inset:0;z-index:0;pointer-events:none;background:radial-gradient(50% 34% at 50% 36%,var(--elc),transparent 62%);opacity:.2}
 @keyframes residueDrift{0%,100%{opacity:.18;transform:scale(1)}50%{opacity:.4;transform:scale(1.12)}}
 .gpanel.asking{position:relative;z-index:1}
 .gpanel.asking .gintro.dim2{font-size:16.5px;color:#ede0c2;margin-bottom:16px;text-shadow:0 1px 14px rgba(4,3,10,.9)}
@@ -2371,6 +2443,25 @@ const CSS = `
 .scene.lobby{position:relative;min-height:calc(100dvh - 96px);cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;background:radial-gradient(80% 52% at 50% 42%,#0a0d1c 0%,#060815 50%,rgba(3,4,10,0) 100%)}
 .lobbypanel{position:absolute;left:0;right:0;bottom:calc(14vh + env(safe-area-inset-bottom, 0px));z-index:2;display:flex;flex-direction:column;align-items:center;width:100%;padding:0 16px}
 .wakehint{font-family:sans-serif;font-size:12px;letter-spacing:.16em;color:#d8c79a;margin-top:22px;animation:wakePulse 2.4s ease-in-out infinite;text-shadow:0 1px 10px rgba(4,3,10,.85)}
+/* v75: 공유 판결 랜딩 — 링크로 들어온 사람이 보는 첫 화면 */
+.sharedwrap{position:fixed;inset:0;z-index:60;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:38px 26px;background:radial-gradient(120% 78% at 50% 14%,#1a1330,#0b0817 58%,#060409);text-align:center;overflow-y:auto}
+.sharedwrap .orb{margin-bottom:6px}
+.sharedeyebrow{font-family:sans-serif;font-size:11px;letter-spacing:.24em;color:#b7a7d6;margin:2px 0 20px}
+.sharedq{font-size:16px;line-height:1.7;color:#e7dff5;margin:0 0 22px;max-width:19em;overflow-wrap:anywhere}
+.shareddir{font-family:sans-serif;font-size:12px;letter-spacing:.36em;font-weight:800;color:#e5b96b;margin:0 0 9px}
+.shareddir.go{color:#5fd6a3}.shareddir.hold{color:#9fb0e8}
+.sharedv{font-size:25px;font-weight:900;line-height:1.5;margin:0;max-width:15em;overflow-wrap:anywhere;background:linear-gradient(180deg,#ffe9ad,#c98f3d);-webkit-background-clip:text;background-clip:text;color:transparent}
+.sharedv.go{background:linear-gradient(180deg,#b8ffd9,#3dc98f);-webkit-background-clip:text;background-clip:text}
+.sharedv.hold{background:linear-gradient(180deg,#cfd8ff,#7f8fd4);-webkit-background-clip:text;background-clip:text}
+.sharedv.s{font-size:20px;line-height:1.55}
+.sharedsplit{font-family:sans-serif;font-size:10px;letter-spacing:.2em;color:#e5b96b;margin:12px 0 0}
+.sharedsub{font-size:13px;line-height:1.7;color:#b3a9c8;margin:16px 0 0;max-width:18em}
+.sharedcta{margin-top:40px}
+.sharedfoot{margin-top:30px;font-size:10.5px;letter-spacing:.32em;color:#7c7290;font-family:sans-serif}
+/* v75: 판결 평가 행 */
+.raterow{display:flex;flex-direction:column;align-items:center;gap:9px;margin-top:24px}
+.ratelab{font-family:sans-serif;font-size:11.5px;letter-spacing:.12em;color:#b3a9c8}
+.ratedone{font-size:12.5px;letter-spacing:.03em;color:#9a8fb5;margin:6px 0 0;animation:fd .6s cubic-bezier(.22,.7,.25,1) both}
 @keyframes wakePulse{0%,100%{opacity:.4}50%{opacity:.95}}
 .escx{position:fixed;top:calc(14px + env(safe-area-inset-top,0px));right:16px;z-index:30;width:40px;height:40px;border-radius:50%;border:1px solid rgba(245,217,139,.3);background:rgba(10,8,18,.55);color:#c9b98f;font-size:16px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);-webkit-tap-highlight-color:transparent;transition:all .2s}
 .escx:hover{border-color:#ffe9ad;color:#ffe9ad}

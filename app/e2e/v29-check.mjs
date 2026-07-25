@@ -26,6 +26,7 @@ await page.getByRole("button", { name: "이 하늘이야" }).click();
 const tins = page.locator("input.in:not(.wide)");
 await tins.nth(0).fill("14"); await tins.nth(1).fill("30");
 await page.getByRole("button", { name: "기억났어" }).click();
+await page.getByRole("button", { name: "다음" }).click();
 await page.getByRole("button", { name: "하늘을 열기" }).click();
 
 // ── ① v30 순차: 회상 나레이션 단계 → "응, 기억나" 탭 → 문항 단계(나레이션 숨김) ──
@@ -52,12 +53,12 @@ await page.getByRole("button", { name: "안정", exact: true }).click();
 await page.getByRole("button", { name: "수호신 깨우기" }).click();
 
 // ── ② 자기소개: 탄생(3.2s) 직후 로비에서 노출(v52) ──
-await page.waitForSelector("text=두 번 두드리면", { timeout: 12000 });
+await page.waitForSelector("text=두드려봐", { timeout: 12000 });
 await page.waitForTimeout(1200); // 탄생 페이드 + justBorn
 const introVisible = await page.locator(".gsay").first().isVisible().catch(() => false);
 const introText = (await page.locator(".gsay").allTextContents()).join(" ");
 ck("② 탄생 직후 자기소개(로비) 노출", introVisible, introText.slice(0, 40));
-await page.locator("canvas").first().dblclick(); // 두 번 두드려 깨움
+await page.locator("canvas").first().dblclick(); // 두드려봐 깨움
 await page.waitForSelector("textarea.qbox", { timeout: 12000 });
 await page.waitForTimeout(300);
 

@@ -31,6 +31,7 @@ await tins.nth(0).fill("14"); await tins.nth(1).fill("30");
 await page.getByRole("button", { name: "기억났어" }).click(); await page.waitForTimeout(400);
 await shot("j02c_흐름장면");
 await page.getByRole("button", { name: "여", exact: true }).click();
+await page.getByRole("button", { name: "다음" }).click();
 await page.getByRole("button", { name: "하늘을 열기" }).click();
 await page.waitForTimeout(1600); await shot("j03_리빌_중간");
 await page.getByRole("button", { name: "응, 기억나" }).click({ timeout: 15000 }); // v30: 회상 나레이션 넘기기
@@ -52,9 +53,9 @@ await page.getByRole("button", { name: "안정", exact: true }).click();
 await page.waitForTimeout(300); await shot("j08_가치_단하나");
 await page.getByRole("button", { name: "수호신 깨우기" }).click();
 await page.waitForTimeout(1600); await shot("j09_수호신_형성중");
-await page.waitForSelector("text=두 번 두드리면", { timeout: 12000 });          // v52: 로비
+await page.waitForSelector("text=두드려봐", { timeout: 12000 });          // v52: 로비
 await page.waitForTimeout(2400); await shot("j09b_로비");
-await page.locator("canvas").first().dblclick();                               // 두 번 두드려 깨움
+await page.locator("canvas").first().dblclick();                               // 두드려봐 깨움
 await page.waitForSelector("textarea.qbox", { timeout: 12000 });
 await page.waitForTimeout(2000); await shot("j10_수호신_질문화면");
 await page.locator("textarea.qbox").fill("지금 잘까, 더 할까");

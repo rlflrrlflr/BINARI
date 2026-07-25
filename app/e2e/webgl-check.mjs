@@ -19,6 +19,7 @@ async function onboard(page) {
   const tins = page.locator("input.in:not(.wide)");
   await tins.nth(0).fill("14"); await tins.nth(1).fill("30");
   await page.getByRole("button", { name: "기억났어" }).click();
+  await page.getByRole("button", { name: "다음" }).click();
   await page.getByRole("button", { name: "하늘을 열기" }).click();
   await page.getByRole("button", { name: "응, 기억나" }).click({ timeout: 15000 });
   await page.waitForSelector("text=요즘의 너는", { timeout: 10000 });
@@ -30,8 +31,8 @@ async function onboard(page) {
   await page.getByRole("button", { name: "셋을 남겼어" }).click(); await page.waitForTimeout(200);
   await page.getByRole("button", { name: "안정", exact: true }).click();
   await page.getByRole("button", { name: "수호신 깨우기" }).click();
-  await page.waitForSelector("text=두 번 두드리면", { timeout: 12000 });        // v52: 로비
-  await page.locator("canvas").first().dblclick();                              // 두 번 두드려 깨움
+  await page.waitForSelector("text=두드려봐", { timeout: 12000 });        // v52: 로비
+  await page.locator("canvas").first().dblclick();                              // 두드려봐 깨움
   await page.waitForSelector("textarea.qbox", { timeout: 12000 });
 }
 const brightness = (page) => page.evaluate(() => {
