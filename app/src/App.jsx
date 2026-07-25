@@ -1834,7 +1834,7 @@ export default function App() {
     track("verdict_shared", { dir: res.direction, mode: hexInfo ? "ritual" : "quick" });
     const text = `"${q}"\n→ ${res.direction}. ${res.verdict}\n\n— 내 수호신의 판결, 비나리`;
     // v75: 판결을 링크에 실어 보낸다 — 받은 사람이 홈이 아니라 이 판결을 먼저 보게
-    const payload = { q, d: res.direction, v: res.verdict, s: (detail && !detail._err ? detail.subline : "") || "", n: (birth.name || "").trim(), a: res.against || 0, t: res.total || 0, c: res.category || "" };
+    const payload = { q, d: res.direction, v: res.verdict, s: (detail && !detail._err ? detail.subline : "") || "", n: (birth.name || "").trim(), a: res.against || 0, t: res.total || 0, c: res.category || "", to: res.tone || "", hx: hexInfo ? { n: hexInfo.name, t: (hexInfo.moving && hexInfo.moving.length ? hexInfo.toName : "") } : null };
     const enc = encodeShare(payload);
     const url = enc ? `https://binari-sepia.vercel.app/?v=${enc}` : "https://binari-sepia.vercel.app/?ref=share";
     try {
@@ -1962,15 +1962,26 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
         const dcls = isGo ? "go" : isHold ? "hold" : "";
         const a = +sharedIn.a || 0, t = +sharedIn.t || 0;
         const dismiss = () => { track("shared_cta", { dir: d }); try { window.history.replaceState({}, "", window.location.pathname); } catch (_) {} setSharedGone(true); };
+        const vv = sharedIn.v || "";
         return (
           <section className="scene fade sharedwrap">
-            <div className="orb"><DustOrb size={148} stage={0} /></div>
             <p className="sharedeyebrow">{sharedIn.n ? `${sharedIn.n}의 수호신이 이렇게 판결했어` : "어떤 이의 수호신이 이렇게 판결했어"}</p>
-            <p className="sharedq">“{sharedIn.q || "…"}”</p>
-            <p className={`shareddir ${dcls}`}>{d}</p>
-            <p className={`sharedv ${dcls} ${(sharedIn.v || "").length > 22 ? "s" : ""}`}>{sharedIn.v}</p>
-            {t > 0 && a > 0 && a / t >= 0.4 && <p className="sharedsplit">지표가 갈라섰다 · {t - a} : {a}</p>}
-            {sharedIn.s && <p className="sharedsub">“{sharedIn.s}”</p>}
+            <div className="persp sharedcard">
+              <div className="vcard">
+                <div className="vface">
+                  <i className="corner tl">✦</i><i className="corner tr">✦</i><i className="corner bl">✦</i><i className="corner br">✦</i>
+                  <span className="vside">運命合意判決</span>
+                  <span className="vseal">神</span>
+                  <div className="vtop"><span>BINARI</span><span>{sharedIn.c ? `${sharedIn.c}형` : "판결"}{sharedIn.to ? ` · ${sharedIn.to}` : ""}</span></div>
+                  <p className={`vq ${(sharedIn.q || "").length > 55 ? "s" : ""}`}>{sharedIn.q || "…"}</p>
+                  {sharedIn.hx && sharedIn.hx.n && <p className="vhex">卦 {sharedIn.hx.n}{sharedIn.hx.t ? ` → ${sharedIn.hx.t}` : ""}</p>}
+                  <div className="vdiv"><span>✦</span></div>
+                  {t > 0 && a > 0 && a / t >= 0.4 && <p className="split">지표가 갈라섰다 · {t - a} : {a}</p>}
+                  <p className={`vv ${dcls} ${vv.length > 40 ? "s" : vv.length > 22 ? "m" : ""}`}>{vv}</p>
+                  {sharedIn.s && <p className="sharedsub">“{sharedIn.s}”</p>}
+                </div>
+              </div>
+            </div>
             <button className="btn gold sharedcta" onClick={dismiss}>나도 내 수호신에게 물어볼래</button>
             <p className="sharedfoot">비나리 — 답은 거기에 있어</p>
           </section>
@@ -2485,21 +2496,14 @@ const CSS = `
 .scene.lobby{position:relative;min-height:calc(100dvh - 96px);cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;background:radial-gradient(80% 52% at 50% 42%,#0a0d1c 0%,#060815 50%,rgba(3,4,10,0) 100%)}
 .lobbypanel{position:absolute;left:0;right:0;bottom:calc(14vh + env(safe-area-inset-bottom, 0px));z-index:2;display:flex;flex-direction:column;align-items:center;width:100%;padding:0 16px}
 .wakehint{font-family:sans-serif;font-size:12px;letter-spacing:.16em;color:#d8c79a;margin-top:22px;animation:wakePulse 2.4s ease-in-out infinite;text-shadow:0 1px 10px rgba(4,3,10,.85)}
-/* v75: 공유 판결 랜딩 — 링크로 들어온 사람이 보는 첫 화면 */
-.sharedwrap{position:fixed;inset:0;z-index:60;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:38px 26px;background:radial-gradient(120% 78% at 50% 14%,#1a1330,#0b0817 58%,#060409);text-align:center;overflow-y:auto}
-.sharedwrap .orb{margin-bottom:6px}
-.sharedeyebrow{font-family:sans-serif;font-size:11px;letter-spacing:.24em;color:#b7a7d6;margin:2px 0 20px}
-.sharedq{font-size:16px;line-height:1.7;color:#e7dff5;margin:0 0 22px;max-width:19em;overflow-wrap:anywhere}
-.shareddir{font-family:sans-serif;font-size:12px;letter-spacing:.36em;font-weight:800;color:#e5b96b;margin:0 0 9px}
-.shareddir.go{color:#5fd6a3}.shareddir.hold{color:#9fb0e8}
-.sharedv{font-size:25px;font-weight:900;line-height:1.5;margin:0;max-width:15em;overflow-wrap:anywhere;background:linear-gradient(180deg,#ffe9ad,#c98f3d);-webkit-background-clip:text;background-clip:text;color:transparent}
-.sharedv.go{background:linear-gradient(180deg,#b8ffd9,#3dc98f);-webkit-background-clip:text;background-clip:text}
-.sharedv.hold{background:linear-gradient(180deg,#cfd8ff,#7f8fd4);-webkit-background-clip:text;background-clip:text}
-.sharedv.s{font-size:20px;line-height:1.55}
-.sharedsplit{font-family:sans-serif;font-size:10px;letter-spacing:.2em;color:#e5b96b;margin:12px 0 0}
-.sharedsub{font-size:13px;line-height:1.7;color:#b3a9c8;margin:16px 0 0;max-width:18em}
-.sharedcta{margin-top:40px}
-.sharedfoot{margin-top:30px;font-size:10.5px;letter-spacing:.32em;color:#7c7290;font-family:sans-serif}
+/* v75: 공유 판결 랜딩 — 링크로 들어온 사람이 '실제 판결 카드'를 그대로 본다 */
+.sharedwrap{position:fixed;inset:0;z-index:60;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:34px 20px;background:radial-gradient(120% 78% at 50% 14%,#161029,#0b0817 58%,#060409);text-align:center;overflow-y:auto}
+.sharedeyebrow{font-family:sans-serif;font-size:11px;letter-spacing:.24em;color:#b7a7d6;margin:0 0 16px}
+.sharedcard{margin-top:0}
+.sharedcard .vv{margin-top:6px}
+.sharedsub{font-size:13px;line-height:1.7;color:#c3b6d8;margin:16px 4px 0;overflow-wrap:anywhere}
+.sharedcta{margin-top:34px}
+.sharedfoot{margin-top:26px;font-size:10.5px;letter-spacing:.32em;color:#7c7290;font-family:sans-serif}
 /* v75: 판결 평가 행 */
 .raterow{display:flex;flex-direction:column;align-items:center;gap:9px;margin-top:24px}
 .ratelab{font-family:sans-serif;font-size:11.5px;letter-spacing:.12em;color:#b3a9c8}
