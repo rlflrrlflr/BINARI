@@ -78,12 +78,14 @@ try {
     await ctx2.close();
   }
 
-  /* ── 2단계 동의: 미동의 시 프로파일 키만 빠지고 이벤트·1단계 지표는 살아야 한다 ── */
+  /* ── 2단계 동의: 미동의 시 프로파일 키만 빠지고 이벤트·1단계 지표는 살아야 한다 ──
+     belief 는 2026-07-26부터 1단계라 동의와 무관하게 전송된다(G2 게이트 표본 확보).
+     대신 2단계 키(verdict/hesit/age_band 등)는 여전히 제거돼야 한다. */
   {
     const inject = () => { localStorage.setItem("binari.belief.v1", "skeptic"); };
     const ctx = await fresh(inject);                                     // 동의 없음
     const a = await open(ctx, "/?trackdebug");
-    check("동의 없이 belief 제거됨", !("belief" in a), `belief=${a.belief}`);
+    check("belief 는 동의 없이도 전송(1단계)", a.belief === "skeptic", `belief=${a.belief}`);
     check("동의 없이도 1단계 지표는 전송", a.is_internal === false && typeof a.ft_source === "string" && "returning" in a && "ref" in a,
       `ref=${a.ref} returning=${a.returning}`);
     await ctx.close();
@@ -93,8 +95,12 @@ try {
       localStorage.setItem("binari.analytics_consent.v1", "1");
     });
     const b = await open(ctx2, "/?trackdebug");
-    check("동의 시 belief 전송", b.belief === "skeptic", `belief=${b.belief}`);
+    check("동의 시에도 belief 전송", b.belief === "skeptic", `belief=${b.belief}`);
     await ctx2.close();
+
+    // stripProfile 이 2단계 키(verdict/hesit/age_band…)를 실제로 제거하는지는 여기서 못 잰다.
+    // 그 키들은 verdict_shown 에만 실리고, 판결에는 /api/judge 호출이 필요하기 때문이다.
+    // 프로덕션 데이터로 확인함(2026-07-26): verdict_shown 17건 중 dir 17/17 · verdict 8/17.
   }
 
   /* ── 유실 방지: posthog 로드 전에 발생하는 app_open 이 큐를 타고 살아남아야 한다 ── */

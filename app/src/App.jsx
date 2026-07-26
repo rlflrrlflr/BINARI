@@ -5,14 +5,14 @@ const AKEY = import.meta.env.VITE_POSTHOG_KEY;
 let _ph = null, _phInit = false;
 /* ── 계측 2단계 구조 ──────────────────────────────────────────────
    1단계(기본) — 동의 불필요. 서비스 운영·개선에 필요한 최소 통계.
-     이벤트 발생 사실과 비식별 지표(판결 방향·카테고리·톤·만족도 점수·질문 길이 등)만.
+     이벤트 발생 사실과 비식별 지표(판결 방향·카테고리·톤·만족도 점수·질문 길이·belief 등)만.
      근거: 개인정보보호법 §15①6 정당한 이익 / §28-2 가명정보 통계작성 + 처리방침 고지.
      → DAU/MAU·리텐션·퍼널이 전체 사용자 기준으로 정확히 잡힌다.
    2단계(프로파일) — 선택 동의 필요. 나이·성별·직업·관계·도시·MBTI·가치관·오행,
      판결 문구, 망설임 사유. 서비스 제공에 필수가 아니고 조합 시 식별성이 커지므로 동의 기반.
      미동의 시 아래 키만 제거되고 이벤트 자체는 그대로 전송된다.
    질문 원문·실명·생년월일 원값은 단계 무관하게 절대 전송하지 않는다. */
-const PROFILE_KEYS = new Set(["age", "age_band", "sex", "job", "rel", "city", "mbti", "core_value", "element", "zodiac", "verdict", "hesit", "belief"]);
+const PROFILE_KEYS = new Set(["age", "age_band", "sex", "job", "rel", "city", "mbti", "core_value", "element", "zodiac", "verdict", "hesit"]);
 const stripProfile = (p) => { const o = {}; for (const k in p) if (!PROFILE_KEYS.has(k)) o[k] = p[k]; return o; };
 
 /* ── D1·D2: 모든 이벤트에 따라붙는 고정 속성(super property) ────────────────
@@ -96,8 +96,10 @@ if (typeof window !== "undefined" && /[?&]trackdebug/.test(window.location.searc
 
 /* D3 — 신자/비신자 1문항. 첫 판결 직후 1탭으로 한 번만 묻고, 이후 모든 이벤트에 따라붙는다.
    G2 게이트("비신자도 돌아오는가")를 재는 유일한 축이다.
-   ※ '신념'은 개인정보보호법 §23 민감정보로 해석될 여지가 있어 PROFILE_KEYS(선택 동의)에 넣어 두었다.
-      동의자 한정으로만 집계되므로, 전체 집계가 필요하면 PROFILE_KEYS에서 "belief"를 빼면 된다. */
+   ※ 2026-07-26 판단: 1단계(동의 불필요)로 이동. 종교·사상적 신조가 아니라 점술이라는 서비스
+      카테고리에 대한 태도이고, 3지 선택 고정값이라 자유서술이 없으며, 식별자와 연결되지 않는다.
+      §23 민감정보로 볼 여지가 완전히 없지는 않으므로 처리방침 2조 '기본 통계' 항목에 명시 고지한다.
+      되돌리려면 PROFILE_KEYS에 "belief"를 다시 넣고 처리방침 고지를 2단계로 옮기면 된다. */
 const BELIEF_KEY = "binari.belief.v1";
 function readBelief() { try { return window.localStorage.getItem(BELIEF_KEY) || ""; } catch (_) { return ""; } }
 function saveBelief(v) {
