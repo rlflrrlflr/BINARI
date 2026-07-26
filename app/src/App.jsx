@@ -1068,7 +1068,7 @@ void computeShape(vec4 a_r0, vec4 a_r1, out vec2 spos, out float depth, out floa
   spos+=vec2(sin(t*0.11+1.3)*0.11, sin(t*0.17)*0.07+0.012*u_breath)*(1.0-ta)*smoothstep(0.0,3.5,u_t);
 }`;
 const SIM_VERT = `attribute vec2 a_q; void main(){ gl_Position=vec4(a_q,0.0,1.0); }`;
-const SIM_FRAG = `precision highp float;\n` + SHAPE_UNI + `\nuniform sampler2D u_state,u_r0,u_r1; uniform vec2 u_texdim,u_touchVel; uniform float u_dt,u_bloom; uniform vec4 u_trail[12];\n` + SHAPE_FN + `
+const SIM_FRAG = `precision highp float;\n` + SHAPE_UNI + `\nuniform sampler2D u_state,u_r0,u_r1; uniform vec2 u_texdim,u_touchVel; uniform float u_dt,u_bloom; uniform vec4 u_trail[16];\n` + SHAPE_FN + `
 void main(){
   vec2 uv=gl_FragCoord.xy/u_texdim;
   vec4 st=texture2D(u_state,uv); vec4 a_r0=texture2D(u_r0,uv); vec4 a_r1=texture2D(u_r1,uv);
@@ -1077,29 +1077,42 @@ void main(){
   computeShape(a_r0,a_r1,spos,depth,v_a,sc,rl);
   vec2 target=spos;
   float ta=clamp(u_touchAmt,0.0,1.0);
-  float stg=a_r1.z*0.68; float g=clamp((ta-stg)/0.28,0.0,1.0); g=g*g*(3.0-2.0*g);
+  float stg=a_r1.z*0.45; float g=clamp((ta-stg)/0.28,0.0,1.0); g=g*g*(3.0-2.0*g);
   if(g>0.001){
     float bang=a_r1.w*6.2832;
-    float bR=0.014+0.07*u_bloom;                                // v72 방사 더 좁게
-    float rr=0.3+0.7*a_r0.z;
-    vec2 burst=u_touch+vec2(cos(bang),sin(bang))*(rr*bR);
+    float rr=a_r0.z*a_r0.z;                                     // v76 중심 밀집 → 빈 도넛 대신 밝은 코어
+    float ph=fract(u_t*0.9);
+    float beat=exp(-ph*9.0)+0.45*exp(-abs(ph-0.22)*20.0);       // v80 럽-덥 심장박동(~54bpm 명상 박자)
+    float bR=0.008*(1.0+0.30*beat*u_bloom);                     // 코어가 심장처럼 부풀었다 가라앉는다 — 살아있는 촉감
+    float pr=step(0.88,fract(a_r0.w*13.7+a_r1.x*5.3));          // v80.1 행렬 전담 입자(~12%) — 나머지 88%는 코어에 남는다
+    float rad=mix(rr*bR, 0.05, pr*u_bloom);                     // 전원 응축 → 완료 후 행렬 입자만 서서히 띠로 나간다
+    vec2 burst=u_touch+vec2(cos(bang),sin(bang))*rad;
     target=mix(target,burst,g);
   }
   float spd=min(length(u_touchVel),0.06);
-  float k=mix(14.0,10.0,g)-spd*120.0; k=max(k,2.0);           // 대기 강성↑(크리스프), 드래그 시 느슨(잔상)
-  float damp=mix(9.0,5.5,g)-spd*55.0; damp=max(damp,2.5);
+  float k=mix(14.0,15.0,g)-spd*95.0; k=max(k,2.5);           // v79 응답 빠르게(강성↑) + 드래그 잔상(궤적 살림)
+  float damp=mix(9.0,6.8,g)-spd*48.0; damp=max(damp,2.8);     // v79 댐핑 낮춰 빠른 정착 → 중심 즉시 채움(눌린 느낌)·드래그 잔상
   vec2 acc=(target-pos)*k - vel*damp;
   if(g>0.15){
     vec2 d=pos-u_touch; float dl=length(d)+1e-4; vec2 dn=d/dl; vec2 cw=vec2(dn.y,-dn.x); // 시계방향 접선
-    acc += cw*g*2.2*exp(-dl*dl*90.0)*u_bloom;                  // v73 방사/크래클은 다 모인 뒤(bloom)에만 시작
-    for(int i=0;i<12;i++){                                     // v72 궤적(족적) 따라 불꽃 튐
+    // v80 홀림 모션 — 심장박동 코어 둘레를 '탑돌이'처럼 일정하게 도는 궤도 행렬 + 간헐 불티
+    float ph2=fract(u_t*0.9);
+    float beat2=exp(-ph2*9.0)+0.45*exp(-abs(ph2-0.22)*20.0);
+    float shell=smoothstep(0.012,0.04,dl);                    // 코어(안쪽)는 꽉 찬 채로 — 불티는 코어 밖에서만
+    float pr2=step(0.88,fract(a_r0.w*13.7+a_r1.x*5.3));       // 행렬 전담 입자만 띠 힘을 받는다(코어 88% 보호)
+    float band=exp(-(dl-0.05)*(dl-0.05)*1400.0);
+    acc += cw*band*pr2*g*u_bloom*(13.0+6.0*beat2);            // 경건한 시계방향 행진, 박동마다 힘이 실린다
+    float ember=step(0.93,fract(a_r0.w*31.7+floor(u_t*14.0)*0.5+a_r1.x*3.0));
+    acc += cw*ember*shell*g*u_bloom*exp(-dl*dl*180.0)*16.0;   // 간헐 불티 — 은은하게만 반짝
+    for(int i=0;i<16;i++){                                     // v75 궤적(족적) 따라 스파클라 불꽃
       vec4 tr=u_trail[i];
-      float fresh=tr.w*exp(-tr.z*1.3)*step(0.02,tr.w);         // 족적 신선도(오래되면 사그라듦)
-      vec2 tv=pos-tr.xy; float tr2=dot(tv,tv); float trl=sqrt(tr2)+1e-4;
-      float nearT=exp(-tr2*70.0);
-      acc += -tv*nearT*fresh*7.0;                              // 족적으로 모임(궤적 연결성) — 항상
-      float crackle=step(0.72,fract(a_r0.w*23.1+floor(u_t*16.0)*0.41+float(i)*0.17+a_r1.x*2.0));
-      acc += (tv/trl+cw*0.4)*nearT*fresh*crackle*34.0*u_bloom; // 족적 불꽃 튐 — 도착(bloom) 후
+      float fresh=tr.w*exp(-tr.z*2.1)*step(0.02,tr.w);         // v79 궤적 되살림 — 뒤에서 서서히 그라데이션 소멸
+      vec2 tv=pos-tr.xy; float tr2=dot(tv,tv); float trl=sqrt(tr2)+1e-4; vec2 tvn=tv/trl;
+      float nearT=exp(-tr2*130.0);
+      acc += -tv*nearT*fresh*12.0;                             // v79 족적 인력 복원(궤적이 보이게)
+      float spark=step(0.84,fract(a_r0.w*23.1+floor(u_t*20.0)*0.41+float(i)*0.17+a_r1.x*2.0));
+      vec2 perp=vec2(-tvn.y,tvn.x);
+      acc += (tvn+perp*(a_r1.x-0.5)*1.2)*nearT*fresh*spark*40.0; // v79 스파클라 발사 복원(궤적에서 불꽃 튐)
     }
   }
   vel+=acc*u_dt;
@@ -1118,7 +1131,7 @@ void main(){
   float halo=step(0.84,a_r1.y);
   float star=step(0.87,fract(a_r1.w*61.7)); v_star=star;
   float ta=clamp(u_touchAmt,0.0,1.0);
-  float stg=a_r1.z*0.68; float g=clamp((ta-stg)/0.28,0.0,1.0); g=g*g*(3.0-2.0*g);
+  float stg=a_r1.z*0.45; float g=clamp((ta-stg)/0.28,0.0,1.0); g=g*g*(3.0-2.0*g);
   gl_PointSize=u_ps*u_psMul*(0.6+a_r0.w)*(0.5+0.55*depth)*sc*mix(0.72,1.5,star)*mix(1.0,0.6,halo);
   float twk=mix(1.0,0.78+0.22*sin(t*1.5+a_r0.w*44.0),u_twk*star);
   float life=0.90+0.10*sin(t*1.1+a_r1.x*22.0);
@@ -1126,6 +1139,8 @@ void main(){
   float rr=length(pos-u_touch);
   float er=clamp(rr/0.18,0.0,1.0);
   float emitB=mix(1.0,0.6+1.0*(1.0-er)*(1.0-er),g);                  // B: 작은 코어 밝고 스파크로 갈수록 감쇠
+  float phb=fract(u_t*0.9); float beatb=exp(-phb*9.0)+0.45*exp(-abs(phb-0.22)*20.0);
+  emitB*=1.0+0.22*beatb*g*u_bloom;                                   // v80 심장박동에 맞춰 코어 광량도 함께 뛴다
   float kA=clamp(u_k,0.0,1.0);                                       // v75 'asm'은 GLSL 예약어 → 엄격 드라이버서 sim 폴백, 개명
   v_a=va0*(0.25+0.75*kA)*u_lum*depth*twk*clamp(sc*0.66,0.34,1.34)*life*core*mix(0.42,1.7,star)*(0.90+0.10*u_breath)*emitB;
   v_pick=a_r1.z;
@@ -1231,7 +1246,7 @@ function GuardianCanvasSim({ saju, zo, mbti, num, moon, birth, agitateRef, react
         gl.uniform1f(U.u_touchAmt, touch.amt); gl.uniform2f(U.u_touch, touch.x, touch.y);
       };
       let src = 0, dst = 1, bloom = 0;
-      const trailArr = new Float32Array(48); let trailHead = 0, lastDrop = 0;   // v72 궤적 족적 링버퍼(12점)
+      const trailArr = new Float32Array(64); let trailHead = 0, lastDrop = 0;   // v75 궤적 족적 링버퍼(16점)
       const born = performance.now();
       const draw = () => {
         if (dead) return;
@@ -1245,7 +1260,7 @@ function GuardianCanvasSim({ saju, zo, mbti, num, moon, birth, agitateRef, react
           if (rt < 1.8) { const env = Math.max(0, 1 - rt / 1.7) * Math.min(1, rt / 0.18); const dir = reactRef.current.dir;
             if (dir === "GO") { expand = env * 0.5; bright = 1 + env * 0.5; } else if (dir === "STOP") { expand = -env * 0.45; bright = 1 - env * 0.55; } else { expand = env * 0.1 * Math.sin(rt * 5); bright = 1 - env * 0.12; } }
         }
-        const tau = touch.target > touch.amt ? 0.55 : 1.60;                  // v69 모임 더 느리게(~1.6s)
+        const tau = touch.target > touch.amt ? 0.30 : 2.10;                  // v80 모임은 즉각, 풀림은 미련처럼 느리게(여운 → 다시 만지고 싶게)
         touch.amt += (touch.target - touch.amt) * (1 - Math.exp(-dt / tau));
         const bloomT = touch.amt > 0.88 ? 1 : 0;                             // 다 모인 뒤에만 방사 개화
         bloom += (bloomT - bloom) * (1 - Math.exp(-dt / (bloomT > bloom ? 0.9 : 0.45)));
@@ -1253,12 +1268,12 @@ function GuardianCanvasSim({ saju, zo, mbti, num, moon, birth, agitateRef, react
         const kv = 1 - Math.exp(-dt / 0.06); touch.vx += (dvx - touch.vx) * kv; touch.vy += (dvy - touch.vy) * kv;
         const bph = now * Math.PI * 2 / 9000; const breath = Math.sin(bph - 0.35 * Math.sin(bph));
         const uk = Math.min(1, t / 3.4);
-        for (let i = 0; i < 12; i++) trailArr[i * 4 + 2] += dt;               // 족적 나이 증가
-        const _li = ((trailHead + 11) % 12) * 4;
+        for (let i = 0; i < 16; i++) trailArr[i * 4 + 2] += dt;               // 족적 나이 증가
+        const _li = ((trailHead + 15) % 16) * 4;
         const _moved = Math.hypot(touch.x - trailArr[_li], touch.y - trailArr[_li + 1]);
-        if (touch.pressed && (now - lastDrop > 14 || _moved > 0.045)) {       // v73 빠른 이동도 거리기반으로 촘촘히 따라감
+        if (touch.pressed && _moved > 0.018) {                                // v76 거리기반만 — 정지 시 드롭 안 함(방사링 방지), 이동 시 촘촘
           trailArr[trailHead * 4] = touch.x; trailArr[trailHead * 4 + 1] = touch.y; trailArr[trailHead * 4 + 2] = 0; trailArr[trailHead * 4 + 3] = 1;
-          trailHead = (trailHead + 1) % 12; lastDrop = now;
+          trailHead = (trailHead + 1) % 16; lastDrop = now;
         }
         // ── SIM 패스 (여러 서브스텝으로 강성 안정화) ──
         gl.useProgram(simP);
@@ -1311,7 +1326,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v85 · B=v74";
+const APP_VER = "v86 · B=v80";
 function VerBadge() {
   const [r, setR] = useState("");
   useEffect(() => { const t = setInterval(() => { const m = typeof window !== "undefined" && window.__BINARI_R; if (m && m !== r) setR(m); }, 1200); return () => clearInterval(t); }, [r]);
