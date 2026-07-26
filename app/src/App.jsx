@@ -690,8 +690,7 @@ void main(){
   float t=u_t*u_speed;
   float tB=t;
   // v94 심장박동(럽-덥, ~54bpm) — 살아있는 것으로 읽히게. u_beat=0이면 꺼짐
-  float hp=fract(u_t*0.9);
-  float beat=(exp(-hp*9.0)+0.45*exp(-abs(hp-0.22)*20.0))*u_beat;
+
   float strand=floor(a_r1.w*u_strands+0.0001);
   float sOff=strand/max(u_strands,1.0);
   vec2 p; float depth=1.0;
@@ -761,7 +760,7 @@ void main(){
   float rl=length(p);
   p+=u_nayA*0.055*vec2(sin(t*u_nayF+a_r0.w*6.2832),cos(t*u_nayF*1.1+a_r1.x)); // 납음 결
   p+=u_agi*0.05*vec2(sin(t*9.0+a_r0.w*40.0),cos(t*8.0+a_r1.x*40.0));          // 의식 요동
-  p*=(1.0+u_expand)*(1.0+0.075*u_breath)*(1.0+0.021*beat)*u_R;   // v94 박동 수축·이완                                   // 판결 팽창/수축 + 9초 이완 호흡(지배 모드)
+  p*=(1.0+u_expand)*(1.0+0.075*u_breath)*u_R;                                   // 판결 팽창/수축 + 9초 이완 호흡(지배 모드)
   vec2 scat=vec2(cos(a_r1.x*6.2832),sin(a_r1.x*6.2832))*(1.15+a_r0.z*0.75);    // 어셈블 시작점
   float k=clamp((u_k-a_r1.y*0.35)/0.65,0.0,1.0); k=1.0-(1.0-k)*(1.0-k)*(1.0-k);
   p=mix(scat,p,k);
@@ -786,6 +785,9 @@ void main(){
   // ── B상태: 중앙점으로 모여 빛이 방사로 발산 (문양·회전 없음 — 입자단위 재정렬) ──
   float bang=a_r1.w*6.2832 + (a_r0.y-0.5)*0.22;                     // 입자별 방사각(레이)
   float bph=fract(a_r0.z*1.7 + tB*0.55);                            // 0(중심)→1(바깥) 연속 발산 흐름
+  // v95 박동을 '파동'으로 — 중심에서 바깥으로 번져 나가는 럽-덥(위상이 bph만큼 지연)
+  float wph=fract(u_t*0.9 - bph*0.85);
+  float wave=(exp(-wph*9.0)+0.45*exp(-abs(wph-0.22)*20.0))*u_beat;
   float bR=0.045 + 0.46*smoothstep(0.34,1.0,g);                     // 먼저 점으로 모임 → 이후 개화(발산)
   float brad=bph*bph*bR;                                            // 중심 밀집(발광핵) → 바깥 스트림
   vec2 burst=u_touch + vec2(cos(bang),sin(bang))*brad;             // 방사 발산 좌표
@@ -825,7 +827,7 @@ void main(){
   float core=1.0+u_focal*0.22*smoothstep(0.6,0.0,rl);               // I: 코어 발광(과포화 억제)
   v_a*=(0.25+0.75*k)*u_lum*depth*twk*clamp(sc*0.66,0.34,1.34)*life*core
      *mix(0.42,1.7,star)*(0.90+0.10*u_breath)*(1.0+min(wglow,0.8)*0.9)
-     *(1.0+beat*(0.16+0.22*g))
+     *(1.0+wave*0.34*g)
      *mix(1.0, 0.42+1.25*emit, g)                                   // B: 중심 밝고 바깥 감쇠(빛 발산)
      *(1.0-g*0.34*smoothstep(0.018,0.0,brad))                       // 극중심 화이트아웃만 억제
      *(1.0-0.26*g*(1.0-g)*4.0);                                     // 비행 중 감광(플래시 방지)
@@ -922,7 +924,7 @@ function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactR
       const F_PS = { 금: 0.82, 토: 0.9 }[saju.main] || 1;
       gl.uniform1f(L.u_ps, (T ? 1.6 : 2.0) * dpr * F_PS); gl.uniform1f(L.u_psMul, 1); gl.uniform1f(L.u_lum, lum); gl.uniform1f(L.u_twk, N ? 1 : 0);
       // v94 심장박동 세기 — ?beat=0(끔) / 1(기본) / 2(강하게)
-      let _beat = 1; try { const mb = /[?&]beat=([\d.]+)/.exec(window.location.search); if (mb) _beat = Math.max(0, Math.min(3, parseFloat(mb[1]))); } catch (_) {}
+      let _beat = 2; try { const mb = /[?&]beat=([\d.]+)/.exec(window.location.search); if (mb) _beat = Math.max(0, Math.min(3, parseFloat(mb[1]))); } catch (_) {}
       gl.uniform1f(L.u_beat, _beat);
       // v93 실험: A 겉결 — 최신(sim)의 '소프트 헤일로' 패스 세기. ?soft=0(끔·기존 GL) / 1(sim과 동일) / 2(강하게)
       let _soft = 1; try { const m = /[?&]soft=([\d.]+)/.exec(window.location.search); if (m) _soft = Math.max(0, Math.min(3, parseFloat(m[1]))); } catch (_) {}
@@ -1062,7 +1064,7 @@ void computeShape(vec4 a_r0, vec4 a_r1, out vec2 spos, out float depth, out floa
   rl=length(p);
   p+=u_nayA*0.055*vec2(sin(t*u_nayF+a_r0.w*6.2832),cos(t*u_nayF*1.1+a_r1.x));
   p+=u_agi*0.05*vec2(sin(t*9.0+a_r0.w*40.0),cos(t*8.0+a_r1.x*40.0));
-  p*=(1.0+u_expand)*(1.0+0.075*u_breath)*(1.0+0.021*beat)*u_R;   // v94 박동 수축·이완
+  p*=(1.0+u_expand)*(1.0+0.075*u_breath)*u_R;
   float zc=(a_r0.w-0.5)*0.6+(depth-0.5)*0.3;
   vec3 P=vec3(p,zc);
   float dwr=t*(0.07/(0.35+rl));
@@ -1330,7 +1332,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v94 · 박동";
+const APP_VER = "v95 · B파동";
 function VerBadge() {
   const [r, setR] = useState("");
   useEffect(() => { const t = setInterval(() => { const m = typeof window !== "undefined" && window.__BINARI_R; if (m && m !== r) setR(m); }, 1200); return () => clearInterval(t); }, [r]);
