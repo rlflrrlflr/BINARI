@@ -2110,6 +2110,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
             <button className="btn gold" onClick={() => { track("onboard_start"); setStep(1); }}>조각을 모으러 갈래</button>
           </div>
           <p className="brand-mark">비나리 BINARI</p>
+          <p className="ainote">수호신의 판결은 AI가 생성합니다 · 재미로 보는 참고예요</p>
         </section>
       )}
 
@@ -2139,7 +2140,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
               </div>
               {birth.cal === "lunar" && <p className="fine">달의 날짜구나 — 하늘의 달력으로 바꿔 읽어줄게.</p>}
               {err && <p className="err">{err}</p>}
-              <button className="btn gold mt" onClick={() => { const y = +birth.y, m = +birth.m, d = +birth.d; if (!y || !m || !d || y < 1900 || y > new Date().getFullYear() || m < 1 || m > 12 || d < 1 || d > 31) { setErr("생년월일을 확인해줘. 너를 또렷하게 보려면 정확해야 해."); return; } setErr(""); setBstep(2); }}>이 하늘이야</button>
+              <button className="btn gold mt" onClick={() => { const y = +birth.y, m = +birth.m, d = +birth.d; if (!y || !m || !d || y < 1900 || y > new Date().getFullYear() || m < 1 || m > 12 || d < 1 || d > 31) { setErr("생년월일을 확인해줘. 너를 또렷하게 보려면 정확해야 해."); return; } /* 개보법 제22조의2 — 만 14세 미만 확인 게이트(세계관 안의 문구로) */ const _age = exactAge(y, m, d); if (_age !== null && _age < 14) { track("age_gate_blocked", { age_band: "14세 미만" }); setErr("아직은 네 하늘을 열 수 없어. 열넷의 봄을 지나고 다시 나를 불러줘 — 그때 네 곁으로 갈게."); return; } setErr(""); setBstep(2); }}>이 하늘이야</button>
             </div>
           )}
           {bstep === 2 && (
@@ -2535,6 +2536,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
             </div>
           )}
           {res && cardOn && <button className="btn ghost mt" onClick={backToLobby}>다른 걸 물어볼래</button>}
+          {res && cardOn && <p className="ainote card">이 판결은 AI가 생성한 내용입니다</p>}
         </section>
       )}
     </div>
@@ -2592,6 +2594,9 @@ const CSS = `
 .btn.gold{background:linear-gradient(180deg,#f5d98b,#c98f3d);color:#241a08;border:none;box-shadow:0 6px 22px rgba(201,143,61,.3)}
 .btn.ghost{border-color:rgba(245,217,139,.32);background:rgba(245,217,139,.05);color:#d6c493;box-shadow:0 2px 14px rgba(0,0,0,.28)}.btn:hover{border-color:rgba(245,217,139,.7);box-shadow:0 0 16px rgba(245,217,139,.2)}.btn.gold:hover{box-shadow:0 8px 26px rgba(201,143,61,.45)}.btn:active{transform:translateY(1px)}.btn:disabled{opacity:.45;cursor:default}.mt{margin-top:18px}
 .fine{font-family:sans-serif;font-size:11px;color:#6b617d;margin-top:14px;line-height:1.6}
+/* AI기본법 제31조 — 생성형 AI 사전 고지·결과물 표시(별지 잔글씨, 판결문 형식 불변) */
+.ainote{font-family:sans-serif;font-size:10.5px;color:#6b617d;line-height:1.6;margin-top:14px;text-align:center}
+.ainote.card{margin-top:18px;opacity:.85}
 .err{color:#e58a8a;font-size:13px;font-family:sans-serif;margin:10px 0}
 .cards{display:flex;flex-direction:column;gap:14px;width:100%;margin-top:10px}
 .chips{display:flex;flex-direction:column;gap:8px;width:100%;margin:8px 0 4px;align-items:center}
