@@ -83,13 +83,15 @@ for (const p of personas) {
     const u = `질문: ${q.text}${q.hex ? `\n[이번에 청한 주역] ${q.hex}` : ""}\n${TODAY}`;
     try {
       const sys = system(p);
-      const { json: r1, usage: us1 } = await call(sys, u + CONCLUDE, 320);
+      // 앱과 동일한 모드 태그를 붙인다(App.jsx concludeMsg와 문자열 일치) — 안 붙이면 하네스가 앱과 다른 것을 잰다
+      const STAKE = q.mode === "quick" ? "\n[판돈] 낮음 — 유저가 '속결'로 물었다. 가볍게 툭 답한다." : "";
+      const { json: r1, usage: us1 } = await call(sys, u + STAKE + CONCLUDE, 320);
       if (us1) { spend.in += us1.input_tokens || 0; spend.out += us1.output_tokens || 0; }
       const auto = autoChecks(r1.verdict || "", q.cat);
       if (auto !== "OK") flags++;
       let sub = "", fun = "";
       if (FULL) {
-        const explain = `${u}\n\n[이미 확정된 판결] direction=${r1.direction} / verdict="${r1.verdict}" / 총 ${r1.total} 중 반대 ${r1.against}. 이 판결을 절대 뒤집지 말고, 근거만 JSON으로: {"subline":"수호신의 한 줄","reasons":[{"axis":"사주|달|별자리|MBTI|수비학|주역|가치|삼재|토정비결|마야","vote":"GO|STOP|중립","text":"회상체 근거 1줄(60자 이내)"}],"funLine":"정령 한마디","disclaimer":""}. reasons엔 참여 지표 전부.`;
+        const explain = `${u}${STAKE}\n\n[이미 확정된 판결] direction=${r1.direction} / verdict="${r1.verdict}" / 총 ${r1.total} 중 반대 ${r1.against}. 이 판결을 절대 뒤집지 말고, 근거만 JSON으로: {"subline":"수호신의 한 줄","reasons":[{"axis":"사주|달|별자리|MBTI|수비학|주역|가치|삼재|토정비결|마야","vote":"GO|STOP|중립","text":"회상체 근거 1줄(60자 이내)"}],"funLine":"정령 한마디","disclaimer":""}. reasons엔 참여 지표 전부.`;
         const { json: r2, usage: us2 } = await call(sys, explain, 1500);
         if (us2) { spend.in += us2.input_tokens || 0; spend.out += us2.output_tokens || 0; }
         sub = r2.subline || ""; fun = r2.funLine || "";
