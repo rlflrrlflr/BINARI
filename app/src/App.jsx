@@ -1077,7 +1077,7 @@ void main(){
   computeShape(a_r0,a_r1,spos,depth,v_a,sc,rl);
   vec2 target=spos;
   float ta=clamp(u_touchAmt,0.0,1.0);
-  float stg=a_r1.z*0.45; float g=clamp((ta-stg)/0.28,0.0,1.0); g=g*g*(3.0-2.0*g);
+  float stg=a_r1.z*0.68; float g=clamp((ta-stg)/0.28,0.0,1.0); g=g*g*(3.0-2.0*g);
   if(g>0.001){
     float bang=a_r1.w*6.2832;
     float rr=a_r0.z*a_r0.z;                                     // v76 중심 밀집 → 빈 도넛 대신 밝은 코어
@@ -1086,8 +1086,8 @@ void main(){
     target=mix(target,burst,g);
   }
   float spd=min(length(u_touchVel),0.06);
-  float k=mix(14.0,15.0,g)-spd*95.0; k=max(k,2.5);           // v79 응답 빠르게(강성↑) + 드래그 잔상(궤적 살림)
-  float damp=mix(9.0,6.8,g)-spd*48.0; damp=max(damp,2.8);     // v79 댐핑 낮춰 빠른 정착 → 중심 즉시 채움(눌린 느낌)·드래그 잔상
+  float k=mix(14.0,12.0,g)-spd*120.0; k=max(k,2.0);           // 대기 강성↑(크리스프), 드래그 시 느슨(잔상)
+  float damp=mix(9.0,10.0,g)-spd*70.0; damp=max(damp,2.5);    // v76 개화 시 과댐핑 → 코어에 가라앉음(공전링 방지), 드래그 땐 낮아져 잔상
   vec2 acc=(target-pos)*k - vel*damp;
   if(g>0.15){
     vec2 d=pos-u_touch; float dl=length(d)+1e-4; vec2 dn=d/dl; vec2 cw=vec2(dn.y,-dn.x); // 시계방향 접선
@@ -1097,13 +1097,13 @@ void main(){
     acc += cw*coreSpk*g*u_bloom*exp(-dl*dl*150.0)*shell*24.0; // 순수 시계방향(바깥0) · bloom으로 응축 후 서서히 시작
     for(int i=0;i<16;i++){                                     // v75 궤적(족적) 따라 스파클라 불꽃
       vec4 tr=u_trail[i];
-      float fresh=tr.w*exp(-tr.z*2.1)*step(0.02,tr.w);         // v79 궤적 되살림 — 뒤에서 서서히 그라데이션 소멸
+      float fresh=tr.w*exp(-tr.z*2.2)*step(0.02,tr.w);         // 오래된(먼) 족적일수록 그라데이션 소멸
       vec2 tv=pos-tr.xy; float tr2=dot(tv,tv); float trl=sqrt(tr2)+1e-4; vec2 tvn=tv/trl;
       float nearT=exp(-tr2*130.0);
-      acc += -tv*nearT*fresh*12.0;                             // v79 족적 인력 복원(궤적이 보이게)
+      acc += -tv*nearT*fresh*13.0;                             // v76 족적으로 강하게 모임(궤적이 보이게)
       float spark=step(0.84,fract(a_r0.w*23.1+floor(u_t*20.0)*0.41+float(i)*0.17+a_r1.x*2.0));
       vec2 perp=vec2(-tvn.y,tvn.x);
-      acc += (tvn+perp*(a_r1.x-0.5)*1.2)*nearT*fresh*spark*40.0; // v79 스파클라 발사 복원(궤적에서 불꽃 튐)
+      acc += (tvn+perp*(a_r1.x-0.5)*1.2)*nearT*fresh*spark*42.0; // 스파클라 발사 — 족적에서 바깥으로
     }
   }
   vel+=acc*u_dt;
@@ -1122,7 +1122,7 @@ void main(){
   float halo=step(0.84,a_r1.y);
   float star=step(0.87,fract(a_r1.w*61.7)); v_star=star;
   float ta=clamp(u_touchAmt,0.0,1.0);
-  float stg=a_r1.z*0.45; float g=clamp((ta-stg)/0.28,0.0,1.0); g=g*g*(3.0-2.0*g);
+  float stg=a_r1.z*0.68; float g=clamp((ta-stg)/0.28,0.0,1.0); g=g*g*(3.0-2.0*g);
   gl_PointSize=u_ps*u_psMul*(0.6+a_r0.w)*(0.5+0.55*depth)*sc*mix(0.72,1.5,star)*mix(1.0,0.6,halo);
   float twk=mix(1.0,0.78+0.22*sin(t*1.5+a_r0.w*44.0),u_twk*star);
   float life=0.90+0.10*sin(t*1.1+a_r1.x*22.0);
@@ -1249,7 +1249,7 @@ function GuardianCanvasSim({ saju, zo, mbti, num, moon, birth, agitateRef, react
           if (rt < 1.8) { const env = Math.max(0, 1 - rt / 1.7) * Math.min(1, rt / 0.18); const dir = reactRef.current.dir;
             if (dir === "GO") { expand = env * 0.5; bright = 1 + env * 0.5; } else if (dir === "STOP") { expand = -env * 0.45; bright = 1 - env * 0.55; } else { expand = env * 0.1 * Math.sin(rt * 5); bright = 1 - env * 0.12; } }
         }
-        const tau = touch.target > touch.amt ? 0.30 : 1.60;                  // v79 모임 빠르게(~0.9s) → 눌렀을 때 즉각 반응·중심 채움
+        const tau = touch.target > touch.amt ? 0.55 : 1.60;                  // v69 모임 더 느리게(~1.6s)
         touch.amt += (touch.target - touch.amt) * (1 - Math.exp(-dt / tau));
         const bloomT = touch.amt > 0.88 ? 1 : 0;                             // 다 모인 뒤에만 방사 개화
         bloom += (bloomT - bloom) * (1 - Math.exp(-dt / (bloomT > bloom ? 0.9 : 0.45)));
@@ -1315,7 +1315,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v87 · B=v79";
+const APP_VER = "v88 · B=v77";
 function VerBadge() {
   const [r, setR] = useState("");
   useEffect(() => { const t = setInterval(() => { const m = typeof window !== "undefined" && window.__BINARI_R; if (m && m !== r) setR(m); }, 1200); return () => clearInterval(t); }, [r]);
