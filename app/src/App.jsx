@@ -688,6 +688,7 @@ void main(){
     return;
   }
   float t=u_t*u_speed;
+  float tB=t;
   float strand=floor(a_r1.w*u_strands+0.0001);
   float sOff=strand/max(u_strands,1.0);
   vec2 p; float depth=1.0;
@@ -781,7 +782,7 @@ void main(){
   float g=clamp((ta-st)/0.28,0.0,1.0); g=g*g*(3.0-2.0*g);           // v66 고정 비행창 — 모임·풀림 모두 낱알 파도로
   // ── B상태: 중앙점으로 모여 빛이 방사로 발산 (문양·회전 없음 — 입자단위 재정렬) ──
   float bang=a_r1.w*6.2832 + (a_r0.y-0.5)*0.22;                     // 입자별 방사각(레이)
-  float bph=fract(a_r0.z*1.7 + t*0.55);                             // 0(중심)→1(바깥) 연속 발산 흐름
+  float bph=fract(a_r0.z*1.7 + tB*0.55);                            // 0(중심)→1(바깥) 연속 발산 흐름
   float bR=0.045 + 0.46*smoothstep(0.34,1.0,g);                     // 먼저 점으로 모임 → 이후 개화(발산)
   float brad=bph*bph*bR;                                            // 중심 밀집(발광핵) → 바깥 스트림
   vec2 burst=u_touch + vec2(cos(bang),sin(bang))*brad;             // 방사 발산 좌표
@@ -916,6 +917,8 @@ function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactR
       const F_AL = { 화: 0.36, 수: 0.31, 목: 0.32, 금: 0.29, 토: 0.26 }[saju.main] || 0.31;  // v64 노출 예산(백화 해소, 낱알 위계)
       const F_PS = { 금: 0.82, 토: 0.9 }[saju.main] || 1;
       gl.uniform1f(L.u_ps, (T ? 1.6 : 2.0) * dpr * F_PS); gl.uniform1f(L.u_psMul, 1); gl.uniform1f(L.u_lum, lum); gl.uniform1f(L.u_twk, N ? 1 : 0);
+      // v93 실험: A 겉결 — 최신(sim)의 '소프트 헤일로' 패스 세기. ?soft=0(끔·기존 GL) / 1(sim과 동일) / 2(강하게)
+      let _soft = 1; try { const m = /[?&]soft=([\d.]+)/.exec(window.location.search); if (m) _soft = Math.max(0, Math.min(3, parseFloat(m[1]))); } catch (_) {}
       gl.uniform3fv(L.u_c1, c1); gl.uniform3fv(L.u_c2, c2); gl.uniform3fv(L.u_acc, acc);
       gl.uniform2f(L.u_touch, 0, 0); gl.uniform2f(L.u_touchVel, 0, 0); gl.uniform1f(L.u_touchAmt, 0);
       gl.uniform1f(L.u_breath, 0); gl.uniform1f(L.u_trailLive, 0); gl.uniform1f(L.u_zodiac, saju.yJ ?? 0);
@@ -966,6 +969,7 @@ function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactR
         gl.uniform2f(L.u_touch, touch.x, touch.y); gl.uniform1f(L.u_touchAmt, touch.amt); gl.uniform2f(L.u_touchVel, touch.vx, touch.vy);
         gl.clear(gl.COLOR_BUFFER_BIT);
         gl.uniform1f(L.u_t, t); gl.uniform1f(L.u_psMul, 3.6); gl.uniform1f(L.u_alpha, 0.05 * F_AL); gl.drawArrays(gl.POINTS, 0, n); // 광휘(더 넓고 어둡게)
+        if (_soft > 0) { gl.uniform1f(L.u_psMul, 1.8); gl.uniform1f(L.u_alpha, 0.22 * _soft * F_AL); gl.drawArrays(gl.POINTS, 0, n); } // v93 소프트 헤일로(최신 sim 겉결)
         gl.uniform1f(L.u_psMul, 1); gl.uniform1f(L.u_alpha, 0.72 * F_AL); gl.drawArrays(gl.POINTS, 0, n);        // 본체
         gl.uniform1f(L.u_t, t - 0.22); gl.uniform1f(L.u_alpha, 0.30 * F_AL); gl.drawArrays(gl.POINTS, 0, n);   // 비단결 꼬리 1
         gl.uniform1f(L.u_t, t - 0.50); gl.uniform1f(L.u_alpha, 0.13 * F_AL); gl.drawArrays(gl.POINTS, 0, n);    // 비단결 꼬리 2
@@ -1319,7 +1323,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v92 · A=최신 · B=gl";
+const APP_VER = "v93 · A=최신 · B=gl";
 function VerBadge() {
   const [r, setR] = useState("");
   useEffect(() => { const t = setInterval(() => { const m = typeof window !== "undefined" && window.__BINARI_R; if (m && m !== r) setR(m); }, 1200); return () => clearInterval(t); }, [r]);
