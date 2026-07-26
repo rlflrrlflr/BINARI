@@ -820,7 +820,7 @@ void main(){
   float life=0.90+0.10*sin(t*1.1+a_r1.x*22.0);                      // 잔잔한 생명 숨결
   float core=1.0+u_focal*0.22*smoothstep(0.6,0.0,rl);               // I: 코어 발광(과포화 억제)
   v_a*=(0.25+0.75*k)*u_lum*depth*twk*clamp(sc*0.66,0.34,1.34)*life*core
-     *mix(0.30,1.9,star)*(0.90+0.10*u_breath)*(1.0+min(wglow,0.8)*0.9)
+     *mix(0.42,1.7,star)*(0.90+0.10*u_breath)*(1.0+min(wglow,0.8)*0.9)
      *mix(1.0, 0.42+1.25*emit, g)                                   // B: 중심 밝고 바깥 감쇠(빛 발산)
      *(1.0-g*0.34*smoothstep(0.018,0.0,brad))                       // 극중심 화이트아웃만 억제
      *(1.0-0.26*g*(1.0-g)*4.0);                                     // 비행 중 감광(플래시 방지)
@@ -1319,7 +1319,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v91 · B=gl";
+const APP_VER = "v92 · A=최신 · B=gl";
 function VerBadge() {
   const [r, setR] = useState("");
   useEffect(() => { const t = setInterval(() => { const m = typeof window !== "undefined" && window.__BINARI_R; if (m && m !== r) setR(m); }, 1200); return () => clearInterval(t); }, [r]);
