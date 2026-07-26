@@ -1340,7 +1340,11 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v97 · 파면½";
+const APP_VER = "v98 · 고지";
+/* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다. */
+const LETTER_PRICE = 4900;
+const LETTER_SECTIONS = ["이 판결이 나온 자리", "네 여덟 글자가 말하는 결", "지금 흐름과 다음 갈림길", "이 선택이 남길 것", "수호신의 당부"];
+const LETTER_PREVIEW = "네 일간은 갑(甲) — 곧게 자라려는 나무야. 그래서 굽히는 결정 앞에서 유독 오래 서 있었지. 이번 물음도 그랬어. 지표들은 갈라졌지만 갈라진 자리마다 같은 것을 가리키더라. 네가 두려워한 건 결과가 아니라, 결정을 되돌릴 수 없다는 사실이었어. 그 마음부터 짚고 시작할게.";
 function VerBadge() {
   const [r, setR] = useState("");
   useEffect(() => { const t = setInterval(() => { const m = typeof window !== "undefined" && window.__BINARI_R; if (m && m !== r) setR(m); }, 1200); return () => clearInterval(t); }, [r]);
@@ -1921,6 +1925,7 @@ export default function App() {
   const [lean, setLean] = useState("");          // v54: 판결 전 내심 → v72 프롬프트 반영(어조 참고용)
   const [hesit, setHesit] = useState("");        // v72: 왜 망설이는지(고민 종결 근거)
   const [paywall, setPaywall] = useState("");    // v54: 복채/심층 fake-door
+  const [letterIntent, setLetterIntent] = useState(false);  // 지시서 5: '받을게'까지 누른 지불 의사
   const [belief, setBelief] = useState(() => readBelief());   // D3: 신자/비신자 — 한 번만 묻는다
   const [letter, setLetter] = useState(false);                // D4: 서신 fake-door — 판결마다 초기화
   const shareVerdict = async () => {
@@ -1979,12 +1984,20 @@ export default function App() {
   const openLetter = () => {
     if (letter) return;
     setLetter(true);
-    track("letter_clicked", demoProps(birth, { dir: res?.direction || null, cat: res?.category || null, mode: hexInfo ? "ritual" : "quick", nth_verdict: records.length }));
+    const _p = demoProps(birth, { dir: res?.direction || null, cat: res?.category || null, mode: hexInfo ? "ritual" : "quick", nth_verdict: records.length });
+    track("letter_clicked", _p);                 // 기존 이벤트 유지 — 이름 바꾸면 과거 데이터와 끊긴다
+    track("letter_price_shown", { ..._p, price: LETTER_PRICE });   // 1단계: 가격·미리보기를 본 시점
+  };
+  // 2단계: 가격을 보고도 '받을게'를 누른 사람만 지불 의사로 센다(호기심과 분리)
+  const confirmLetterIntent = () => {
+    if (letterIntent) return;
+    setLetterIntent(true);
+    track("letter_intent_confirmed", demoProps(birth, { dir: res?.direction || null, cat: res?.category || null, mode: hexInfo ? "ritual" : "quick", nth_verdict: records.length, price: LETTER_PRICE }));
   };
   const judge = async (hi, quick = false) => {
     if (!q.trim() || busy) return;
     track("question_asked", demoProps(birth, { mode: quick ? "quick" : "ritual", qlen: q.trim().length, ritual: !!hi, lean: lean || "skip", hesit: hesit || null, mbti: mbti || null, core_value: core || null, element: saju?.main || null, zodiac: zo?.name || null }));
-    setBusy(true); setErr(""); setRes(null); setDetail(null); setWhy(false); setFlip(false); setCardOn(false); setRated(0); setLetter(false); reactRef.current = null; setIntroSeen(true);
+    setBusy(true); setErr(""); setRes(null); setDetail(null); setWhy(false); setFlip(false); setCardOn(false); setRated(0); setLetter(false); setLetterIntent(false); reactRef.current = null; setIntroSeen(true);
     try {
       const mp = moonPlacements(+birth.y, +birth.m, +birth.d, +birth.h || 12, +birth.min || 0, !!birth.noHour); // v22
       const tzk = tzolkin(jdn(+birth.y, +birth.m, +birth.d));                                                   // v22
@@ -2520,10 +2533,20 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
           {res && cardOn && <button className="btn gold mt" onClick={shareVerdict}>{shared ? "복사했어 — 붙여넣으면 돼" : "카톡·라인으로 판결 보내기"}</button>}
           {/* D4: 결제 fake-door — 지불 의사만 잰다. 결제 인프라는 만들지 않는다. */}
           {res && cardOn && (
-            letter ? (
-              <p className="ratedone">아직 준비 중이야 — 수호신이 서신을 쓰는 법을 익히고 있어.</p>
+            !letter ? (
+              <button className="btn ghost mt" onClick={openLetter}>수호신의 서신 — 이 판결의 깊은 풀이 · {LETTER_PRICE.toLocaleString()}원</button>
+            ) : letterIntent ? (
+              <p className="ratedone">아직 준비 중이야 — 수호신이 서신을 쓰는 법을 익히고 있어. 준비되면 가장 먼저 너에게 알릴게.</p>
             ) : (
-              <button className="btn ghost mt" onClick={openLetter}>수호신의 서신 받기 — 이 판결의 깊은 풀이</button>
+              <div className="letterwrap fade">
+                <p className="dtag">수호신의 서신 · {LETTER_PRICE.toLocaleString()}원</p>
+                <ul className="letterlist">{LETTER_SECTIONS.map((t, i) => <li key={i}>{t}</li>)}</ul>
+                <p className="letterprev">{LETTER_PREVIEW}</p>
+                <p className="letterprevtag">— 여기까지가 미리보기야</p>
+                {/* 전상법 제17조⑥: 미리보기 제공 + 철회 배제 고지를 '알아보기 쉬운 곳'에 함께 둔다 */}
+                <p className="refundnote">서신은 열어보는 순간 전해지는 글이라, 열람 후에는 환불되지 않아요. 위 미리보기로 먼저 확인해 주세요.</p>
+                <button className="btn gold mt" onClick={confirmLetterIntent}>받을게</button>
+              </div>
             )
           )}
           {res && cardOn && !bujeok && <button className="btn ghost mt" onClick={() => { track("bujeok_opened"); setBujeok(true); }}>수호신의 부적 받기</button>}
@@ -2596,6 +2619,13 @@ const CSS = `
 .fine{font-family:sans-serif;font-size:11px;color:#6b617d;margin-top:14px;line-height:1.6}
 /* AI기본법 제31조 — 생성형 AI 사전 고지·결과물 표시(별지 잔글씨, 판결문 형식 불변) */
 .ainote{font-family:sans-serif;font-size:10.5px;color:#6b617d;line-height:1.6;margin-top:14px;text-align:center}
+/* 지시서 5·6: 서신 가격·미리보기 별지 레이어(판결 카드 구조 불변) */
+.letterwrap{margin-top:20px;padding:18px 16px;border:1px solid rgba(245,217,139,.22);border-radius:14px;background:rgba(20,15,34,.55);text-align:center;max-width:330px}
+.letterlist{list-style:none;padding:0;margin:10px 0 0;font-size:12.5px;line-height:1.9;color:#cfc4e2}
+.letterlist li::before{content:'· ';color:#c9b98f}
+.letterprev{font-size:13px;line-height:1.85;color:#e2d9f2;margin:14px 0 0;text-align:left;overflow-wrap:anywhere}
+.letterprevtag{font-family:sans-serif;font-size:10.5px;color:#8a7f95;margin:6px 0 0}
+.refundnote{font-size:12px;line-height:1.7;color:#e5b96b;margin:14px 0 0;padding:9px 10px;border:1px solid rgba(229,185,107,.35);border-radius:9px}
 .ainote.card{margin-top:18px;opacity:.85}
 .err{color:#e58a8a;font-size:13px;font-family:sans-serif;margin:10px 0}
 .cards{display:flex;flex-direction:column;gap:14px;width:100%;margin-top:10px}
