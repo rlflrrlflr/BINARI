@@ -1307,7 +1307,11 @@ function GuardianCanvasSim({ saju, zo, mbti, num, moon, birth, agitateRef, react
 }
 /* WebGL 우선: 상태보존 시뮬(v68) → stateless(v67) → Canvas2D. 각 단계 실패 시 자동 강등 */
 function Guardian(props) {
-  const [mode, setMode] = useState(() => (glDetect() ? "sim" : "2d"));
+  // 테스트용 렌더러 강제: ?r=gl → 폴백 렌더러(v67 계열, 방사+소용돌이) / ?r=2d → Canvas2D / 기본 sim
+  const [mode, setMode] = useState(() => {
+    try { if (/[?&]r=gl(&|$)/.test(window.location.search)) return "gl"; } catch (_) {}
+    return glDetect() ? "sim" : "2d";
+  });
   if (typeof window !== "undefined") window.__BINARI_R = mode;   // 버전 배지용 — 실제 렌더러(sim/gl/2d) 노출
   if (mode === "sim") return <GuardianCanvasSim {...props} onFail={() => setMode("gl")} />;
   if (mode === "gl") return <GuardianCanvasGL {...props} onFail={() => setMode("2d")} />;
@@ -1315,7 +1319,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v88 · B=v77";
+const APP_VER = "v89 · B=v77";
 function VerBadge() {
   const [r, setR] = useState("");
   useEffect(() => { const t = setInterval(() => { const m = typeof window !== "undefined" && window.__BINARI_R; if (m && m !== r) setR(m); }, 1200); return () => clearInterval(t); }, [r]);
