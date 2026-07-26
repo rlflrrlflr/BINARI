@@ -790,7 +790,7 @@ void main(){
   float wave=(exp(-wph*9.0)+0.45*exp(-abs(wph-0.22)*20.0))*u_beat;
   // v96 파면이 시간을 두고 밀려나간다 — 처음부터 끝이 보이지 않고, 퍼지면서 경계가 생긴다
   float front=smoothstep(0.0,1.35,u_hold);                          // 누른 뒤 ~1.35s에 걸쳐 확장
-  float bR=(0.045 + 0.46*smoothstep(0.34,1.0,g))*(0.20+0.80*front);
+  float bR=(0.022 + 0.23*smoothstep(0.34,1.0,g))*(0.20+0.80*front);   // v97 퍼지는 범위 1/2
   // 경계 흐트러뜨리기: 입자별 도달 반경 편차 + 각도별 저주파 요동(삐죽삐죽) → 완전한 동그라미 방지
   float rvar=0.58+0.84*fract(a_r1.x*17.7+a_r0.y*5.3);
   float lobe=1.0+0.17*sin(bang*3.0+u_t*0.6)+0.11*sin(bang*7.0-u_t*0.43)+0.07*sin(bang*13.0+u_t*0.9);
@@ -1340,7 +1340,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v96 · 파면";
+const APP_VER = "v97 · 파면½";
 function VerBadge() {
   const [r, setR] = useState("");
   useEffect(() => { const t = setInterval(() => { const m = typeof window !== "undefined" && window.__BINARI_R; if (m && m !== r) setR(m); }, 1200); return () => clearInterval(t); }, [r]);
