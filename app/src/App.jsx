@@ -629,7 +629,7 @@ const GL_VERT = `
 precision highp float;
 attribute vec4 a_r0; // x:u y:v z:s w:size·위상
 attribute vec4 a_r1; // x:ph y:dly z:colorPick w:strandPick
-uniform float u_beat,u_t,u_form,u_R,u_arms,u_strands,u_twist,u_speed,u_chaos,u_nayF,u_nayA,u_expand,u_agi,u_k,u_ps,u_lum,u_twk,u_psMul,u_focal,u_touchAmt,u_breath,u_trailLive,u_zodiac;
+uniform float u_hold,u_beat,u_t,u_form,u_R,u_arms,u_strands,u_twist,u_speed,u_chaos,u_nayF,u_nayA,u_expand,u_agi,u_k,u_ps,u_lum,u_twk,u_psMul,u_focal,u_touchAmt,u_breath,u_trailLive,u_zodiac;
 uniform vec2 u_touch,u_touchVel;
 uniform vec4 u_trail[10];
 varying float v_a; varying float v_pick; varying float v_star;
@@ -788,11 +788,16 @@ void main(){
   // v95 박동을 '파동'으로 — 중심에서 바깥으로 번져 나가는 럽-덥(위상이 bph만큼 지연)
   float wph=fract(u_t*0.9 - bph*0.85);
   float wave=(exp(-wph*9.0)+0.45*exp(-abs(wph-0.22)*20.0))*u_beat;
-  float bR=0.045 + 0.46*smoothstep(0.34,1.0,g);                     // 먼저 점으로 모임 → 이후 개화(발산)
-  float brad=bph*bph*bR;                                            // 중심 밀집(발광핵) → 바깥 스트림
+  // v96 파면이 시간을 두고 밀려나간다 — 처음부터 끝이 보이지 않고, 퍼지면서 경계가 생긴다
+  float front=smoothstep(0.0,1.35,u_hold);                          // 누른 뒤 ~1.35s에 걸쳐 확장
+  float bR=(0.045 + 0.46*smoothstep(0.34,1.0,g))*(0.20+0.80*front);
+  // 경계 흐트러뜨리기: 입자별 도달 반경 편차 + 각도별 저주파 요동(삐죽삐죽) → 완전한 동그라미 방지
+  float rvar=0.58+0.84*fract(a_r1.x*17.7+a_r0.y*5.3);
+  float lobe=1.0+0.17*sin(bang*3.0+u_t*0.6)+0.11*sin(bang*7.0-u_t*0.43)+0.07*sin(bang*13.0+u_t*0.9);
+  float brad=bph*bph*bR*rvar*lobe;                                  // 중심 밀집(발광핵) → 바깥 스트림
   vec2 burst=u_touch + vec2(cos(bang),sin(bang))*brad;             // 방사 발산 좌표
   spos=mix(spos, burst, g);                                         // 입자단위 직진 재정렬(디졸브 아님)
-  float emit=smoothstep(0.0,0.05,bph)*(1.0-0.7*bph);              // 발산 발광 봉투(재순환 팝 제거)
+  float emit=smoothstep(0.0,0.05,bph)*(1.0-0.7*bph)*(1.0-0.55*smoothstep(0.55,1.0,bph*rvar)); // v96 가장자리 페이드(경계 불명확)
   float wglow=0.0;
   if(u_trailLive>0.5){                                              // v65 MUNG 궤적 와류(특이점 제거)
     for(int i=0;i<10;i++){
@@ -864,7 +869,7 @@ function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactR
     cv.addEventListener("webglcontextlost", lostFn);
     const touch = { x: 0, y: 0, amt: 0, target: 0, vx: 0, vy: 0, lx: 0, ly: 0, pressed: false };  // v59: 눌렀을 때만
     const setPos = (e) => { const r = cv.getBoundingClientRect(); const cx = e.clientX, cy = e.clientY; if (cx == null) return; touch.x = (cx - r.left) / r.width * 2 - 1; touch.y = -((cy - r.top) / r.height * 2 - 1); };
-    const onDown = (e) => { touch.pressed = true; setPos(e); touch.lx = touch.x; touch.ly = touch.y; touch.vx = 0; touch.vy = 0; touch.target = 1.15; };  // 눌러야 발동(데스크탑 호버 무시)
+    const onDown = (e) => { touch.pressed = true; touch.t0 = performance.now(); setPos(e); touch.lx = touch.x; touch.ly = touch.y; touch.vx = 0; touch.vy = 0; touch.target = 1.15; };  // 눌러야 발동(데스크탑 호버 무시)
     const onMove = (e) => { if (!touch.pressed) return; setPos(e); touch.target = 1.15; };
     const onUp = () => { touch.pressed = false; touch.target = 0; };
     cv.addEventListener("pointerdown", onDown); cv.addEventListener("pointermove", onMove);
@@ -913,7 +918,7 @@ function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactR
       gl.useProgram(prog);
       const buf = (name, arr) => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, arr, gl.STATIC_DRAW); const loc = gl.getAttribLocation(prog, name); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 4, gl.FLOAT, false, 0, 0); return b; };
       buf("a_r0", r0); buf("a_r1", r1);
-      const L = {}; ["u_beat","u_t","u_form","u_R","u_arms","u_strands","u_twist","u_speed","u_chaos","u_nayF","u_nayA","u_expand","u_agi","u_k","u_ps","u_lum","u_twk","u_psMul","u_focal","u_touch","u_touchVel","u_touchAmt","u_breath","u_trailLive","u_zodiac","u_c1","u_c2","u_acc","u_wispCol","u_bright","u_alpha"].forEach(k => { L[k] = gl.getUniformLocation(prog, k); });
+      const L = {}; ["u_hold","u_beat","u_t","u_form","u_R","u_arms","u_strands","u_twist","u_speed","u_chaos","u_nayF","u_nayA","u_expand","u_agi","u_k","u_ps","u_lum","u_twk","u_psMul","u_focal","u_touch","u_touchVel","u_touchAmt","u_breath","u_trailLive","u_zodiac","u_c1","u_c2","u_acc","u_wispCol","u_bright","u_alpha"].forEach(k => { L[k] = gl.getUniformLocation(prog, k); });
       L.u_trail = gl.getUniformLocation(prog, "u_trail[0]");
       gl.uniform1f(L.u_form, FORM_I[saju.main] ?? 4);
       gl.uniform1f(L.u_R, 0.8 * (E ? 1.0 : 0.9));
@@ -924,7 +929,7 @@ function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactR
       const F_PS = { 금: 0.82, 토: 0.9 }[saju.main] || 1;
       gl.uniform1f(L.u_ps, (T ? 1.6 : 2.0) * dpr * F_PS); gl.uniform1f(L.u_psMul, 1); gl.uniform1f(L.u_lum, lum); gl.uniform1f(L.u_twk, N ? 1 : 0);
       // v94 심장박동 세기 — ?beat=0(끔) / 1(기본) / 2(강하게)
-      let _beat = 2; try { const mb = /[?&]beat=([\d.]+)/.exec(window.location.search); if (mb) _beat = Math.max(0, Math.min(3, parseFloat(mb[1]))); } catch (_) {}
+      let _beat = 3; try { const mb = /[?&]beat=([\d.]+)/.exec(window.location.search); if (mb) _beat = Math.max(0, Math.min(3, parseFloat(mb[1]))); } catch (_) {}
       gl.uniform1f(L.u_beat, _beat);
       // v93 실험: A 겉결 — 최신(sim)의 '소프트 헤일로' 패스 세기. ?soft=0(끔·기존 GL) / 1(sim과 동일) / 2(강하게)
       let _soft = 1; try { const m = /[?&]soft=([\d.]+)/.exec(window.location.search); if (m) _soft = Math.max(0, Math.min(3, parseFloat(m[1]))); } catch (_) {}
@@ -976,6 +981,9 @@ function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactR
         }
         gl.uniform4fv(L.u_trail, trailArr); gl.uniform1f(L.u_trailLive, live);
         gl.uniform2f(L.u_touch, touch.x, touch.y); gl.uniform1f(L.u_touchAmt, touch.amt); gl.uniform2f(L.u_touchVel, touch.vx, touch.vy);
+        // v96 파면 확장: 누른 뒤 경과 시간(초) — 파동이 밀려나가며 끝이 형성되게. 떼면 touch.amt를 따라 사그라듦
+        const _hold = touch.pressed ? Math.min(2.4, (now - (touch.t0 || now)) / 1000) : 0;
+        gl.uniform1f(L.u_hold, _hold);
         gl.clear(gl.COLOR_BUFFER_BIT);
         gl.uniform1f(L.u_t, t); gl.uniform1f(L.u_psMul, 3.6); gl.uniform1f(L.u_alpha, 0.05 * F_AL); gl.drawArrays(gl.POINTS, 0, n); // 광휘(더 넓고 어둡게)
         if (_soft > 0) { gl.uniform1f(L.u_psMul, 1.8); gl.uniform1f(L.u_alpha, 0.22 * _soft * F_AL); gl.drawArrays(gl.POINTS, 0, n); } // v93 소프트 헤일로(최신 sim 겉결)
@@ -1332,7 +1340,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v95 · B파동";
+const APP_VER = "v96 · 파면";
 function VerBadge() {
   const [r, setR] = useState("");
   useEffect(() => { const t = setInterval(() => { const m = typeof window !== "undefined" && window.__BINARI_R; if (m && m !== r) setR(m); }, 1200); return () => clearInterval(t); }, [r]);
