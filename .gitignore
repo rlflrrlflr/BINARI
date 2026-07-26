@@ -1,3 +1,6 @@
 app/eval/verdicts.csv
 app/eval/verdicts.json
 !app/.env.example
+
+# 로컬 리포트 스크립트 설정(토큰 포함) — 절대 커밋 금지
+.binari-report.env

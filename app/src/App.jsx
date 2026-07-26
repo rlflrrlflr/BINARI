@@ -12,8 +12,50 @@ let _ph = null, _phInit = false;
      판결 문구, 망설임 사유. 서비스 제공에 필수가 아니고 조합 시 식별성이 커지므로 동의 기반.
      미동의 시 아래 키만 제거되고 이벤트 자체는 그대로 전송된다.
    질문 원문·실명·생년월일 원값은 단계 무관하게 절대 전송하지 않는다. */
-const PROFILE_KEYS = new Set(["age", "age_band", "sex", "job", "rel", "city", "mbti", "core_value", "element", "zodiac", "verdict", "hesit"]);
+const PROFILE_KEYS = new Set(["age", "age_band", "sex", "job", "rel", "city", "mbti", "core_value", "element", "zodiac", "verdict", "hesit", "belief"]);
 const stripProfile = (p) => { const o = {}; for (const k in p) if (!PROFILE_KEYS.has(k)) o[k] = p[k]; return o; };
+
+/* ── D1·D2: 모든 이벤트에 따라붙는 고정 속성(super property) ────────────────
+   동의와 무관하게 붙는다. 개인의 신상이 아니라 "이 트래픽이 내부인지"와
+   "최초 유입이 어디였는지"라는 측정 메타데이터라서 PROFILE_KEYS에 넣지 않는다.
+   식별자 원값(fbclid/gclid)은 저장하지 않고 존재 여부만 남긴다. */
+const INTERNAL_KEY = "binari.internal.v1";
+const FIRSTTOUCH_KEY = "binari.firsttouch.v1";
+let _superProps = {};
+
+function _initSuperProps() {
+  if (typeof window === "undefined") return;
+  let sp; try { sp = new URLSearchParams(window.location.search); } catch (_) { sp = new URLSearchParams(""); }
+  const g = (k) => sp.get(k) || null;
+
+  // D1 — 내부 트래픽: ?i=1 로 한 번 들어오면 그 브라우저는 이후 영구히 내부로 표시된다.
+  let internal = false;
+  try {
+    if (g("i") === "1") window.localStorage.setItem(INTERNAL_KEY, "1");
+    internal = window.localStorage.getItem(INTERNAL_KEY) === "1";
+  } catch (_) { internal = g("i") === "1"; }
+
+  // D2 — first-touch: 최초 1회만 기록하고 이후 절대 덮어쓰지 않는다.
+  //   재방문 시 URL에 파라미터가 없어 direct로 덮이던 문제(=소재별 D7 귀속 불가)를 막는다.
+  let ft = null;
+  try { ft = JSON.parse(window.localStorage.getItem(FIRSTTOUCH_KEY) || "null"); } catch (_) {}
+  if (!ft || !ft.ft_source) {
+    ft = {
+      ft_source: g("utm_source") || g("ref") || (g("fbclid") ? "meta" : null) || (g("gclid") ? "google" : null) || (g("v") ? "share" : "direct"),
+      ft_medium: g("utm_medium"),
+      ft_campaign: g("utm_campaign"),
+      ft_content: g("utm_content"),          // 소재 단위 — 이 값이 있어야 소재별 성과가 갈린다
+      ft_term: g("utm_term"),
+      ft_click: g("fbclid") ? "fbclid" : (g("gclid") ? "gclid" : null),   // 원값 아닌 종류만
+      ft_date: new Date().toISOString().slice(0, 10),
+    };
+    try { window.localStorage.setItem(FIRSTTOUCH_KEY, JSON.stringify(ft)); } catch (_) {}
+  }
+
+  _superProps = { is_internal: internal, ...ft };
+  const b = readBelief();                     // D3 — 답했으면 이후 모든 이벤트에 따라붙는다
+  if (b) _superProps.belief = b;
+}
 
 const CONSENT_KEY = "binari.analytics_consent.v1";
 let _consent = false;                                             // 2단계(프로파일) 동의 여부
@@ -43,7 +85,7 @@ async function _initAnalytics() {
 }
 function track(ev, props) {
   try {
-    const p = props || {};
+    const p = { ..._superProps, ...(props || {}) };               // 고정 속성(내부여부·first-touch·신념)을 먼저 깔고 개별 속성으로 덮는다
     const out = _consent ? p : stripProfile(p);                   // 미동의 → 2단계 속성만 제거, 이벤트는 전송
     if (_ph) _ph.capture(ev, out);
     else if (_q.length < Q_MAX) _q.push({ ev, props: p, at: new Date() });   // 로드 대기 중 보류
@@ -51,6 +93,18 @@ function track(ev, props) {
   } catch (_) {}
 }
 if (typeof window !== "undefined" && /[?&]trackdebug/.test(window.location.search)) window.__binariTrackDebug = true;
+
+/* D3 — 신자/비신자 1문항. 첫 판결 직후 1탭으로 한 번만 묻고, 이후 모든 이벤트에 따라붙는다.
+   G2 게이트("비신자도 돌아오는가")를 재는 유일한 축이다.
+   ※ '신념'은 개인정보보호법 §23 민감정보로 해석될 여지가 있어 PROFILE_KEYS(선택 동의)에 넣어 두었다.
+      동의자 한정으로만 집계되므로, 전체 집계가 필요하면 PROFILE_KEYS에서 "belief"를 빼면 된다. */
+const BELIEF_KEY = "binari.belief.v1";
+function readBelief() { try { return window.localStorage.getItem(BELIEF_KEY) || ""; } catch (_) { return ""; } }
+function saveBelief(v) {
+  try { window.localStorage.setItem(BELIEF_KEY, v); } catch (_) {}
+  _superProps.belief = v;
+}
+_initSuperProps();
 
 /* ═══════════════ 비나리 BINARI · 웹앱 (v16-dev · 0단계: 아티팩트 탈출) ═══════════════
    온보딩(재회→의식→회상개봉) → 파라메트릭 수호신 → AI 판결(v2 수호신 프롬프트)
@@ -634,6 +688,7 @@ void main(){
     return;
   }
   float t=u_t*u_speed;
+  float tB=t;
   float strand=floor(a_r1.w*u_strands+0.0001);
   float sOff=strand/max(u_strands,1.0);
   vec2 p; float depth=1.0;
@@ -727,7 +782,7 @@ void main(){
   float g=clamp((ta-st)/0.28,0.0,1.0); g=g*g*(3.0-2.0*g);           // v66 고정 비행창 — 모임·풀림 모두 낱알 파도로
   // ── B상태: 중앙점으로 모여 빛이 방사로 발산 (문양·회전 없음 — 입자단위 재정렬) ──
   float bang=a_r1.w*6.2832 + (a_r0.y-0.5)*0.22;                     // 입자별 방사각(레이)
-  float bph=fract(a_r0.z*1.7 + t*0.55);                             // 0(중심)→1(바깥) 연속 발산 흐름
+  float bph=fract(a_r0.z*1.7 + tB*0.55);                            // 0(중심)→1(바깥) 연속 발산 흐름
   float bR=0.045 + 0.46*smoothstep(0.34,1.0,g);                     // 먼저 점으로 모임 → 이후 개화(발산)
   float brad=bph*bph*bR;                                            // 중심 밀집(발광핵) → 바깥 스트림
   vec2 burst=u_touch + vec2(cos(bang),sin(bang))*brad;             // 방사 발산 좌표
@@ -766,7 +821,7 @@ void main(){
   float life=0.90+0.10*sin(t*1.1+a_r1.x*22.0);                      // 잔잔한 생명 숨결
   float core=1.0+u_focal*0.22*smoothstep(0.6,0.0,rl);               // I: 코어 발광(과포화 억제)
   v_a*=(0.25+0.75*k)*u_lum*depth*twk*clamp(sc*0.66,0.34,1.34)*life*core
-     *mix(0.30,1.9,star)*(0.90+0.10*u_breath)*(1.0+min(wglow,0.8)*0.9)
+     *mix(0.42,1.7,star)*(0.90+0.10*u_breath)*(1.0+min(wglow,0.8)*0.9)
      *mix(1.0, 0.42+1.25*emit, g)                                   // B: 중심 밝고 바깥 감쇠(빛 발산)
      *(1.0-g*0.34*smoothstep(0.018,0.0,brad))                       // 극중심 화이트아웃만 억제
      *(1.0-0.26*g*(1.0-g)*4.0);                                     // 비행 중 감광(플래시 방지)
@@ -862,6 +917,8 @@ function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactR
       const F_AL = { 화: 0.36, 수: 0.31, 목: 0.32, 금: 0.29, 토: 0.26 }[saju.main] || 0.31;  // v64 노출 예산(백화 해소, 낱알 위계)
       const F_PS = { 금: 0.82, 토: 0.9 }[saju.main] || 1;
       gl.uniform1f(L.u_ps, (T ? 1.6 : 2.0) * dpr * F_PS); gl.uniform1f(L.u_psMul, 1); gl.uniform1f(L.u_lum, lum); gl.uniform1f(L.u_twk, N ? 1 : 0);
+      // v93 실험: A 겉결 — 최신(sim)의 '소프트 헤일로' 패스 세기. ?soft=0(끔·기존 GL) / 1(sim과 동일) / 2(강하게)
+      let _soft = 1; try { const m = /[?&]soft=([\d.]+)/.exec(window.location.search); if (m) _soft = Math.max(0, Math.min(3, parseFloat(m[1]))); } catch (_) {}
       gl.uniform3fv(L.u_c1, c1); gl.uniform3fv(L.u_c2, c2); gl.uniform3fv(L.u_acc, acc);
       gl.uniform2f(L.u_touch, 0, 0); gl.uniform2f(L.u_touchVel, 0, 0); gl.uniform1f(L.u_touchAmt, 0);
       gl.uniform1f(L.u_breath, 0); gl.uniform1f(L.u_trailLive, 0); gl.uniform1f(L.u_zodiac, saju.yJ ?? 0);
@@ -912,6 +969,7 @@ function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactR
         gl.uniform2f(L.u_touch, touch.x, touch.y); gl.uniform1f(L.u_touchAmt, touch.amt); gl.uniform2f(L.u_touchVel, touch.vx, touch.vy);
         gl.clear(gl.COLOR_BUFFER_BIT);
         gl.uniform1f(L.u_t, t); gl.uniform1f(L.u_psMul, 3.6); gl.uniform1f(L.u_alpha, 0.05 * F_AL); gl.drawArrays(gl.POINTS, 0, n); // 광휘(더 넓고 어둡게)
+        if (_soft > 0) { gl.uniform1f(L.u_psMul, 1.8); gl.uniform1f(L.u_alpha, 0.22 * _soft * F_AL); gl.drawArrays(gl.POINTS, 0, n); } // v93 소프트 헤일로(최신 sim 겉결)
         gl.uniform1f(L.u_psMul, 1); gl.uniform1f(L.u_alpha, 0.72 * F_AL); gl.drawArrays(gl.POINTS, 0, n);        // 본체
         gl.uniform1f(L.u_t, t - 0.22); gl.uniform1f(L.u_alpha, 0.30 * F_AL); gl.drawArrays(gl.POINTS, 0, n);   // 비단결 꼬리 1
         gl.uniform1f(L.u_t, t - 0.50); gl.uniform1f(L.u_alpha, 0.13 * F_AL); gl.drawArrays(gl.POINTS, 0, n);    // 비단결 꼬리 2
@@ -1014,7 +1072,7 @@ void computeShape(vec4 a_r0, vec4 a_r1, out vec2 spos, out float depth, out floa
   spos+=vec2(sin(t*0.11+1.3)*0.11, sin(t*0.17)*0.07+0.012*u_breath)*(1.0-ta)*smoothstep(0.0,3.5,u_t);
 }`;
 const SIM_VERT = `attribute vec2 a_q; void main(){ gl_Position=vec4(a_q,0.0,1.0); }`;
-const SIM_FRAG = `precision highp float;\n` + SHAPE_UNI + `\nuniform sampler2D u_state,u_r0,u_r1; uniform vec2 u_texdim,u_touchVel; uniform float u_dt,u_bloom; uniform vec4 u_trail[16];\n` + SHAPE_FN + `
+const SIM_FRAG = `precision highp float;\n` + SHAPE_UNI + `\nuniform sampler2D u_state,u_r0,u_r1; uniform vec2 u_texdim,u_touchVel; uniform float u_dt,u_bloom; uniform vec4 u_trail[12];\n` + SHAPE_FN + `
 void main(){
   vec2 uv=gl_FragCoord.xy/u_texdim;
   vec4 st=texture2D(u_state,uv); vec4 a_r0=texture2D(u_r0,uv); vec4 a_r1=texture2D(u_r1,uv);
@@ -1026,30 +1084,26 @@ void main(){
   float stg=a_r1.z*0.68; float g=clamp((ta-stg)/0.28,0.0,1.0); g=g*g*(3.0-2.0*g);
   if(g>0.001){
     float bang=a_r1.w*6.2832;
-    float rr=a_r0.z*a_r0.z;                                     // v76 중심 밀집 → 빈 도넛 대신 밝은 코어
-    float bR=0.008;                                            // v77 고정 소형 코어 — 응축 후 커지는 개화(방사) 제거
+    float bR=0.014+0.07*u_bloom;                                // v72 방사 더 좁게
+    float rr=0.3+0.7*a_r0.z;
     vec2 burst=u_touch+vec2(cos(bang),sin(bang))*(rr*bR);
     target=mix(target,burst,g);
   }
   float spd=min(length(u_touchVel),0.06);
-  float k=mix(14.0,13.0,g)-spd*45.0; k=max(k,3.5);           // v78 드래그해도 코어가 뭉쳐 따라옴(혜성처럼 안 늘어짐)
-  float damp=mix(9.0,10.0,g)-spd*35.0; damp=max(damp,3.5);    // 과댐핑 유지 → 공전링·혜성 방지
+  float k=mix(14.0,10.0,g)-spd*120.0; k=max(k,2.0);           // 대기 강성↑(크리스프), 드래그 시 느슨(잔상)
+  float damp=mix(9.0,5.5,g)-spd*55.0; damp=max(damp,2.5);
   vec2 acc=(target-pos)*k - vel*damp;
   if(g>0.15){
     vec2 d=pos-u_touch; float dl=length(d)+1e-4; vec2 dn=d/dl; vec2 cw=vec2(dn.y,-dn.x); // 시계방향 접선
-    // v77 응축 먼저 → u_bloom으로 '서서히' 순수 시계방향 회전 스파크(방사 성분 없음)
-    float coreSpk=step(0.90,fract(a_r0.w*31.7+floor(u_t*20.0)*0.5+a_r1.x*3.0));
-    float shell=smoothstep(0.012,0.05,dl);                    // 코어(안쪽) 완전 제외 → 꽉 찬 밝은 코어
-    acc += cw*coreSpk*g*u_bloom*exp(-dl*dl*150.0)*shell*24.0; // 순수 시계방향(바깥0) · bloom으로 응축 후 서서히 시작
-    for(int i=0;i<16;i++){                                     // v75 궤적(족적) 따라 스파클라 불꽃
+    acc += cw*g*2.2*exp(-dl*dl*90.0)*u_bloom;                  // v73 방사/크래클은 다 모인 뒤(bloom)에만 시작
+    for(int i=0;i<12;i++){                                     // v72 궤적(족적) 따라 불꽃 튐
       vec4 tr=u_trail[i];
-      float fresh=tr.w*exp(-tr.z*3.6)*step(0.02,tr.w);         // v78 꼬리 짧게(혜성처럼 안 늘어지게) — 뒤에서 빨리 사라짐
-      vec2 tv=pos-tr.xy; float tr2=dot(tv,tv); float trl=sqrt(tr2)+1e-4; vec2 tvn=tv/trl;
-      float nearT=exp(-tr2*150.0);
-      acc += -tv*nearT*fresh*6.0;                              // v78 족적 인력 약하게 → 코어가 트레일로 안 끌려감
-      float spark=step(0.86,fract(a_r0.w*23.1+floor(u_t*20.0)*0.41+float(i)*0.17+a_r1.x*2.0));
-      vec2 perp=vec2(-tvn.y,tvn.x);
-      acc += (tvn+perp*(a_r1.x-0.5)*1.2)*nearT*fresh*spark*22.0; // v78 짧은 스파크(긴 혜성 꼬리 방지)
+      float fresh=tr.w*exp(-tr.z*1.3)*step(0.02,tr.w);         // 족적 신선도(오래되면 사그라듦)
+      vec2 tv=pos-tr.xy; float tr2=dot(tv,tv); float trl=sqrt(tr2)+1e-4;
+      float nearT=exp(-tr2*70.0);
+      acc += -tv*nearT*fresh*7.0;                              // 족적으로 모임(궤적 연결성) — 항상
+      float crackle=step(0.72,fract(a_r0.w*23.1+floor(u_t*16.0)*0.41+float(i)*0.17+a_r1.x*2.0));
+      acc += (tv/trl+cw*0.4)*nearT*fresh*crackle*34.0*u_bloom; // 족적 불꽃 튐 — 도착(bloom) 후
     }
   }
   vel+=acc*u_dt;
@@ -1076,7 +1130,7 @@ void main(){
   float rr=length(pos-u_touch);
   float er=clamp(rr/0.18,0.0,1.0);
   float emitB=mix(1.0,0.6+1.0*(1.0-er)*(1.0-er),g);                  // B: 작은 코어 밝고 스파크로 갈수록 감쇠
-  float kA=clamp(u_k,0.0,1.0);                                       // v75 'asm'은 GLSL 예약어 → 엄격 드라이버서 sim 폴백, 개명
+  float kA=clamp(u_k,0.0,1.0);                                       // 'asm'은 GLSL 예약어 — 엄격 드라이버서 sim 폴백되므로 개명 유지
   v_a=va0*(0.25+0.75*kA)*u_lum*depth*twk*clamp(sc*0.66,0.34,1.34)*life*core*mix(0.42,1.7,star)*(0.90+0.10*u_breath)*emitB;
   v_pick=a_r1.z;
 }`;
@@ -1181,7 +1235,7 @@ function GuardianCanvasSim({ saju, zo, mbti, num, moon, birth, agitateRef, react
         gl.uniform1f(U.u_touchAmt, touch.amt); gl.uniform2f(U.u_touch, touch.x, touch.y);
       };
       let src = 0, dst = 1, bloom = 0;
-      const trailArr = new Float32Array(64); let trailHead = 0, lastDrop = 0;   // v75 궤적 족적 링버퍼(16점)
+      const trailArr = new Float32Array(48); let trailHead = 0, lastDrop = 0;   // v72 궤적 족적 링버퍼(12점)
       const born = performance.now();
       const draw = () => {
         if (dead) return;
@@ -1203,12 +1257,12 @@ function GuardianCanvasSim({ saju, zo, mbti, num, moon, birth, agitateRef, react
         const kv = 1 - Math.exp(-dt / 0.06); touch.vx += (dvx - touch.vx) * kv; touch.vy += (dvy - touch.vy) * kv;
         const bph = now * Math.PI * 2 / 9000; const breath = Math.sin(bph - 0.35 * Math.sin(bph));
         const uk = Math.min(1, t / 3.4);
-        for (let i = 0; i < 16; i++) trailArr[i * 4 + 2] += dt;               // 족적 나이 증가
-        const _li = ((trailHead + 15) % 16) * 4;
+        for (let i = 0; i < 12; i++) trailArr[i * 4 + 2] += dt;               // 족적 나이 증가
+        const _li = ((trailHead + 11) % 12) * 4;
         const _moved = Math.hypot(touch.x - trailArr[_li], touch.y - trailArr[_li + 1]);
-        if (touch.pressed && _moved > 0.018) {                                // v76 거리기반만 — 정지 시 드롭 안 함(방사링 방지), 이동 시 촘촘
+        if (touch.pressed && (now - lastDrop > 14 || _moved > 0.045)) {       // v73 빠른 이동도 거리기반으로 촘촘히 따라감
           trailArr[trailHead * 4] = touch.x; trailArr[trailHead * 4 + 1] = touch.y; trailArr[trailHead * 4 + 2] = 0; trailArr[trailHead * 4 + 3] = 1;
-          trailHead = (trailHead + 1) % 16; lastDrop = now;
+          trailHead = (trailHead + 1) % 12; lastDrop = now;
         }
         // ── SIM 패스 (여러 서브스텝으로 강성 안정화) ──
         gl.useProgram(simP);
@@ -1253,10 +1307,27 @@ function GuardianCanvasSim({ saju, zo, mbti, num, moon, birth, agitateRef, react
 }
 /* WebGL 우선: 상태보존 시뮬(v68) → stateless(v67) → Canvas2D. 각 단계 실패 시 자동 강등 */
 function Guardian(props) {
-  const [mode, setMode] = useState(() => (glDetect() ? "sim" : "2d"));
+  // v91: 기본 렌더러 = GL(v67 계열) — 무상태 직접계산이라 지연·링이 없고 중앙 발산 레이가 살아 있다.
+  //      ?r=sim → 상태보존 FBO 엔진 / ?r=2d → Canvas2D (비교·폴백용)
+  const [mode, setMode] = useState(() => {
+    try {
+      const s = window.location.search;
+      if (/[?&]r=sim(&|$)/.test(s)) return glDetect() ? "sim" : "2d";
+    } catch (_) {}
+    return glDetect() ? "gl" : "2d";
+  });
+  if (typeof window !== "undefined") window.__BINARI_R = mode;   // 버전 배지용 — 실제 렌더러(sim/gl/2d) 노출
   if (mode === "sim") return <GuardianCanvasSim {...props} onFail={() => setMode("gl")} />;
   if (mode === "gl") return <GuardianCanvasGL {...props} onFail={() => setMode("2d")} />;
   return <GuardianCanvas {...props} />;
+}
+
+/* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
+const APP_VER = "v93 · A=최신 · B=gl";
+function VerBadge() {
+  const [r, setR] = useState("");
+  useEffect(() => { const t = setInterval(() => { const m = typeof window !== "undefined" && window.__BINARI_R; if (m && m !== r) setR(m); }, 1200); return () => clearInterval(t); }, [r]);
+  return <div className="verbadge">{APP_VER}{r ? ` · ${r}` : ""}</div>;
 }
 
 /* ───── 오프닝용 점 구름 (지표 없이 은은하게) ───── */
@@ -1699,7 +1770,8 @@ export default function App() {
   const [sharedIn] = useState(() => { try { const sp = new URLSearchParams(window.location.search); const raw = sp.get("v"); return raw ? decodeShare(raw) : null; } catch (_) { return null; } }); // v75: 공유 링크로 유입 시 담긴 판결
   const [sharedGone, setSharedGone] = useState(false);  // v75: '나도 물어볼래'로 공유 화면 닫음
   // 1단계 계측은 동의와 무관하게 항상 켠다(2단계 속성만 동의로 게이트)
-  useEffect(() => { _consent = readConsent(); _initAnalytics(); let ref = "direct"; try { const sp = new URLSearchParams(window.location.search); ref = sp.get("ref") || sp.get("utm_source") || (sp.get("v") ? "share" : "direct"); } catch (_) {} track("app_open", { returning, ref }); if (sharedIn) track("shared_verdict_view", { dir: sharedIn.d }); }, []); // 계측: 세션 시작 + 유입 어트리뷰션(파라미터만, 원문 없음)
+  // 계측: 세션 시작. 유입은 first-touch(_superProps.ft_*)가 고정 부착하므로 여기선 이번 방문 경로(ref)만 참고용으로 남긴다.
+  useEffect(() => { _consent = readConsent(); _initAnalytics(); let ref = "direct"; try { const sp = new URLSearchParams(window.location.search); ref = sp.get("ref") || sp.get("utm_source") || (sp.get("v") ? "share" : "direct"); } catch (_) {} track("app_open", { returning, ref }); if (sharedIn) track("shared_verdict_view", { dir: sharedIn.d }); }, []);
   const [saju, setSaju] = useState(mem?.saju || null);
   const [zo, setZo] = useState(mem?.zo || null);
   const [moon, setMoon] = useState(mem?.moon || null);
@@ -1832,6 +1904,8 @@ export default function App() {
   const [lean, setLean] = useState("");          // v54: 판결 전 내심 → v72 프롬프트 반영(어조 참고용)
   const [hesit, setHesit] = useState("");        // v72: 왜 망설이는지(고민 종결 근거)
   const [paywall, setPaywall] = useState("");    // v54: 복채/심층 fake-door
+  const [belief, setBelief] = useState(() => readBelief());   // D3: 신자/비신자 — 한 번만 묻는다
+  const [letter, setLetter] = useState(false);                // D4: 서신 fake-door — 판결마다 초기화
   const shareVerdict = async () => {
     if (!res) return;
     track("verdict_shared", { dir: res.direction, mode: hexInfo ? "ritual" : "quick" });
@@ -1867,7 +1941,7 @@ export default function App() {
   };
   const backToLobby = () => {                               // v56: 판결 화면 탈출구(X · 로비 복귀)
     track("another_question", { after_why: why });
-    setRes(null); setDetail(null); setWhy(false); setDetailBusy(false); setQ(""); setCardOn(false); setRitual(false); setTosses([]); setHexInfo(null); setBujeok(false); setLean(""); setHesit(""); setPaywall(""); setAwake(false); setRated(0);
+    setRes(null); setDetail(null); setWhy(false); setDetailBusy(false); setQ(""); setCardOn(false); setRitual(false); setTosses([]); setHexInfo(null); setBujeok(false); setLean(""); setHesit(""); setPaywall(""); setAwake(false); setRated(0); setLetter(false);
   };
   const rateVerdict = (score) => {                          // v75: 판결 평가 — 정확도 피드백 수집(계측 + 기록에 부착)
     if (rated) return;
@@ -1875,10 +1949,25 @@ export default function App() {
     track("verdict_rated", demoProps(birth, { score, dir: res?.direction, mode: hexInfo ? "ritual" : "quick", cat: res?.category || null, tone: res?.tone || null, mbti: mbti || null, element: saju?.main || null }));
     setRecords(prev => { if (!prev.length) return prev; const nx = prev.slice(); nx[nx.length - 1] = { ...nx[nx.length - 1], rating: score }; return nx; });
   };
+
+  // D3 — 신념 1문항. 한 번 답하면 고정 속성이 되어 이후 모든 이벤트에 따라붙는다(리텐션을 신념별로 가르는 축).
+  const answerBelief = (v) => {
+    if (belief) return;
+    saveBelief(v); setBelief(v);
+    track("belief_answered", { belief: v, after_verdicts: records.length });
+  };
+
+  // D4 — 결제 fake-door. 클릭만 세고 결제는 만들지 않는다.
+  //   노출 = verdict_shown 이므로 클릭률 = letter_clicked / verdict_shown 으로 계산된다.
+  const openLetter = () => {
+    if (letter) return;
+    setLetter(true);
+    track("letter_clicked", demoProps(birth, { dir: res?.direction || null, cat: res?.category || null, mode: hexInfo ? "ritual" : "quick", nth_verdict: records.length }));
+  };
   const judge = async (hi, quick = false) => {
     if (!q.trim() || busy) return;
     track("question_asked", demoProps(birth, { mode: quick ? "quick" : "ritual", qlen: q.trim().length, ritual: !!hi, lean: lean || "skip", hesit: hesit || null, mbti: mbti || null, core_value: core || null, element: saju?.main || null, zodiac: zo?.name || null }));
-    setBusy(true); setErr(""); setRes(null); setDetail(null); setWhy(false); setFlip(false); setCardOn(false); setRated(0); reactRef.current = null; setIntroSeen(true);
+    setBusy(true); setErr(""); setRes(null); setDetail(null); setWhy(false); setFlip(false); setCardOn(false); setRated(0); setLetter(false); reactRef.current = null; setIntroSeen(true);
     try {
       const mp = moonPlacements(+birth.y, +birth.m, +birth.d, +birth.h || 12, +birth.min || 0, !!birth.noHour); // v22
       const tzk = tzolkin(jdn(+birth.y, +birth.m, +birth.d));                                                   // v22
@@ -1931,7 +2020,9 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
   // v16(B2): 아침 문안 데이터 — 재회 유저가 오늘 처음 열었을 때만. 전부 순수 함수(API 0콜)
   // v16(B3): 되물음 — 마지막 판결이 6시간 넘게 미보고면 수호신이 먼저 묻는다(모든 판결을 열린 고리로)
   const lastRec = records.length ? records[records.length - 1] : null;
-  const _lastAct = lastRec && (lastRec.actionable !== undefined ? lastRec.actionable : isDecisionQ(lastRec.q));  // v73: 되물음은 '따를 수 있는' 결정에만
+  // v84: 되물음은 '따를 수 있는 결정'에만 — 저장된 옛 판정(actionable)을 믿지 않고 현재 로직으로 매번 재판정한다
+  //      (예전 기록의 actionable:true 때문에 "이얏호오" 같은 헛소리에 '따랐어?'가 뜨던 문제)
+  const _lastAct = !!lastRec && isDecisionQ(lastRec.q) && lastRec.actionable !== false;
   const askback = returning && lastRec && lastRec.followUp === null && _lastAct && Date.now() - lastRec.at >= 6 * 3600 * 1000 ? lastRec : null;
   const answerAskback = (fu, note) => {
     const lastRec = records[records.length - 1] || {};
@@ -1959,6 +2050,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
   return (
     <div className="stage">
       <style>{CSS}</style>
+      <VerBadge />
 
       {sharedIn && !sharedGone && (() => {
         const d = sharedIn.d, isGo = d === "GO", isHold = d === "HOLD";
@@ -2225,7 +2317,9 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
               {askback && !ritual && !res && (
                 <div className="daily fade">
                   <p className="dtag">지난 판결 · {askback.direction}</p>
-                  <p className="dmain">지난번 물음 — "{askback.q}"<br />그래서, 결국 어떻게 했어?</p>
+                  <p className="dmain">지난번 물음 — "{askback.q}"</p>
+                  {askback.verdict && <p className="dverdict">내가 이렇게 말했지 — "{askback.verdict}"</p>}
+                  <p className="dmain">그래서, 결국 어떻게 했어?</p>
                   {!noting ? (
                     <div className="row gap center">
                       <button className="btn ghost sm" onClick={() => answerAskback("did")}>따랐어</button>
@@ -2393,7 +2487,27 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
               )}
             </div>
           )}
+          {/* D3: 신자/비신자 1문항 — 첫 판결 직후 한 번만. 온보딩이 아닌 여기 두는 건
+              광고 유입자의 온보딩 이탈을 건드리지 않기 위해서다. */}
+          {res && cardOn && !belief && (
+            <div className="raterow fade">
+              <span className="ratelab">이런 거, 원래 믿는 편이야?</span>
+              <div className="row gap center">
+                {[["believer", "믿는 편"], ["mixed", "반반"], ["skeptic", "안 믿는 편"]].map(([v, label]) => (
+                  <button key={v} type="button" className="calbtn sm" onClick={() => answerBelief(v)}>{label}</button>
+                ))}
+              </div>
+            </div>
+          )}
           {res && cardOn && <button className="btn gold mt" onClick={shareVerdict}>{shared ? "복사했어 — 붙여넣으면 돼" : "카톡·라인으로 판결 보내기"}</button>}
+          {/* D4: 결제 fake-door — 지불 의사만 잰다. 결제 인프라는 만들지 않는다. */}
+          {res && cardOn && (
+            letter ? (
+              <p className="ratedone">아직 준비 중이야 — 수호신이 서신을 쓰는 법을 익히고 있어.</p>
+            ) : (
+              <button className="btn ghost mt" onClick={openLetter}>수호신의 서신 받기 — 이 판결의 깊은 풀이</button>
+            )
+          )}
           {res && cardOn && !bujeok && <button className="btn ghost mt" onClick={() => { track("bujeok_opened"); setBujeok(true); }}>수호신의 부적 받기</button>}
           {res && cardOn && bujeok && (
             <div className="fade bwrap">
@@ -2422,6 +2536,7 @@ const CSS = `
 .orb{position:relative;width:170px;height:170px;margin:48px 0 36px;filter:drop-shadow(0 0 24px rgba(245,217,139,.2))}
 .line{font-size:17px;line-height:1.8;margin:8px 0;opacity:0;animation:fd 1.6s cubic-bezier(.22,.7,.25,1) forwards}.d1{animation-delay:1.4s}.d2{animation-delay:3s}
 .brand-mark{margin-top:56px;font-size:11px;letter-spacing:.4em;color:#8a7f95;font-family:sans-serif}
+.verbadge{position:fixed;right:9px;bottom:7px;z-index:70;font-family:sans-serif;font-size:9px;letter-spacing:.08em;color:#575070;pointer-events:none;user-select:none}
 .title{font-size:20px;font-weight:600;color:#f0e2b8;margin:6px 0 4px}
 .sub2{font-size:14px;color:#9d8fb5;line-height:1.7;margin:6px 0 18px}
 .form{display:flex;flex-direction:column;gap:12px;width:100%;margin-bottom:14px}
@@ -2623,6 +2738,7 @@ const CSS = `
 .daily{width:100%;border:1px solid rgba(245,217,139,.28);border-radius:14px;padding:14px 16px;margin:2px 0 14px;background:linear-gradient(160deg,#1c173066,#120e1e88)}
 .dtag{font-family:sans-serif;font-size:9.5px;letter-spacing:.22em;color:#c9b98f;margin:0 0 8px}
 .dmain{font-size:14.5px;line-height:1.8;color:#e8dff5;margin:0}.dmain b{color:#ffe9ad;font-weight:600}
+.dverdict{font-size:13.5px;line-height:1.75;color:#e5b96b;margin:6px 0 10px;overflow-wrap:anywhere}
 .dsub{font-family:sans-serif;font-size:10.5px;color:#8a7f95;line-height:1.7;margin:8px 0 10px}
 .btn.sm{padding:8px 18px;font-size:12px;letter-spacing:.08em}
 .knock{background:none;border:1px dashed rgba(245,217,139,.35);border-radius:999px;padding:10px 22px;margin:2px 0 14px;color:#c9b98f;font-family:inherit;font-size:13px;letter-spacing:.04em;cursor:pointer;transition:all .3s}
