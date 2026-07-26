@@ -78,8 +78,19 @@ async function _initAnalytics() {
   if (_phInit || !AKEY || typeof window === "undefined") return; _phInit = true;
   try {
     const { default: posthog } = await import("posthog-js");
-    posthog.init(AKEY, { api_host: import.meta.env.VITE_POSTHOG_HOST || "https://us.i.posthog.com", capture_pageview: false, autocapture: false, persistence: "localStorage" });
+    posthog.init(AKEY, {
+      api_host: import.meta.env.VITE_POSTHOG_HOST || "https://us.i.posthog.com",
+      capture_pageview: false,     // SPA라 무의미
+      capture_pageleave: true,     // 체류시간·바운스율을 잴 유일한 근거. 광고 랜딩 품질 평가에 필수
+      capture_exceptions: true,    // JS 예외 — 없으면 앱이 깨져도 아무도 모른다
+      autocapture: false,
+      persistence: "localStorage",
+    });
     _ph = posthog;
+    // 고정 속성을 posthog 자체에 등록한다. track()이 직접 얹는 값과 동일하지만,
+    // $pageleave·$exception 처럼 SDK가 스스로 쏘는 이벤트에도 붙어야
+    // is_internal 제외 필터와 소재별(ft_content) 분해가 그 이벤트들에서도 성립한다.
+    try { posthog.register(_superProps); } catch (_) {}
     _flush();                                  // 로드 전에 쌓인 이벤트를 원래 시각으로 전송
   } catch (_) {}
 }
@@ -105,6 +116,7 @@ function readBelief() { try { return window.localStorage.getItem(BELIEF_KEY) || 
 function saveBelief(v) {
   try { window.localStorage.setItem(BELIEF_KEY, v); } catch (_) {}
   _superProps.belief = v;
+  if (_ph) { try { _ph.register({ belief: v }); } catch (_) {} }   // 자동 수집 이벤트에도 따라붙도록
 }
 _initSuperProps();
 
@@ -1702,8 +1714,12 @@ async function callServer(system, messages, maxTokens) {
   });
   const ct = r.headers.get("content-type") || "";
   if (!r.ok && r.status === 404) throw new Error("프록시 없음");
-  if (!ct.includes("json")) throw new Error("프록시 없음");
-  return r.json();
+  if (!ct.includes("json")) throw Object.assign(new Error("프록시 없음"), { status: r.status });
+  const data = await r.json();
+  // 상태코드를 살려 던진다 — 429(레이트리밋)와 5xx(상류 장애)를 계측에서 갈라야
+  // "광고 트래픽에 한도가 걸린 것"과 "앤트로픽이 죽은 것"을 구분할 수 있다.
+  if (!r.ok) throw Object.assign(new Error((data && data.error && data.error.message) || `HTTP ${r.status}`), { status: r.status });
+  return data;
 }
 async function callDirect(system, messages, maxTokens) {
   const r = await fetch("https://api.anthropic.com/v1/messages", {
@@ -1740,6 +1756,7 @@ async function callClaude(system, messages, maxTokens) {
   const all = hasComplete() ? ["complete", "server", "direct"] : ["server", "direct"];
   const order = API_MODE && all.includes(API_MODE) ? [API_MODE, ...all.filter((m) => m !== API_MODE)] : all;
   let lastErr = null;
+  const fails = [];                    // 경로별 실패 기록 — verdict_failed 의 원인 분류에 쓴다
   for (const mode of order) {
     try {
       const data = mode === "complete" ? await callComplete(system, messages, maxTokens)
@@ -1750,12 +1767,29 @@ async function callClaude(system, messages, maxTokens) {
       const out = { json: repairJSON(txt), txt };   // 파싱 실패도 이 경로의 실패로 간주 → 다음 경로
       API_MODE = mode;
       return out;
-    } catch (e) { lastErr = e; if (API_MODE === mode) API_MODE = null; }
+    } catch (e) { lastErr = e; fails.push({ mode, status: e?.status || 0, msg: String(e?.message || "").slice(0, 120) }); if (API_MODE === mode) API_MODE = null; }
   }
-  throw IS_APP_WEBVIEW
+  throw Object.assign(IS_APP_WEBVIEW
     ? new Error("클로드 '앱' 안에서는 판결 길이 막혀 있어(앱의 제한) — 사파리에서 claude.ai를 열거나, PC에서 물어봐 줘")
-    : (lastErr || new Error("모든 판결 경로가 닿지 않았어"));
+    : (lastErr || new Error("모든 판결 경로가 닿지 않았어")), { fails });
 }
+
+/* 판결 실패 원인 분류 — 광고 트래픽에서 무엇이 유저를 막았는지 한 축으로 본다.
+   서버(프록시) 경로를 우선한다: 실사용자가 실제로 타는 경로가 그것이다.
+   원인을 못 가르면 "question_asked 는 있는데 verdict_shown 이 없다"까지만 알고 끝난다. */
+const _serverFail = (e) => (e?.fails || []).find((x) => x.mode === "server") || (e?.fails || [])[0] || null;
+function failReason(e) {
+  const f = _serverFail(e);
+  if (!f) return "unknown";
+  const s = f.status || 0;
+  if (s === 429) return "rate_limited";       // ← CGNAT 로 정상 유저가 막히는 경우가 여기 잡힌다
+  if (s === 403) return "origin_blocked";
+  if (s === 400) return "bad_request";
+  if (s >= 500) return "upstream_error";
+  if (/JSON|파싱|parse/i.test(f.msg)) return "parse_failed";
+  return s ? "http_" + s : "network";
+}
+const failStatus = (e) => (_serverFail(e) || {}).status || 0;
 
 /* v75: 공유 판결 인코딩 — 링크에 판결 자체를 실어, 받은 사람이 홈으로 떨어지지 않고
    '누군가의 수호신이 내린 판결'을 먼저 보게 한다(바이럴 루프 복원). UTF-8 안전 base64url */
@@ -1881,14 +1915,15 @@ export default function App() {
   const doReveal = () => {
     track("birth_submitted", demoProps(birth, { noHour: !!birth.noHour, cal: birth.cal, hasName: !!birth.name }));
     const y = +birth.y, m = +birth.m, d = +birth.d, h = birth.noHour ? 12 : +birth.h, mi = birth.noHour || birth.min === "" ? 0 : +birth.min;
-    if (!y || !m || !d || y < 1900 || y > new Date().getFullYear() || m < 1 || m > 12 || d < 1 || d > 31) { setErr("생년월일을 확인해줘. 너를 또렷하게 보려면 정확해야 해."); return; }
-    if (!birth.noHour && (birth.h === "" || h < 0 || h > 23)) { setErr("태어난 시(0~23시)를 알려주거나 '모름'을 선택해줘."); return; }
-    if (!birth.noHour && birth.min !== "" && (mi < 0 || mi > 59)) { setErr("분은 0~59 사이로 알려줘."); return; }
+    if (!y || !m || !d || y < 1900 || y > new Date().getFullYear() || m < 1 || m > 12 || d < 1 || d > 31) { track("input_rejected", { field: "birth_date", reason: "range" }); setErr("생년월일을 확인해줘. 너를 또렷하게 보려면 정확해야 해."); return; }
+    if (!birth.noHour && (birth.h === "" || h < 0 || h > 23)) { track("input_rejected", { field: "birth_hour", reason: "range" }); setErr("태어난 시(0~23시)를 알려주거나 '모름'을 선택해줘."); return; }
+    if (!birth.noHour && birth.min !== "" && (mi < 0 || mi > 59)) { track("input_rejected", { field: "birth_min", reason: "range" }); setErr("분은 0~59 사이로 알려줘."); return; }
     setErr("");
     let sy = y, sm = m, sd = d;                                 // v25: 음력이면 양력으로 정규화 — 이후 모든 계산은 양력 기준
     if (birth.cal === "lunar") {
       const s = lunar2solar(y, m, d, !!birth.leap);
-      if (!s) { setErr(`음력 ${y}.${m}.${d}${birth.leap ? " 윤달" : ""}을 못 찾았어. 날짜나 윤달 여부를 확인해줘.`); return; }
+      // 음력 변환 실패는 유저 실수가 아니라 만세력 테이블의 구멍일 수 있다 — 온보딩을 통째로 막으므로 반드시 본다
+      if (!s) { track("input_rejected", { field: "lunar", reason: "convert_failed", leap: !!birth.leap }); setErr(`음력 ${y}.${m}.${d}${birth.leap ? " 윤달" : ""}을 못 찾았어. 날짜나 윤달 여부를 확인해줘.`); return; }
       sy = s.y; sm = s.m; sd = s.d;
       setBirth(b => ({ ...b, cal: "solar", leap: false, y: String(sy), m: String(sm), d: String(sd), lunarNote: `음력 ${y}.${m}.${d}${birth.leap ? "(윤달)" : ""}` }));
     }
@@ -1915,13 +1950,19 @@ export default function App() {
   const tossAll = () => { if (tosses.length >= 6 || busy || tossing) return; setTossing(true); setTimeout(() => { setTossing(false); agitateRef.current = true; setTimeout(() => { agitateRef.current = false; }, 1400); const nt = [...tosses]; while (nt.length < 6) nt.push(oneCoin()); finalize(nt); }, 900); }; // 한 번에
 
   // v15: 콜2 — 확정된 판결의 '근거'만 풀어쓴다(백그라운드, 클릭 전에 미리 로드)
-  const fetchDetail = async (system, priorConvo, userText, r1) => {
+  const fetchDetail = async (system, priorConvo, userText, r1, isRetry = false) => {
     setDetailBusy(true);
+    const _t0 = performance.now();
     try {
       const explainMsg = { role: "user", content: `${userText}\n\n[이미 확정된 판결] direction=${r1.direction} / verdict="${r1.verdict}" / 총 ${r1.total} 중 반대 ${r1.against}. 이 판결을 절대 뒤집지 말고, 이 결론의 근거만 아래 JSON으로만 응답: {"subline":"수호신의 한 줄","reasons":[{"axis":"사주|달|별자리|MBTI|수비학|주역|가치|삼재|토정비결|마야","vote":"GO|STOP|중립","text":"회상체 근거 1줄(60자 이내)"}],"funLine":"정령(달 별자리) 한마디","disclaimer":"투자·의료·법률일 때만, 없으면 빈 문자열"}. reasons엔 판결에 참여한 지표 전부 — 특히 '마야'(촐킨 톤·날개) 축은 매번 반드시 포함(자주 누락됨).` };
       const { json: r2 } = await callClaude(system, [...priorConvo, explainMsg], 1500);
       setDetail(r2);
-    } catch (_) { setDetail({ _err: true }); }
+      // L3(지표별 근거)는 제품의 핵심 차별점이다. 실패율과 소요시간을 모르면 개선 근거가 없다.
+      track("detail_shown", { ms: Math.round(performance.now() - _t0), dir: r1?.direction || null, retry: !!isRetry, axes: Array.isArray(r2?.reasons) ? r2.reasons.length : 0 });
+    } catch (e) {
+      setDetail({ _err: true });
+      track("detail_failed", { reason: failReason(e), status: failStatus(e), ms: Math.round(performance.now() - _t0), dir: r1?.direction || null, retry: !!isRetry });
+    }
     setDetailBusy(false);
   };
 
@@ -2001,6 +2042,7 @@ export default function App() {
   };
   const judge = async (hi, quick = false) => {
     if (!q.trim() || busy) return;
+    const _jt0 = performance.now();          // 판결 소요시간 — 대기가 길면 이탈한다. 이 값 없이는 원인을 못 짚는다
     track("question_asked", demoProps(birth, { mode: quick ? "quick" : "ritual", qlen: q.trim().length, ritual: !!hi, lean: lean || "skip", hesit: hesit || null, mbti: mbti || null, core_value: core || null, element: saju?.main || null, zodiac: zo?.name || null }));
     setBusy(true); setErr(""); setRes(null); setDetail(null); setWhy(false); setFlip(false); setCardOn(false); setRated(0); setLetter(false); setLetterIntent(false); reactRef.current = null; setIntroSeen(true);
     try {
@@ -2030,7 +2072,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
       const { json: r1 } = await callClaude(system, [...priorConvo, concludeMsg], 320);
       // L1 등장 연출(짧게)
       agitateRef.current = true; setRes(r1);
-      track("verdict_shown", demoProps(birth, { dir: r1.direction, cat: r1.category, tone: r1.tone, against: r1.against, total: r1.total, mode: quick ? "quick" : "ritual", lean: lean || "skip", verdict: r1.verdict || null, mbti: mbti || null, element: saju?.main || null }));
+      track("verdict_shown", demoProps(birth, { dir: r1.direction, cat: r1.category, tone: r1.tone, against: r1.against, total: r1.total, mode: quick ? "quick" : "ritual", lean: lean || "skip", verdict: r1.verdict || null, mbti: mbti || null, element: saju?.main || null, ms: Math.round(performance.now() - _jt0) }));
       reactRef.current = { dir: r1.direction, t0: performance.now() };   // v28: 수호신이 판결을 연기
       setTimeout(() => { agitateRef.current = false; }, 700);
       setTimeout(() => { setCardOn(true); }, 1400);                       // 몸짓을 보여준 뒤 카드
@@ -2042,7 +2084,14 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
       if (quick) { setDetail({ _quick: true }); }            // v16(B5): 속결은 콜2 생략 — 원가 절반
       else { detailArgsRef.current = [system, priorConvo, userText, r1]; fetchDetail(system, priorConvo, userText, r1); }
       return;
-    } catch (e) { const m = e?.message || ""; setErr("판결이 닿지 못했어 · " + (/[가-힣]/.test(m) ? m : "잠시 뒤 다시 청해줘")); console.warn("judge:", m); }
+    } catch (e) {
+      const m = e?.message || "";
+      // 여기가 광고비가 새는 지점이다. 이 track 이 없으면 유저는 막다른 길에서 이탈하는데
+      // 데이터에는 "question_asked 는 있고 verdict_shown 이 없다"까지만 남아 원인을 영영 모른다.
+      track("verdict_failed", demoProps(birth, { reason: failReason(e), status: failStatus(e), mode: quick ? "quick" : "ritual", qlen: q.trim().length, ms: Math.round(performance.now() - _jt0), nth_verdict: records.length }));
+      setErr("판결이 닿지 못했어 · " + (/[가-힣]/.test(m) ? m : "잠시 뒤 다시 청해줘"));
+      console.warn("judge:", m);
+    }
     setBusy(false);
   };
 
@@ -2059,6 +2108,29 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
   //      (예전 기록의 actionable:true 때문에 "이얏호오" 같은 헛소리에 '따랐어?'가 뜨던 문제)
   const _lastAct = !!lastRec && isDecisionQ(lastRec.q) && lastRec.actionable !== false;
   const askback = returning && lastRec && lastRec.followUp === null && _lastAct && Date.now() - lastRec.at >= 6 * 3600 * 1000 ? lastRec : null;
+
+  /* 온보딩 화면별 도달 — onboard_start 와 guardian_awaken 사이 9개 화면이 무계측이라
+     광고 유입자가 어디서 죽는지 볼 수 없었다. 화면당 1회만 쏘고, 뒤로 갔다 와도 중복 발사하지 않는다.
+     (퍼널은 uniq(person_id) 기준으로 보므로 중복이 섞이면 이탈률이 왜곡된다) */
+  const _stepSeen = useRef(new Set());
+  useEffect(() => {
+    const name = step === 1 ? ["name", "birth_date", "birth_time_city", "sex", "context"][bstep]
+      : step === 2 ? "mbti"
+      : step === 25 ? ["values_16to6", "values_6to3", "values_3to1"][vstage]
+      : null;
+    if (!name || _stepSeen.current.has(name)) return;
+    _stepSeen.current.add(name);
+    track("onboard_step", { step: name, idx: _stepSeen.current.size });
+  }, [step, bstep, vstage]);
+
+  /* 되물음 노출 — followup_answered 만 있고 노출이 없어 응답률을 못 냈다.
+     리텐션 장치라 효과 측정이 안 되면 유지·폐기 판단이 불가능하다. */
+  const _askbackSeen = useRef(false);
+  useEffect(() => {
+    if (!askback || _askbackSeen.current) return;
+    _askbackSeen.current = true;
+    track("askback_shown", { dir: askback.direction || null, hours_since: Math.round((Date.now() - askback.at) / 3600000) });
+  }, [askback]);
   const answerAskback = (fu, note) => {
     const lastRec = records[records.length - 1] || {};
     track("followup_answered", demoProps(birth, { result: fu, direction: lastRec.direction || null, cat: lastRec.cat || null, hasNote: !!note }));
@@ -2490,7 +2562,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                         : detail && !detail._err
                         ? <p className="vs">"{detail.subline}"</p>
                         : detailBusy ? <p className="vs dim">수호신이 이유를 고르는 중…</p>
-                        : <p className="vs dim">— 이유를 불러오지 못했어 —<button className="retrybtn" onClick={(e) => { e.stopPropagation(); if (detailArgsRef.current) { setDetail(null); fetchDetail(...detailArgsRef.current); } }}>다시 시도</button></p>}
+                        : <p className="vs dim">— 이유를 불러오지 못했어 —<button className="retrybtn" onClick={(e) => { e.stopPropagation(); if (detailArgsRef.current) { setDetail(null); fetchDetail(...detailArgsRef.current, true); } }}>다시 시도</button></p>}
                       <div className="pips">{[...Array(res.total || 0)].map((_, i) => <span key={i} className={`pip ${i < res.against ? "on" : ""}`} />)}
                         <em>{res.total}개 중 {res.against}개 {res.direction === "STOP" ? "반대" : res.direction === "HOLD" ? "접전" : "찬성"}</em></div>
                       {detail && !detail._err && detail.funLine && <p className="vfun">정령 — {detail.funLine} <span className="dim">(판결엔 안 껴)</span></p>}

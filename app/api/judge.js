@@ -11,11 +11,14 @@
 const SYS_PREFIX = "당신은 유저의 '수호신' 비나리다";
 const DEFAULT_ORIGINS = ["https://binari-sepia.vercel.app", "http://localhost:5173", "http://localhost:4173"];
 
-// ── 레이트리밋: IP당 고정 윈도(기본 1분 30회 = 질문 15개분, 판결 1건당 2콜) ──
-//    한국 이동통신은 CGNAT로 다수 사용자가 IP를 공유하므로 너무 조이면 정상 유저가 막힌다.
-//    RL_MAX 환경변수로 배포 후 튜닝 가능.
+// ── 레이트리밋: IP당 고정 윈도(기본 1분 90회 = 질문 45개분, 판결 1건당 2콜) ──
+//    한국 이동통신은 CGNAT로 수백 명이 한 IP를 공유한다. 광고로 모바일 트래픽이 몰리면
+//    (특히 카톡 인앱브라우저) 정상 유저가 429를 맞는데, 유저 눈에는 "판결이 닿지 못했어"로만 보인다.
+//    기존 30회는 광고 집행 기준으로 너무 좁아 90으로 올렸다.
+//    ※ 실제 발생 여부는 이제 verdict_failed{reason:"rate_limited"} 로 관측된다 — 데이터 보고 RL_MAX 로 재조정할 것.
+//      상한을 넓힌 만큼 비용 측 최종 방어선은 Anthropic 콘솔의 월 지출 한도다.
 const RL_WINDOW_MS = 60_000;
-const RL_MAX = Math.max(1, parseInt(process.env.RL_MAX, 10) || 30);
+const RL_MAX = Math.max(1, parseInt(process.env.RL_MAX, 10) || 90);
 const RL_MAX_KEYS = 5000;              // 메모리 상한 — 만료분 정리 후에도 넘치면 오래된 것부터 버림
 const _hits = new Map();               // ip -> { n, resetAt }
 

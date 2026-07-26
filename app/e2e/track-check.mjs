@@ -103,6 +103,33 @@ try {
     // 프로덕션 데이터로 확인함(2026-07-26): verdict_shown 17건 중 dir 17/17 · verdict 8/17.
   }
 
+  /* ── 온보딩 화면별 도달 — 광고 유입자가 어디서 죽는지 보려면 화면마다 1발씩 찍혀야 한다 ── */
+  {
+    const ctx = await fresh();
+    const page = await ctx.newPage({ viewport: { width: 390, height: 844 } });
+    await page.goto(BASE + "/?trackdebug");
+    await page.waitForFunction(() => (window.__binariEvents || []).some((e) => e.ev === "app_open"), null, { timeout: 10000 });
+    await page.getByRole("button", { name: "조각을 모으러 갈래" }).click();
+    await page.waitForFunction(() => (window.__binariEvents || []).some((e) => e.ev === "onboard_step"), null, { timeout: 8000 });
+    const evs = await page.evaluate(() => window.__binariEvents.map((e) => ({ ev: e.ev, step: e.props.step })));
+    const steps = evs.filter((e) => e.ev === "onboard_step").map((e) => e.step);
+    check("온보딩 첫 화면이 onboard_step 으로 기록", steps[0] === "name", `steps=${steps.join(",")}`);
+    check("onboard_start 가 onboard_step 보다 먼저", evs.findIndex((e) => e.ev === "onboard_start") < evs.findIndex((e) => e.ev === "onboard_step"));
+
+    // 뒤로 갔다 오면 중복 발사되면 안 된다 — 퍼널 이탈률이 왜곡된다
+    await page.getByRole("button", { name: "이름 없이 갈래" }).click();
+    await page.waitForTimeout(600);
+    const back = page.getByText("아까 장면으로 돌아갈래");
+    if (await back.count()) { await back.first().click(); await page.waitForTimeout(400); }
+    const steps2 = await page.evaluate(() => window.__binariEvents.filter((e) => e.ev === "onboard_step").map((e) => e.props.step));
+    check("onboard_step 화면당 1회만(중복 없음)", steps2.length === new Set(steps2).size, `steps=${steps2.join(",")}`);
+
+    // 고정 속성이 온보딩 이벤트에도 그대로 붙어야 소재별 완주율이 갈린다
+    const p = await page.evaluate(() => window.__binariEvents.find((e) => e.ev === "onboard_step").props);
+    check("onboard_step 에도 ft_*·is_internal 부착", typeof p.ft_source === "string" && p.is_internal === false, `ft_source=${p.ft_source}`);
+    await page.close(); await ctx.close();
+  }
+
   /* ── 유실 방지: posthog 로드 전에 발생하는 app_open 이 큐를 타고 살아남아야 한다 ── */
   {
     const ctx = await fresh();
