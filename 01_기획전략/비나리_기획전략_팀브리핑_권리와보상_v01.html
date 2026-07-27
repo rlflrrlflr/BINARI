@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="robots" content="noindex, nofollow">
+<meta property="og:title" content="비나리 — 권리·보상·겸업 정리 안내">
+<meta property="og:description" content="사업자 형태, 여러분 몫, 저작권, 회사 겸업 규정. 미루지 않고 지금 정리하려는 이유.">
+<title>비나리 — 권리·보상·겸업 정리 안내</title>
+<style>
+:root{
+  --bg:#0a0812; --panel:#181228; --panel2:#1e1730;
+  --ink:#e8dff5; --ink2:#b9acce; --ink3:#8a7f9c;
+  --line:rgba(245,217,139,.16); --line2:rgba(245,217,139,.34);
+  --gold:#f5d98b; --gold2:#c98f3d;
+  --go:#4dcf9a; --stop:#e0655f; --hold:#8b9be0;
+  --sans:'Pretendard','Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR',system-ui,sans-serif;
+  --serif:'Nanum Myeongjo',AppleMyungjo,Batang,'Noto Serif KR',serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+  -webkit-font-smoothing:antialiased;line-height:1.7;font-size:15.5px}
+.page{max-width:760px;margin:0 auto;padding:0 20px 110px}
+
+.cover{padding:56px 0 32px}
+.doctype{font-size:10.5px;letter-spacing:.24em;color:var(--gold2);margin:0 0 18px}
+.cover h1{font-family:var(--serif);font-size:clamp(26px,6vw,36px);line-height:1.3;margin:0 0 12px;color:#fff;font-weight:700;text-wrap:balance}
+.cover .sub1{font-size:15.5px;color:var(--ink2);margin:0 0 22px}
+.byline{display:flex;flex-wrap:wrap;gap:6px 20px;font-size:12.5px;color:var(--ink3);border-top:1px solid var(--line);padding-top:14px}
+
+.tldr{border:1px solid var(--line2);background:var(--panel);padding:22px 22px 8px;margin:26px 0 0}
+.tldr h2{font-family:var(--serif);font-size:15px;color:var(--gold);margin:0 0 16px;letter-spacing:.04em}
+.tldr dl{margin:0;display:grid;grid-template-columns:96px 1fr;gap:0}
+.tldr dt{font-size:12px;color:var(--ink3);padding:9px 0;border-top:1px solid var(--line)}
+.tldr dd{margin:0;font-size:14.5px;padding:9px 0;border-top:1px solid var(--line);color:var(--ink)}
+.tldr dt:first-of-type,.tldr dd:first-of-type{border-top:none}
+.tldr dd b{color:var(--gold);font-weight:600}
+
+section{padding-top:52px}
+.sh{display:flex;align-items:baseline;gap:11px;margin:0 0 6px;border-bottom:1px solid var(--line2);padding-bottom:9px}
+.sh .no{font-family:var(--serif);font-size:13px;color:var(--gold2);flex:none}
+.sh h2{font-family:var(--serif);font-size:21px;color:#fff;margin:0;font-weight:700}
+.lead{font-size:14px;color:var(--ink3);margin:12px 0 20px}
+p{margin:0 0 15px;text-wrap:pretty}
+strong{color:var(--gold);font-weight:600}
+
+.tw{overflow-x:auto;margin:0 0 18px;border:1px solid var(--line)}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;padding:11px 13px;border-bottom:1px solid var(--line);vertical-align:top}
+th{background:var(--panel);color:var(--ink3);font-weight:500;font-size:11.5px;letter-spacing:.05em;white-space:nowrap}
+tr:last-child td{border-bottom:none}
+td.k{color:var(--ink2);white-space:nowrap}
+td.n{color:var(--gold);font-variant-numeric:tabular-nums;white-space:nowrap}
+.min380{min-width:380px} .min460{min-width:460px} .min520{min-width:520px}
+.pill{display:inline-block;font-size:10.5px;padding:2px 7px;border:1px solid;border-radius:2px;white-space:nowrap}
+.p-stop{color:var(--stop);border-color:rgba(224,101,95,.4)}
+.p-go{color:var(--go);border-color:rgba(77,207,154,.4)}
+
+.key{border-left:2px solid var(--gold2);padding:4px 0 4px 16px;margin:20px 0;font-size:16px}
+.key b{color:var(--gold)}
+
+/* Q&A */
+.qa{border-top:1px solid var(--line)}
+.qa:last-of-type{border-bottom:1px solid var(--line)}
+.qa .q{display:flex;gap:10px;align-items:baseline;padding:16px 0 8px}
+.qa .q .mk{flex:none;font-family:var(--serif);font-size:13px;color:var(--gold2)}
+.qa .q .t{font-size:15.5px;color:#fff}
+.qa .a{display:flex;gap:10px;align-items:baseline;padding:0 0 16px}
+.qa .a .mk{flex:none;font-family:var(--serif);font-size:13px;color:var(--ink3)}
+.qa .a .t{font-size:14.5px;color:var(--ink2)}
+.qa .a .t b{color:var(--gold);font-weight:600}
+
+.docs{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);margin-bottom:18px}
+.doc{background:var(--panel);padding:18px}
+.doc .nm{font-family:var(--serif);font-size:16px;color:#fff;margin:0 0 8px}
+.doc .d{font-size:14px;color:var(--ink2);margin:0 0 8px}
+.doc .w{font-size:12.5px;color:var(--gold2)}
+
+.note{border:1px solid var(--line);background:var(--panel);padding:16px 18px;font-size:13.5px;color:var(--ink2);margin-top:18px}
+.note b{color:var(--ink)}
+
+footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);font-size:12.5px;color:var(--ink3)}
+footer p{margin:0 0 8px}
+@media (max-width:520px){
+  .tldr dl{grid-template-columns:1fr}
+  .tldr dt{padding-bottom:0;border-top:1px solid var(--line)}
+  .tldr dd{padding-top:2px;border-top:none}
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="cover">
+  <p class="doctype">BINARI · 내부 보고 02</p>
+  <h1>권리·보상·겸업 정리 안내</h1>
+  <p class="sub1">사업자 형태를 어떻게 할지, 여러분 몫은 어떻게 되는지, 만드신 결과물의 권리는 어떻게 되는지 알아봤습니다. 미루지 않고 지금 말씀드립니다.</p>
+  <div class="byline">
+    <span>2026년 7월 27일</span><span>작성 · 강석우</span><span>공유 · 팀 전원</span><span>분량 · 5분</span>
+  </div>
+</div>
+
+<div class="tldr">
+  <h2>한눈에 보기</h2>
+  <dl>
+    <dt>사업자</dt><dd>지금은 <b>등록하지 않습니다.</b> 등록하면 예비창업 지원사업(평균 4,000만원) 자격이 영구히 사라집니다.</dd>
+    <dt>법인</dt><dd>아직 안 세웁니다. 첫해 고정비 <b>290~340만원</b>인데 지금 얻을 게 없습니다.</dd>
+    <dt>여러분 몫</dt><dd>지분은 <b>지금 확정하지 않습니다.</b> 대신 <b>"법인 세우면 이 산식으로 배정"</b>을 문서로 남깁니다.</dd>
+    <dt>저작권</dt><dd>지금은 여러분이 만든 결과물의 권리가 <b>각자 개인에게</b> 있습니다. 정리가 필요합니다.</dd>
+    <dt>겸업</dt><dd>각자 <b>회사 취업규칙</b>을 직접 확인해 주세요. 30분이면 됩니다.</dd>
+    <dt>언제</dt><dd>합의서 2장은 <b>지금</b>, 지분 산식은 <b>6주 회고</b>에서 같이 정합니다.</dd>
+  </dl>
+</div>
+
+<section>
+  <div class="sh"><span class="no">01</span><h2>왜 지금 사업자등록도, 법인도 안 하나</h2></div>
+
+  <p><strong>사업자등록을 미루는 이유는 하나입니다.</strong> 2026년 예비창업패키지는 사업자등록증이 없는 사람만 신청할 수 있습니다. 평균 지원금 4,000만원, 경쟁률 49대 1입니다. 등록하는 순간 이 자격이 영구히 사라지고, 창업지원사업의 '업력'도 그날부터 계산됩니다.</p>
+
+  <p>이번에 리포트를 팔아보려는 금액이 4,900원 × 10건 = <strong>5만원</strong>입니다. 5만원을 재보려고 4,000만원짜리 창구를 태우는 건 맞지 않다고 봤습니다.</p>
+
+  <p><strong>법인을 안 세우는 이유는 비용입니다.</strong> 세율이 아니라 고정비입니다.</p>
+
+  <div class="tw"><table class="min460">
+    <thead><tr><th>항목</th><th>개인</th><th>법인(서울)</th></tr></thead>
+    <tbody>
+      <tr><td class="k">설립 비용</td><td class="n">0원</td><td class="n">45~150만원</td></tr>
+      <tr><td class="k">연 유지비</td><td class="n">0원</td><td class="n">225만원</td></tr>
+      <tr><td class="k">첫해 합계</td><td class="n">0원</td><td class="n">290~340만원</td></tr>
+    </tbody>
+  </table></div>
+
+  <p>게다가 개인으로 하면 광고비 손실을 제 근로소득에서 뺄 수 있어서 연말에 20~30만원가량이 돌아옵니다. 법인은 이게 안 됩니다. 즉 지금 법인을 세우면 <strong>290만원을 더 쓰면서 30만원 환급도 포기하는</strong> 셈입니다.</p>
+
+  <div class="key">법인이 필요해지는 건 <b>돈을 받을 때가 아니라 지분을 줄 때</b>입니다. 결제·앱스토어는 전부 개인으로도 됩니다.</div>
+</section>
+
+<section>
+  <div class="sh"><span class="no">02</span><h2>그럼 여러분 몫은 어떻게 되나</h2></div>
+  <p class="lead">가장 궁금하실 부분이라 솔직하게 말씀드립니다</p>
+
+  <p><strong>지분은 지금 정하지 않습니다.</strong> 이유는 두 가지입니다.</p>
+
+  <p><strong>첫째, 나눌 근거가 아직 없습니다.</strong> 기여를 6주도 측정하지 않았고 게이트를 한 번도 통과하지 않았습니다. 이 상태의 배분은 추측입니다.</p>
+
+  <p><strong>둘째, 우리는 "6주마다 계속할지 각자 다시 정한다"고 이미 약속했습니다.</strong> 나가기 쉬운 팀을 만들어놓고, 나가면 회수가 안 되는 물건을 미리 주는 건 앞뒤가 안 맞습니다. 주식은 본인 동의 없이 못 가져오고, 무상으로 돌려받으면 증여 문제가 생깁니다.</p>
+
+  <p>그렇다고 아무것도 약속 안 드리겠다는 뜻이 아닙니다. <strong>지금 드릴 수 있는 건 문서로 남긴 약속입니다.</strong></p>
+
+  <div class="key"><b>장래 지분 약정</b> — "법인을 세우면 이 산식으로 지분을 배정한다"를 지금 문서로 씁니다.<br>지분은 아직 없지만 <b>약속은 기록으로 남습니다.</b></div>
+
+  <p>여기에 <strong>기여 기간에 따라 나눠서 확정되는 조건</strong>을 답니다. 오래 함께할수록 몫이 커지고, 아주 초기에 빠지면 배정이 없는 구조입니다. 6주마다 다시 정하는 우리 방식과 맞물립니다.</p>
+
+  <p>산식 자체는 제가 혼자 정하지 않겠습니다. <strong>6주 회고에서 같이 정합니다.</strong> 그때는 각자 무엇을 얼마나 했는지가 기록으로 남아 있어서, 추측이 아니라 실제를 보고 이야기할 수 있습니다.</p>
+
+  <p class="lead">참고로 "개인사업자도 공동사업자로 등록하면 지분율을 쓸 수 있다"는 방법이 있는데, 이건 안 하기로 했습니다. 그 방식은 지분을 팔거나 빠져나올 수가 없고(민법 273조), 반대로 사업에 빚이 생기면 <b>여러분 개인 재산까지 책임</b>을 집니다(상법 57조). 권리는 없고 책임만 지는 구조입니다.</p>
+</section>
+
+<section>
+  <div class="sh"><span class="no">03</span><h2>저작권 — 이건 지금 정리해야 합니다</h2></div>
+
+  <p>확인해보니 이런 상태입니다.</p>
+
+  <div class="key">여러분이 만든 <b>광고 소재·카피·리서치 문서의 저작권은 지금 각자 개인에게</b> 있습니다.</div>
+
+  <p>회사 직원이 업무로 만든 결과물은 회사 것이 되지만, 그건 <strong>고용관계가 있을 때</strong> 이야기입니다. 우리는 무보수로 함께하는 사이라 그 요건이 안 됩니다.</p>
+
+  <p>지금은 문제가 없습니다. 문제는 나중입니다. 법인을 세우거나 투자를 받으려면 결과물의 권리가 한 곳에 모여 있어야 하는데, 그때 넘기려면 <strong>전원 동의</strong>가 필요합니다. 한 분이라도 연락이 닿지 않거나 사이가 틀어지면 그 한 분이 전체를 막습니다.</p>
+
+  <p>그리고 우리는 <strong>6주마다 나갈 수 있는 구조</strong>입니다. 이탈은 사고가 아니라 설계입니다. 그래서 미룰수록 위험합니다.</p>
+
+  <p><strong>그래서 합의서 두 장을 묶어서 드리려고 합니다.</strong></p>
+
+  <div class="docs">
+    <div class="doc">
+      <p class="nm">① 저작권 귀속 합의서</p>
+      <p class="d">프로젝트 산출물의 저작권을 프로젝트(또는 나중에 세울 법인)로 모읍니다.</p>
+      <p class="w">여러분이 주는 것</p>
+    </div>
+    <div class="doc">
+      <p class="nm">② 장래 지분 약정</p>
+      <p class="d">법인 설립 시 지분 배정 산식과 기여 기간 조건을 명시합니다.</p>
+      <p class="w">여러분이 받는 것</p>
+    </div>
+  </div>
+
+  <p><strong>두 장을 따로 드리지 않고 같이 드리는 이유가 있습니다.</strong> 저작권만 달라고 하면 일방적인 요구가 됩니다. 같이 드려야 "권리는 정리하고 몫은 보장한다"가 됩니다.</p>
+
+  <p>그리고 <strong>6주 결과가 나오기 전인 지금</strong> 드리는 게 맞다고 봤습니다. 잘된 뒤에 꺼내면 "이제 와서"가 되고, 안된 뒤에 꺼내면 의미가 없습니다.</p>
+</section>
+
+<section>
+  <div class="sh"><span class="no">04</span><h2>회사 겸업 규정 — 각자 확인 부탁드립니다</h2></div>
+
+  <p>먼저 사실관계부터. <strong>근로기준법에 겸업을 금지하는 조항은 없습니다.</strong> 겸업 제한은 회사 취업규칙상의 약정이고, 법원은 본업에 지장을 주거나 회사와 이익이 부딪힐 때만 징계를 인정하는 편입니다. 매출 0원인 사이드 프로젝트가 문제가 될 가능성은 낮습니다.</p>
+
+  <p>다만 <strong>우리 본업이 광고대행이고 이 프로젝트에서 하는 일이 유저 획득</strong>이라, "이익이 부딪힌다"는 얘기가 나올 여지는 있습니다. 확인해두는 게 안전합니다.</p>
+
+  <div class="tw"><table class="min460">
+    <thead><tr><th>확인할 것</th><th>어디서</th><th>시간</th></tr></thead>
+    <tbody>
+      <tr><td>취업규칙의 <b>겸업·겸직</b> 조항</td><td class="k">사내 인트라넷</td><td class="k">30분</td></tr>
+      <tr><td>취업규칙의 <b>직무발명·업무상저작물</b> 조항</td><td class="k">사내 인트라넷</td><td class="k">위와 같이</td></tr>
+    </tbody>
+  </table></div>
+
+  <p class="lead">규칙 사본을 밖으로 내보내지는 말아 주세요. 그 자체가 회사 자료입니다. <b>확인한 결과만</b> 공유해 주시면 됩니다.</p>
+
+  <p>승인이 필요한 구조라면 승인을 받는 게 정답입니다. 숨기고 갈 생각은 없습니다. 확인 결과에 따라 참여 방식이 달라질 수 있고, 그건 6주 회고 안건으로 올리겠습니다. <strong>노무사 상담도 한 번 받아보려고 합니다.</strong></p>
+
+  <p>참고로 <strong>법인 등기부는 누구나 볼 수 있는 공개 문서</strong>입니다. 회사 이름만 알면 1,000원에 임원 이름과 생년월일이 나옵니다. 사업자등록 정보는 반대로 세법상 비공개입니다. 이것도 법인을 서두르지 않는 이유 중 하나입니다 — <strong>되돌릴 수 없는 공개 기록을 확인 전에 만들지 않으려고요.</strong></p>
+</section>
+
+<section>
+  <div class="sh"><span class="no">05</span><h2>언제 법인을 세우나</h2></div>
+  <p class="lead">넷 중 하나만 걸리면 그때 바로 세웁니다</p>
+
+  <div class="tw"><table class="min520">
+    <thead><tr><th style="width:34%">조건</th><th>설명</th></tr></thead>
+    <tbody>
+      <tr><td class="k">투자 논의가 실무 단계</td><td>"관심 있다" 수준이 아니라 조건을 문서로 주고받기 시작할 때</td></tr>
+      <tr><td class="k">법인 요구 프로그램 지원</td><td>팁스 등은 최종 선정에 법인이 필수입니다</td></tr>
+      <tr><td class="k"><b>지분을 실제로 배정</b></td><td>지분을 주려면 법인 말고는 담을 그릇이 없습니다</td></tr>
+      <tr><td class="k">채용 또는 거래처 요구</td><td>급여를 주거나, 거래처가 법인 명의를 요구할 때</td></tr>
+    </tbody>
+  </table></div>
+
+  <p><strong>매출이 생겼다거나 결제를 붙였다는 건 조건이 아닙니다.</strong> 결제는 개인사업자로도 전부 됩니다. 전환 비용도 낮습니다 — 우리는 설비가 없는 소프트웨어라 나중에 세워도 1~2주, 17만~100만원이면 됩니다.</p>
+</section>
+
+<section>
+  <div class="sh"><span class="no">06</span><h2>예상 질문</h2></div>
+  <p class="lead">제가 여러분이라면 물어볼 것들을 미리 적었습니다. 여기 없는 건 편하게 물어봐 주세요</p>
+
+  <div class="qa">
+    <div class="q"><span class="mk">Q</span><span class="t">저작권을 넘기면 저는 뭘 받나요?</span></div>
+    <div class="a"><span class="mk">A</span><span class="t">장래 지분 약정입니다. 두 장을 같이 드리는 이유가 그겁니다. <b>다만 지금 지분은 없고 약속만 있다는 게 사실이고, 그걸 숨기지 않겠습니다.</b> 그래서 산식을 제가 정하지 않고 6주 회고에서 같이 정하자는 겁니다.</span></div>
+  </div>
+
+  <div class="qa">
+    <div class="q"><span class="mk">Q</span><span class="t">6주 하고 그만두면 저작권만 뺏기는 건가요?</span></div>
+    <div class="a"><span class="mk">A</span><span class="t">기여 기간에 따라 배정되는 구조라 <b>일한 만큼은 남습니다.</b> 다만 아주 초기에 빠지면 배정이 없는 구간도 두는 게 일반적입니다. 그 기준선을 몇 주로 할지도 회고에서 같이 정하겠습니다.</span></div>
+  </div>
+
+  <div class="qa">
+    <div class="q"><span class="mk">Q</span><span class="t">회사에 걸리면 어떻게 되나요?</span></div>
+    <div class="a"><span class="mk">A</span><span class="t">그래서 먼저 확인하자는 겁니다. <b>숨기고 가지 않겠습니다.</b> 승인이 필요하면 승인을 받고, 규정상 어려우면 참여 방식을 바꿉니다. 확인 전에 등기부처럼 되돌릴 수 없는 기록을 만들지 않는 것도 같은 이유입니다.</span></div>
+  </div>
+
+  <div class="qa">
+    <div class="q"><span class="mk">Q</span><span class="t">지금 돈이 안 나오는데 왜 이런 걸 정하나요?</span></div>
+    <div class="a"><span class="mk">A</span><span class="t">돈이 나온 뒤에 정하면 늦습니다. <b>관계가 좋을 때 정해야 서로 안전합니다.</b> 나중에 이 얘기를 꺼내면 그때는 이해관계가 걸린 협상이 됩니다.</span></div>
+  </div>
+
+  <div class="qa">
+    <div class="q"><span class="mk">Q</span><span class="t">이대로 안 하면 뭐가 문제인가요?</span></div>
+    <div class="a"><span class="mk">A</span><span class="t">나중에 법인을 세우거나 투자를 받을 때 결과물 권리를 한 곳에 모아야 하는데, 그때 <b>전원 동의</b>가 필요합니다. 그 시점에 한 분이라도 연락이 안 되면 전체가 멈춥니다.</span></div>
+  </div>
+
+  <div class="qa">
+    <div class="q"><span class="mk">Q</span><span class="t">변호사·세무사 검토는 받나요?</span></div>
+    <div class="a"><span class="mk">A</span><span class="t">네. <b>합의서 문안은 법률 검토를 받고 드리겠습니다.</b> 취업규칙은 노무사, 사업자등록 시점은 세무사 상담을 붙일 예정입니다. 이 문서에 적은 내용은 제가 조사한 것이고 자문이 아닙니다.</span></div>
+  </div>
+</section>
+
+<section>
+  <div class="sh"><span class="no">07</span><h2>일정</h2></div>
+
+  <div class="tw"><table class="min520">
+    <thead><tr><th style="width:20%">시점</th><th style="width:34%">무엇</th><th>누가</th></tr></thead>
+    <tbody>
+      <tr><td class="k">이번 주</td><td>취업규칙 겸업·직무발명 조항 확인</td><td class="k">전원 (각자 30분)</td></tr>
+      <tr><td class="k">1~2주 내</td><td>합의서 2장 초안 공유 + 법률 검토</td><td class="k">강석우</td></tr>
+      <tr><td class="k">검토 후</td><td>합의서 서명 (내용에 이견 있으면 조정)</td><td class="k">전원</td></tr>
+      <tr><td class="k">6주 회고</td><td><b>지분 산식과 기여 기준 확정</b></td><td class="k">전원 논의</td></tr>
+      <tr><td class="k">조건 충족 시</td><td>법인 설립 및 지분 배정</td><td class="k">—</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note">
+    <p style="margin:0"><b>합의서 내용에 이견이 있으면 말씀해 주세요.</b> 초안은 제가 만들지만 그대로 서명하시라는 뜻이 아닙니다. 조정할 수 있고, 조정하는 게 정상입니다. 서명이 부담스러우시면 그 이유를 듣고 방식을 다시 생각하겠습니다.</p>
+  </div>
+</section>
+
+<footer>
+  <p>이 문서는 제가 조사한 내용을 정리한 것이고 <b>법률·세무 자문이 아닙니다.</b> 합의서 문안은 법률 검토를 거쳐 드리겠습니다.</p>
+  <p>사업 계획과 6주 실행 내용은 앞서 공유드린 <b>「검증 결과 보고 및 6주 실행계획」</b>을 봐 주세요.</p>
+</footer>
+
+</div>
+</body>
+</html>
