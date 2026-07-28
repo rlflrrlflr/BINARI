@@ -126,6 +126,65 @@ FAIL_KO = {
 }
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+#  ★ 말투 — 리포트에 나가는 문장은 전부 여기 있다. 이 블록만 고치면 말투가 바뀐다.
+#
+#  고치는 법
+#    · 따옴표 " " 안의 한국어만 바꾼다.
+#    · {중괄호} 안의 이름은 숫자가 들어갈 자리다. 이름은 그대로 두고 위치만 옮긴다.
+#      예) "질문 {질문}건 전부 정상입니다" → "물음 {질문}개 다 잘 나갔어요"
+#    · 줄 맨 앞의 이름(총평_정상 등)과 콜론(:) 은 건드리지 않는다.
+#    · 아예 빼고 싶은 문장은 "" 로 비우면 그 줄이 나가지 않는다.
+# ══════════════════════════════════════════════════════════════════════════════
+MSG = {
+    # ── 머리말 ──
+    "제목":        "비나리 데일리 리포트",
+    "인사":        "전일 자({날짜}) 공유드립니다!",
+
+    # ── 총평: 넷 중 하나만 나간다 ──
+    "총평_정상":    "질문 {질문}건 전부 판결까지 정상 응답하여 운영 이슈 없는 것으로 확인됩니다.",
+    "총평_실패":    "질문 {질문}건 중 {실패}건이 응답에 실패하여 운영 이슈 확인되었습니다.",
+    "총평_유입없음": "전일 질문이 한 건도 발생하지 않았습니다. 유입 경로 점검이 필요합니다.",
+    "총평_내부만":  "운영 이슈는 없으나 전일 활동이 전부 내부 트래픽이라 제품 판단에는 쓰기 어렵습니다.",
+
+    # ── 데이터 요약 블록의 각 줄 ──
+    "숫자_사람":    "외부 {외부}명{외부증감}",
+    "숫자_내부":    " · 내부 {내부}명(제외)",
+    "숫자_방문":    "방문 {방문}회{방문증감}{일인당}",
+    "숫자_일인당":  " · 1인 {일인당}회",
+    "숫자_온보딩":  "온보딩 {시작} → {완주} 완주 {완주율}",
+    "숫자_판결":    "질문 {질문} → 판결 {판결}{판결증감}",
+    "숫자_실패":    " · 실패 {실패}",
+    "숫자_방향":    "GO {GO} · HOLD {HOLD}({HOLD비율}) · STOP {STOP}",
+    "숫자_반응":    "평가 {평가}건 {평가율} · 서신 {서신}건 {서신클릭률}",
+    "숫자_받을게":  " → 받을게 {받을게}건",
+    "숫자_공유":    " · 공유 {공유}건",
+
+    # ── 코멘트: 해당하는 것만 • 로 붙는다 ──
+    "말_실패원인":  "실패 원인은 {원인}입니다. 유저가 판결을 받지 못하고 이탈한 건으로 우선 확인이 필요합니다.",
+    "말_이탈지점":  "{화면} 화면에서 {인원}명 이탈하여 최대 이탈 지점으로 확인됩니다. 화면 축소 또는 순서 조정 검토 제안드립니다.",
+    "말_STOP없음":  "STOP이 한 건도 없어 '망설임엔 단언을'과는 거리가 있는 상황입니다. 표본 누적 후 판결 프롬프트 임계값 조정 검토가 필요해 보입니다.",
+    "말_서신유보":  "서신은 표본이 충분치 않아 판단 유보하며 추이 모니터링 지속하겠습니다.",
+    "말_서신판정":  "서신 노출 300회를 넘겨 지불 의사 판정이 가능한 시점입니다.",
+
+    # ── 예외 ──
+    "데이터없음":   "전일 자 데이터가 조회되지 않습니다. 배포 상태 및 계측 연결 확인이 필요합니다.",
+    "연결확인":     "비나리 연결 확인 — 이 메시지가 보이면 디스코드 발송은 정상입니다.",
+}
+
+
+def say(key, **kw):
+    """MSG 에서 문장을 꺼내 숫자를 채운다. 빈 문자열이면 그 줄은 나가지 않는다."""
+    tpl = MSG.get(key, "")
+    if not tpl:
+        return ""
+    try:
+        return tpl.format(**kw)
+    except (KeyError, IndexError):
+        # 사용자가 {중괄호} 이름을 잘못 고쳐도 리포트 전체가 죽지 않게 원문을 그대로 내보낸다
+        return tpl
+
+
 def pct(a, b):
     return f"{round(a / b * 100)}%" if b else "—"
 
@@ -146,55 +205,56 @@ def build_report(cfg):
     """
     rows = hogql(cfg, Q_DAILY)
     if not rows:
-        return ("비나리 데일리 리포트\n"
-                "전일 자 데이터가 조회되지 않습니다. 배포 상태 및 계측 연결 확인이 필요합니다.")
+        return MSG["제목"] + "\n" + MSG["데이터없음"]
 
     keys = ["d", "people", "internal_people", "visits", "ob_start", "ob_done",
             "asked", "verdicts", "failed", "rated", "letter", "letter_yes", "shared"]
     t = dict(zip(keys, rows[0]))
     p = dict(zip(keys, rows[1])) if len(rows) > 1 else {}
 
-    L = ["비나리 데일리 리포트", f"전일 자({t['d']}) 공유드립니다!"]
+    L = [MSG["제목"], say("인사", 날짜=t["d"])]
 
     # ── 총평: 이슈 유무를 한 문장으로 먼저 알린다 ──
     if t["failed"]:
-        L.append(f"질문 {t['asked']}건 중 {t['failed']}건이 응답에 실패하여 운영 이슈 확인되었습니다.")
+        L.append(say("총평_실패", 질문=t["asked"], 실패=t["failed"]))
     elif t["asked"] == 0:
-        L.append("전일 질문이 한 건도 발생하지 않았습니다. 유입 경로 점검이 필요합니다.")
+        L.append(say("총평_유입없음"))
     elif t["people"] == 0 and t["internal_people"]:
-        L.append("운영 이슈는 없으나 전일 활동이 전부 내부 트래픽이라 제품 판단에는 쓰기 어렵습니다.")
+        L.append(say("총평_내부만"))
     else:
-        L.append(f"질문 {t['asked']}건 전부 판결까지 정상 응답하여 운영 이슈 없는 것으로 확인됩니다.")
+        L.append(say("총평_정상", 질문=t["asked"]))
 
     # ── 데이터 요약: 숫자는 여기 몰아넣는다 ──
     dirs = {str(r[0]): r[1] for r in hogql(cfg, Q_DIR)} if t["verdicts"] else {}
     tv = sum(dirs.values()) or t["verdicts"]
     go, hold, stop = dirs.get("GO", 0), dirs.get("HOLD", 0), dirs.get("STOP", 0)
-    per = f" · 1인 {round(t['visits'] / t['people'], 1)}회" if t["people"] else ""
+    per = say("숫자_일인당", 일인당=round(t["visits"] / t["people"], 1)) if t["people"] else ""
 
     D = ["```",
-         f"외부 {t['people']}명{delta(t['people'], p.get('people'))}"
-         + (f" · 내부 {t['internal_people']}명(제외)" if t["internal_people"] else ""),
-         f"방문 {t['visits']}회{delta(t['visits'], p.get('visits'))}{per}"]
+         say("숫자_사람", 외부=t["people"], 외부증감=delta(t["people"], p.get("people")))
+         + (say("숫자_내부", 내부=t["internal_people"]) if t["internal_people"] else ""),
+         say("숫자_방문", 방문=t["visits"], 방문증감=delta(t["visits"], p.get("visits")), 일인당=per)]
     if t["ob_start"]:
-        D.append(f"온보딩 {t['ob_start']} → {t['ob_done']} 완주 {pct(t['ob_done'], t['ob_start'])}")
-    D.append(f"질문 {t['asked']} → 판결 {t['verdicts']}{delta(t['verdicts'], p.get('verdicts'))}"
-             + (f" · 실패 {t['failed']}" if t["failed"] else ""))
+        D.append(say("숫자_온보딩", 시작=t["ob_start"], 완주=t["ob_done"],
+                     완주율=pct(t["ob_done"], t["ob_start"])))
+    D.append(say("숫자_판결", 질문=t["asked"], 판결=t["verdicts"],
+                 판결증감=delta(t["verdicts"], p.get("verdicts")))
+             + (say("숫자_실패", 실패=t["failed"]) if t["failed"] else ""))
     if t["verdicts"]:
-        D += [f"GO {go} · HOLD {hold}({pct(hold, tv)}) · STOP {stop}",
-              f"평가 {t['rated']}건 {pct(t['rated'], t['verdicts'])}"
-              f" · 서신 {t['letter']}건 {pct(t['letter'], t['verdicts'])}"
-              + (f" → 받을게 {t['letter_yes']}건" if t["letter"] else "")
-              + (f" · 공유 {t['shared']}건" if t["shared"] else "")]
+        D += [say("숫자_방향", GO=go, HOLD=hold, HOLD비율=pct(hold, tv), STOP=stop),
+              say("숫자_반응", 평가=t["rated"], 평가율=pct(t["rated"], t["verdicts"]),
+                  서신=t["letter"], 서신클릭률=pct(t["letter"], t["verdicts"]))
+              + (say("숫자_받을게", 받을게=t["letter_yes"]) if t["letter"] else "")
+              + (say("숫자_공유", 공유=t["shared"]) if t["shared"] else "")]
     D.append("```")
-    L += [""] + D
+    L += [""] + [d for d in D if d]
 
     # ── 코멘트: 숫자 반복 없이 '무엇을 할 것인가'만 ──
     notes = []
     if t["failed"]:
         fails = hogql(cfg, Q_FAIL)
         cause = " · ".join(f"{FAIL_KO.get(str(r[0]), str(r[0]))} {r[1]}건" for r in fails) if fails else "원인 미분류"
-        notes.append(f"실패 원인은 {cause}입니다. 유저가 판결을 받지 못하고 이탈한 건으로 우선 확인이 필요합니다.")
+        notes.append(say("말_실패원인", 원인=cause))
 
     if t["ob_start"]:
         ob = [(str(r[0]), r[1]) for r in hogql(cfg, Q_ONBOARD)]
@@ -204,17 +264,15 @@ def build_report(cfg):
             if d > drop:
                 worst, drop = ob[i][0], d
         if worst:
-            notes.append(f"{STEP_KO.get(worst, worst)} 화면에서 {drop}명 이탈하여 최대 이탈 지점으로 "
-                         "확인됩니다. 화면 축소 또는 순서 조정 검토 제안드립니다.")
+            notes.append(say("말_이탈지점", 화면=STEP_KO.get(worst, worst), 인원=drop))
 
     if t["verdicts"] and stop == 0 and tv >= 5:
-        notes.append("STOP이 한 건도 없어 '망설임엔 단언을'과는 거리가 있는 상황입니다. "
-                     "표본 누적 후 판결 프롬프트 임계값 조정 검토가 필요해 보입니다.")
+        notes.append(say("말_STOP없음"))
 
     if t["letter"]:
-        notes.append("서신은 표본이 충분치 않아 판단 유보하며 추이 모니터링 지속하겠습니다."
-                     if t["verdicts"] < 300 else
-                     "서신 노출 300회를 넘겨 지불 의사 판정이 가능한 시점입니다.")
+        notes.append(say("말_서신유보") if t["verdicts"] < 300 else say("말_서신판정"))
+
+    notes = [n for n in notes if n]
 
     if notes:
         L += [""] + [f"• {n}" for n in notes]
@@ -256,7 +314,7 @@ def main():
         if not cfg.get("DISCORD_WEBHOOK_URL"):
             sys.exit("설정 누락: DISCORD_WEBHOOK_URL")
         try:
-            send_discord(cfg, "비나리 연결 확인 — 이 메시지가 보이면 디스코드 발송은 정상입니다.")
+            send_discord(cfg, MSG["연결확인"])
             print("연결 확인 완료 — 디스코드로 시험 메시지를 보냈습니다.")
         except urllib.error.HTTPError as e:
             sys.exit(discord_error(e))
