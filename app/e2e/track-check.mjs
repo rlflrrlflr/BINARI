@@ -20,6 +20,9 @@ const browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath
 // init 은 페이지 스크립트보다 먼저 실행되므로 사전 상태(동의·신념) 주입에 쓴다.
 async function open(ctx, url) {
   const page = await ctx.newPage({ viewport: { width: 390, height: 844 } });
+  // 방문 기록을 지워 "30분 뒤 다시 옴"을 흉내낸다 — 아래 검사들은 매번 app_open 이 필요하다.
+  // (새로고침 중복 방지 검사는 이 헬퍼를 쓰지 않고 직접 페이지를 연다)
+  await page.addInitScript(() => { try { localStorage.removeItem("binari.lastvisit.v1"); } catch (_) {} });
   await page.goto(BASE + url);
   await page.waitForFunction(() => (window.__binariEvents || []).some((e) => e.ev === "app_open"), null, { timeout: 10000 });
   const props = await page.evaluate(() => window.__binariEvents.find((e) => e.ev === "app_open").props);
@@ -85,7 +88,7 @@ try {
     const inject = () => { localStorage.setItem("binari.belief.v1", "skeptic"); };
     const ctx = await fresh(inject);                                     // 동의 없음
     const a = await open(ctx, "/?trackdebug");
-    check("belief 는 동의 없이도 전송(1단계)", a.belief === "skeptic", `belief=${a.belief}`);
+    check("belief 는 동의 없이도 전송", a.belief === "skeptic", `belief=${a.belief}`);
     check("동의 없이도 1단계 지표는 전송", a.is_internal === false && typeof a.ft_source === "string" && "returning" in a && "ref" in a,
       `ref=${a.ref} returning=${a.returning}`);
     await ctx.close();
@@ -144,6 +147,14 @@ try {
     await page.waitForTimeout(1500);
     const opens = await page.evaluate(() => (window.__binariEvents || []).filter((e) => e.ev === "app_open").length);
     check("app_open 은 방문당 1회만(새로고침 중복 없음)", opens === 0, `재방문 후 재발사=${opens}`);
+
+    // 습관 앱의 핵심 신호 — 시간이 지나 다시 오면 반드시 새 방문으로 세야 한다.
+    // 이게 깨지면 "하루에 몇 번 열었나"를 영영 못 재고, 리텐션이 실제보다 낮게 나온다.
+    await page.evaluate(() => localStorage.setItem("binari.lastvisit.v1", String(Date.now() - 31 * 60 * 1000)));
+    await page.reload();
+    await page.waitForTimeout(1500);
+    const reopens = await page.evaluate(() => (window.__binariEvents || []).filter((e) => e.ev === "app_open").length);
+    check("30분 뒤 재방문은 새 방문으로 집계", reopens === 1, `재발사=${reopens}`);
     await page.close();
     await ctx.close();
   }

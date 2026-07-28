@@ -12,7 +12,12 @@ let _ph = null, _phInit = false;
      판결 문구, 망설임 사유. 서비스 제공에 필수가 아니고 조합 시 식별성이 커지므로 동의 기반.
      미동의 시 아래 키만 제거되고 이벤트 자체는 그대로 전송된다.
    질문 원문·실명·생년월일 원값은 단계 무관하게 절대 전송하지 않는다. */
-const PROFILE_KEYS = new Set(["age", "age_band", "sex", "job", "rel", "city", "mbti", "core_value", "element", "zodiac", "verdict", "hesit"]);
+/* 2026-07-28 결정: 프로파일 항목도 전부 1단계(동의 불필요)로 수집한다.
+   동의율이 47%라 나이·성별·MBTI·가치·판결 결과가 절반만 들어왔고, 그 표본으로는
+   어떤 판단도 서지 않았다. 대신 처리방침(2조)에 전 항목을 명시 고지하고 근거를 §15①6에 둔다.
+   ⚠️ 질문 원문·실명·생년월일 원값·자유 서술 메모는 단계와 무관하게 여전히 절대 보내지 않는다.
+   이 집합을 다시 채우면 그 키들이 미동의자에게서 제거되는 구조는 그대로 되살아난다. */
+const PROFILE_KEYS = new Set([]);
 const stripProfile = (p) => { const o = {}; for (const k in p) if (!PROFILE_KEYS.has(k)) o[k] = p[k]; return o; };
 
 /* ── D1·D2: 모든 이벤트에 따라붙는 고정 속성(super property) ────────────────
@@ -97,17 +102,35 @@ async function _initAnalytics() {
     _flush();                                  // 로드 전에 쌓인 이벤트를 원래 시각으로 전송
   } catch (_) {}
 }
-/* 방문(탭 세션)당 1회만 보내는 계측. 무료 요금제의 기록 한도를 지키기 위한 장치다.
-   같은 사람이 새로고침할 때마다, 수호신을 탭할 때마다 쌓이는 기록은
-   성과 분석에도 앱 개선에도 쓰이지 않으면서 한도만 먹는다.
-   횟수 대신 "이번 방문에 일어났는가"만 남긴다 — 퍼널·전환은 어차피 사람 수 기준으로 본다. */
-function trackOnce(key, ev, props) {
+/* ── 방문 단위 계측 ──────────────────────────────────────────────────────────
+   비나리는 습관 앱이다. "하루에 몇 번 열었나"가 제품의 핵심 신호이므로 빈도를 죽이면 안 된다.
+   죽여야 하는 건 새로고침 연타처럼 같은 방문 안에서 중복으로 쌓이는 기록뿐이다.
+   그래서 '탭 세션'이 아니라 '30분 간격'으로 방문을 가른다(PostHog 세션 정의와 같은 기준).
+     - 새로고침 10번  → 1건 (노이즈 제거)
+     - 아침·점심·저녁 → 3건 (습관 빈도 보존)
+   모바일은 탭을 안 닫고 앱을 오가므로, 화면이 다시 보일 때도 같은 규칙으로 재판정한다.
+   그게 없으면 하루 종일 탭을 열어둔 사람은 재방문이 영영 안 잡힌다. */
+const VISIT_KEY = "binari.lastvisit.v1";
+const VISIT_GAP_MS = 30 * 60 * 1000;
+function trackVisit(props) {
+  let last = 0;
+  try { last = +(window.localStorage.getItem(VISIT_KEY) || 0) || 0; } catch (_) {}
+  if (Date.now() - last < VISIT_GAP_MS) return false;
+  try { window.localStorage.setItem(VISIT_KEY, String(Date.now())); } catch (_) {}
+  track("app_open", props);
+  return true;
+}
+/* 방문당 1회로 묶는 계측. '이번 방문에 일어났는가'만 남기고 횟수는 속성으로 따로 싣는다.
+   방문 경계는 위 trackVisit 과 같은 30분 기준이라 재방문하면 다시 열린다. */
+function trackVisitOnce(ev, props) {
+  const k = "binari.once." + ev;
   try {
-    const k = "binari.once." + key;
-    if (window.sessionStorage.getItem(k)) return;
-    window.sessionStorage.setItem(k, "1");
-  } catch (_) { /* 시크릿 모드 등 저장 불가 — 그냥 보낸다 */ }
-  track(ev, props);
+    const last = +(window.localStorage.getItem(k) || 0) || 0;
+    if (Date.now() - last < VISIT_GAP_MS) return false;
+    window.localStorage.setItem(k, String(Date.now()));
+  } catch (_) { /* 저장 불가(시크릿 등) — 놓치느니 보낸다 */ }
+  track(ev, props || {});
+  return true;
 }
 function track(ev, props) {
   try {
@@ -1858,7 +1881,7 @@ export default function App() {
   const [sharedGone, setSharedGone] = useState(false);  // v75: '나도 물어볼래'로 공유 화면 닫음
   // 1단계 계측은 동의와 무관하게 항상 켠다(2단계 속성만 동의로 게이트)
   // 계측: 세션 시작. 유입은 first-touch(_superProps.ft_*)가 고정 부착하므로 여기선 이번 방문 경로(ref)만 참고용으로 남긴다.
-  useEffect(() => { _consent = readConsent(); _initAnalytics(); let ref = "direct"; try { const sp = new URLSearchParams(window.location.search); ref = sp.get("ref") || sp.get("utm_source") || (sp.get("v") ? "share" : "direct"); } catch (_) {} trackOnce("app_open", "app_open", { returning, ref }); if (sharedIn) track("shared_verdict_view", { dir: sharedIn.d }); }, []);
+  useEffect(() => { _consent = readConsent(); _initAnalytics(); let ref = "direct"; try { const sp = new URLSearchParams(window.location.search); ref = sp.get("ref") || sp.get("utm_source") || (sp.get("v") ? "share" : "direct"); } catch (_) {} trackVisit({ returning, ref }); if (sharedIn) track("shared_verdict_view", { dir: sharedIn.d }); }, []);
   const [saju, setSaju] = useState(mem?.saju || null);
   const [zo, setZo] = useState(mem?.zo || null);
   const [moon, setMoon] = useState(mem?.moon || null);
@@ -2029,9 +2052,15 @@ export default function App() {
     rd.readAsText(file);
   };
   const wakeTapRef = useRef(0);
+  /* 수호신을 얼마나 만졌는가 = 애착 지표. 탭 하나하나를 이벤트로 보내면 기록이 폭증하므로
+     방문 내내 세어 두었다가 화면을 떠날 때 한 건으로 묶어 보낸다.
+     기록은 1건인데 "몇 번 만졌고 얼마나 오래 붙들었는지"는 그대로 남는다. */
+  const touchRef = useRef({ taps: 0, first: 0, last: 0, sent: false });
   const tryWake = () => {                                   // v52: 수동 더블탭(모바일·데스크탑 동일)
     const now = performance.now();
-    if (now - wakeTapRef.current < 350) { wakeTapRef.current = 0; if (!awake) { setAwake(true); trackOnce("guardian_wake", "guardian_wake"); } }
+    const t = touchRef.current;
+    t.taps += 1; t.last = now; if (!t.first) t.first = now;
+    if (now - wakeTapRef.current < 350) { wakeTapRef.current = 0; if (!awake) { setAwake(true); trackVisitOnce("guardian_wake", {}); } }
     else { wakeTapRef.current = now; }
   };
   const backToLobby = () => {                               // v56: 판결 화면 탈출구(X · 로비 복귀)
@@ -2149,6 +2178,26 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
     _stepSeen.current.add(name);
     track("onboard_step", { step: name, idx: _stepSeen.current.size });
   }, [step, bstep, vstage]);
+
+  /* 화면을 떠날 때 / 다시 볼 때 ─ 습관 앱의 두 가지 필수 신호를 여기서 챙긴다.
+     ① 떠날 때: 이번 방문에 수호신을 만진 횟수·붙든 시간을 한 건으로 보낸다(애착 지표).
+     ② 다시 볼 때: 30분 넘게 떠나 있었으면 새 방문으로 센다.
+        모바일은 탭을 닫지 않고 앱을 오가므로, 이게 없으면 하루에 세 번 열어도 1회로 잡힌다. */
+  useEffect(() => {
+    const onHide = () => {
+      const t = touchRef.current;
+      if (t.sent || t.taps < 1) return;
+      t.sent = true;
+      track("guardian_touched", { taps: t.taps, hold_sec: Math.round((t.last - t.first) / 1000) });
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "hidden") { onHide(); return; }
+      if (trackVisit({ returning: true, ref: "foreground" })) touchRef.current = { taps: 0, first: 0, last: 0, sent: false };
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("pagehide", onHide);
+    return () => { document.removeEventListener("visibilitychange", onVisible); window.removeEventListener("pagehide", onHide); };
+  }, []);
 
   /* 되물음 노출 — followup_answered 만 있고 노출이 없어 응답률을 못 냈다.
      리텐션 장치라 효과 측정이 안 되면 유지·폐기 판단이 불가능하다. */
@@ -2297,9 +2346,12 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                 </div>
               </div>
               {err && <p className="err">{err}</p>}
+              {/* 선택 동의 체크박스를 뺐다 — 프로파일 항목을 전부 1단계로 옮기면서
+                  이 체크박스가 실제로 막는 게 하나도 없어졌기 때문이다.
+                  아무것도 안 막는 동의 UI는 이용자를 오인시켜 없느니만 못하다. */}
               <div className="consent">
-                <label className="chk"><input type="checkbox" checked={agree} onChange={e => { setAgree(e.target.checked); setAnalyticsConsent(e.target.checked); }} /> <span>(선택) 나이·직업 같은 내 조각도 분석에 써도 좋아</span></label>
-                <p className="fine">판결이 더 잘 맞게 다듬는 데만 써. 동의하지 않아도 판결은 똑같이 나오고, 언제든 바꿀 수 있어.<br />
+                <p className="fine">네가 준 조각(나이·성별·직업·MBTI·가치 같은 것)은 판결을 다듬는 데 써.
+                  <strong>네가 적은 질문은 보내지 않아.</strong><br />
                   ‘하늘을 열기’를 누르면 <a className="plink" href="/privacy.html" target="_blank" rel="noreferrer">개인정보처리방침</a>에 동의한 것으로 볼게.</p>
               </div>
               <button className="btn gold mt" onClick={doReveal}>하늘을 열기</button>
