@@ -200,3 +200,53 @@ if (errors === total && total > 0) {
   process.exitCode = 1;   // 실패한 실행이 성공으로 보이지 않게
 }
 if (errors < total) console.log(`다음: verdicts.csv를 열어 '사람평점' 열을 채워 — 판결이 '꽂히나'는 여기서만 판단됨.`);
+
+/* ── 사람이 읽는 요약(summary.md) ────────────────────────────────────────────
+   CSV 를 내려받아 엑셀로 여는 건 허들이다. GitHub Actions 로 돌리면 이 파일이
+   실행 결과 페이지에 그대로 표로 보이므로, 아무것도 내려받지 않고 결과를 읽을 수 있다. */
+{
+  const items = rows.slice(1).map((r) => Object.fromEntries(rows[0].map((k, i) => [k, r[i]])));
+  const bad = items.filter((it) => it.auto !== "OK");
+  const L = [];
+  L.push(`# 판결 품질 평가 결과
+`);
+  L.push(`- 판결 ${total}건 · **문제 ${bad.length}건** · 호출 실패 ${errors}건`);
+  L.push(`- 경로: ${VIA ? `배포본 경유(${VIA})` : `직접 호출 · 모델 ${MODEL}`}
+`);
+  if (errors === total && total > 0) {
+    L.push(`> **전부 실패했습니다.** 판결을 하나도 못 받았습니다. 아래 오류를 먼저 해결하세요.
+`);
+    L.push("> " + (items[0]?.verdict || "").slice(0, 300).replace(/\n/g, " ") + "\n");
+  } else {
+    // 무엇이 몇 건 걸렸는지부터 — 어디가 무너졌는지 한눈에 보인다
+    const tally = {};
+    for (const it of bad) for (const f of String(it.auto).split(";")) tally[f.replace(/\(.*/, "")] = (tally[f.replace(/\(.*/, "")] || 0) + 1;
+    if (bad.length) {
+      L.push(`## 걸린 항목
+`);
+      L.push(`| 문제 | 건수 |`, `|---|---|`);
+      for (const [k, v] of Object.entries(tally).sort((a, b) => b[1] - a[1])) L.push(`| ${k} | ${v} |`);
+      L.push("");
+      L.push(`## 문제가 난 판결
+`);
+      L.push(`| 질문 | 방향 | 표(votes) | 판결문 | 걸린 것 |`, `|---|---|---|---|---|`);
+      for (const it of bad.slice(0, 40)) {
+        const cell = (x) => String(x || "").replace(/\|/g, "\\|").replace(/\n/g, " ");
+        L.push(`| ${cell(it.question).slice(0, 40)} | ${cell(it.dir)} | ${cell(it.votes).slice(0, 60)} | ${cell(it.verdict)} | **${cell(it.auto)}** |`);
+      }
+      L.push("");
+    } else L.push(`## 자동검사 전부 통과 ✓
+`);
+    L.push(`## 전체 판결
+`);
+    L.push(`| 질문 | 방향 | 표(votes) | 판결문 |`, `|---|---|---|---|`);
+    for (const it of items) {
+      const cell = (x) => String(x || "").replace(/\|/g, "\\|").replace(/\n/g, " ");
+      L.push(`| ${cell(it.question).slice(0, 40)} | ${cell(it.dir)} | ${cell(it.votes).slice(0, 60)} | ${cell(it.verdict)} |`);
+    }
+    L.push(`
+> 자동검사는 '대놓고 틀린 것'만 잡습니다. **판결이 마음에 꽂히는지는 사람만 압니다** — verdicts.csv 의 '사람평점' 열을 채워주세요.`);
+  }
+  writeFileSync(join(HERE, "summary.md"), L.join("\n"));
+  console.log(`요약 → ${join(HERE, "summary.md")}`);
+}

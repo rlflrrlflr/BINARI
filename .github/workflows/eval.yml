@@ -1,0 +1,87 @@
+name: 판결 품질 평가
+
+# 판결이 실제로 잘 나오는지 실모델로 확인한다.
+# GitHub 컴퓨터가 대신 돌려주므로 내 컴퓨터에 저장소를 내려받을 필요가 없다.
+#
+# 쓰는 법: 저장소 위쪽 Actions 탭 → 왼쪽에서 '판결 품질 평가' → 오른쪽 'Run workflow' 버튼.
+#          몇 분 뒤 실행 결과 페이지 아래에 결과 표가 그대로 보인다(아무것도 내려받지 않아도 된다).
+#
+# API 키는 필요 없다. 배포된 비나리(/api/judge)를 거쳐 부르므로 키는 Vercel 안에만 있으면 된다.
+
+on:
+  workflow_dispatch:
+    inputs:
+      cat:
+        description: "무엇을 볼까 (S3=넘김 · HEALTH=몸·건강 · REASK=되물음 · A/B/C=일반 · GUARD=위기. 비우면 전부)"
+        default: "S3,HEALTH,REASK"
+        required: false
+      personas:
+        description: "몇 사람으로 볼까 (1~5. 많을수록 정확하지만 오래 걸린다)"
+        default: "2"
+        required: false
+      via:
+        description: "어느 주소를 거칠까 (보통 그대로 두세요)"
+        default: "https://binari-sepia.vercel.app"
+        required: false
+
+# 두 개가 동시에 돌면 판결 요청이 몰려 차단될 수 있다 — 한 번에 하나만.
+concurrency:
+  group: binari-eval
+  cancel-in-progress: false
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: 배포본에 닿는지 먼저 확인
+        # 여기서 막히면 아래 평가는 전부 실패한다. 무엇이 문제인지 먼저 알려준다.
+        run: |
+          url="${{ inputs.via }}"
+          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 20 "$url" || echo 000)
+          echo "$url → HTTP $code"
+          if [ "$code" = "000" ] || [ "$code" -ge 500 ]; then
+            echo "::error::배포된 비나리에 닿지 못했습니다($url). 주소가 맞는지, 사이트가 살아 있는지 확인하세요."
+            exit 1
+          fi
+
+      - name: 평가 실행
+        id: run
+        run: |
+          args="--via=${{ inputs.via }} --personas=${{ inputs.personas }}"
+          if [ -n "${{ inputs.cat }}" ]; then args="$args --cat=${{ inputs.cat }}"; fi
+          echo "실행: node app/eval/run-eval.mjs $args"
+          node app/eval/run-eval.mjs $args
+        continue-on-error: true   # 실패해도 아래 요약을 보여줘야 원인을 안다
+
+      - name: 결과를 이 페이지에 표로 붙이기
+        if: always()
+        run: |
+          if [ -f app/eval/summary.md ]; then
+            cat app/eval/summary.md >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## 결과 파일이 만들어지지 않았습니다" >> $GITHUB_STEP_SUMMARY
+            echo "평가가 시작조차 못 한 것 같습니다. 위 '평가 실행' 단계의 빨간 글씨를 확인하세요." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: 결과 파일 보관(엑셀용 CSV)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 판결결과
+          path: |
+            app/eval/verdicts.csv
+            app/eval/summary.md
+          if-no-files-found: warn
+
+      - name: 실패했으면 빨갛게 표시
+        if: always() && steps.run.outcome == 'failure'
+        run: |
+          echo "::error::평가가 실패했습니다. 이 페이지 아래 요약을 보세요."
+          exit 1
