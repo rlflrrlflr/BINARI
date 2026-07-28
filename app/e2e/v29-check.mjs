@@ -9,7 +9,7 @@ const R = []; const ck = (n, p, note = "") => { R.push(p); console.log(`${p ? "P
 const CALL1 = JSON.stringify({ category: "C", tone: "단호", direction: "GO", verdict: "가. 망설이지 마.", against: 2, total: 6 });
 const CALL2 = JSON.stringify({ subline: "이미 답을 알잖아.", reasons: [{ axis: "사주", vote: "GO", text: "목기가 뻗어." }], funLine: "가자.", disclaimer: "" });
 
-const b = await chromium.launch();
+const b = await chromium.launch((process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}));
 const page = await b.newPage({ viewport: { width: 430, height: 932 } });
 page.setDefaultTimeout(9000);
 const errs = [];

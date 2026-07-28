@@ -123,7 +123,8 @@ export default async function handler(req, res) {
       const txt = (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
       const cat = (txt.match(/"category"\s*:\s*"([ABC])"/) || [])[1] || null;
       const dir = (txt.match(/"direction"\s*:\s*"(GO|STOP|HOLD)"/) || [])[1] || null;
-      console.log(JSON.stringify({ at: new Date().toISOString(), call: mt <= 400 ? 1 : 2, cat, dir, usage: data.usage || null }));
+      const scope = (txt.match(/"scope"\s*:\s*"(S[123])"/) || [])[1] || null;   // S3(몸·병) 진입 비율은 서버 로그로도 본다
+      console.log(JSON.stringify({ at: new Date().toISOString(), call: mt <= 400 ? 1 : 2, cat, dir, scope, usage: data.usage || null }));
     } catch {}
     return res.status(200).json(data);
   } catch (e) {

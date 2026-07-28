@@ -105,19 +105,67 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
   }
 }
 
+/* ── 검사 4-2. 판결이 흐려지는 것을 막는 규칙이 살아 있는가 ────────────────
+   실제 사고(2026-07-28): 유저가 "무슨 뜻이야"·"어떤 사람인데"로 7번 연속 되물었는데
+   7번 다 HOLD + 추상적인 비유가 나왔다. 앱이 되물음을 '새 질문'으로 처리해 매번 재판정했고,
+   되물음엔 GO/STOP 축이 없으니 전부 HOLD로 내려앉은 것. 화면엔 아무 오류도 안 뜬다 — 전형적인 조용한 고장.
+   이 규칙들은 프롬프트 리팩터링에서 통째로 날아가기 쉬우므로 검사로 고정한다. */
+{
+  const rules = [
+    { name: "제1원칙(물어본 것에 답한다)", pat: /## 제1원칙 — 물어본 것에 답한다/,
+      fix: "판결이 질문을 비껴가는 것을 막는 최상위 규칙입니다. 지우면 '어떤 사람인데?'에 '사람 종류가 아니야' 같은 답이 돌아옵니다." },
+    { name: "되물음 분기(프롬프트)", pat: /## 되물음에 답하기/,
+      fix: "되물음을 새 판결로 처리하면 HOLD 나선에 빠집니다. 실제로 7연속 HOLD 사고가 났습니다." },
+    { name: "되물음 태그(코드)", pat: /\[되물음\] 유저가 방금 판결/,
+      fix: "프롬프트 규칙만 있고 태그를 안 붙이면 모델은 되물음인지 모릅니다. isReask → reaskLine 배선을 확인하세요." },
+    { name: "HOLD 남용 금지", pat: /## HOLD를 쓰지 않는다/,
+      fix: "HOLD가 '판단 못 하겠음'의 기본값이 되면 앱이 아무 결정도 못 내려줍니다." },
+    { name: "응답 스코프(S1·S2·S3)", pat: /## 응답 스코프\(S1·S2·S3\)/,
+      fix: "몸·병·임신출산(S3)에 길흉 판결이 나가는 것을 막는 규칙입니다. 오답 시 실제 피해가 발생하는 영역입니다." },
+    { name: "S3 넘김 절차", pat: /### S3 넘기는 법/,
+      fix: "판단을 넘기되 '지금 뭘 할지'는 남기는 절차입니다. 없으면 얼버무림과 구분되지 않습니다." },
+    { name: "scope 계측", pat: /scope_level:/,
+      fix: "S3 진입률·이탈률을 못 재면 스코프 설계가 맞는지 영영 알 수 없습니다. verdict_shown 의 scope_level/handoff_triggered 를 확인하세요." },
+  ];
+  for (const r of rules) {
+    if (r.pat.test(src)) add("정상", `판결 품질 규칙 — ${r.name}`, "있음", "");
+    else add("심각", `판결 품질 규칙 사라짐 — ${r.name}`, "코드에서 찾을 수 없음", r.fix);
+  }
+  // 콜1이 scope 를 안 뱉으면 계측값이 통째로 null 이 된다(조용한 고장)
+  if (/"scope":"S1\|S2\|S3"/.test(src)) add("정상", "판결 품질 규칙 — 콜1 scope 필드", "있음", "");
+  else add("심각", "콜1 출력 스키마에 scope 없음", "JSON 스키마에서 찾을 수 없음",
+    "콜1 JSON 스키마에 \"scope\":\"S1|S2|S3\" 을 넣으세요. 없으면 scope_level 이 항상 빈 값으로 기록됩니다.");
+  // 카드 앞면에 한자 괘 이름이 돌아오는 회귀 방지 — 앞면은 쉬운 말만(층위 분리)
+  //   범위: 공유 카드 앞면 ~ 판결 카드의 L1 결론. 마커가 사라졌으면(구조 변경) 조용히 통과시키지 말고 알린다.
+  const fs0 = src.indexOf('<div className="vtop"><span>BINARI</span>'), fs1 = src.indexOf("{/* L1 결론 */}");
+  const front = fs0 >= 0 && fs1 > fs0 ? src.slice(fs0, fs1) : null;
+  if (front === null) {
+    add("주의", "카드 앞면 용어 검사 불가", "앞면 구간을 찾는 표시가 사라짐",
+      "카드 구조가 바뀐 것 같습니다. health-check.mjs 의 앞면 구간 표시를 새 구조에 맞춰 고치세요. 지금은 이 검사가 아무것도 못 잡습니다.");
+  } else if (front.includes("卦")) {
+    add("주의", "카드 앞면에 괘 이름(한자) 노출", "앞면 영역에서 '卦' 발견",
+      "괘 이름은 뒷면(판결 근거)에만 두세요. 앞면은 처음 보는 사람도 읽을 수 있는 말만 둡니다.");
+  } else add("정상", "카드 앞면 용어", "앞면에 어려운 말 없음", "");
+}
+
 /* ── 검사 5. 앱과 평가 하네스가 같은 것을 재고 있는가 ────────────────────
    사고 위험: 프롬프트에 태그를 붙였는데 하네스에 안 붙이면, 채점 결과가 실제 앱과 무관해진다. */
 {
-  const tag = "유저가 '속결'로 물었다";
-  const inApp = src.includes(tag);
+  // 앱과 하네스가 반드시 같이 갖고 있어야 할 문자열들. 하나라도 어긋나면 채점이 앱과 무관해진다.
+  const shared = [
+    { name: "판돈 태그", tag: "유저가 '속결'로 물었다" },
+    { name: "되물음 태그", tag: "[되물음] 유저가 방금 판결" },
+    { name: "콜1 scope 필드", tag: '"scope":"S1|S2|S3"' },
+  ];
   const evalPath = "eval/run-eval.mjs";
   if (existsSync(evalPath)) {
     const ev = readFileSync(evalPath, "utf8");
-    if (inApp && !ev.includes(tag)) {
-      add("심각", "평가 도구가 앱과 다른 것을 측정 중", "앱에는 판돈 태그가 있는데 평가 하네스에는 없음",
-        "eval/run-eval.mjs에도 같은 태그를 넣으세요. 안 그러면 채점 결과가 실제 앱 품질과 무관합니다.");
-    } else if (inApp) {
-      add("정상", "평가 도구 정합", "앱과 하네스가 같은 프롬프트를 사용", "");
+    const drift = shared.filter((s) => src.includes(s.tag) && !ev.includes(s.tag)).map((s) => s.name);
+    if (drift.length) {
+      add("심각", "평가 도구가 앱과 다른 것을 측정 중", `앱에는 있는데 평가 하네스에 없음 — ${drift.join(", ")}`,
+        "eval/run-eval.mjs에도 같은 문자열을 넣으세요. 안 그러면 채점 결과가 실제 앱 품질과 무관합니다.");
+    } else {
+      add("정상", "평가 도구 정합", `앱과 하네스가 같은 프롬프트를 사용(${shared.length}개 대조)`, "");
     }
   }
 }
@@ -135,7 +183,13 @@ async function browserCheck() {
   let pw; try { pw = require("playwright"); } catch { try { pw = require("/opt/node22/lib/node_modules/playwright"); } catch { return null; } }
   const base = process.env.BASE || "http://localhost:4173";
   try { const r = await fetch(base); if (!r.ok) return null; } catch (_) { return null; }
-  const b = await pw.chromium.launch({ args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
+  // 브라우저 실행 실패로 검진 전체가 죽으면 안 된다 — 나머지 20여 개 검사 결과까지 같이 사라진다.
+  //   (실제로 발생: playwright 를 업데이트하면 예전 브라우저 폴더와 어긋나 launch 가 예외를 던진다)
+  //   CHROME_PATH 를 주면 그 브라우저로 검사한다(playwright 가 받아둔 브라우저와 어긋날 때의 탈출구).
+  let b;
+  const _exe = process.env.CHROME_PATH || undefined;
+  try { b = await pw.chromium.launch({ executablePath: _exe, args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"] }); }
+  catch (e) { return { launchErr: String(e?.message || e).split("\n")[0].slice(0, 120) }; }
   const p = await b.newPage({ viewport: { width: 390, height: 844 } });
   const errs = [];
   p.on("pageerror", e => errs.push(String(e).slice(0, 80)));
@@ -159,6 +213,9 @@ const bc = await browserCheck();
 if (bc === null) {
   add("주의", "실행 중 검사 건너뜀", "preview 서버가 없어 실제 화면을 확인하지 못함",
     "터미널을 하나 더 열고 'npm run preview' 를 켠 뒤 다시 검진하면, 실제로 어떤 수호신이 뜨는지까지 확인합니다.");
+} else if (bc.launchErr) {
+  add("주의", "실행 중 검사 건너뜀 — 검사용 브라우저를 못 켰음", bc.launchErr,
+    "'npx playwright install chromium' 을 한 번 실행하세요. 앱 문제가 아니라 검사 도구 문제이며, 나머지 검사 결과는 그대로 유효합니다.");
 } else if (bc.err) {
   add("심각", "앱이 열리지 않음", bc.err, "npm run build 후 preview를 다시 켜 보세요.");
 } else {
