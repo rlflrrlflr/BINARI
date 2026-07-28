@@ -365,6 +365,7 @@ const GL_FRAG = ${JSON.stringify(sliceConst(APP, "GL_FRAG"))};
 const PLACES = ${JSON.stringify(gens.map(g => g.body))};
 
 const T0 = performance.now();
+window.__T0 = T0;                     /* PNG 캡처 스크립트가 C 국면을 맞출 때 쓴다 */
 const hex2rgb = h => [parseInt(h.slice(1,3),16)/255, parseInt(h.slice(3,5),16)/255, parseInt(h.slice(5,7),16)/255];
 const srnd = (seed) => { let h = seed >>> 0; return () => ((h = (h * 1664525 + 1013904223) >>> 0) / 2 ** 32); };
 const F_AL = { "화":0.36, "수":0.31, "목":0.32, "금":0.29, "토":0.26 };
@@ -529,7 +530,15 @@ function initMatrix() {
   cv.width = NE * MC; cv.height = NV * MC;
   const gl = cv.getContext("webgl", { alpha: false, antialias: false, depth: false });
   if (!gl) { warn.style.display = "block"; warn.textContent = "이 브라우저에서 WebGL을 못 씁니다."; return; }
-  const floatOK = !!gl.getExtension("OES_texture_float");
+  /* 상태 텍스처는 부동소수 렌더타깃이 필요하다. float → half-float 순으로 시도하고,
+     둘 다 프레임버퍼가 안 붙으면 sim 줄은 그리지 않는다(멈춘 그림을 보여주는 게 더 나쁘다). */
+  gl.getExtension("OES_texture_float");
+  gl.getExtension("WEBGL_color_buffer_float");
+  gl.getExtension("OES_texture_half_float");
+  gl.getExtension("EXT_color_buffer_half_float");
+  const HALF_FLOAT_OES = 0x8D61;
+  let texType = 0, texTypeName = "";
+
   const mkSh = (ty, s) => { const sh = gl.createShader(ty); gl.shaderSource(sh, s); gl.compileShader(sh);
     if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh)); return sh; };
   /* v68~v76·v94의 sim 셰이더는 GLSL 예약어 'asm' 을 변수명으로 써서 엄격한 드라이버에선
@@ -570,12 +579,36 @@ function initMatrix() {
     sInit.set([Math.cos(ang) * rr, Math.sin(ang) * rr, 0, 0], i * 4);
     sIdx[i] = i;
   }
-  const mkTex = (data) => { const tx = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tx);
+  const mkTexT = (data, type) => { const tx = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tx);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, SW, SH, 0, gl.RGBA, gl.FLOAT, data); return tx; };
+    const src = type === gl.FLOAT ? data : (data ? f32ToF16(data) : null);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, SW, SH, 0, gl.RGBA, type, src); return tx; };
+  /* half-float 경로용 변환(WebGL1은 Uint16Array 로 넘겨야 한다) */
+  function f32ToF16(arr) {
+    const out = new Uint16Array(arr.length), buf = new DataView(new ArrayBuffer(4));
+    for (let i = 0; i < arr.length; i++) {
+      buf.setFloat32(0, arr[i]); const x = buf.getUint32(0);
+      const sign = (x >>> 16) & 0x8000; let e = ((x >>> 23) & 0xff) - 127 + 15, m = x & 0x7fffff;
+      if (e <= 0) { out[i] = sign; continue; }
+      if (e >= 31) { out[i] = sign | 0x7bff; continue; }
+      out[i] = sign | (e << 10) | (m >>> 13);
+    }
+    return out;
+  }
+  /* 실제로 렌더타깃이 붙는 타입을 찾는다 */
+  for (const [type, name] of [[gl.FLOAT, "float"], [HALF_FLOAT_OES, "half-float"]]) {
+    const tx = mkTexT(null, type), fb = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tx, 0);
+    const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.deleteFramebuffer(fb); gl.deleteTexture(tx);
+    if (ok) { texType = type; texTypeName = name; break; }
+  }
+  const floatOK = texType !== 0;
+  const mkTex = (data) => mkTexT(data, texType);
   let simShared = null;
   if (floatOK) {
     const r0Tex = mkTex(sr0), r1Tex = mkTex(sr1);
@@ -586,7 +619,7 @@ function initMatrix() {
     simShared = { r0Tex, r1Tex, quad, r0Buf: mkBuf(sr0), r1Buf: mkBuf(sr1), idxBuf: mkBuf(sIdx) };
   } else {
     warn.style.display = "block";
-    warn.textContent = "이 브라우저는 float 텍스처(OES_texture_float)를 지원하지 않아 sim 엔진 줄(v68~v88)은 비어 있습니다. GL 줄은 정상 렌더됩니다.";
+    warn.textContent = "이 브라우저는 부동소수 렌더타깃(float·half-float 모두)을 지원하지 않아 sim 엔진 줄(v68~v88)은 비어 있습니다. GL 줄은 정상 렌더됩니다.";
   }
 
   const SHU = ["u_t","u_speed","u_form","u_R","u_arms","u_strands","u_twist","u_chaos","u_nayF","u_nayA",
@@ -658,6 +691,39 @@ function initMatrix() {
     if (L.u_touch) gl.uniform2f(L.u_touch, st.tx, st.ty);
   };
 
+  /* 한 칸의 물리를 sub 스텝만큼 굴린다(그리기와 분리 — 워밍업에도 그대로 쓴다) */
+  function stepSim(R, C, el, t, st, dt, sub) {
+    gl.disable(gl.SCISSOR_TEST); gl.disable(gl.BLEND);
+    gl.useProgram(R.simP);
+    gl.bindBuffer(gl.ARRAY_BUFFER, simShared.quad);
+    if (R.simA >= 0) { gl.enableVertexAttribArray(R.simA); gl.vertexAttribPointer(R.simA, 2, gl.FLOAT, false, 0, 0); }
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, simShared.r0Tex); gl.uniform1i(R.simU.u_r0, 1);
+    gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, simShared.r1Tex); gl.uniform1i(R.simU.u_r1, 2);
+    if (R.simU.u_texdim) gl.uniform2f(R.simU.u_texdim, SW, SH);
+    if (R.simU.u_touchVel) gl.uniform2f(R.simU.u_touchVel, 0, 0);
+    f1(R.simU, "u_bloom", st.bloom);
+    if (R.simU.u_trail) { fillTrail(trailS, st, 12); gl.uniform4fv(R.simU.u_trail, trailS); }
+    setShape(R.simU, el, t, st);
+    for (let i = 0; i < sub; i++) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, C.fbo[C.dst]); gl.viewport(0, 0, SW, SH);
+      f1(R.simU, "u_dt", dt / sub);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, C.tex[C.src]); gl.uniform1i(R.simU.u_state, 0);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+      const tmp = C.src; C.src = C.dst; C.dst = tmp;
+    }
+  }
+
+  /* 워밍업 — sim 은 스프링이라 자리를 잡는 데 실시간 몇 초가 걸린다.
+     느린 기기·캡처에서 '흩어진 채 멈춘 그림'이 보이지 않도록 미리 굴려 앉힌다. */
+  {
+    const st0 = cellState("A", 3);
+    for (const R of rows) {
+      if (!R || R.engine !== "sim") continue;
+      R.cells.forEach((C, ei) => stepSim(R, C, DATA.elements[ei], 3, st0, 0.016 * 40, 40));
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+
   let lastT = 0;
   const loop = () => {
     requestAnimationFrame(loop);
@@ -711,24 +777,7 @@ function initMatrix() {
 
         /* sim: 상태 갱신(FBO) → 렌더 */
         const C = R.cells[ei];
-        gl.disable(gl.SCISSOR_TEST); gl.disable(gl.BLEND);
-        gl.useProgram(R.simP);
-        gl.bindBuffer(gl.ARRAY_BUFFER, simShared.quad);
-        if (R.simA >= 0) { gl.enableVertexAttribArray(R.simA); gl.vertexAttribPointer(R.simA, 2, gl.FLOAT, false, 0, 0); }
-        gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, simShared.r0Tex); gl.uniform1i(R.simU.u_r0, 1);
-        gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, simShared.r1Tex); gl.uniform1i(R.simU.u_r1, 2);
-        if (R.simU.u_texdim) gl.uniform2f(R.simU.u_texdim, SW, SH);
-        if (R.simU.u_touchVel) gl.uniform2f(R.simU.u_touchVel, 0, 0);
-        f1(R.simU, "u_bloom", st.bloom);
-        if (R.simU.u_trail) { fillTrail(trailS, st, 12); gl.uniform4fv(R.simU.u_trail, trailS); }
-        setShape(R.simU, el, t, st);
-        for (let s = 0; s < 2; s++) {
-          gl.bindFramebuffer(gl.FRAMEBUFFER, C.fbo[C.dst]); gl.viewport(0, 0, SW, SH);
-          f1(R.simU, "u_dt", dt / 2);
-          gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, C.tex[C.src]); gl.uniform1i(R.simU.u_state, 0);
-          gl.drawArrays(gl.TRIANGLES, 0, 6);
-          const tmp = C.src; C.src = C.dst; C.dst = tmp;
-        }
+        stepSim(R, C, el, t, st, dt, 2);
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.viewport(px, py, MC, MC); gl.enable(gl.SCISSOR_TEST); gl.scissor(px, py, MC, MC);
         gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
