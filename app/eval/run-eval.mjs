@@ -1,5 +1,10 @@
 // 판결 품질 평가 하네스 — 페르소나 × 질문을 실모델(sonnet-5)로 배치 생성 → CSV + 자동검사
-// 사용: ANTHROPIC_API_KEY=sk-... node eval/run-eval.mjs [--full]
+// 사용(둘 중 하나):
+//   ① ANTHROPIC_API_KEY=sk-... node eval/run-eval.mjs [--full]
+//   ② node eval/run-eval.mjs --via=https://binari-sepia.vercel.app     ← 키가 Vercel 에만 있을 때
+//      배포된 /api/judge 를 경유하므로 키를 내 컴퓨터로 내려받지 않아도 된다. 운영 레이트리밋 때문에
+//      호출 사이에 1.5초를 쉬므로 느리다(27문항×5인이면 20분 안팎). 모델은 서버 설정을 따른다.
+//   자주 쓰는 조합: --cat=S3,REASK (몸·병 넘김과 되물음만) · --personas=2 · --qids=Q21,Q25
 //   기본: 콜1(결론)만. --full: 콜2(근거·정령)까지. 사람이 채점할 수 있게 CSV로 출력.
 // 앱과 동일한 SYS 프롬프트를 src/App.jsx에서 직접 추출해 검증(프롬프트 드리프트 방지).
 import { readFileSync, writeFileSync } from "node:fs";
@@ -8,9 +13,23 @@ import { dirname, join } from "node:path";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const KEY = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY;
-if (!KEY) { console.error("환경변수 ANTHROPIC_API_KEY 필요"); process.exit(1); }
+/* ── 두 가지 경로 ────────────────────────────────────────────────────────────
+   ① 직접: ANTHROPIC_API_KEY 를 들고 api.anthropic.com 을 부른다(기존 방식).
+   ② 경유: --via=https://... 로 **배포된 /api/judge** 를 부른다. 키가 Vercel 에만 있고
+      내 컴퓨터엔 없을 때 쓴다 — 키를 로컬로 내려받지 않고도 평가를 돌릴 수 있다.
+      대신 운영 프록시를 쓰므로 레이트리밋(IP당 1분 90회)에 걸리지 않게 호출 간격을 둔다.
+      모델은 서버의 BINARI_MODEL 이 정하므로 여기서 지정해도 무시된다. */
+const viaArg = process.argv.find((a) => a.startsWith("--via="));
+const VIA = viaArg ? viaArg.split("=")[1].replace(/\/+$/, "") : null;
+if (!KEY && !VIA) {
+  console.error("키가 없습니다. 둘 중 하나를 쓰세요:\n" +
+    "  ① ANTHROPIC_API_KEY=sk-... node eval/run-eval.mjs\n" +
+    "  ② node eval/run-eval.mjs --via=https://binari-sepia.vercel.app   (키는 Vercel 에만 두고 배포본 경유)");
+  process.exit(1);
+}
 const FULL = process.argv.includes("--full");
 const MODEL = process.env.BINARI_MODEL || "claude-sonnet-5";
+const VIA_GAP_MS = 1500;   // 경유 시 호출 간격 — 1분 90회 한도 아래로(판결 1건당 최대 2콜)
 
 const APP = readFileSync(join(HERE, "..", "src", "App.jsx"), "utf8");
 const SYS = APP.slice(APP.indexOf("const SYS = `") + 13, APP.indexOf("`;", APP.indexOf("const SYS = `")));
@@ -48,13 +67,28 @@ const reaskTag = (prev) => `\n[되물음] 유저가 방금 판결("${prev.dir} �
 async function call(sys, content, mt) {
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const r = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-api-key": KEY, "anthropic-version": "2023-06-01" },
-        body: JSON.stringify({ model: MODEL, max_tokens: mt, system: sys, messages: [{ role: "user", content }], thinking: { type: "disabled" } }),
-      });
-      const d = await r.json();
-      if (d.error) throw new Error(d.error.message);
+      // 경유 모드는 앱과 똑같이 /api/judge 를 부른다 — system 을 블록 배열로 싸고 Origin 을 붙여야 통과한다
+      //   (judge.js 가 허용 출처·SYS 프리픽스를 검사한다. 브라우저가 아니면 Origin 은 그냥 헤더이므로
+      //    이 검사는 원래부터 보안 경계가 아니라 오용 방지선이다 — 실제 방어는 레이트리밋과 SYS 대조.)
+      const r = VIA
+        ? await fetch(`${VIA}/api/judge`, {
+            method: "POST",
+            headers: { "content-type": "application/json", origin: VIA },
+            body: JSON.stringify({ system: [{ type: "text", text: sys }], max_tokens: mt, messages: [{ role: "user", content }] }),
+          })
+        : await fetch("https://api.anthropic.com/v1/messages", {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-api-key": KEY, "anthropic-version": "2023-06-01" },
+            body: JSON.stringify({ model: MODEL, max_tokens: mt, system: sys, messages: [{ role: "user", content }], thinking: { type: "disabled" } }),
+          });
+      if (VIA) await new Promise((r) => setTimeout(r, VIA_GAP_MS));   // 운영 레이트리밋 보호
+      // 프록시·방화벽은 JSON 이 아닌 본문을 돌려준다. 그대로 r.json() 하면 "Unexpected token 'H'" 같은
+      // 파싱 오류로 보여서 원인(네트워크 차단)이 가려진다 — 무슨 일이 났는지 한국어로 말하게 한다.
+      const raw = await r.text();
+      let d;
+      try { d = JSON.parse(raw); }
+      catch { throw new Error(`응답이 JSON 이 아님(HTTP ${r.status}) — ${raw.slice(0, 80).replace(/\s+/g, " ")}${VIA ? " · 배포본에 닿지 못한 것 같습니다(네트워크 차단·주소 오타 확인)" : ""}`); }
+      if (d.error) throw new Error(d.error.message || JSON.stringify(d.error));
       const txt = (d.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
       return { json: JSON.parse(txt.match(/\{[\s\S]*\}/)[0]), usage: d.usage };
     } catch (e) { if (attempt === 2) throw e; await new Promise((r) => setTimeout(r, 1500 * (attempt + 1))); }
@@ -95,8 +129,9 @@ function autoChecks(v, cat, q, r1) {
 const esc = (s) => `"${String(s == null ? "" : s).replace(/"/g, '""')}"`;
 
 const rows = [["persona", "mbti", "main", "qid", "cat", "mode", "question", "dir", "scope", "tone", "against/total", "verdict", "auto", "subline", "funLine", "사람평점(1-5)", "메모"]];
-let flags = 0, spend = { in: 0, out: 0 };
-console.log(`SYS 추출 OK (${SYS.length}자). 모델 ${MODEL}. ${personas.length}인 × ${questions.length}문항 = ${personas.length * questions.length}판결${FULL ? " (+근거)" : ""}\n`);
+let flags = 0, errors = 0, spend = { in: 0, out: 0 };
+const route = VIA ? `경유 ${VIA}/api/judge (모델은 서버가 정함)` : `직접 api.anthropic.com · 모델 ${MODEL}`;
+console.log(`SYS 추출 OK (${SYS.length}자). ${route}. ${personas.length}인 × ${questions.length}문항 = ${personas.length * questions.length}판결${FULL ? " (+근거)" : ""}\n`);
 
 for (const p of personas) {
   for (const q of questions) {
@@ -120,8 +155,9 @@ for (const p of personas) {
       rows.push([p.id + (p.name ? "/" + p.name : ""), p.mbti, p.main, q.id, q.cat, q.mode, q.text, r1.direction, r1.scope || "", r1.tone, `${(r1.total || 0) - (r1.against || 0)}:${r1.against || 0}`, r1.verdict, auto, sub, fun, "", ""]);
       console.log(`${p.id} ${q.id} ${r1.direction}/${r1.scope || "?"} [${auto}] ${r1.verdict}`);
     } catch (e) {
-      rows.push([p.id, p.mbti, p.main, q.id, q.cat, q.mode, q.text, "ERR", "", "", "", e.message.slice(0, 60), "ERROR", "", "", "", ""]);
-      console.log(`${p.id} ${q.id} ERROR ${e.message.slice(0, 60)}`);
+      errors++;   // 실패도 세어야 한다 — 안 세면 '전부 실패한 실행'이 플래그 0 으로 깨끗해 보인다
+      rows.push([p.id, p.mbti, p.main, q.id, q.cat, q.mode, q.text, "ERR", "", "", "", e.message.slice(0, 160), "ERROR", "", "", "", ""]);
+      console.log(`${p.id} ${q.id} ERROR ${e.message.slice(0, 160)}`);
     }
   }
 }
@@ -135,5 +171,10 @@ const items = rows.slice(1).map((r) => Object.fromEntries(keys.map((k, i) => [k,
 writeFileSync(join(HERE, "verdicts.json"), JSON.stringify(items, null, 0));
 const cost = (spend.in / 1e6) * 3 + (spend.out / 1e6) * 15; // sonnet 대략 단가($/M)
 console.log(`\n완료 → ${out}`);
-console.log(`자동검사 플래그: ${flags}/${(rows.length - 1)}  ·  토큰 in ${spend.in} out ${spend.out}  ·  약 $${cost.toFixed(3)}`);
-console.log(`다음: verdicts.csv를 열어 '사람평점' 열을 채워 — 판결이 '꽂히나'는 여기서만 판단됨.`);
+const total = rows.length - 1;
+console.log(`자동검사 플래그: ${flags}/${total}${errors ? `  ·  ⚠ 호출 실패 ${errors}건(채점 불가)` : ""}  ·  토큰 in ${spend.in} out ${spend.out}  ·  약 $${cost.toFixed(3)}`);
+if (errors === total && total > 0) {
+  console.log("\n전부 실패했습니다 — 채점할 판결이 하나도 없습니다. 위 오류 메시지를 먼저 해결하세요.");
+  process.exitCode = 1;   // 실패한 실행이 성공으로 보이지 않게
+}
+if (errors < total) console.log(`다음: verdicts.csv를 열어 '사람평점' 열을 채워 — 판결이 '꽂히나'는 여기서만 판단됨.`);
