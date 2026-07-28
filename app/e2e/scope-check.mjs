@@ -24,20 +24,24 @@ const scopeHint = (s) => (S3_RE.test(s) ? "S3" : S2_RE.test(s) ? "S2" : "S1");
 
 // [질문, 기대 스코프]
 const SCOPE = [
-  // S3 — 몸이 대상이면 S3. 틀리면 사람이 다치는 영역이라 여기가 제일 중요하다.
-  ["올해 내 건강운 어때?", "S3"],
+  // S3 — '몸이라서'가 아니라 '틀리면 되돌릴 수 없어서' 넘기는 넷. 아주 좁다.
+  ["나 얼마나 살까?", "S3"],
+  ["이 병으로 죽을까?", "S3"],
   ["허리 디스크 수술 받아야 할까?", "S3"],
-  ["올해 안에 아이 생길까?", "S3"],
-  ["둘째 가져도 될까?", "S3"],
-  ["암에 걸릴까 무서워", "S3"],
-  ["위암 수술 받는 게 나을까", "S3"],
-  ["엄마 암 진단 받았어 어떡하지", "S3"],
-  ["요즘 계속 아픈데 병원 가야 할까?", "S3"],
-  ["우울증 약 끊어도 될까?", "S3"],
-  // S3 오탐 방지 — 몸 얘기가 아닌데 S3로 잠기면 멀쩡한 질문이 넘김 처리된다
+  ["이 약 끊어도 될까?", "S3"],
+  ["이 증상 무슨 병이야?", "S3"],
+  ["암 재발할까?", "S3"],
+  // S3 가 아니다 — 몸·건강도 답한다(경쟁 앱 대비 강점). 여기가 과잉 차단되면 제품이 죽는다.
+  ["올해 내 건강운 어때?", "S2"],
+  ["몸 언제쯤 풀릴까?", "S2"],
+  ["올해 안에 아이 생길까?", "S2"],
+  ["둘째 언제 가지면 좋을까?", "S2"],
+  ["수술 날짜 언제로 잡는 게 좋아?", "S2"],
+  ["건강검진 언제 받을까?", "S2"],
+  // S3 오탐 방지 — 몸 얘기가 아닌데 잠기면 멀쩡한 질문이 넘김 처리된다
   ["암튼 오늘 뭐 먹지", "S1"],
   ["이 옷 살까 말까", "S1"],
-  // S2 — 결정이 대상이고 몸은 사정일 뿐
+  // S2 — 시기·타이밍
   ["체력이 달리는데 지금 이직할까?", "S2"],
   ["언제 창업하는 게 좋을까?", "S2"],
   ["올해 안에 이사 갈까?", "S2"],
@@ -76,6 +80,43 @@ console.log("\n── 되물음 ──");
 for (const [q, exp] of REASK) {
   const got = REASK_RE.test(q);
   say(got === exp, `${got ? "되물음" : "새질문"}${got === exp ? "" : `(기대 ${exp ? "되물음" : "새질문"})`} · ${q}`);
+}
+
+/* ── 표 집계(tallyVotes) — 결론이 지표 표에서 나오는지 확인 ─────────────────
+   App.jsx 에서 함수 원문을 그대로 떼어와 실행한다(재구현하면 같이 틀려도 못 잡는다). */
+function pullFn() {
+  const i = SRC.indexOf("const VOTE_AX = new Set(");
+  const j = SRC.indexOf("\n}", SRC.indexOf("function tallyVotes(", i));
+  if (i < 0 || j < 0) { console.error("✗ tallyVotes 를 App.jsx 에서 찾지 못했습니다."); process.exit(1); }
+  return new Function(`${SRC.slice(i, j + 2)}\nreturn tallyVotes;`)();
+}
+const tallyVotes = pullFn();
+const V = (...xs) => ({ votes: xs.map(([axis, v]) => ({ axis, v })) });
+
+console.log("\n── 표 집계 ──");
+{
+  const cases = [
+    // [설명, 입력, 기대 {dir, against, total} 또는 null]
+    ["GO 우세 → GO", { ...V(["사주","GO"],["달","GO"],["별자리","STOP"],["MBTI","중립"]), direction: "GO" }, { dir:"GO", against:1, total:4 }],
+    ["STOP 우세 → STOP", { ...V(["사주","STOP"],["달","STOP"],["별자리","GO"]), direction: "STOP" }, { dir:"STOP", against:1, total:3 }],
+    ["동률 → 경험 편향(GO)", { ...V(["사주","GO"],["달","STOP"],["별자리","중립"]), direction: "STOP" }, { dir:"GO", against:1, total:3 }],
+    ["모델이 표와 다른 결론 → 표를 따른다", { ...V(["사주","STOP"],["달","STOP"],["별자리","STOP"]), direction: "GO" }, { dir:"STOP", against:0, total:3 }],
+    ["HOLD 는 표로 뒤집지 않는다", { ...V(["사주","GO"],["달","GO"],["별자리","GO"]), direction: "HOLD" }, { dir:"HOLD", total:3 }],
+    ["같은 축 중복은 한 번만", { ...V(["사주","GO"],["사주","STOP"],["달","GO"],["별자리","GO"]), direction: "GO" }, { dir:"GO", total:3 }],
+    ["모르는 축은 버린다", { ...V(["사주","GO"],["혈액형","STOP"],["달","GO"],["별자리","GO"]), direction: "GO" }, { dir:"GO", against:0, total:3 }],
+    ["표가 부실하면(3개 미만) 집계 안 함", { ...V(["사주","GO"],["달","GO"]), direction: "GO" }, null],
+    ["votes 자체가 없으면 집계 안 함", { direction: "GO" }, null],
+  ];
+  for (const [name, input, exp] of cases) {
+    const got = tallyVotes(input);
+    let ok;
+    if (exp === null) ok = got === null;
+    else ok = got && got.dir === exp.dir && got.total === exp.total &&
+              (exp.against === undefined || got.against === exp.against);
+    say(ok, `${name}${ok ? "" : ` — 받은 값 ${JSON.stringify(got)}`}`);
+  }
+  const t = tallyVotes({ ...V(["사주","STOP"],["달","STOP"],["별자리","STOP"]), direction: "GO" });
+  say(t && t.overridden === true, "표와 결론이 어긋나면 overridden 으로 표시(계측용)");
 }
 
 console.log(`\n=== 스코프·되물음 체크: ${pass}/${pass + fail} PASS ===`);

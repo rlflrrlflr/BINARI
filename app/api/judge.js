@@ -124,7 +124,8 @@ export default async function handler(req, res) {
       const cat = (txt.match(/"category"\s*:\s*"([ABC])"/) || [])[1] || null;
       const dir = (txt.match(/"direction"\s*:\s*"(GO|STOP|HOLD)"/) || [])[1] || null;
       const scope = (txt.match(/"scope"\s*:\s*"(S[123])"/) || [])[1] || null;   // S3(몸·병) 진입 비율은 서버 로그로도 본다
-      console.log(JSON.stringify({ at: new Date().toISOString(), call: mt <= 400 ? 1 : 2, cat, dir, scope, usage: data.usage || null }));
+      // 콜1은 votes 를 함께 받느라 560토큰이 됐다 — 경계를 800으로 올리지 않으면 콜1이 콜2로 잘못 집계된다
+      console.log(JSON.stringify({ at: new Date().toISOString(), call: mt <= 800 ? 1 : 2, cat, dir, scope, usage: data.usage || null }));
     } catch {}
     return res.status(200).json(data);
   } catch (e) {

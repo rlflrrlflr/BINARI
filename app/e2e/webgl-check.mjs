@@ -6,7 +6,7 @@ let pw; try { pw = require("playwright"); } catch { pw = require("/opt/node22/li
 const { chromium } = pw;
 const BASE = process.env.BASE || "http://localhost:4173";
 const R = []; const ck = (n, p, note = "") => { R.push(p); console.log(`${p ? "PASS" : "FAIL"} — ${n}${note ? " · " + note : ""}`); };
-const CALL1 = JSON.stringify({ category: "C", direction: "GO", verdict: "가. 망설이지 마.", against: 2, total: 6 });
+const CALL1 = JSON.stringify({ category: "C", votes: [{ axis: "사주", v: "GO" }, { axis: "달", v: "GO" }, { axis: "별자리", v: "STOP" }], direction: "GO", verdict: "가. 망설이지 마.", against: 2, total: 6 });
 const CALL2 = JSON.stringify({ subline: "이미 답을 알잖아.", reasons: [{ axis: "사주", vote: "GO", text: "목기가 뻗어." }], funLine: "가자.", disclaimer: "" });
 
 async function onboard(page) {
@@ -50,7 +50,7 @@ const b = await chromium.launch({ executablePath: process.env.CHROME_PATH || und
 {
   const page = await b.newPage({ viewport: { width: 430, height: 932 } });
   const errs = []; page.on("pageerror", (e) => errs.push(e.message));
-  await page.addInitScript(({ c1, c2 }) => { window.claude = { complete: async (p) => (p.includes("결론만") ? c1 : c2) }; }, { c1: CALL1, c2: CALL2 });
+  await page.addInitScript(({ c1, c2 }) => { window.claude = { complete: async (p) => (p.includes("[이미 확정된 판결]") ? c2 : c1) }; }, { c1: CALL1, c2: CALL2 });
   await onboard(page);
   await page.waitForTimeout(2200); // 어셈블 진행
   const renderer = await page.evaluate(() => document.querySelector("canvas[data-renderer]")?.getAttribute("data-renderer"));

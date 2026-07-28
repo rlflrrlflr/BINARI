@@ -121,12 +121,20 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
       fix: "되물음을 새 판결로 처리하면 HOLD 나선에 빠집니다. 실제로 7연속 HOLD 사고가 났습니다." },
     { name: "되물음 태그(코드)", pat: /\[되물음\] 유저가 방금 판결/,
       fix: "프롬프트 규칙만 있고 태그를 안 붙이면 모델은 되물음인지 모릅니다. isReask → reaskLine 배선을 확인하세요." },
-    { name: "HOLD 남용 금지", pat: /## HOLD를 쓰지 않는다/,
-      fix: "HOLD가 '판단 못 하겠음'의 기본값이 되면 앱이 아무 결정도 못 내려줍니다." },
+    { name: "HOLD 규칙", pat: /## HOLD는 표에서 나온다/,
+      fix: "HOLD가 '판단 못 하겠음'의 기본값이 되면 앱이 아무 결정도 못 내려줍니다. HOLD도 지표에서 나와야 합니다." },
     { name: "응답 스코프(S1·S2·S3)", pat: /## 응답 스코프\(S1·S2·S3\)/,
       fix: "몸·병·임신출산(S3)에 길흉 판결이 나가는 것을 막는 규칙입니다. 오답 시 실제 피해가 발생하는 영역입니다." },
     { name: "S3 넘김 절차", pat: /### S3 넘기는 법/,
       fix: "판단을 넘기되 '지금 뭘 할지'는 남기는 절차입니다. 없으면 얼버무림과 구분되지 않습니다." },
+    { name: "표 우선 판정(votes)", pat: /votes를 먼저 채우고/,
+      fix: "결론을 먼저 정하고 근거를 끼워 맞추는 것을 막는 핵심 규칙입니다. 없으면 판결이 '아무나 해줄 수 있는 조언'으로 돌아갑니다." },
+    { name: "표 집계(tallyVotes)", pat: /function tallyVotes\(/,
+      fix: "against/total 과 direction 을 지표 표에서 계산하는 함수입니다. 없으면 모델이 숫자를 지어내도 아무도 모릅니다." },
+    { name: "일반 조언 금지", pat: /일반 조언 금지 — 이게 우리가 파는 것/,
+      fix: "'무리하지 마' 같은 누구에게나 하는 말을 막는 규칙입니다. 이게 빠지면 운세 앱일 이유가 사라집니다." },
+    { name: "뒷면 용어·풀이 병기", pat: /반드시 쉬운 풀이를 붙여 병기한다/,
+      fix: "사주 보러 가면 용어 뒤에 풀이를 붙여주듯, 근거는 '용어 — 쉬운 풀이' 형식이어야 합니다." },
     { name: "scope 계측", pat: /scope_level:/,
       fix: "S3 진입률·이탈률을 못 재면 스코프 설계가 맞는지 영영 알 수 없습니다. verdict_shown 의 scope_level/handoff_triggered 를 확인하세요." },
   ];
@@ -138,6 +146,17 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
   if (/"scope":"S1\|S2\|S3"/.test(src)) add("정상", "판결 품질 규칙 — 콜1 scope 필드", "있음", "");
   else add("심각", "콜1 출력 스키마에 scope 없음", "JSON 스키마에서 찾을 수 없음",
     "콜1 JSON 스키마에 \"scope\":\"S1|S2|S3\" 을 넣으세요. 없으면 scope_level 이 항상 빈 값으로 기록됩니다.");
+  // 콜1 토큰 상한(앱) vs 서버 로그의 콜1/콜2 경계(judge.js) — 어긋나면 계측이 조용히 오염된다
+  try {
+    const mt = +(src.match(/callClaude\(system, \[\.\.\.priorConvo, concludeMsg\], (\d+)\)/) || [])[1];
+    const api = readFileSync("api/judge.js", "utf8");
+    const cut = +(api.match(/call: mt <= (\d+) \? 1 : 2/) || [])[1];
+    if (mt && cut && mt > cut) {
+      add("주의", "서버 로그가 콜1을 콜2로 셈", `콜1 상한 ${mt} > 경계 ${cut}`,
+        "api/judge.js 의 'mt <= N ? 1 : 2' 에서 N 을 콜1 상한보다 크게 올리세요. 안 그러면 호출 통계가 뒤섞입니다.");
+    } else if (mt && cut) add("정상", "콜1/콜2 로그 경계", `콜1 ${mt} ≤ 경계 ${cut}`, "");
+  } catch (_) { /* 구조가 바뀌면 조용히 넘어간다 */ }
+
   // 카드 앞면에 한자 괘 이름이 돌아오는 회귀 방지 — 앞면은 쉬운 말만(층위 분리)
   //   범위: 공유 카드 앞면 ~ 판결 카드의 L1 결론. 마커가 사라졌으면(구조 변경) 조용히 통과시키지 말고 알린다.
   const fs0 = src.indexOf('<div className="vtop"><span>BINARI</span>'), fs1 = src.indexOf("{/* L1 결론 */}");
@@ -159,6 +178,7 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
     { name: "판돈 태그", tag: "유저가 '속결'로 물었다" },
     { name: "되물음 태그", tag: "[되물음] 유저가 방금 판결" },
     { name: "콜1 scope 필드", tag: '"scope":"S1|S2|S3"' },
+    { name: "콜1 votes 필드", tag: '"votes":[{"axis":"지표명","v":"GO|STOP|중립"}]' },
   ];
   const evalPath = "eval/run-eval.mjs";
   if (existsSync(evalPath)) {
@@ -170,6 +190,23 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
     } else {
       add("정상", "평가 도구 정합", `앱과 하네스가 같은 프롬프트를 사용(${shared.length}개 대조)`, "");
     }
+  }
+}
+
+/* ── 검사 5-2. e2e 모의응답이 앱과 같은 표지로 콜1/콜2를 가르는가 ─────────
+   실제 사고(2026-07-28): e2e 가 콜1 프롬프트의 "결론만" 이라는 문구로 콜1/콜2를 구분했는데,
+   프롬프트를 다듬으며 그 문구가 사라지자 테스트가 콜1 자리에 콜2 응답을 물렸다.
+   증상은 "판결이 화면에 안 뜸" 이었지만 원인은 앱이 아니라 테스트였다 — 진짜 회귀와 구분이 안 된다.
+   그래서 표지 문자열이 앱에 실제로 존재하는지 검사한다. */
+{
+  const MARK = "[이미 확정된 판결]";
+  const files = ["e2e/v29-check.mjs", "e2e/verdict.mjs", "e2e/webgl-check.mjs"].filter((f) => existsSync(f));
+  const users = files.filter((f) => readFileSync(f, "utf8").includes(MARK));
+  if (users.length && !src.includes(MARK)) {
+    add("심각", "e2e 가 앱에 없는 표지로 콜1/콜2를 가름", `${users.join(", ")} 는 "${MARK}" 를 쓰는데 App.jsx 엔 없음`,
+      "App.jsx 의 콜2 프롬프트에서 그 표지를 바꾼 것 같습니다. e2e 파일의 표지도 같이 바꾸세요. 안 그러면 테스트가 엉뚱한 응답을 물고 '판결이 안 뜬다'고 보고합니다.");
+  } else if (users.length) {
+    add("정상", "e2e 콜1/콜2 구분 표지", `${users.length}개 파일이 앱과 같은 표지 사용`, "");
   }
 }
 
