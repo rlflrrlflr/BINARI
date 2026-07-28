@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""비나리 데일리 리포트 — PostHog에서 전일 지표를 뽑아 텔레그램으로 보낸다.
+"""비나리 데일리 리포트 — PostHog에서 전일 지표를 뽑아 디스코드로 보낸다.
 
-로컬(맥)에서 실행하는 스크립트다. Zapier 없이 텔레그램 봇 API를 직접 호출하므로
-중계 서비스도, 유료 플랜도 필요 없다. 표준 라이브러리만 쓴다(pip 설치 불필요).
+GitHub Actions(.github/workflows/daily-report.yml)가 매일 아침 자동 실행한다.
+맥을 켜둘 필요도, Zapier 같은 중계 서비스도, 유료 플랜도 필요 없다.
+표준 라이브러리만 쓰므로 pip 설치가 없다.
 
-설정: ~/.binari-report.env 에 아래 4개를 넣는다(이 파일은 절대 git에 올리지 않는다).
-    POSTHOG_API_KEY=phx_...      # PostHog > Settings > Personal API keys (query:read 권한)
-    POSTHOG_PROJECT_ID=526669
-    TELEGRAM_BOT_TOKEN=123456:AA...   # @BotFather 에서 발급
-    TELEGRAM_CHAT_ID=123456789        # 봇에게 말 건 뒤 아래 --whoami 로 확인
+필요한 값 3개 — GitHub 저장소 Settings > Secrets and variables > Actions 에 넣는다.
+    POSTHOG_API_KEY       PostHog > Settings > Personal API keys (query:read 권한)
+    POSTHOG_PROJECT_ID    526669
+    DISCORD_WEBHOOK_URL   디스코드 채널 편집 > 연동 > 웹후크 에서 복사한 주소
+로컬에서 돌릴 때는 ~/.binari-report.env 에 같은 이름으로 넣어도 된다(git 에 올리지 말 것).
 
 사용:
-    python3 daily-report.py            # 전일 리포트 생성 후 텔레그램 발송
-    python3 daily-report.py --dry      # 발송 없이 화면에만 출력
-    python3 daily-report.py --whoami   # 내 chat_id 확인(봇에게 아무 메시지나 보낸 뒤 실행)
+    python3 daily-report.py           # 전일 리포트를 디스코드로 발송
+    python3 daily-report.py --dry     # 발송 없이 화면에만 출력(연결 점검용)
 """
 import json
 import os
@@ -24,10 +24,11 @@ from pathlib import Path
 
 ENV_PATH = Path.home() / ".binari-report.env"
 PH_HOST = "https://us.posthog.com"
+KEYS = ("POSTHOG_API_KEY", "POSTHOG_PROJECT_ID", "DISCORD_WEBHOOK_URL")
 
 
 def load_env():
-    """~/.binari-report.env 를 읽어 환경변수처럼 쓴다(이미 설정된 환경변수가 우선)."""
+    """환경변수 우선, 없으면 ~/.binari-report.env 에서 읽는다."""
     cfg = {}
     if ENV_PATH.exists():
         for line in ENV_PATH.read_text(encoding="utf-8").splitlines():
@@ -36,59 +37,84 @@ def load_env():
                 continue
             k, v = line.split("=", 1)
             cfg[k.strip()] = v.strip().strip('"').strip("'")
-    for k in ("POSTHOG_API_KEY", "POSTHOG_PROJECT_ID", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"):
+    for k in KEYS:
         if os.environ.get(k):
             cfg[k] = os.environ[k]
     return cfg
 
 
-def post_json(url, payload, headers, timeout=60):
+def post_json(url, payload, headers=None, timeout=60):
     data = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json", **headers})
+    req = urllib.request.Request(url, data=data,
+                                 headers={"Content-Type": "application/json", **(headers or {})})
     with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.loads(r.read().decode("utf-8"))
+        body = r.read().decode("utf-8")
+        return json.loads(body) if body.strip() else {}
 
 
 def hogql(cfg, query):
-    """PostHog Query API로 HogQL 실행 → 행 리스트 반환."""
+    """PostHog Query API로 HogQL 실행 → 행 리스트."""
     url = f"{PH_HOST}/api/projects/{cfg['POSTHOG_PROJECT_ID']}/query/"
-    body = {"query": {"kind": "HogQLQuery", "query": query}}
-    out = post_json(url, body, {"Authorization": f"Bearer {cfg['POSTHOG_API_KEY']}"})
+    out = post_json(url, {"query": {"kind": "HogQLQuery", "query": query}},
+                    {"Authorization": f"Bearer {cfg['POSTHOG_API_KEY']}"})
     return out.get("results", [])
 
 
-# ── 지표 수집 ────────────────────────────────────────────────────────────────
+# ── 지표 ─────────────────────────────────────────────────────────────────────
+# 내부(팀·지인) 트래픽을 항상 따로 센다. 섞어서 보면 게이트 판정이 무력화된다.
 Q_DAILY = """
 SELECT
-    toDate(timestamp) AS d,
-    uniq(person_id) AS people,
-    uniq(properties.$session_id) AS sessions,
-    countIf(event = 'app_open') AS opens,
-    countIf(event = 'birth_submitted') AS onboarded,
-    countIf(event = 'question_asked') AS asked,
-    countIf(event = 'verdict_shown') AS verdicts,
-    countIf(event = 'why_opened') AS why,
-    countIf(event = 'another_question') AS again,
-    countIf(event = 'verdict_shared') AS shared,
-    countIf(event = 'verdict_rated') AS rated
+    toDate(timestamp)                                   AS d,
+    uniqIf(person_id, properties.is_internal != true)   AS people,
+    uniqIf(person_id, properties.is_internal = true)    AS internal_people,
+    countIf(event = 'app_open')                         AS visits,
+    countIf(event = 'onboard_start')                    AS ob_start,
+    countIf(event = 'guardian_awaken')                  AS ob_done,
+    countIf(event = 'question_asked')                   AS asked,
+    countIf(event = 'verdict_shown')                    AS verdicts,
+    countIf(event = 'verdict_failed')                   AS failed,
+    countIf(event = 'verdict_rated')                    AS rated,
+    countIf(event = 'letter_clicked')                   AS letter,
+    countIf(event = 'letter_intent_confirmed')          AS letter_yes,
+    countIf(event = 'verdict_shared')                   AS shared
 FROM events
-WHERE timestamp >= now() - INTERVAL 3 DAY AND event NOT LIKE '$%'
+WHERE timestamp >= today() - 2 AND event NOT LIKE '$%'
 GROUP BY d ORDER BY d DESC LIMIT 3
 """
 
 Q_DIR = """
 SELECT properties.dir AS dir, count() AS n
 FROM events
-WHERE timestamp >= now() - INTERVAL 1 DAY AND event = 'verdict_shown'
+WHERE timestamp >= today() - 1 AND timestamp < today() AND event = 'verdict_shown'
 GROUP BY dir ORDER BY n DESC
 """
 
-Q_RATE = """
-SELECT properties.score AS score, count() AS n
+# 실패는 원인을 알아야 손을 쓴다. rate_limited 면 RL_MAX, origin_blocked 면 허용목록 문제다.
+Q_FAIL = """
+SELECT properties.reason AS reason, count() AS n
 FROM events
-WHERE timestamp >= now() - INTERVAL 1 DAY AND event = 'verdict_rated'
-GROUP BY score ORDER BY score
+WHERE timestamp >= today() - 1 AND timestamp < today() AND event = 'verdict_failed'
+GROUP BY reason ORDER BY n DESC
 """
+
+# 온보딩에서 어느 화면이 사람을 가장 많이 잃는가
+Q_ONBOARD = """
+SELECT properties.step AS step, uniq(person_id) AS u
+FROM events
+WHERE timestamp >= today() - 1 AND timestamp < today() AND event = 'onboard_step'
+GROUP BY step ORDER BY u DESC
+"""
+
+STEP_KO = {
+    "name": "이름", "birth_date": "생년월일", "birth_time_city": "태어난 시·도시",
+    "sex": "성별", "context": "직업·관계", "mbti": "MBTI",
+    "values_16to6": "가치 16→6", "values_6to3": "가치 6→3", "values_3to1": "가치 3→1",
+}
+FAIL_KO = {
+    "rate_limited": "호출 한도 초과", "upstream_error": "AI 서버 장애",
+    "parse_failed": "응답 형식 오류", "origin_blocked": "허용되지 않은 주소",
+    "bad_request": "잘못된 요청", "network": "네트워크",
+}
 
 
 def pct(a, b):
@@ -96,156 +122,117 @@ def pct(a, b):
 
 
 def delta(now, prev):
-    """전일 대비 증감 표기."""
     if prev is None:
         return ""
     diff = now - prev
-    if diff == 0:
-        return " (—)"
-    return f" ({'+' if diff > 0 else ''}{diff})"
+    return " (—)" if diff == 0 else f" ({'+' if diff > 0 else ''}{diff})"
 
 
 def build_report(cfg):
     rows = hogql(cfg, Q_DAILY)
     if not rows:
-        return "비나리 데일리 리포트\n\n전일 데이터가 없습니다. 계측 또는 배포 상태를 확인해주세요."
+        return "**비나리 데일리 리포트**\n\n전일 데이터가 없습니다. 배포 상태와 계측을 확인해주세요."
 
-    # 컬럼 순서는 Q_DAILY의 SELECT 순서와 같다
-    keys = ["d", "people", "sessions", "opens", "onboarded", "asked", "verdicts", "why", "again", "shared", "rated"]
-    today = dict(zip(keys, rows[0]))
-    prev = dict(zip(keys, rows[1])) if len(rows) > 1 else {}
+    keys = ["d", "people", "internal_people", "visits", "ob_start", "ob_done",
+            "asked", "verdicts", "failed", "rated", "letter", "letter_yes", "shared"]
+    t = dict(zip(keys, rows[0]))
+    p = dict(zip(keys, rows[1])) if len(rows) > 1 else {}
 
-    dirs = {str(r[0]): r[1] for r in hogql(cfg, Q_DIR)}
-    total_v = sum(dirs.values())
-    hold, go, stop = dirs.get("HOLD", 0), dirs.get("GO", 0), dirs.get("STOP", 0)
+    L = [f"**비나리 데일리 리포트 · {t['d']}**", ""]
 
-    scores = {str(int(float(r[0]))): r[1] for r in hogql(cfg, Q_RATE) if r[0] is not None}
-    n_rated = sum(scores.values())
-    hit = scores.get("3", 0)
-
-    L = []
-    L.append(f"비나리 데일리 리포트 ({today['d']})")
-    L.append("")
-
-    # 총평 — 수치가 아니라 판단을 먼저
-    if today["asked"] == 0:
-        L.append("전일 질문이 한 건도 없었습니다. 유입 경로를 먼저 점검해야 할 것으로 보입니다.")
-    elif today["verdicts"] < today["asked"]:
-        fail = today["asked"] - today["verdicts"]
-        L.append(f"전일 자 리포트 공유드립니다. 질문 {today['asked']}건 중 {fail}건이 판결까지 도달하지 못했습니다. 응답 실패 원인 확인이 필요합니다.")
+    # ── 총평: 숫자보다 판단을 먼저 놓는다 ──
+    if t["failed"] > 0:
+        L.append(f"⚠️ 판결 **{t['failed']}건이 실패**했습니다. 유저가 판결을 못 받고 이탈한 만큼입니다.")
+    elif t["asked"] == 0:
+        L.append("전일 질문이 한 건도 없었습니다. 유입 경로부터 확인이 필요합니다.")
     else:
-        L.append(f"전일 자 리포트 공유드립니다. 질문 {today['asked']}건 전부 판결까지 정상 응답했습니다.")
+        L.append(f"질문 {t['asked']}건 전부 판결까지 정상 응답했습니다.")
 
-    L.append("")
-    L.append("[ 지표 ]")
-    L.append(f"· 방문자 {today['people']}명{delta(today['people'], prev.get('people'))} / 세션 {today['sessions']}")
-    L.append(f"· 온보딩 완료 {today['onboarded']}")
-    L.append(f"· 질문 {today['asked']} → 판결 {today['verdicts']} ({pct(today['verdicts'], today['asked'])})")
-    L.append(f"· 재질문 {today['again']} ({pct(today['again'], today['verdicts'])})")
-    L.append(f"· '왜?' 열람 {today['why']} ({pct(today['why'], today['verdicts'])})")
-    L.append(f"· 공유 {today['shared']} ({pct(today['shared'], today['verdicts'])})")
-    L.append(f"· 판결 평가 {today['rated']} ({pct(today['rated'], today['verdicts'])})")
+    if t["people"] == 0 and t["internal_people"] > 0:
+        L.append("_전일 활동은 전부 내부(팀·지인) 트래픽입니다. 제품 판단에 쓰지 마세요._")
 
-    if total_v:
-        L.append("")
-        L.append(f"[ 판결 방향 ] GO {go} · HOLD {hold} · STOP {stop}")
+    # ── 사람과 방문: 습관 앱의 핵심 축 ──
+    L += ["", "```", f"외부 사용자   {t['people']:>4}{delta(t['people'], p.get('people'))}"]
+    L.append(f"내부 사용자   {t['internal_people']:>4}   (지표에서 제외 대상)")
+    per = round(t["visits"] / t["people"], 1) if t["people"] else 0
+    L.append(f"방문          {t['visits']:>4}{delta(t['visits'], p.get('visits'))}"
+             + (f"   1인 {per}회" if t["people"] else ""))
 
-    L.append("")
-    L.append("[ 해석 ]")
-    notes = []
+    # ── 퍼널 ──
+    L += ["", f"온보딩 시작   {t['ob_start']:>4}",
+          f"수호신 도달   {t['ob_done']:>4}   완주 {pct(t['ob_done'], t['ob_start'])}",
+          f"질문          {t['asked']:>4}{delta(t['asked'], p.get('asked'))}",
+          f"판결          {t['verdicts']:>4}{delta(t['verdicts'], p.get('verdicts'))}"]
+    if t["failed"]:
+        L.append(f"판결 실패     {t['failed']:>4}   ← 확인 필요")
 
-    # 단언 비율 — 제품의 핵심 가치 지표
-    if total_v >= 5:
-        decisive = pct(go + stop, total_v)
-        if (go + stop) / total_v < 0.5:
-            notes.append(f"HOLD 비중이 {pct(hold, total_v)}로 높습니다. 단언(GO/STOP) 비율이 {decisive}에 그쳐 '결단을 준다'는 핵심 가치가 약해지고 있습니다. 지속되면 판결 프롬프트 임계값 조정 검토가 필요합니다.")
-        else:
-            notes.append(f"단언(GO/STOP) 비율 {decisive}로 방향성은 유지되고 있습니다.")
+    # ── 제품 신호 ──
+    L += ["", f"판결 평가     {t['rated']:>4}   평가율 {pct(t['rated'], t['verdicts'])}",
+          f"서신 클릭     {t['letter']:>4}   클릭률 {pct(t['letter'], t['verdicts'])}",
+          f"  └ 받을게    {t['letter_yes']:>4}   전환 {pct(t['letter_yes'], t['letter'])}",
+          f"공유          {t['shared']:>4}   공유율 {pct(t['shared'], t['verdicts'])}", "```"]
 
-    # 평가율 — 품질 피드백 루프
-    if today["verdicts"] >= 5:
-        rr = today["rated"] / today["verdicts"]
-        if rr < 0.3:
-            notes.append(f"평가율이 {pct(today['rated'], today['verdicts'])}로 낮습니다. 판결 품질을 검증할 유일한 지표라 이 수준으로는 개선 근거가 쌓이지 않습니다.")
+    # ── 판결 방향: HOLD 편중을 계속 본다 ──
+    dirs = {str(r[0]): r[1] for r in hogql(cfg, Q_DIR)}
+    tv = sum(dirs.values())
+    if tv:
+        go, hold, stop = dirs.get("GO", 0), dirs.get("HOLD", 0), dirs.get("STOP", 0)
+        line = f"판결 방향 — GO {go} · HOLD {hold} ({pct(hold, tv)}) · STOP {stop}"
+        if stop == 0 and tv >= 5:
+            line += "\n_STOP이 한 건도 없습니다. '망설임엔 단언을'이 핵심 가치인데 제품이 '하지 마'를 말한 적이 없습니다._"
+        L += ["", line]
 
-    # 만족도
-    if n_rated:
-        notes.append(f"평가 {n_rated}건 중 '딱 맞음' {hit}건({pct(hit, n_rated)})입니다.")
+    # ── 실패 원인: 있을 때만 ──
+    if t["failed"]:
+        fails = hogql(cfg, Q_FAIL)
+        if fails:
+            L += ["", "실패 원인 — " + " · ".join(
+                f"{FAIL_KO.get(str(r[0]), str(r[0]))} {r[1]}건" for r in fails)]
 
-    # 재질문 — 인게이지먼트
-    if today["verdicts"] >= 5 and today["again"] / max(today["verdicts"], 1) > 0.7:
-        notes.append(f"재질문율이 {pct(today['again'], today['verdicts'])}로 높아 한 번 들어온 사용자는 계속 묻고 있습니다.")
+    # ── 온보딩 최대 이탈 지점 ──
+    ob = [(str(r[0]), r[1]) for r in hogql(cfg, Q_ONBOARD)]
+    if len(ob) >= 2:
+        worst, drop = None, 0
+        for i in range(1, len(ob)):
+            d = ob[i - 1][1] - ob[i][1]
+            if d > drop:
+                worst, drop = ob[i][0], d
+        if worst and drop:
+            L += ["", f"온보딩 최대 이탈 — {STEP_KO.get(worst, worst)} 화면에서 {drop}명"]
 
-    if today["people"] < 10:
-        notes.append(f"표본이 {today['people']}명으로 작아 비율 지표는 참고용입니다. 유의미한 해석은 유입 확대 이후 가능합니다.")
-
-    L.extend("· " + n for n in (notes or ["특이사항 없습니다."]))
     return "\n".join(L)
 
 
-# ── 텔레그램 ─────────────────────────────────────────────────────────────────
-def tg(cfg, method, payload=None):
-    url = f"https://api.telegram.org/bot{cfg['TELEGRAM_BOT_TOKEN']}/{method}"
-    if payload is None:
-        with urllib.request.urlopen(url, timeout=30) as r:
-            return json.loads(r.read().decode("utf-8"))
-    return post_json(url, payload, {})
-
-
-def send(cfg, text):
-    return tg(cfg, "sendMessage", {"chat_id": cfg["TELEGRAM_CHAT_ID"], "text": text, "disable_web_page_preview": True})
-
-
-def whoami(cfg):
-    """봇에게 보낸 최근 메시지에서 chat_id를 찾아준다."""
-    out = tg(cfg, "getUpdates")
-    seen = {}
-    for u in out.get("result", []):
-        msg = u.get("message") or u.get("channel_post") or {}
-        ch = msg.get("chat") or {}
-        if ch.get("id"):
-            seen[ch["id"]] = ch.get("username") or ch.get("first_name") or ch.get("title") or ""
-    if not seen:
-        print("최근 메시지가 없습니다. 텔레그램에서 봇에게 아무 메시지나 보낸 뒤 다시 실행해주세요.")
-        return
-    print("찾은 chat_id (이 값을 ~/.binari-report.env 의 TELEGRAM_CHAT_ID 에 넣으세요):")
-    for cid, name in seen.items():
-        print(f"  {cid}   {name}")
+def send_discord(cfg, text):
+    # 디스코드 메시지 상한 2000자. 넘치면 잘라 보낸다(리포트를 통째로 잃는 것보다 낫다).
+    if len(text) > 1900:
+        text = text[:1890] + "\n…(생략)"
+    post_json(cfg["DISCORD_WEBHOOK_URL"], {"content": text, "allowed_mentions": {"parse": []}})
 
 
 def main():
     cfg = load_env()
-    args = sys.argv[1:]
+    dry = "--dry" in sys.argv[1:]
 
-    if "--whoami" in args:
-        if not cfg.get("TELEGRAM_BOT_TOKEN"):
-            sys.exit("TELEGRAM_BOT_TOKEN이 없습니다. ~/.binari-report.env 를 확인해주세요.")
-        whoami(cfg)
-        return
-
-    missing = [k for k in ("POSTHOG_API_KEY", "POSTHOG_PROJECT_ID") if not cfg.get(k)]
+    need = ["POSTHOG_API_KEY", "POSTHOG_PROJECT_ID"] + ([] if dry else ["DISCORD_WEBHOOK_URL"])
+    missing = [k for k in need if not cfg.get(k)]
     if missing:
-        sys.exit(f"설정 누락: {', '.join(missing)} — {ENV_PATH} 를 확인해주세요.")
+        sys.exit(f"설정 누락: {', '.join(missing)}")
 
     try:
         report = build_report(cfg)
     except urllib.error.HTTPError as e:
         sys.exit(f"PostHog 조회 실패 ({e.code}): {e.read().decode('utf-8', 'ignore')[:300]}")
 
-    if "--dry" in args:
+    if dry:
         print(report)
         return
 
-    missing = [k for k in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID") if not cfg.get(k)]
-    if missing:
-        print(report)
-        sys.exit(f"\n(발송 안 함) 설정 누락: {', '.join(missing)}")
-
     try:
-        send(cfg, report)
+        send_discord(cfg, report)
         print("발송 완료")
     except urllib.error.HTTPError as e:
-        sys.exit(f"텔레그램 발송 실패 ({e.code}): {e.read().decode('utf-8', 'ignore')[:300]}")
+        sys.exit(f"디스코드 발송 실패 ({e.code}): {e.read().decode('utf-8', 'ignore')[:300]}")
 
 
 if __name__ == "__main__":
