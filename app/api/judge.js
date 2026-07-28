@@ -9,7 +9,28 @@
       실질 방어가 필요해지면 Upstash/Vercel KV 같은 공유 저장소로 옮길 것.
       그 전까지의 최종 방어선은 여전히 Anthropic 콘솔의 월 지출 한도다. */
 const SYS_PREFIX = "당신은 유저의 '수호신' 비나리다";
+/* ── 허용 출처 ────────────────────────────────────────────────────────────────
+   여기서 막히면 판결 요청이 403이 되고, 유저 눈에는 "판결이 닿지 못했어"로만 보인다.
+   자체 도메인(binari.xxx)을 붙이는 날 이 목록을 같이 안 고치면 앱이 통째로 죽는다.
+
+   ALLOWED_ORIGIN 환경변수는 쉼표로 여러 개를 받는다. 값이 하나뿐이던 예전 방식으로는
+   "새 도메인 + 기존 vercel.app(내부 테스트용)"을 동시에 열 수 없었다.
+     예) ALLOWED_ORIGIN="https://binari.life,https://binari-sepia.vercel.app"
+   설정하면 아래 기본 목록을 완전히 대체한다(로컬 주소도 함께 적어야 개발이 된다).
+
+   프리뷰 배포(binari-<해시>-binari.vercel.app, binari-git-<브랜치>-binari.vercel.app)는
+   패턴으로 허용한다. 끝의 `binari`는 Vercel 팀 슬러그라 남이 같은 주소를 만들 수 없다.
+   이게 없으면 프리뷰 URL에서 판결이 전부 막혀 내부 테스트를 프리뷰로 돌릴 수 없다. */
 const DEFAULT_ORIGINS = ["https://binari-sepia.vercel.app", "http://localhost:5173", "http://localhost:4173"];
+const PREVIEW_RE = /^https:\/\/[a-z0-9][a-z0-9-]*-binari\.vercel\.app$/;
+const norm = (o) => String(o || "").trim().replace(/\/+$/, "").toLowerCase();   // 끝 슬래시는 흔한 오타 — Origin 헤더엔 붙지 않는다
+
+export function isAllowedOrigin(origin, envAllowed = process.env.ALLOWED_ORIGIN) {
+  const o = norm(origin);
+  if (!o) return false;                                  // Origin 없는 요청(직접 호출·서버간)은 거절
+  const list = (envAllowed ? String(envAllowed).split(",") : DEFAULT_ORIGINS).map(norm).filter(Boolean);
+  return list.includes(o) || PREVIEW_RE.test(o);
+}
 
 // ── 레이트리밋: IP당 고정 윈도(기본 1분 90회 = 질문 45개분, 판결 1건당 2콜) ──
 //    한국 이동통신은 CGNAT로 수백 명이 한 IP를 공유한다. 광고로 모바일 트래픽이 몰리면
@@ -45,9 +66,8 @@ const clientIp = (req) =>
   "unknown";
 
 export default async function handler(req, res) {
-  const allowed = process.env.ALLOWED_ORIGIN ? [process.env.ALLOWED_ORIGIN] : DEFAULT_ORIGINS;
   const origin = req.headers.origin || "";
-  const originOk = !!origin && allowed.includes(origin);
+  const originOk = isAllowedOrigin(origin);
 
   // 허용 목록을 통과한 출처에만 CORS를 되돌려준다(임의 반사 금지).
   if (originOk) {
