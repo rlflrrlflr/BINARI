@@ -2,16 +2,19 @@
 /**
  * 비나리 건강검진 — 비개발자가 직접 돌려서, 코드를 읽지 않고도 앱의 고장을 알아내는 도구.
  *
- * 실행:  npm run 검진
+ * 사용자는 AI에게 **"검진"** 한 마디만 하면 된다. 명령어를 외울 필요가 없다.
+ * (직접 돌릴 때: `node health-check.mjs` — 빌드도 미리보기 서버도 이 파일이 알아서 한다)
  *
  * 설계 원칙
  *  1) 이 검사들은 "있으면 좋은 것"이 아니라 **실제로 터졌던 사고**에서 역산해 만들었다.
  *     새 사고가 나면 여기에 검사를 하나 추가한다. 그래야 같은 사고가 두 번 나지 않는다.
  *  2) 출력은 스택트레이스가 아니라 **한국어 증상 + 조치**다. 읽는 사람은 개발자가 아니다.
- *  3) 정적 검사는 항상 돌고, 브라우저 검사는 preview가 떠 있을 때만 돈다(없으면 건너뛴다).
+ *  3) 준비물은 스스로 갖춘다. 빌드가 없으면 빌드하고, 미리보기 서버가 없으면 띄웠다가 끈다.
+ *     "터미널 하나 더 열고…" 같은 안내는 이 도구의 실패다.
  */
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
+import { execFileSync, spawn } from "node:child_process";
 
 const APP = "src/App.jsx";
 const src = readFileSync(APP, "utf8");
@@ -170,33 +173,159 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
   }
 }
 
-/* ── 검사 6. 빌드 산출물 ─────────────────────────────────────────────── */
-add(existsSync("dist/index.html") ? "정상" : "주의", "빌드 산출물",
-  existsSync("dist/index.html") ? "dist/ 있음" : "dist/ 없음",
-  "npm run build 를 실행하세요.");
+/* ── 검사 6. 의존성 취약점 (npm audit) ───────────────────────────────────
+   남이 만든 부품에서 보안 구멍이 발견되는 일은 우리가 코드를 안 건드려도 일어난다.
+   중요한 구분: **사용자에게 배달되는 부품(prod)** 과 **내 컴퓨터에서만 쓰는 부품(dev)** 은
+   위험의 크기가 다르다. 빌드 도구의 구멍은 사이트 방문자와 무관하다 — 겁줄 필요가 없다. */
+{
+  const audit = (extra) => {
+    try {
+      const out = execFileSync("npm", ["audit", "--json", ...extra],
+        { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 90000 });
+      return JSON.parse(out).metadata.vulnerabilities;
+    } catch (e) {
+      // npm audit는 취약점이 있으면 종료코드가 0이 아니다 — 그래도 stdout에 결과가 들어있다.
+      try { return JSON.parse(e.stdout || "").metadata.vulnerabilities; } catch { return null; }
+    }
+  };
+  const prod = audit(["--omit=dev"]);
+  if (!prod) {
+    add("주의", "부품 보안 점검을 못 함", "인터넷에 연결되지 않았거나 npm 응답 없음",
+      "인터넷이 되는 곳에서 다시 검진하세요. 오프라인에서는 이 검사만 건너뜁니다.");
+  } else {
+    const sev = prod.critical + prod.high;
+    if (sev > 0) {
+      add("심각", "사용자에게 배달되는 부품에 보안 구멍",
+        `심각 ${prod.critical}건, 높음 ${prod.high}건`,
+        "실제 사이트 방문자가 노출됩니다. AI에게 '취약한 의존성을 안전한 버전으로 올려달라'고 하세요.");
+    } else if (prod.moderate + prod.low > 0) {
+      add("주의", "배달되는 부품에 경미한 보안 구멍", `보통 ${prod.moderate}건, 낮음 ${prod.low}건`,
+        "급하지 않습니다. 다음 정기 점검 때 함께 올리세요.");
+    } else {
+      add("정상", "부품 보안(사용자 도달분)", "구멍 없음", "");
+    }
+    const all = audit([]);
+    if (all && (all.total - prod.total) > 0) {
+      add("주의", "개발 도구 쪽 보안 구멍",
+        `${all.total - prod.total}건 — 빌드에만 쓰이고 사이트에는 실리지 않음`,
+        "방문자와는 무관합니다. 사이트가 위험한 게 아니니 서두르지 마세요. 도구를 올릴 때 회귀 위험이 있으니 검진·스모크를 함께 돌리세요.");
+    }
+  }
+}
 
-/* ── 검사 7. (브라우저) 실제로 어떤 렌더러가 뜨는가 ──────────────────────
-   가장 중요한 검사. 사고 이력: 사용자가 몇 시간 동안 실행되지도 않는 렌더러를 튜닝했다.
-   preview가 떠 있을 때만 실행한다. */
+/* ── 검사 7. 비밀키가 사용자에게 배달되는 코드에 섞였는가 ─────────────────
+   결제·로그인을 붙이면 가장 흔하고 가장 비싼 사고. 지금은 유출이 없지만,
+   **없다는 사실을 계속 확인하는 것**이 이 검사의 목적이다(도입 후에 만들면 늦다). */
+{
+  // 어디서 나와도 사고인 것들. 남의 라이브러리 코드에 우연히 섞일 수 없는 모양만 고른다.
+  const SECRET = [
+    { name: "Anthropic 키", re: /sk-ant-[A-Za-z0-9_-]{8}/ },
+    { name: "서버 전용 키(service_role)", re: /SUPABASE_SERVICE|SERVICE_ROLE_KEY|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}/ },
+    { name: "결제 비밀키", re: /sk_live_[A-Za-z0-9]{8}|test_sk_[A-Za-z0-9]{12}|live_sk_[A-Za-z0-9]{12}/ },
+  ];
+  // 우리 코드에서만 보는 것 — 남의 번들에는 이런 모양이 흔해서 오경보가 난다.
+  const OURS = [{ name: "API 키 하드코딩", re: /(api[_-]?key|apikey|secret)\s*[:=]\s*["'][A-Za-z0-9_-]{20,}["']/i }];
+  const targets = ["src/App.jsx"];
+  if (existsSync("dist/assets")) {
+    for (const f of readdirSync("dist/assets")) if (f.endsWith(".js")) targets.push(`dist/assets/${f}`);
+  }
+  const hits = [];
+  for (const t of targets) {
+    const body = readFileSync(t, "utf8");
+    for (const s of SECRET) if (s.re.test(body)) hits.push(`${t}: ${s.name}`);
+    if (t.startsWith("src/")) for (const s of OURS) if (s.re.test(body)) hits.push(`${t}: ${s.name}`);
+  }
+  if (hits.length) {
+    add("심각", "비밀키가 사용자 브라우저로 전송됨", hits.join(", "),
+      "브라우저에 실린 값은 누구나 볼 수 있습니다. 즉시 그 키를 폐기·재발급하고, 서버(api/) 환경변수로 옮기세요.");
+  } else {
+    add("정상", "비밀키 유출", `검사한 파일 ${targets.length}개 모두 깨끗함`, "");
+  }
+
+  /* 결제·로그인 도입 시에만 깨어나는 검사 — 지금은 잠들어 있다.
+     "그때 가서 만들자"가 사고의 시작이라, 미리 심어 둔다. */
+  const pkg = existsSync("package.json") ? readFileSync("package.json", "utf8") : "";
+  // 의존성으로 들어왔을 때만 깨운다. 본문 문자열 검색은 오경보를 낸다
+  // (예: 주역 척전의 `tosses`가 결제사 'toss'로 잡혔던 적이 있다).
+  const dep = (re) => new RegExp(`"[^"]*${re}[^"]*"\\s*:`, "i").test(pkg);
+  const hasDB = dep("supabase") || dep("firebase") || dep("prisma") || dep("mongodb") || dep("^pg$") || dep("drizzle");
+  const hasPay = dep("tosspayments") || dep("iamport") || dep("portone") || dep("stripe")
+    || /TossPayments\s*\(|IMP\.request_pay|PortOne\.|new Stripe\s*\(/.test(src);
+  if (hasDB) {
+    const srcAll = targets.map(t => readFileSync(t, "utf8")).join("\n");
+    if (!/rls|row level security|policy/i.test(src) && !/auth\.uid\(\)/.test(src)) {
+      add("심각", "데이터베이스를 붙였는데 접근 제한 흔적이 없음",
+        "package.json에 DB 라이브러리가 있으나 코드에 행 수준 보안(RLS)·인증 검사가 보이지 않음",
+        "브라우저에서 DB를 직접 부르는 구조라면, RLS를 켜지 않는 순간 남의 사주·질문이 전부 열립니다. 테이블마다 '본인 것만' 정책을 켜세요.");
+    } else {
+      add("정상", "DB 접근 제한", "RLS/인증 검사 흔적 있음", "");
+    }
+    if (/anon|public/i.test(srcAll) && /insert|update|delete/i.test(srcAll)) {
+      add("주의", "익명 권한으로 쓰기가 가능한 구조일 수 있음", "클라이언트 코드에 쓰기 호출이 있음",
+        "쓰기는 서버(api/)를 거치게 하는 편이 안전합니다.");
+    }
+  }
+  if (hasPay) {
+    const ok = /webhook|서버.*검증|verify/i.test(src) || existsSync("api/payment-webhook.js") || existsSync("api/confirm.js");
+    add(ok ? "정상" : "심각", "결제 금액 서버 검증",
+      ok ? "서버 검증 경로 있음" : "브라우저가 보낸 금액을 그대로 믿는 구조로 보임",
+      ok ? "" : "금액을 브라우저에서 바꿔 100원으로 결제할 수 있습니다. 결제 승인은 반드시 서버에서 금액을 다시 확인해야 합니다.");
+  }
+}
+
+/* ── 검사 8. 빌드 산출물 — 없으면 만든다 ────────────────────────────────
+   "npm run build 를 실행하세요"라고 시키는 대신 그냥 한다. */
+if (existsSync("dist/index.html")) {
+  add("정상", "빌드 산출물", "dist/ 있음", "");
+} else {
+  try {
+    execFileSync("npm", ["run", "build"], { stdio: "ignore", timeout: 180000 });
+    add("정상", "빌드 산출물", "없어서 방금 새로 만들었음", "");
+  } catch (_) {
+    add("심각", "빌드 실패", "앱을 만들어내지 못했습니다",
+      "코드에 문법 오류가 있을 가능성이 높습니다. AI에게 '빌드가 실패한다'고 알리세요.");
+  }
+}
+
+/* ── 검사 9. (브라우저) 실제로 어떤 렌더러가 뜨는가 ──────────────────────
+   가장 중요한 검사. 사고 이력: 사용자가 몇 시간 동안 실행되지도 않는 렌더러를 튜닝했고,
+   앱이 아예 열리지 않는 사고(TDZ)를 빌드가 아니라 이 검사만 잡았다.
+   미리보기 서버가 없으면 **직접 띄웠다가 끝나면 끈다.** */
+let previewProc = null;
+async function ensurePreview(base) {
+  try { const r = await fetch(base); if (r.ok) return "이미 떠 있음"; } catch (_) { /* 아래에서 띄운다 */ }
+  previewProc = spawn("npm", ["run", "preview"], { stdio: "ignore", detached: true });
+  for (let i = 0; i < 40; i++) {
+    await new Promise(r => setTimeout(r, 500));
+    try { const r = await fetch(base); if (r.ok) return "검진이 띄움"; } catch (_) { /* 아직 */ }
+  }
+  return null;
+}
+function stopPreview() {
+  if (!previewProc) return;
+  try { process.kill(-previewProc.pid, "SIGTERM"); } catch (_) { try { previewProc.kill(); } catch (_) {} }
+  previewProc = null;
+}
+
 async function browserCheck() {
   const require = createRequire(import.meta.url);
-  let pw; try { pw = require("playwright"); } catch { try { pw = require("/opt/node22/lib/node_modules/playwright"); } catch { return null; } }
+  let pw; try { pw = require("playwright"); } catch { try { pw = require("/opt/node22/lib/node_modules/playwright"); } catch { return { noPw: true }; } }
   const base = process.env.BASE || "http://localhost:4173";
-  try { const r = await fetch(base); if (!r.ok) return null; } catch (_) { return null; }
+  if (!(await ensurePreview(base))) return null;
   // 브라우저 실행 실패로 검진 전체가 죽으면 안 된다 — 나머지 20여 개 검사 결과까지 같이 사라진다.
   //   (실제로 발생: playwright 를 업데이트하면 예전 브라우저 폴더와 어긋나 launch 가 예외를 던진다)
   //   CHROME_PATH 를 주면 그 브라우저로 검사한다(playwright 가 받아둔 브라우저와 어긋날 때의 탈출구).
   let b;
   const _exe = process.env.CHROME_PATH || undefined;
   try { b = await pw.chromium.launch({ executablePath: _exe, args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"] }); }
-  catch (e) { return { launchErr: String(e?.message || e).split("\n")[0].slice(0, 120) }; }
+  catch (e) { stopPreview(); return { launchErr: String(e?.message || e).split("\n")[0].slice(0, 120) }; }
   const p = await b.newPage({ viewport: { width: 390, height: 844 } });
   const errs = [];
   p.on("pageerror", e => errs.push(String(e).slice(0, 80)));
   let out = {};
   try {
     await p.goto(base, { timeout: 15000 });
-    await p.waitForTimeout(1200);
+    await p.waitForTimeout(2200);   // 배지가 실제 렌더러를 붙이는 데 1.2초 폴링이 걸린다
     out.badge = await p.locator(".verbadge").textContent().catch(() => null);
     out.shaders = await p.evaluate(() => {
       const c = document.createElement("canvas"); const gl = c.getContext("webgl");
@@ -210,18 +339,56 @@ async function browserCheck() {
 }
 
 const bc = await browserCheck();
-if (bc === null) {
-  add("주의", "실행 중 검사 건너뜀", "preview 서버가 없어 실제 화면을 확인하지 못함",
-    "터미널을 하나 더 열고 'npm run preview' 를 켠 뒤 다시 검진하면, 실제로 어떤 수호신이 뜨는지까지 확인합니다.");
-} else if (bc.launchErr) {
-  add("주의", "실행 중 검사 건너뜀 — 검사용 브라우저를 못 켰음", bc.launchErr,
+stopPreview();
+if (bc?.noPw) {
+  add("주의", "실제 화면 검사 건너뜀", "브라우저 검사 도구(playwright)가 설치돼 있지 않음",
+    "이 컴퓨터에서 화면 검사를 하려면 AI에게 '검진용 브라우저 도구를 설치해줘'라고 하세요. 나머지 검사는 정상 수행됐습니다.");
+} else if (bc?.launchErr) {
+  add("주의", "실제 화면 검사 건너뜀 — 검사용 브라우저를 못 켰음", bc.launchErr,
     "'npx playwright install chromium' 을 한 번 실행하세요. 앱 문제가 아니라 검사 도구 문제이며, 나머지 검사 결과는 그대로 유효합니다.");
+} else if (bc === null) {
+  add("심각", "앱을 띄우지 못함", "미리보기 서버가 20초 안에 응답하지 않음",
+    "빌드가 깨졌거나 4173 포트를 다른 프로그램이 쓰고 있습니다. AI에게 이 문장을 그대로 전하세요.");
 } else if (bc.err) {
-  add("심각", "앱이 열리지 않음", bc.err, "npm run build 후 preview를 다시 켜 보세요.");
+  add("심각", "앱이 열리지 않음", bc.err, "화면이 뜨기 전에 오류가 났습니다. AI에게 이 문장을 그대로 전하세요.");
 } else {
   if (bc.errs?.length) add("심각", "화면에서 오류 발생", bc.errs.join(" / "), "이 오류는 사용자 화면에서도 납니다.");
   else add("정상", "화면 오류", "없음", "");
-  add("정상", "지금 보이는 버전", bc.badge || "(배지 없음)", "");
+  // 배지는 `v98 · 고지 · gl` 형태 — 뒤가 실제 렌더러다. 첫 화면(생년월일 입력)에는
+  // 수호신이 아직 없어 렌더러가 붙지 않는 게 정상이다.
+  add("정상", "지금 보이는 버전", (bc.badge || "(배지 없음)") + (/·\s*(gl|sim|2d)\s*$/.test(bc.badge || "") ? "" : " (첫 화면이라 렌더러 미표시 — 정상)"), "");
+}
+
+/* ── 검사 10. 실제 서비스가 지금 살아 있는가 ─────────────────────────────
+   여기까지의 검사는 전부 "내 컴퓨터"를 본다. 정작 사용자가 보는 건 배포된 사이트다.
+   다만 이건 **검진할 때 그 순간**만 본다 — 새벽 3시에 죽으면 아무도 모른다.
+   상시 감시는 §유지보수_규칙.md 의 가동 감시(UptimeRobot) 설정이 담당한다. */
+{
+  const LIVE = process.env.LIVE || "https://binari-sepia.vercel.app";
+  try {
+    const t0 = Date.now();
+    const r = await fetch(LIVE, { signal: AbortSignal.timeout(12000) });
+    const ms = Date.now() - t0;
+    const html = await r.text();
+    // 회사망·프록시 환경에서는 우리 사이트가 멀쩡해도 403/407이 돌아온다. 이걸 장애로 보고하면
+    // 검진이 늑대소년이 된다 — 프록시 경유가 확실할 때는 '확인 못 함'으로 낮춘다.
+    const proxied = !!(process.env.HTTPS_PROXY || process.env.https_proxy);
+    if (!r.ok && proxied && [403, 405, 407, 502].includes(r.status)) {
+      add("주의", "배포된 사이트 확인 못 함", `네트워크(프록시)가 막음 — HTTP ${r.status}`,
+        "우리 사이트 문제가 아닐 가능성이 큽니다. 휴대폰으로 사이트를 한 번 열어 확인하세요.");
+    } else if (!r.ok) {
+      add("심각", "배포된 사이트가 오류를 냄", `${LIVE} → HTTP ${r.status}`,
+        "지금 사용자가 앱을 못 씁니다. Vercel 대시보드에서 최근 배포를 이전 버전으로 되돌리세요(Deployments → 직전 배포 → Promote).");
+    } else if (!/<div id="root"/.test(html)) {
+      add("심각", "배포된 사이트가 빈 화면", "응답은 오는데 앱 뼈대가 없음",
+        "빌드 산출물이 잘못 올라갔습니다. 다시 배포하세요.");
+    } else {
+      add("정상", "배포된 사이트", `응답 ${ms}ms`, "");
+    }
+  } catch (_) {
+    add("주의", "배포된 사이트 확인 못 함", "인터넷에 연결되지 않았거나 응답 없음",
+      "인터넷이 되는 곳에서 다시 검진하세요. 이 검사만 건너뜁니다.");
+  }
 }
 
 /* ── 출력 ──────────────────────────────────────────────────────────── */
