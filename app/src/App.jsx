@@ -639,6 +639,18 @@ function GuardianCanvas({ saju, zo, mbti, num, moon, birth, agitateRef, reactRef
    유일성 재배선: 촐킨(20날개×13톤)=가닥 수·꼬임(코어 문양 대체) · 납음=흐름 결 · 나크샤트라=강조색 · 대운=색조 틴트.
    형태(오행 5): 화=꼬여 오르는 리본 기둥 · 수=흐르는 물결 층 · 목=뻗는 가지 흐름 · 금=궤도 빛줄기 · 토=중심 없는 난류 융기.
    레퍼런스: 불 리본·유속 소용돌이·난류 블룸(2026-07-21 사용자 영상) — 밝은 중앙 코어 없이 흐름 자체로 존재. */
+/* ═══════════════ 수호신 튜닝값 — 단일 진실 원천 ═══════════════
+   여기 있는 값은 두 렌더러(gl / sim)가 함께 쓴다. 예전엔 같은 값이 셰이더마다
+   따로 박혀 있어서, 한쪽만 고치면 화면과 시뮬레이션의 기준이 조용히 어긋났다(실제 사고).
+   이제 아래 한 곳만 고치면 양쪽이 같이 바뀐다. 값을 바꿀 땐 이 블록만 보면 된다.
+   확인: npm run 검진                                                        */
+const TUNE = {
+  stg: 0.68,        // 응집 시차 — 손끝으로 모이는 순서(클수록 알알이 늦게 도착)
+  starLo: 0.42,     // 별 아닌 입자의 밝기 하한
+  starHi: 1.7,      // 별 입자의 밝기 상한(대비)
+  nE: 34000,        // 입자 수 — 외향(E)
+  nI: 27000,        // 입자 수 — 내향(I)
+};
 const GL_VERT = `
 precision highp float;
 attribute vec4 a_r0; // x:u y:v z:s w:size·위상
@@ -794,7 +806,7 @@ void main(){
   vec2 spos=P.xy*sc*0.48;
   float ta=clamp(u_touchAmt,0.0,1.0);
   spos+=vec2(sin(t*0.11+1.3)*0.11, sin(t*0.17)*0.07+0.012*u_breath)*(1.0-ta)*smoothstep(0.0,3.5,u_t);   // 부유+호흡 — 터치 중엔 멈춤
-  float st=a_r1.z*0.68;                                             // 입자별 시차(파도식 도착 순서)
+  float st=a_r1.z*${TUNE.stg};                                             // 입자별 시차(파도식 도착 순서)
   float g=clamp((ta-st)/0.28,0.0,1.0); g=g*g*(3.0-2.0*g);           // v66 고정 비행창 — 모임·풀림 모두 낱알 파도로
   // ── B상태: 중앙점으로 모여 빛이 방사로 발산 (문양·회전 없음 — 입자단위 재정렬) ──
   float bang=a_r1.w*6.2832 + (a_r0.y-0.5)*0.22;                     // 입자별 방사각(레이)
@@ -845,7 +857,7 @@ void main(){
   float life=0.90+0.10*sin(t*1.1+a_r1.x*22.0);                      // 잔잔한 생명 숨결
   float core=1.0+u_focal*0.22*smoothstep(0.6,0.0,rl);               // I: 코어 발광(과포화 억제)
   v_a*=(0.25+0.75*k)*u_lum*depth*twk*clamp(sc*0.66,0.34,1.34)*life*core
-     *mix(0.42,1.7,star)*(0.90+0.10*u_breath)*(1.0+min(wglow,0.8)*0.9)
+     *mix(${TUNE.starLo},${TUNE.starHi},star)*(0.90+0.10*u_breath)*(1.0+min(wglow,0.8)*0.9)
      *(1.0+wave*0.34*g)
      *mix(1.0, 0.42+1.25*emit, g)                                   // B: 중심 밝고 바깥 감쇠(빛 발산)
      *(1.0-g*0.34*smoothstep(0.018,0.0,brad))                       // 극중심 화이트아웃만 억제
@@ -917,7 +929,7 @@ function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactR
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       cv.width = Math.round(size * dpr); cv.height = Math.round(size * dpr);
       gl.viewport(0, 0, cv.width, cv.height);
-      const n = E ? 34000 : 27000;
+      const n = E ? TUNE.nE : TUNE.nI;
       const r0 = new Float32Array(n * 4), r1 = new Float32Array(n * 4);
       for (let i = 0; i < n; i++) {
         r0[i * 4] = srnd(); r0[i * 4 + 1] = srnd(); r0[i * 4 + 2] = srnd(); r0[i * 4 + 3] = srnd();
@@ -1112,7 +1124,7 @@ void main(){
   computeShape(a_r0,a_r1,spos,depth,v_a,sc,rl);
   vec2 target=spos;
   float ta=clamp(u_touchAmt,0.0,1.0);
-  float stg=a_r1.z*0.68; float g=clamp((ta-stg)/0.28,0.0,1.0); g=g*g*(3.0-2.0*g);
+  float stg=a_r1.z*${TUNE.stg}; float g=clamp((ta-stg)/0.28,0.0,1.0); g=g*g*(3.0-2.0*g);
   if(g>0.001){
     float bang=a_r1.w*6.2832;
     float bR=0.014+0.07*u_bloom;                                // v72 방사 더 좁게
@@ -1153,7 +1165,7 @@ void main(){
   float halo=step(0.84,a_r1.y);
   float star=step(0.87,fract(a_r1.w*61.7)); v_star=star;
   float ta=clamp(u_touchAmt,0.0,1.0);
-  float stg=a_r1.z*0.68; float g=clamp((ta-stg)/0.28,0.0,1.0); g=g*g*(3.0-2.0*g);
+  float stg=a_r1.z*${TUNE.stg}; float g=clamp((ta-stg)/0.28,0.0,1.0); g=g*g*(3.0-2.0*g);
   gl_PointSize=u_ps*u_psMul*(0.6+a_r0.w)*(0.5+0.55*depth)*sc*mix(0.72,1.5,star)*mix(1.0,0.6,halo);
   float twk=mix(1.0,0.78+0.22*sin(t*1.5+a_r0.w*44.0),u_twk*star);
   float life=0.90+0.10*sin(t*1.1+a_r1.x*22.0);
@@ -1162,7 +1174,7 @@ void main(){
   float er=clamp(rr/0.18,0.0,1.0);
   float emitB=mix(1.0,0.6+1.0*(1.0-er)*(1.0-er),g);                  // B: 작은 코어 밝고 스파크로 갈수록 감쇠
   float kA=clamp(u_k,0.0,1.0);                                       // 'asm'은 GLSL 예약어 — 엄격 드라이버서 sim 폴백되므로 개명 유지
-  v_a=va0*(0.25+0.75*kA)*u_lum*depth*twk*clamp(sc*0.66,0.34,1.34)*life*core*mix(0.42,1.7,star)*(0.90+0.10*u_breath)*emitB;
+  v_a=va0*(0.25+0.75*kA)*u_lum*depth*twk*clamp(sc*0.66,0.34,1.34)*life*core*mix(${TUNE.starLo},${TUNE.starHi},star)*(0.90+0.10*u_breath)*emitB;
   v_pick=a_r1.z;
 }`;
 const RND_FRAG = `precision mediump float;
@@ -1220,7 +1232,7 @@ function GuardianCanvasSim({ saju, zo, mbti, num, moon, birth, agitateRef, react
       const lum = 0.72 + (MOON_I[moon?.name] ?? 2) * 0.1;
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       cv.width = Math.round(size * dpr); cv.height = Math.round(size * dpr);
-      const n = E ? 34000 : 27000;
+      const n = E ? TUNE.nE : TUNE.nI;
       const W = 256, H = Math.ceil(n / W), TN = W * H;
       const r0 = new Float32Array(TN * 4), r1 = new Float32Array(TN * 4), stInit = new Float32Array(TN * 4), idxArr = new Float32Array(n);
       for (let i = 0; i < n; i++) {

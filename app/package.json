@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "검진": "node health-check.mjs",
+    "health": "node health-check.mjs"
   },
   "dependencies": {
     "posthog-js": "^1.407.0",
