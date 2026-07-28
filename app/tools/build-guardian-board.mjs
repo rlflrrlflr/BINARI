@@ -14,6 +14,7 @@
  * 실행: node app/tools/build-guardian-board.mjs
  */
 import { readFileSync, writeFileSync } from "node:fs";
+import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -42,6 +43,52 @@ function slicePlace(src) {
 
 const GL_VERT = sliceConst(APP, "GL_VERT");
 const GL_FRAG = sliceConst(APP, "GL_FRAG");
+
+/* ── GL 셰이더 계보 — git 히스토리에서 서로 다른 셰이더만 골라낸다 ─────
+   같은 셰이더가 이어지는 구간은 하나로 합친다(코드가 같으면 그림도 같다). */
+function glVariants() {
+  const heads = execSync("git log --format=%H --reverse -- app/src/App.jsx", { cwd: ROOT, maxBuffer: 1 << 28 })
+    .toString().trim().split("\n");
+  const out = [];
+  for (const h of heads) {
+    let src;
+    try { src = execSync(`git show ${h}:app/src/App.jsx`, { cwd: ROOT, maxBuffer: 1 << 28 }).toString(); }
+    catch { continue; }
+    if (src.indexOf("const GL_VERT = `") < 0) continue;
+    let vert, frag;
+    try { vert = sliceConst(src, "GL_VERT"); frag = sliceConst(src, "GL_FRAG"); } catch { continue; }
+    const last = out[out.length - 1];
+    if (last && last.vert === vert && last.frag === frag) { last.until = h; continue; }
+    const subject = execSync(`git log -1 --format=%s ${h}`, { cwd: ROOT }).toString().trim();
+    const date = execSync(`git log -1 --format=%ad --date=short ${h}`, { cwd: ROOT }).toString().trim();
+    /* 커밋 제목에 배지 번호가 없는 구간은 손으로 붙여준다(작업로그 대조) */
+    const FIX = [[/심장박동 추가/, "v94"], [/박동: A에서 제거/, "v95"],
+                 [/파동: 파면/, "v96"], [/파동 퍼지는 범위/, "v97"]];
+    const fix = FIX.find(([re]) => re.test(subject));
+    const m = /v(\d{2,3})/.exec(subject);
+    out.push({ vert, frag, subject, date,
+      label: fix ? fix[1] : (m ? "v" + m[1] : h.slice(0, 7)), sha: h, until: h });
+  }
+  return out;
+}
+const VARIANTS = glVariants();
+if (VARIANTS.length < 2) throw new Error("GL 셰이더 계보를 못 읽음 — git 히스토리 확인");
+
+/* 각 변종이 무엇을 바꿨는지(커밋 제목은 짧아서 한 줄 해설을 덧붙인다) */
+const VAR_NOTE = {
+  v60: "터치 = 그 지점으로 끌려와 모임(모임 강도 상향·정지 확실). B 모드의 초기형.",
+  v61: "터치가 형태를 완전히 해체 → 점으로 붕괴 + 유입 모션 + 궤적 트레일.",
+  v63: "붕괴점을 나선 은하로 정련 — 3갈래 나선팔, 코어 구멍 메움.",
+  v66: "명상 모드 대개편 — 은하 무드·알알이 재집결·궤적 와류·띠 정령(12지지 걸음걸이).",
+  v67: "B = 나선 문양 회전 → 중앙 발광 방사 발산. 현재 라이브 모션의 직계 조상.",
+  v73: "도착한 뒤에야 방사 시작 + 족적 빠른 추적 + A 초기 중앙정렬. 가장 오래 쓰인 셰이더(34커밋).",
+  v92: "A 상태를 최신 기준으로 정렬(별 대비값).",
+  v93: "A 겉결 — sim 엔진의 소프트 헤일로 패스 도입(3패스 → 4패스). 표면 질감이 부드러워진다.",
+  v94: "심장박동(럽-덥 ~54bpm) 추가 — A·B 모두 뛴다.",
+  v95: "박동을 A에서 제거(A는 호흡만) · B는 중심→바깥 파동으로.",
+  v96: "파면이 1.35초에 걸쳐 밀려나가며 끝이 형성 + 경계 불명확(rvar·lobe).",
+  v97: "파동 퍼지는 범위 절반 — 최대 반경 0.505 → 0.252. 현재 라이브.",
+};
 
 /* 2D 형태 계보 — 파일에서 place() 본문을 뽑아 같은 소스는 한 세대로 합친다 */
 const TWO_D_FILES = [
@@ -169,6 +216,8 @@ const DATA = {
   modes: MODES.map(m => ({ key: m.key, title: m.title, sub: m.sub, what: m.what, hist: m.hist })),
   gens: gens.map((g, i) => ({ versions: g.versions, ...(GEN_META[i] || { title: `2D ${i + 1}세대`, note: "", detail: "" }) })),
   timeline: TIMELINE,
+  variants: VARIANTS.map(v => ({ label: v.label, date: v.date, subject: v.subject,
+                                 note: VAR_NOTE[v.label] || "" })),
 };
 
 const html = `<!doctype html>
@@ -209,7 +258,17 @@ code{font-size:12px;color:#b9c6e0;background:#12121c;padding:1px 5px;border-radi
 .rowlegend b{font-size:15px}
 .rowlegend p{font-size:12px;color:var(--dim);margin:4px 0 0}
 
-/* 섹션 2 — 2D 계보 */
+/* 버전 비교 컨트롤 */
+.ctrls{display:flex;gap:18px;flex-wrap:wrap;margin:0 0 12px}
+.grp{display:flex;gap:6px}
+.grp button{background:#10101a;color:var(--dim);border:1px solid var(--line);border-radius:999px;
+  padding:6px 14px;font-size:13px;cursor:pointer;font-family:inherit}
+.grp button.on{background:rgba(245,217,139,.14);color:var(--gold);border-color:rgba(245,217,139,.45)}
+.varnotes{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px;margin-top:14px}
+.varnotes div{border-top:1px solid var(--line);padding-top:8px;font-size:12px;color:var(--dim)}
+.varnotes b{color:var(--gold);font-size:12.5px}
+
+/* 섹션 3 — 2D 계보 */
 .gen{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px;margin-top:14px}
 .gencard{border:1px solid var(--line);border-radius:14px;padding:16px;background:#0a0a12}
 .gencard h3{margin:0 0 2px;font-size:15px}
@@ -253,14 +312,26 @@ td:nth-child(2),td:nth-child(3){color:var(--dim);white-space:nowrap}
   </div>
   <div class="rowlegend" id="rowlegend"></div>
 
-  <h2>2. 형태의 계보 — 2D 세대별(오행 5)</h2>
+  <h2>2. 같은 오행, 버전별로 — GL 셰이더 계보 12종</h2>
+  <p class="note">git 히스토리에 남아있는 <b>서로 다른 셰이더 12개를 전부 컴파일해</b> 같은 조건으로 나란히 돌린다. 오행과 모드를 바꿔가며 어느 버전이 나았는지 직접 비교하면 된다. (v60 이전 GL과 v68~v92의 sim 엔진 B 모션[물레·홀림]은 이 저장소 히스토리에 코드가 없어 렌더 불가 — 3·4절의 이력으로만 남는다.)</p>
+  <div class="ctrls">
+    <div class="grp" id="elpick"></div>
+    <div class="grp" id="modepick"></div>
+  </div>
+  <div class="glwrap">
+    <canvas id="gl2"></canvas>
+    <div class="overlay" id="overlay2"></div>
+  </div>
+  <div class="varnotes" id="varnotes"></div>
+
+  <h2>3. 형태의 계보 — 2D 세대별(오행 5)</h2>
   <p class="note">WebGL 이전의 Canvas2D 형태 함수를 구버전 파일에서 뽑아 나란히 돌린다. 같은 코드인 버전은 한 세대로 묶었다(코드가 안 바뀐 구간은 형태도 안 바뀌었다는 뜻).</p>
   <div class="gen" id="gen"></div>
 
-  <h2>3. 모드별 변경 이력</h2>
+  <h2>4. 모드별 변경 이력</h2>
   <div class="modes" id="modes"></div>
 
-  <h2>4. 전체 타임라인</h2>
+  <h2>5. 전체 타임라인</h2>
   <table>
     <thead><tr><th>버전</th><th>날짜</th><th>엔진</th><th>무엇이 바뀌었나</th></tr></thead>
     <tbody id="tl"></tbody>
@@ -273,9 +344,33 @@ const DATA = ${JSON.stringify(DATA)};
 const GL_VERT = ${JSON.stringify(GL_VERT)};
 const GL_FRAG = ${JSON.stringify(GL_FRAG)};
 const PLACES = ${JSON.stringify(gens.map(g => g.body))};
+const VARIANTS = ${JSON.stringify(VARIANTS.map(v => ({ vert: v.vert, frag: v.frag })))};
 
 const T0 = performance.now();
 const hex2rgb = h => [parseInt(h.slice(1,3),16)/255, parseInt(h.slice(3,5),16)/255, parseInt(h.slice(5,7),16)/255];
+/* 모드별 상태 — 섹션 1(현재 버전)과 섹션 2(버전 비교)가 같은 조건을 쓴다.
+   B: 화면 중앙 언저리를 계속 누른 채 원을 그리며 끄는 상태
+   C: 판결 반응 12초 순환 — 요동 → GO → HOLD → STOP → 해체 → 복원 */
+const env = (r) => Math.max(0, 1 - r / 1.7) * Math.min(1, r / 0.18);
+function cellState(mode, t) {
+  const st = { touchAmt: 0, hold: 0, expand: 0, bright: 1, agi: 0, alphaK: 1, trailLive: 0, tx: 0, ty: 0, a: 0 };
+  if (mode === "B") {
+    st.a = t * 0.55;
+    st.tx = Math.cos(st.a) * 0.16; st.ty = Math.sin(st.a) * 0.128;
+    st.touchAmt = Math.min(1.15, t * 0.7);
+    st.hold = Math.min(2.4, t);
+    st.trailLive = 1;
+  } else if (mode === "C") {
+    const c = t % 12;
+    if (c < 2) st.agi = 1;
+    else if (c < 4) { const e = env(c - 2); st.expand = e * 0.50; st.bright = 1 + e * 0.50; }
+    else if (c < 6) { const e = env(c - 4); st.expand = e * 0.10 * Math.sin((c - 4) * 5); st.bright = 1 - e * 0.12; }
+    else if (c < 8) { const e = env(c - 6); st.expand = -e * 0.45; st.bright = 1 - e * 0.55; }
+    else if (c < 10.5) { const d = (c - 8) / 2.5; st.expand = d * 0.7; st.alphaK = 1 - d; }
+    else { const d = (c - 10.5) / 1.5; st.expand = 0.7 * (1 - d); st.alphaK = d; }
+  }
+  return st;
+}
 const srnd = (seed) => { let h = seed >>> 0; return () => ((h = (h * 1664525 + 1013904223) >>> 0) / 2 ** 32); };
 
 /* ── 헤더·범례 ───────────────────────────────────────────────── */
@@ -364,32 +459,15 @@ function initGL() {
     const bph = (born + t * 1000) * Math.PI * 2 / 9000;
     gl.uniform1f(L.u_breath, Math.sin(bph - 0.35 * Math.sin(bph)));
 
-    let touchAmt = 0, hold = 0, expand = 0, bright = 1, agi = 0, alphaK = 1, trailLive = 0, tx = 0, ty = 0;
-    if (mode === "B") {
-      /* 화면 중앙 언저리를 계속 누르고 원을 그리며 끄는 상태를 재현 */
-      const rr = 0.16, a = t * 0.55;
-      tx = Math.cos(a) * rr; ty = Math.sin(a) * rr * 0.8;
-      touchAmt = Math.min(1.15, t * 0.7);
-      hold = Math.min(2.4, t);
-      trailLive = 1;
+    const st = cellState(mode, t);
+    if (st.trailLive) {
       for (let i = 0; i < 10; i++) {
-        const la = a - i * 0.16;
-        trail.set([Math.cos(la) * rr, Math.sin(la) * rr * 0.8, i * 0.09, 0.5], i * 4);
+        const la = st.a - i * 0.16;
+        trail.set([Math.cos(la) * 0.16, Math.sin(la) * 0.128, i * 0.09, 0.5], i * 4);
       }
       gl.uniform4fv(L.u_trail, trail);
-    } else if (mode === "C") {
-      /* 판결 반응 루프: 요동 → GO → HOLD → STOP → 해체 → 복원 (12초) */
-      const c = t % 12;
-      if (c < 2) { agi = 1; }
-      else if (c < 4)  { const e = env(c - 2); expand =  e * 0.50; bright = 1 + e * 0.50; }
-      else if (c < 6)  { const e = env(c - 4); expand =  e * 0.10 * Math.sin((c - 4) * 5); bright = 1 - e * 0.12; }
-      else if (c < 8)  { const e = env(c - 6); expand = -e * 0.45; bright = 1 - e * 0.55; }
-      else if (c < 10.5) { const d = (c - 8) / 2.5; expand = d * 0.7; alphaK = 1 - d; }   /* dissolved(해체) */
-      else { const d = (c - 10.5) / 1.5; expand = 0.7 * (1 - d); alphaK = d; }
-      gl.uniform4fv(L.u_trail, new Float32Array(40));
-    } else {
-      gl.uniform4fv(L.u_trail, new Float32Array(40));
-    }
+    } else gl.uniform4fv(L.u_trail, new Float32Array(40));
+    const { touchAmt, hold, expand, bright, agi, alphaK, trailLive, tx, ty } = st;
     gl.uniform2f(L.u_touch, tx, ty);
     gl.uniform1f(L.u_touchAmt, touchAmt); gl.uniform1f(L.u_hold, hold);
     gl.uniform1f(L.u_trailLive, trailLive);
@@ -402,7 +480,6 @@ function initGL() {
     gl.uniform1f(L.u_psMul, 1);   gl.uniform1f(L.u_alpha, 0.72 * A); gl.drawArrays(gl.POINTS, 0, n);
     gl.uniform1f(L.u_t, t - 0.22); gl.uniform1f(L.u_alpha, 0.30 * A); gl.drawArrays(gl.POINTS, 0, n);
   }
-  const env = (r) => Math.max(0, 1 - r / 1.7) * Math.min(1, r / 0.18);
 
   let visible = true;
   new IntersectionObserver(es => { visible = es[0].isIntersecting; }, { threshold: 0 }).observe(cv);
@@ -421,7 +498,125 @@ function initGL() {
 }
 try { initGL(); } catch (e) { document.getElementById("fallback").style.display = "block"; console.error(e); }
 
-/* ── 섹션 2: 2D 세대별 — 원본 place() 를 그대로 돌린다 ───────────── */
+/* ── 섹션 2: 버전 계보 12종 — 오행·모드 고정, 셰이더만 갈아끼운다 ─── */
+const VCOLS = 4, VROWS = Math.ceil(VARIANTS.length / VCOLS), VCELL = 236;
+let pickEl = DATA.elements[0], pickMode = "A";
+const overlay2 = document.getElementById("overlay2");
+overlay2.style.gridTemplateColumns = \`repeat(\${VCOLS},1fr)\`;
+overlay2.style.gridTemplateRows = \`repeat(\${VROWS},1fr)\`;
+overlay2.innerHTML = DATA.variants
+  .map(v => \`<div class="cell"><span class="tag">\${v.label} · \${v.date}</span></div>\`).join("");
+document.getElementById("varnotes").innerHTML = DATA.variants
+  .map(v => \`<div><b>\${v.label}</b> \${v.note || v.subject}</div>\`).join("");
+document.getElementById("elpick").innerHTML = DATA.elements
+  .map((e, i) => \`<button data-el="\${e.key}" class="\${i ? "" : "on"}">\${e.key}</button>\`).join("");
+document.getElementById("modepick").innerHTML = DATA.modes
+  .map((m, i) => \`<button data-mode="\${m.key}" class="\${i ? "" : "on"}">\${m.title}</button>\`).join("");
+document.querySelectorAll("#elpick button").forEach(b => b.onclick = () => {
+  pickEl = DATA.elements.find(e => e.key === b.dataset.el);
+  document.querySelectorAll("#elpick button").forEach(x => x.classList.toggle("on", x === b));
+});
+document.querySelectorAll("#modepick button").forEach(b => b.onclick = () => {
+  pickMode = b.dataset.mode;
+  document.querySelectorAll("#modepick button").forEach(x => x.classList.toggle("on", x === b));
+});
+
+function initCompare() {
+  const cv = document.getElementById("gl2");
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  cv.style.aspectRatio = (VCOLS * VCELL) + " / " + (VROWS * VCELL);
+  cv.width = VCOLS * VCELL * dpr; cv.height = VROWS * VCELL * dpr;
+  const gl = cv.getContext("webgl", { alpha: false, antialias: false, depth: false });
+  if (!gl) return;
+  const n = 7000, r0 = new Float32Array(n * 4), r1 = new Float32Array(n * 4), rnd = srnd(20260728);
+  for (let i = 0; i < n * 4; i++) { r0[i] = rnd(); r1[i] = rnd(); }
+  const b0 = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b0); gl.bufferData(gl.ARRAY_BUFFER, r0, gl.STATIC_DRAW);
+  const b1 = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b1); gl.bufferData(gl.ARRAY_BUFFER, r1, gl.STATIC_DRAW);
+  const mk = (ty, src) => { const sh = gl.createShader(ty); gl.shaderSource(sh, src); gl.compileShader(sh);
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh)); return sh; };
+  const UNI = ["u_hold","u_beat","u_t","u_form","u_R","u_arms","u_strands","u_twist","u_speed","u_chaos",
+    "u_nayF","u_nayA","u_expand","u_agi","u_k","u_ps","u_lum","u_twk","u_psMul","u_focal","u_touch",
+    "u_touchVel","u_touchAmt","u_breath","u_trailLive","u_zodiac","u_c1","u_c2","u_acc","u_wispCol",
+    "u_bright","u_alpha","u_bloom"];
+  const progs = VARIANTS.map((v, i) => {
+    try {
+      const p = gl.createProgram();
+      gl.attachShader(p, mk(gl.VERTEX_SHADER, v.vert));
+      gl.attachShader(p, mk(gl.FRAGMENT_SHADER, v.frag));
+      gl.linkProgram(p);
+      if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+      const L = {}; UNI.forEach(k => L[k] = gl.getUniformLocation(p, k));
+      L.u_trail = gl.getUniformLocation(p, "u_trail[0]");
+      const a0 = gl.getAttribLocation(p, "a_r0"), a1 = gl.getAttribLocation(p, "a_r1");
+      return { p, L, a0, a1 };
+    } catch (err) {
+      console.error(DATA.variants[i].label, err);
+      const tag = overlay2.children[i]; if (tag) tag.querySelector(".tag").textContent += " — 컴파일 실패";
+      return null;
+    }
+  });
+  gl.disable(gl.DEPTH_TEST); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+  gl.clearColor(0.016, 0.016, 0.031, 1);
+  const F_AL = { "화":0.36, "수":0.31, "목":0.32, "금":0.29, "토":0.26 };
+  const F_PS = { "금":0.82, "토":0.9 };
+  const trail = new Float32Array(40);
+  const f1 = (L, k, v) => { if (L[k]) gl.uniform1f(L[k], v); };
+
+  let visible = true;
+  new IntersectionObserver(es => { visible = es[0].isIntersecting; }, { threshold: 0 }).observe(cv);
+  const loop = () => {
+    requestAnimationFrame(loop);
+    if (!visible) return;
+    const t = (performance.now() - T0) / 1000;
+    const el = pickEl, mode = pickMode;
+    const st = cellState(mode, t);
+    gl.disable(gl.SCISSOR_TEST);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    for (let i = 0; i < progs.length; i++) {
+      const P = progs[i]; if (!P) continue;
+      const col = i % VCOLS, row = (VROWS - 1) - Math.floor(i / VCOLS);
+      const w = VCELL * dpr, px = col * w, py = row * w;
+      gl.viewport(px, py, w, w); gl.enable(gl.SCISSOR_TEST); gl.scissor(px, py, w, w);
+      gl.useProgram(P.p);
+      gl.bindBuffer(gl.ARRAY_BUFFER, b0);
+      if (P.a0 >= 0) { gl.enableVertexAttribArray(P.a0); gl.vertexAttribPointer(P.a0, 4, gl.FLOAT, false, 0, 0); }
+      gl.bindBuffer(gl.ARRAY_BUFFER, b1);
+      if (P.a1 >= 0) { gl.enableVertexAttribArray(P.a1); gl.vertexAttribPointer(P.a1, 4, gl.FLOAT, false, 0, 0); }
+      const L = P.L, c1 = hex2rgb(el.colors[0]), c2 = hex2rgb(el.colors[1]);
+      if (L.u_c1) gl.uniform3fv(L.u_c1, c1);
+      if (L.u_c2) gl.uniform3fv(L.u_c2, c2);
+      if (L.u_acc) gl.uniform3fv(L.u_acc, hex2rgb(el.acc));
+      if (L.u_wispCol) gl.uniform3fv(L.u_wispCol, [0.5 + c1[0] * 0.28, 0.55 + c1[1] * 0.26, 0.66 + c1[2] * 0.2]);
+      f1(L, "u_form", el.form); f1(L, "u_R", 0.8); f1(L, "u_arms", 5); f1(L, "u_strands", 5);
+      f1(L, "u_twist", 2.1); f1(L, "u_speed", 0.30); f1(L, "u_chaos", 0.9); f1(L, "u_focal", 0.55);
+      f1(L, "u_nayF", 0.58); f1(L, "u_nayA", 0.45); f1(L, "u_lum", 0.92); f1(L, "u_twk", 1);
+      f1(L, "u_beat", 3); f1(L, "u_k", 1); f1(L, "u_zodiac", 4); f1(L, "u_bloom", 1);
+      f1(L, "u_ps", 1.8 * dpr * (F_PS[el.key] || 1));
+      const bph = (T0 + t * 1000) * Math.PI * 2 / 9000;
+      f1(L, "u_breath", Math.sin(bph - 0.35 * Math.sin(bph)));
+      if (L.u_touch) gl.uniform2f(L.u_touch, st.tx, st.ty);
+      if (L.u_touchVel) gl.uniform2f(L.u_touchVel, 0, 0);
+      f1(L, "u_touchAmt", st.touchAmt); f1(L, "u_hold", st.hold);
+      f1(L, "u_trailLive", st.trailLive); f1(L, "u_expand", st.expand);
+      f1(L, "u_bright", st.bright); f1(L, "u_agi", st.agi);
+      if (L.u_trail) { if (st.trailLive) { for (let k = 0; k < 10; k++) {
+          const la = st.a - k * 0.16;
+          trail.set([Math.cos(la) * 0.16, Math.sin(la) * 0.128, k * 0.09, 0.5], k * 4); } }
+        else trail.fill(0);
+        gl.uniform4fv(L.u_trail, trail); }
+      const A = (F_AL[el.key] || 0.31) * st.alphaK;
+      f1(L, "u_t", t);
+      f1(L, "u_psMul", 3.6); f1(L, "u_alpha", 0.05 * A); gl.drawArrays(gl.POINTS, 0, n);
+      f1(L, "u_psMul", 1.8); f1(L, "u_alpha", 0.22 * A); gl.drawArrays(gl.POINTS, 0, n);
+      f1(L, "u_psMul", 1);   f1(L, "u_alpha", 0.72 * A); gl.drawArrays(gl.POINTS, 0, n);
+      f1(L, "u_t", t - 0.22); f1(L, "u_alpha", 0.30 * A); gl.drawArrays(gl.POINTS, 0, n);
+    }
+  };
+  loop();
+}
+try { initCompare(); } catch (e) { console.error(e); }
+
+/* ── 섹션 3: 2D 세대별 — 원본 place() 를 그대로 돌린다 ───────────── */
 const genHost = document.getElementById("gen");
 genHost.innerHTML = DATA.gens.map((g, gi) => \`
   <div class="gencard">
