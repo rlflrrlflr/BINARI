@@ -145,36 +145,49 @@ def build_report(cfg):
     t = dict(zip(keys, rows[0]))
     p = dict(zip(keys, rows[1])) if len(rows) > 1 else {}
 
-    L = ["비나리 데일리 리포트", f"전일 자({t['d']}) 비나리 데일리 리포트 공유드립니다!"]
+    L = ["비나리 데일리 리포트", f"전일 자({t['d']}) 공유드립니다!"]
 
-    # ── 총평: 이슈 유무를 먼저 판단해 알린다 ──
+    # ── 총평: 이슈 유무를 한 문장으로 먼저 알린다 ──
     if t["failed"]:
-        L.append(f"판결 {t['asked']}건 중 {t['failed']}건이 응답에 실패하여 운영 이슈 확인되었습니다. "
-                 "해당 건은 유저가 판결을 받지 못하고 이탈한 것으로, 우선 확인이 필요합니다.")
+        L.append(f"질문 {t['asked']}건 중 {t['failed']}건이 응답에 실패하여 운영 이슈 확인되었습니다.")
     elif t["asked"] == 0:
-        L.append("전일 질문이 한 건도 발생하지 않았습니다. 유입 경로부터 점검이 필요할 것으로 판단됩니다.")
+        L.append("전일 질문이 한 건도 발생하지 않았습니다. 유입 경로 점검이 필요합니다.")
+    elif t["people"] == 0 and t["internal_people"]:
+        L.append("운영 이슈는 없으나 전일 활동이 전부 내부 트래픽이라 제품 판단에는 쓰기 어렵습니다.")
     else:
         L.append(f"질문 {t['asked']}건 전부 판결까지 정상 응답하여 운영 이슈 없는 것으로 확인됩니다.")
 
-    if t["people"] == 0 and t["internal_people"]:
-        L.append("다만 전일 활동이 전부 내부(팀·지인) 트래픽이라 제품 판단에는 쓰기 어렵습니다.")
+    # ── 데이터 요약: 숫자는 여기 몰아넣는다 ──
+    dirs = {str(r[0]): r[1] for r in hogql(cfg, Q_DIR)} if t["verdicts"] else {}
+    tv = sum(dirs.values()) or t["verdicts"]
+    go, hold, stop = dirs.get("GO", 0), dirs.get("HOLD", 0), dirs.get("STOP", 0)
+    per = f" · 1인 {round(t['visits'] / t['people'], 1)}회" if t["people"] else ""
 
-    # ── 유입·재방문 ──
-    seg = [f"유입의 경우, 외부 사용자 {t['people']}명{delta(t['people'], p.get('people'))} · "
-           f"방문 {t['visits']}회{delta(t['visits'], p.get('visits'))} 기록하였습니다."]
-    if t["people"]:
-        per = round(t["visits"] / t["people"], 1)
-        seg.append(f"1인당 {per}회 방문으로, "
-                   + ("재방문 습관이 형성되는 흐름으로 보입니다."
-                      if per >= 2 else "아직 재방문까지는 이어지지 않고 있습니다."))
-    if t["internal_people"]:
-        seg.append(f"내부 {t['internal_people']}명은 지표에서 제외 대상입니다.")
-    L += ["", " ".join(seg)]
-
-    # ── 온보딩: 최대 이탈 지점을 짚고 조치를 제안한다 ──
+    D = ["```",
+         f"외부 {t['people']}명{delta(t['people'], p.get('people'))}"
+         + (f" · 내부 {t['internal_people']}명(제외)" if t["internal_people"] else ""),
+         f"방문 {t['visits']}회{delta(t['visits'], p.get('visits'))}{per}"]
     if t["ob_start"]:
-        seg = [f"온보딩의 경우, {t['ob_start']}건 시작하여 {t['ob_done']}건 완주"
-               f"({pct(t['ob_done'], t['ob_start'])})하였습니다."]
+        D.append(f"온보딩 {t['ob_start']} → {t['ob_done']} 완주 {pct(t['ob_done'], t['ob_start'])}")
+    D.append(f"질문 {t['asked']} → 판결 {t['verdicts']}{delta(t['verdicts'], p.get('verdicts'))}"
+             + (f" · 실패 {t['failed']}" if t["failed"] else ""))
+    if t["verdicts"]:
+        D += [f"GO {go} · HOLD {hold}({pct(hold, tv)}) · STOP {stop}",
+              f"평가 {t['rated']}건 {pct(t['rated'], t['verdicts'])}"
+              f" · 서신 {t['letter']}건 {pct(t['letter'], t['verdicts'])}"
+              + (f" → 받을게 {t['letter_yes']}건" if t["letter"] else "")
+              + (f" · 공유 {t['shared']}건" if t["shared"] else "")]
+    D.append("```")
+    L += [""] + D
+
+    # ── 코멘트: 숫자 반복 없이 '무엇을 할 것인가'만 ──
+    notes = []
+    if t["failed"]:
+        fails = hogql(cfg, Q_FAIL)
+        cause = " · ".join(f"{FAIL_KO.get(str(r[0]), str(r[0]))} {r[1]}건" for r in fails) if fails else "원인 미분류"
+        notes.append(f"실패 원인은 {cause}입니다. 유저가 판결을 받지 못하고 이탈한 건으로 우선 확인이 필요합니다.")
+
+    if t["ob_start"]:
         ob = [(str(r[0]), r[1]) for r in hogql(cfg, Q_ONBOARD)]
         worst, drop = None, 0
         for i in range(1, len(ob)):
@@ -182,44 +195,18 @@ def build_report(cfg):
             if d > drop:
                 worst, drop = ob[i][0], d
         if worst:
-            seg.append(f"{STEP_KO.get(worst, worst)} 화면에서 {drop}명 이탈하여 해당 구간이 "
-                       "최대 이탈 지점으로 확인되며, 화면 축소 또는 순서 조정 검토 제안드립니다.")
-        L += ["", " ".join(seg)]
+            notes.append(f"{STEP_KO.get(worst, worst)} 화면에서 {drop}명 이탈하여 최대 이탈 지점으로 "
+                         "확인됩니다. 화면 축소 또는 순서 조정 검토 제안드립니다.")
 
-    # ── 판결: HOLD 편중을 계속 추적한다 ──
-    if t["verdicts"]:
-        dirs = {str(r[0]): r[1] for r in hogql(cfg, Q_DIR)}
-        tv = sum(dirs.values()) or t["verdicts"]
-        go, hold, stop = dirs.get("GO", 0), dirs.get("HOLD", 0), dirs.get("STOP", 0)
-        seg = [f"판결은 {t['verdicts']}건{delta(t['verdicts'], p.get('verdicts'))} 발생하였고, "
-               f"방향은 GO {go} · HOLD {hold}({pct(hold, tv)}) · STOP {stop}입니다."]
-        if stop == 0 and tv >= 5:
-            seg.append("STOP이 한 건도 없어 '망설임엔 단언을'이라는 핵심 가치와는 거리가 있는 상황으로, "
-                       "표본 누적 후 판결 프롬프트 임계값 조정 검토가 필요해 보입니다.")
-        seg.append(f"판결 평가는 {t['rated']}건(평가율 {pct(t['rated'], t['verdicts'])}) 수집되었습니다.")
-        L += ["", " ".join(seg)]
+    if t["verdicts"] and stop == 0 and tv >= 5:
+        notes.append("STOP이 한 건도 없어 '망설임엔 단언을'과는 거리가 있는 상황입니다. "
+                     "표본 누적 후 판결 프롬프트 임계값 조정 검토가 필요해 보입니다.")
 
-    # ── 지불 의사(D4) ──
-    if t["verdicts"]:
-        seg = [f"서신의 경우, 클릭률 {pct(t['letter'], t['verdicts'])}"
-               f"({t['letter']}/{t['verdicts']}) 기록하였습니다."]
-        if t["letter"]:
-            seg.append(f"이 중 {t['letter_yes']}건이 '받을게'까지 도달"
-                       f"(전환 {pct(t['letter_yes'], t['letter'])})하였습니다.")
-        seg.append("표본이 충분치 않아 판단은 유보하며 추이 모니터링 지속하겠습니다."
-                   if t["verdicts"] < 300 else
-                   "노출 300회를 넘겨 지불 의사 판정이 가능한 시점입니다.")
-        L += ["", " ".join(seg)]
+    if t["letter"]:
+        notes.append("서신은 표본이 충분치 않아 판단 유보하며 추이 모니터링 지속하겠습니다."
+                     if t["verdicts"] < 300 else
+                     "서신 노출 300회를 넘겨 지불 의사 판정이 가능한 시점입니다.")
 
-    # ── 참고 불릿 ──
-    notes = []
-    if t["failed"]:
-        fails = hogql(cfg, Q_FAIL)
-        if fails:
-            notes.append("실패 원인: " + " · ".join(
-                f"{FAIL_KO.get(str(r[0]), str(r[0]))} {r[1]}건" for r in fails))
-    if t["shared"]:
-        notes.append(f"공유 {t['shared']}건(공유율 {pct(t['shared'], t['verdicts'])})")
     if notes:
         L += [""] + [f"• {n}" for n in notes]
 
