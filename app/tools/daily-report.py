@@ -71,9 +71,15 @@ def hogql(cfg, query):
 
 # ── 지표 ─────────────────────────────────────────────────────────────────────
 # 내부(팀·지인) 트래픽을 항상 따로 센다. 섞어서 보면 게이트 판정이 무력화된다.
+#
+# ⚠️ 날짜 기준 — 모든 쿼리가 '한국 날짜로 어제 하루'만 본다. 하나라도 다른 창을 쓰면
+#    요약과 상세가 어긋난다(2026-07-28: 요약은 오늘 26건, 방향은 어제 7건이 나가 합이 안 맞았다).
+#    PostHog 프로젝트 시간대가 UTC 라서 today() 를 그냥 쓰면 아침 8시(KST)에 받는
+#    '어제'와 하루가 밀린다. 그래서 +9시간 해서 한국 날짜로 자른다.
+KST_YDAY = ("toDate(timestamp + INTERVAL 9 HOUR) = toDate(now() + INTERVAL 9 HOUR) - 1")
 Q_DAILY = """
 SELECT
-    toDate(timestamp)                                   AS d,
+    toDate(timestamp + INTERVAL 9 HOUR)                 AS d,
     uniqIf(person_id, properties.is_internal != true)   AS people,
     uniqIf(person_id, properties.is_internal = true)    AS internal_people,
     countIf(event = 'app_open')                         AS visits,
@@ -87,14 +93,16 @@ SELECT
     countIf(event = 'letter_intent_confirmed')          AS letter_yes,
     countIf(event = 'verdict_shared')                   AS shared
 FROM events
-WHERE timestamp >= today() - 2 AND event NOT LIKE '$%'
-GROUP BY d ORDER BY d DESC LIMIT 3
+WHERE timestamp >= now() - INTERVAL 5 DAY AND event NOT LIKE '$%'
+GROUP BY d
+HAVING d <= toDate(now() + INTERVAL 9 HOUR) - 1   -- 진행 중인 오늘은 뺀다
+ORDER BY d DESC LIMIT 2
 """
 
 Q_DIR = """
 SELECT properties.dir AS dir, count() AS n
 FROM events
-WHERE timestamp >= today() - 1 AND timestamp < today() AND event = 'verdict_shown'
+WHERE timestamp >= now() - INTERVAL 3 DAY AND """ + KST_YDAY + """ AND event = 'verdict_shown'
 GROUP BY dir ORDER BY n DESC
 """
 
@@ -102,7 +110,7 @@ GROUP BY dir ORDER BY n DESC
 Q_FAIL = """
 SELECT properties.reason AS reason, count() AS n
 FROM events
-WHERE timestamp >= today() - 1 AND timestamp < today() AND event = 'verdict_failed'
+WHERE timestamp >= now() - INTERVAL 3 DAY AND """ + KST_YDAY + """ AND event = 'verdict_failed'
 GROUP BY reason ORDER BY n DESC
 """
 
@@ -110,7 +118,7 @@ GROUP BY reason ORDER BY n DESC
 Q_ONBOARD = """
 SELECT properties.step AS step, uniq(person_id) AS u
 FROM events
-WHERE timestamp >= today() - 1 AND timestamp < today() AND event = 'onboard_step'
+WHERE timestamp >= now() - INTERVAL 3 DAY AND """ + KST_YDAY + """ AND event = 'onboard_step'
 GROUP BY step ORDER BY u DESC
 """
 
@@ -139,13 +147,13 @@ FAIL_KO = {
 MSG = {
     # ── 머리말 ──
     "제목":        "비나리 데일리 리포트",
-    "인사":        "전일 자({날짜}) 공유드립니다!",
+    "인사":        "{날짜} 하루치입니다!",
 
     # ── 총평: 넷 중 하나만 나간다 ──
-    "총평_정상":    "질문 {질문}건 전부 판결까지 정상 응답하여 운영 이슈 없는 것으로 확인됩니다.",
-    "총평_실패":    "질문 {질문}건 중 {실패}건이 응답에 실패하여 운영 이슈 확인되었습니다.",
-    "총평_유입없음": "전일 질문이 한 건도 발생하지 않았습니다. 유입 경로 점검이 필요합니다.",
-    "총평_내부만":  "운영 이슈는 없으나 전일 활동이 전부 내부 트래픽이라 제품 판단에는 쓰기 어렵습니다.",
+    "총평_정상":    "질문 {질문}건 전부 판결까지 잘 나갔습니다. 문제 없습니다.",
+    "총평_실패":    "질문 {질문}건 중 {실패}건이 판결까지 못 갔습니다. 확인이 필요합니다.",
+    "총평_유입없음": "어제는 질문이 하나도 없었습니다. 사람이 안 들어온 건지 봐야 합니다.",
+    "총평_내부만":  "문제는 없지만 어제 쓴 사람이 전부 우리 쪽이라, 이 숫자로 제품을 판단하면 안 됩니다.",
 
     # ── 데이터 요약 블록의 각 줄 ──
     "숫자_사람":    "외부 {외부}명{외부증감}",
@@ -161,14 +169,14 @@ MSG = {
     "숫자_공유":    " · 공유 {공유}건",
 
     # ── 코멘트: 해당하는 것만 • 로 붙는다 ──
-    "말_실패원인":  "실패 원인은 {원인}입니다. 유저가 판결을 받지 못하고 이탈한 건으로 우선 확인이 필요합니다.",
-    "말_이탈지점":  "{화면} 화면에서 {인원}명 이탈하여 최대 이탈 지점으로 확인됩니다. 화면 축소 또는 순서 조정 검토 제안드립니다.",
-    "말_STOP없음":  "STOP이 한 건도 없어 '망설임엔 단언을'과는 거리가 있는 상황입니다. 표본 누적 후 판결 프롬프트 임계값 조정 검토가 필요해 보입니다.",
-    "말_서신유보":  "서신은 표본이 충분치 않아 판단 유보하며 추이 모니터링 지속하겠습니다.",
-    "말_서신판정":  "서신 노출 300회를 넘겨 지불 의사 판정이 가능한 시점입니다.",
+    "말_실패원인":  "실패 이유는 {원인}입니다. 그만큼 사람들이 답을 못 받고 나갔다는 뜻이라 제일 먼저 봐야 합니다.",
+    "말_이탈지점":  "{화면} 화면에서 {인원}명이 빠져나갔습니다. 어제 사람을 가장 많이 잃은 곳입니다. 이 화면을 줄이거나 순서를 바꾸는 걸 생각해볼 만합니다.",
+    "말_STOP없음":  "어제 'STOP(하지 마)' 판결이 하나도 없었습니다. 망설일 때 딱 잘라 말해주는 게 비나리인데, 정작 말리는 법이 없는 셈입니다. 데이터가 좀 더 쌓이면 판결 기준을 손볼지 정해야 합니다.",
+    "말_서신유보":  "서신은 아직 눌린 횟수가 적어 돈 낼 사람이 있는지 판단하기 이릅니다. 계속 지켜보겠습니다.",
+    "말_서신판정":  "서신이 300번 넘게 노출됐습니다. 이제 돈 낼 사람이 있는지 판단할 수 있는 시점입니다.",
 
     # ── 예외 ──
-    "데이터없음":   "전일 자 데이터가 조회되지 않습니다. 배포 상태 및 계측 연결 확인이 필요합니다.",
+    "데이터없음":   "어제 데이터를 못 가져왔습니다. 앱이 살아있는지, 기록이 붙어있는지 봐야 합니다.",
     "연결확인":     "비나리 연결 확인 — 이 메시지가 보이면 디스코드 발송은 정상입니다.",
 }
 
