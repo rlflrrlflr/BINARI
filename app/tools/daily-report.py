@@ -15,6 +15,7 @@ GitHub Actions(.github/workflows/daily-report.yml)가 매일 아침 자동 실�
     python3 daily-report.py           # 전일 리포트를 디스코드로 발송
     python3 daily-report.py --dry     # 발송 없이 화면에만 출력(연결 점검용)
 """
+import datetime
 import json
 import os
 import sys
@@ -147,7 +148,7 @@ FAIL_KO = {
 MSG = {
     # ── 머리말 ──
     "제목":        "비나리 데일리 리포트",
-    "인사":        "{날짜} 하루치입니다!",
+    "인사":        "{날짜}",                 # 날짜+요일만. 다른 말은 넣지 않기로 함(2026-07-28 결정)
 
     # ── 총평: 넷 중 하나만 나간다 ──
     "총평_정상":    "질문 {질문}건 전부 판결까지 잘 나갔습니다. 문제 없습니다.",
@@ -193,6 +194,16 @@ def say(key, **kw):
         return tpl
 
 
+def kdate(v):
+    """2026-07-28 → 7/28(화). 매일 보는 리포트라 연도는 빼고 요일을 붙인다."""
+    s = str(v)[:10]
+    try:
+        d = datetime.date(*(int(x) for x in s.split("-")))
+        return f"{d.month}/{d.day}({'월화수목금토일'[d.weekday()]})"
+    except Exception:
+        return s                                   # 형식이 예상과 다르면 원본을 그대로 쓴다
+
+
 def pct(a, b):
     return f"{round(a / b * 100)}%" if b else "—"
 
@@ -220,7 +231,7 @@ def build_report(cfg):
     t = dict(zip(keys, rows[0]))
     p = dict(zip(keys, rows[1])) if len(rows) > 1 else {}
 
-    L = [MSG["제목"], say("인사", 날짜=t["d"])]
+    L = [MSG["제목"], say("인사", 날짜=kdate(t["d"]))]
 
     # ── 총평: 이슈 유무를 한 문장으로 먼저 알린다 ──
     if t["failed"]:
