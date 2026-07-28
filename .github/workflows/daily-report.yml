@@ -1,0 +1,38 @@
+name: 데일리 리포트
+
+# 매일 아침 8시(한국)에 전일 지표를 디스코드로 보낸다.
+# GitHub이 대신 돌려주므로 맥을 켜둘 필요가 없다.
+# cron 은 UTC 기준이라 23:00 UTC = 다음날 08:00 KST.
+on:
+  schedule:
+    - cron: "0 23 * * *"
+  workflow_dispatch: {}   # 저장소 Actions 탭에서 손으로 즉시 실행할 수도 있다
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 설정값 확인
+        # 비밀값이 하나라도 비면 조용히 실패하는 대신 무엇이 없는지 알려준다.
+        env:
+          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+          POSTHOG_PROJECT_ID: ${{ secrets.POSTHOG_PROJECT_ID }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          miss=""
+          [ -z "$POSTHOG_API_KEY" ] && miss="$miss POSTHOG_API_KEY"
+          [ -z "$POSTHOG_PROJECT_ID" ] && miss="$miss POSTHOG_PROJECT_ID"
+          [ -z "$DISCORD_WEBHOOK_URL" ] && miss="$miss DISCORD_WEBHOOK_URL"
+          if [ -n "$miss" ]; then
+            echo "저장소 Settings > Secrets and variables > Actions 에 아래를 넣어주세요:$miss"
+            exit 1
+          fi
+
+      - name: 리포트 발송
+        env:
+          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+          POSTHOG_PROJECT_ID: ${{ secrets.POSTHOG_PROJECT_ID }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: python3 app/tools/daily-report.py
