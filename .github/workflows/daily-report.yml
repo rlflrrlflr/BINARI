@@ -6,7 +6,15 @@ name: 데일리 리포트
 on:
   schedule:
     - cron: "0 23 * * *"
-  workflow_dispatch: {}   # 저장소 Actions 탭에서 손으로 즉시 실행할 수도 있다
+  workflow_dispatch:      # 저장소 Actions 탭에서 손으로 즉시 실행할 수도 있다
+    inputs:
+      mode:
+        description: "무엇을 보낼지"
+        type: choice
+        default: report
+        options:
+          - report        # 전일 리포트 전체
+          - ping          # 디스코드 연결만 확인(PostHog 조회 없음). 문제 생기면 이걸로 원인을 가른다
 
 jobs:
   report:
@@ -35,4 +43,9 @@ jobs:
           POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
           POSTHOG_PROJECT_ID: ${{ secrets.POSTHOG_PROJECT_ID }}
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-        run: python3 app/tools/daily-report.py
+        run: |
+          if [ "${{ inputs.mode }}" = "ping" ]; then
+            python3 app/tools/daily-report.py --ping
+          else
+            python3 app/tools/daily-report.py
+          fi

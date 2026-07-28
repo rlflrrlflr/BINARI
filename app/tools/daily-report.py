@@ -43,10 +43,19 @@ def load_env():
     return cfg
 
 
+# ⚠️ 이 줄을 지우지 말 것. urllib 의 기본 User-Agent("Python-urllib/3.x")로 디스코드에 붙으면
+#    Cloudflare 가 "브라우저 서명 차단"으로 막는다(HTTP 403 · error code 1010).
+#    2026-07-28 첫 발송이 이 이유로 실패했다. 디스코드 API 문서가 요구하는 형식으로 자신을 밝힌다.
+USER_AGENT = "DiscordBot (https://binari-sepia.vercel.app, 1.0)"
+
+
 def post_json(url, payload, headers=None, timeout=60):
     data = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(url, data=data,
-                                 headers={"Content-Type": "application/json", **(headers or {})})
+    req = urllib.request.Request(url, data=data, headers={
+        "Content-Type": "application/json",
+        "User-Agent": USER_AGENT,
+        **(headers or {}),
+    })
     with urllib.request.urlopen(req, timeout=timeout) as r:
         body = r.read().decode("utf-8")
         return json.loads(body) if body.strip() else {}
@@ -220,9 +229,38 @@ def send_discord(cfg, text):
     post_json(cfg["DISCORD_WEBHOOK_URL"], {"content": text, "allowed_mentions": {"parse": []}})
 
 
+def discord_error(e):
+    """실패했을 때 무엇을 손봐야 하는지까지 알려준다. 코드만 뱉으면 다음 사람이 또 헤맨다."""
+    body = e.read().decode("utf-8", "ignore")[:200]
+    if e.code == 403 and "1010" in body:
+        hint = ("Cloudflare 가 요청을 막았습니다(브라우저 서명 차단). "
+                "User-Agent 헤더가 빠졌거나 기본값(Python-urllib)일 때 발생합니다 — USER_AGENT 상수를 확인하세요.")
+    elif e.code in (401, 403):
+        hint = "웹훅 주소가 만료·삭제되었을 수 있습니다. 디스코드 채널 편집 > 연동 > 웹후크에서 재발급하세요."
+    elif e.code == 404:
+        hint = "웹훅이 존재하지 않습니다. 주소를 다시 확인하세요."
+    elif e.code == 429:
+        hint = "디스코드 호출 한도입니다. 잠시 후 재실행하세요."
+    else:
+        hint = "디스코드 응답을 확인하세요."
+    return f"디스코드 발송 실패 ({e.code}): {body}\n→ {hint}"
+
+
 def main():
+    args = sys.argv[1:]
     cfg = load_env()
-    dry = "--dry" in sys.argv[1:]
+    dry, ping = "--dry" in args, "--ping" in args
+
+    # --ping: PostHog 없이 디스코드 연결만 시험한다. 실패 시 원인이 어느 쪽인지 바로 갈린다.
+    if ping:
+        if not cfg.get("DISCORD_WEBHOOK_URL"):
+            sys.exit("설정 누락: DISCORD_WEBHOOK_URL")
+        try:
+            send_discord(cfg, "비나리 연결 확인 — 이 메시지가 보이면 디스코드 발송은 정상입니다.")
+            print("연결 확인 완료 — 디스코드로 시험 메시지를 보냈습니다.")
+        except urllib.error.HTTPError as e:
+            sys.exit(discord_error(e))
+        return
 
     need = ["POSTHOG_API_KEY", "POSTHOG_PROJECT_ID"] + ([] if dry else ["DISCORD_WEBHOOK_URL"])
     missing = [k for k in need if not cfg.get(k)]
@@ -232,7 +270,9 @@ def main():
     try:
         report = build_report(cfg)
     except urllib.error.HTTPError as e:
-        sys.exit(f"PostHog 조회 실패 ({e.code}): {e.read().decode('utf-8', 'ignore')[:300]}")
+        sys.exit(f"PostHog 조회 실패 ({e.code}): {e.read().decode('utf-8', 'ignore')[:300]}\n"
+                 "→ POSTHOG_API_KEY 가 Personal API key(query:read 권한)인지, "
+                 "POSTHOG_PROJECT_ID 가 526669 인지 확인하세요.")
 
     if dry:
         print(report)
@@ -242,7 +282,7 @@ def main():
         send_discord(cfg, report)
         print("발송 완료")
     except urllib.error.HTTPError as e:
-        sys.exit(f"디스코드 발송 실패 ({e.code}): {e.read().decode('utf-8', 'ignore')[:300]}")
+        sys.exit(discord_error(e))
 
 
 if __name__ == "__main__":
