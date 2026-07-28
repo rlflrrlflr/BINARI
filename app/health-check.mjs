@@ -208,6 +208,24 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
   } else if (users.length) {
     add("정상", "e2e 콜1/콜2 구분 표지", `${users.length}개 파일이 앱과 같은 표지 사용`, "");
   }
+
+  /* 같은 사고의 두 번째 얼굴(2026-07-28, 병합 후 발견): 표지로 옮긴 건 complete 모의뿐이었고
+     HTTP 경로 모의는 여전히 `max_tokens <= 400` 으로 갈랐다. 콜1 상한이 320→560으로 오르자
+     콜1 자리에 콜2 응답이 물려 "폭포수 판결 실패"가 났다 — 앱은 멀쩡했다.
+     토큰 상한은 품질 튜닝으로 수시로 바뀌는 값이므로, 분기 기준으로 쓰면 언제든 다시 깨진다. */
+  const tokenSplit = [];
+  for (const f of ["e2e/verdict.mjs", "e2e/v29-check.mjs", "e2e/webgl-check.mjs", "e2e/smoke.mjs"].filter(existsSync)) {
+    const t = readFileSync(f, "utf8");
+    const m = t.match(/max_tokens[^\n]{0,40}[<>]=?\s*(\d+)\s*\?/);
+    if (m) tokenSplit.push(`${f} (${m[1]} 기준)`);
+  }
+  const mt1 = +(src.match(/callClaude\(system, \[\.\.\.priorConvo, concludeMsg\], (\d+)\)/) || [])[1];
+  if (tokenSplit.length) {
+    add("심각", "e2e 가 토큰 수로 콜1/콜2를 가름", `${tokenSplit.join(", ")} — 현재 앱의 콜1 상한은 ${mt1 || "?"}`,
+      `토큰 상한은 품질을 다듬을 때마다 바뀝니다. 그 값으로 분기하면 상한이 바뀌는 날 테스트가 조용히 엉뚱한 응답을 물고 '판결이 안 뜬다'고 거짓 보고합니다. "${MARK}" 표지로 가르도록 바꾸세요.`);
+  } else {
+    add("정상", "e2e 분기 기준", "토큰 수가 아니라 표지로 콜1/콜2를 가름", "");
+  }
 }
 
 /* ── 검사 6. 의존성 취약점 (npm audit) ───────────────────────────────────

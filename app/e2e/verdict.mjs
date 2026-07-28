@@ -78,7 +78,10 @@ const b = await chromium.launch((process.env.CHROME_PATH ? { executablePath: pro
   });
   await page.route("https://api.anthropic.com/**", async (route) => {
     const body = JSON.parse(route.request().postData() || "{}");
-    const txt = (body.max_tokens || 0) <= 400 ? CALL1 : CALL2;
+    // 콜1/콜2는 토큰 상한이 아니라 **앱이 실제로 쓰는 표지**로 가른다.
+    // 사고(2026-07-28): 콜1 상한이 320→560으로 오르자 <=400 기준이 콜1 자리에 콜2 응답을 물려
+    // "폭포수 판결 실패"로 보고했다. 앱은 멀쩡했고 고장난 건 이 줄이었다.
+    const txt = JSON.stringify(body.messages || []).includes("[이미 확정된 판결]") ? CALL2 : CALL1;
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ content: [{ type: "text", text: txt }] }) });
   });
   await onboard(page);
