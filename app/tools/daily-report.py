@@ -78,21 +78,27 @@ def hogql(cfg, query):
 #    PostHog 프로젝트 시간대가 UTC 라서 today() 를 그냥 쓰면 아침 8시(KST)에 받는
 #    '어제'와 하루가 밀린다. 그래서 +9시간 해서 한국 날짜로 자른다.
 KST_YDAY = ("toDate(timestamp + INTERVAL 9 HOUR) = toDate(now() + INTERVAL 9 HOUR) - 1")
-Q_DAILY = """
+# 모든 제품 지표는 외부(실유저)만 센다. 내부는 맨 아래 한 줄로 따로 알린다.
+#   2026-07-28 사고: 사람 수만 내부를 빼고 나머지(방문·질문·판결·평가·서신)는 합산이라
+#   '내부 6명(제외)' 라고 써놓고 판결 26건 중 19건이 내부였다. 라벨이 거짓말을 했다.
+EXT = "properties.is_internal != true"
+
+Q_DAILY = f"""
 SELECT
-    toDate(timestamp + INTERVAL 9 HOUR)                 AS d,
-    uniqIf(person_id, properties.is_internal != true)   AS people,
-    uniqIf(person_id, properties.is_internal = true)    AS internal_people,
-    countIf(event = 'app_open')                         AS visits,
-    countIf(event = 'onboard_start')                    AS ob_start,
-    countIf(event = 'guardian_awaken')                  AS ob_done,
-    countIf(event = 'question_asked')                   AS asked,
-    countIf(event = 'verdict_shown')                    AS verdicts,
-    countIf(event = 'verdict_failed')                   AS failed,
-    countIf(event = 'verdict_rated')                    AS rated,
-    countIf(event = 'letter_clicked')                   AS letter,
-    countIf(event = 'letter_intent_confirmed')          AS letter_yes,
-    countIf(event = 'verdict_shared')                   AS shared
+    toDate(timestamp + INTERVAL 9 HOUR)                                 AS d,
+    uniqIf(person_id, {EXT})                                            AS people,
+    countIf(event = 'app_open' AND {EXT})                               AS visits,
+    countIf(event = 'onboard_start' AND {EXT})                          AS ob_start,
+    countIf(event = 'guardian_awaken' AND {EXT})                        AS ob_done,
+    countIf(event = 'question_asked' AND {EXT})                         AS asked,
+    countIf(event = 'verdict_shown' AND {EXT})                          AS verdicts,
+    countIf(event = 'verdict_failed' AND {EXT})                         AS failed,
+    countIf(event = 'verdict_rated' AND {EXT})                          AS rated,
+    countIf(event = 'letter_clicked' AND {EXT})                         AS letter,
+    countIf(event = 'letter_intent_confirmed' AND {EXT})                AS letter_yes,
+    countIf(event = 'verdict_shared' AND {EXT})                         AS shared,
+    uniqIf(person_id, properties.is_internal = true)                    AS in_people,
+    countIf(event = 'verdict_shown' AND properties.is_internal = true)  AS in_verdicts
 FROM events
 WHERE timestamp >= now() - INTERVAL 5 DAY AND event NOT LIKE '$%'
 GROUP BY d
@@ -103,7 +109,7 @@ ORDER BY d DESC LIMIT 2
 Q_DIR = """
 SELECT properties.dir AS dir, count() AS n
 FROM events
-WHERE timestamp >= now() - INTERVAL 3 DAY AND """ + KST_YDAY + """ AND event = 'verdict_shown'
+WHERE timestamp >= now() - INTERVAL 3 DAY AND """ + KST_YDAY + """ AND event = 'verdict_shown' AND """ + EXT + """
 GROUP BY dir ORDER BY n DESC
 """
 
@@ -111,7 +117,7 @@ GROUP BY dir ORDER BY n DESC
 Q_FAIL = """
 SELECT properties.reason AS reason, count() AS n
 FROM events
-WHERE timestamp >= now() - INTERVAL 3 DAY AND """ + KST_YDAY + """ AND event = 'verdict_failed'
+WHERE timestamp >= now() - INTERVAL 3 DAY AND """ + KST_YDAY + """ AND event = 'verdict_failed' AND """ + EXT + """
 GROUP BY reason ORDER BY n DESC
 """
 
@@ -119,7 +125,7 @@ GROUP BY reason ORDER BY n DESC
 Q_ONBOARD = """
 SELECT properties.step AS step, uniq(person_id) AS u
 FROM events
-WHERE timestamp >= now() - INTERVAL 3 DAY AND """ + KST_YDAY + """ AND event = 'onboard_step'
+WHERE timestamp >= now() - INTERVAL 3 DAY AND """ + KST_YDAY + """ AND event = 'onboard_step' AND """ + EXT + """
 GROUP BY step ORDER BY u DESC
 """
 
@@ -153,11 +159,11 @@ MSG = {
     "총평_정상":    "질문 {질문}건 전부 판결까지 잘 나갔습니다. 문제 없습니다.",
     "총평_실패":    "질문 {질문}건 중 {실패}건이 판결까지 못 갔습니다. 확인이 필요합니다.",
     "총평_유입없음": "어제는 질문이 하나도 없었습니다. 사람이 안 들어온 건지 봐야 합니다.",
-    "총평_내부만":  "문제는 없지만 어제 쓴 사람이 전부 우리 쪽이라, 이 숫자로 제품을 판단하면 안 됩니다.",
+    "총평_내부만":  "어제 외부 사용자 활동이 없었습니다. 아래 숫자는 전부 0입니다.",
 
     # ── 데이터 요약 블록의 각 줄 ──
-    "숫자_사람":    "외부 {외부}명{외부증감}",
-    "숫자_내부":    " · 내부 {내부}명(제외)",
+    "숫자_사람":    "사용자 {외부}명{외부증감}",
+    "숫자_내부":    "위 숫자에서 내부(팀) {내부}명 · 판결 {내부판결}건은 뺐습니다",
     "숫자_방문":    "방문 {방문}회{방문증감}{일인당}",
     "숫자_일인당":  " · 1인 {일인당}회",
     "숫자_온보딩":  "온보딩 {시작} → {완주} 완주 {완주율}",
@@ -233,8 +239,8 @@ def build_report(cfg):
     if not rows:
         return say("제목", 날짜=kdate(yesterday_kst())) + "\n" + MSG["데이터없음"]
 
-    keys = ["d", "people", "internal_people", "visits", "ob_start", "ob_done",
-            "asked", "verdicts", "failed", "rated", "letter", "letter_yes", "shared"]
+    keys = ["d", "people", "visits", "ob_start", "ob_done", "asked", "verdicts",
+            "failed", "rated", "letter", "letter_yes", "shared", "in_people", "in_verdicts"]
     t = dict(zip(keys, rows[0]))
     p = dict(zip(keys, rows[1])) if len(rows) > 1 else {}
 
@@ -245,7 +251,7 @@ def build_report(cfg):
         L.append(say("총평_실패", 질문=t["asked"], 실패=t["failed"]))
     elif t["asked"] == 0:
         L.append(say("총평_유입없음"))
-    elif t["people"] == 0 and t["internal_people"]:
+    elif t["people"] == 0:
         L.append(say("총평_내부만"))
     else:
         L.append(say("총평_정상", 질문=t["asked"]))
@@ -257,8 +263,7 @@ def build_report(cfg):
     per = say("숫자_일인당", 일인당=round(t["visits"] / t["people"], 1)) if t["people"] else ""
 
     D = ["```",
-         say("숫자_사람", 외부=t["people"], 외부증감=delta(t["people"], p.get("people")))
-         + (say("숫자_내부", 내부=t["internal_people"]) if t["internal_people"] else ""),
+         say("숫자_사람", 외부=t["people"], 외부증감=delta(t["people"], p.get("people"))),
          say("숫자_방문", 방문=t["visits"], 방문증감=delta(t["visits"], p.get("visits")), 일인당=per)]
     if t["ob_start"]:
         D.append(say("숫자_온보딩", 시작=t["ob_start"], 완주=t["ob_done"],
@@ -272,6 +277,8 @@ def build_report(cfg):
                   서신=t["letter"], 서신클릭률=pct(t["letter"], t["verdicts"]))
               + (say("숫자_받을게", 받을게=t["letter_yes"]) if t["letter"] else "")
               + (say("숫자_공유", 공유=t["shared"]) if t["shared"] else "")]
+    if t["in_people"] or t["in_verdicts"]:
+        D.append(say("숫자_내부", 내부=t["in_people"], 내부판결=t["in_verdicts"]))
     D.append("```")
     L += [""] + [d for d in D if d]
 
