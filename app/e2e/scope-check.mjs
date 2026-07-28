@@ -119,6 +119,20 @@ console.log("\n── 표 집계 ──");
   say(t && t.overridden === true, "표와 결론이 어긋나면 overridden 으로 표시(계측용)");
 }
 
+/* ── 되물음 승계 vs 표 우선 ────────────────────────────────────────────────
+   실측(2026-07-28 2회차, P2 Q27): "그래서 뭘 하라는 거야?"(앞 판결 GO)에서 표가 1GO:2STOP 이
+   나왔고, 표 우선 규칙이 GO 를 STOP 으로 뒤집었다. 되물음은 새 판정이 아니라 앞 판결의 풀이이므로
+   방향을 바꾸면 안 된다. App.jsx 의 judge() 안에 이 조건이 살아 있는지 확인한다. */
+console.log("\n── 되물음 승계 ──");
+{
+  const ok = /if \(!_reask\) r1\.direction = _tally\.dir/.test(SRC);
+  say(ok, ok ? "되물음 턴에는 표로 방향을 뒤집지 않음"
+           : "되물음 턴에도 표가 방향을 뒤집는다 — judge() 의 `if (!_reask) r1.direction = _tally.dir` 를 확인하세요");
+  // 되물음이어도 접전 표시(against/total)는 표에서 나와야 한다
+  const ok2 = /r1\.against = _tally\.against; r1\.total = _tally\.total;/.test(SRC);
+  say(ok2, ok2 ? "되물음이어도 접전 수치는 표에서 계산" : "against/total 이 표에서 계산되지 않음");
+}
+
 console.log(`\n=== 스코프·되물음 체크: ${pass}/${pass + fail} PASS ===`);
 if (fail) {
   console.log("\n분류기가 어긋났습니다. src/App.jsx 의 S3_RE / S2_RE / REASK_RE 를 고치세요.");
