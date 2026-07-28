@@ -138,8 +138,29 @@ try {
     await page.waitForFunction(() => (window.__binariEvents || []).some((e) => e.ev === "app_open"), null, { timeout: 10000 });
     const first = await page.evaluate(() => window.__binariEvents[0].ev);
     check("app_open 이 첫 이벤트로 기록", first === "app_open", `first=${first}`);
+
+    // 무료 요금제 한도 방어 — 새로고침해도 방문당 1회만 쌓여야 한다
+    await page.reload();
+    await page.waitForTimeout(1500);
+    const opens = await page.evaluate(() => (window.__binariEvents || []).filter((e) => e.ev === "app_open").length);
+    check("app_open 은 방문당 1회만(새로고침 중복 없음)", opens === 0, `재방문 후 재발사=${opens}`);
     await page.close();
     await ctx.close();
+  }
+
+  /* ── 성능 자동수집($web_vitals)이 꺼졌는지 — 전체 기록의 22%를 먹던 항목 ── */
+  {
+    const ctx = await fresh();
+    const page = await ctx.newPage({ viewport: { width: 390, height: 844 } });
+    const hits = [];
+    page.on("request", (r) => { if (/posthog/i.test(r.url())) hits.push(r.url()); });
+    await page.goto(BASE + "/?trackdebug");
+    await page.waitForTimeout(2500);
+    check("posthog 설정에 성능수집 꺼짐", await page.evaluate(() => {
+      const c = window.posthog && window.posthog.config;
+      return !c || c.capture_performance === false;
+    }));
+    await page.close(); await ctx.close();
   }
 } catch (e) {
   check("실행 중 예외", false, String(e && e.message || e));

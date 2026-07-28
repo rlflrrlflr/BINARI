@@ -80,9 +80,12 @@ async function _initAnalytics() {
     const { default: posthog } = await import("posthog-js");
     posthog.init(AKEY, {
       api_host: import.meta.env.VITE_POSTHOG_HOST || "https://us.i.posthog.com",
-      capture_pageview: false,     // SPA라 무의미
-      capture_pageleave: true,     // 체류시간·바운스율을 잴 유일한 근거. 광고 랜딩 품질 평가에 필수
-      capture_exceptions: true,    // JS 예외 — 없으면 앱이 깨져도 아무도 모른다
+      capture_pageview: false,      // SPA라 무의미
+      capture_pageleave: true,      // 체류시간·바운스율을 잴 유일한 근거. 광고 랜딩 품질 평가에 필수
+      capture_exceptions: true,     // JS 예외 — 없으면 앱이 깨져도 아무도 모른다
+      capture_performance: false,   // $web_vitals 끔 — 전체 기록의 22%를 먹으면서(유저당 11.5건)
+                                    //   성과 분석에도 앱 개선에도 안 쓰였다. 판결 대기시간은
+                                    //   verdict_shown.ms 로 이미 더 직접적으로 재고 있다.
       autocapture: false,
       persistence: "localStorage",
     });
@@ -93,6 +96,18 @@ async function _initAnalytics() {
     try { posthog.register(_superProps); } catch (_) {}
     _flush();                                  // 로드 전에 쌓인 이벤트를 원래 시각으로 전송
   } catch (_) {}
+}
+/* 방문(탭 세션)당 1회만 보내는 계측. 무료 요금제의 기록 한도를 지키기 위한 장치다.
+   같은 사람이 새로고침할 때마다, 수호신을 탭할 때마다 쌓이는 기록은
+   성과 분석에도 앱 개선에도 쓰이지 않으면서 한도만 먹는다.
+   횟수 대신 "이번 방문에 일어났는가"만 남긴다 — 퍼널·전환은 어차피 사람 수 기준으로 본다. */
+function trackOnce(key, ev, props) {
+  try {
+    const k = "binari.once." + key;
+    if (window.sessionStorage.getItem(k)) return;
+    window.sessionStorage.setItem(k, "1");
+  } catch (_) { /* 시크릿 모드 등 저장 불가 — 그냥 보낸다 */ }
+  track(ev, props);
 }
 function track(ev, props) {
   try {
@@ -1843,7 +1858,7 @@ export default function App() {
   const [sharedGone, setSharedGone] = useState(false);  // v75: '나도 물어볼래'로 공유 화면 닫음
   // 1단계 계측은 동의와 무관하게 항상 켠다(2단계 속성만 동의로 게이트)
   // 계측: 세션 시작. 유입은 first-touch(_superProps.ft_*)가 고정 부착하므로 여기선 이번 방문 경로(ref)만 참고용으로 남긴다.
-  useEffect(() => { _consent = readConsent(); _initAnalytics(); let ref = "direct"; try { const sp = new URLSearchParams(window.location.search); ref = sp.get("ref") || sp.get("utm_source") || (sp.get("v") ? "share" : "direct"); } catch (_) {} track("app_open", { returning, ref }); if (sharedIn) track("shared_verdict_view", { dir: sharedIn.d }); }, []);
+  useEffect(() => { _consent = readConsent(); _initAnalytics(); let ref = "direct"; try { const sp = new URLSearchParams(window.location.search); ref = sp.get("ref") || sp.get("utm_source") || (sp.get("v") ? "share" : "direct"); } catch (_) {} trackOnce("app_open", "app_open", { returning, ref }); if (sharedIn) track("shared_verdict_view", { dir: sharedIn.d }); }, []);
   const [saju, setSaju] = useState(mem?.saju || null);
   const [zo, setZo] = useState(mem?.zo || null);
   const [moon, setMoon] = useState(mem?.moon || null);
@@ -2016,7 +2031,7 @@ export default function App() {
   const wakeTapRef = useRef(0);
   const tryWake = () => {                                   // v52: 수동 더블탭(모바일·데스크탑 동일)
     const now = performance.now();
-    if (now - wakeTapRef.current < 350) { wakeTapRef.current = 0; if (!awake) { setAwake(true); track("guardian_wake"); } }
+    if (now - wakeTapRef.current < 350) { wakeTapRef.current = 0; if (!awake) { setAwake(true); trackOnce("guardian_wake", "guardian_wake"); } }
     else { wakeTapRef.current = now; }
   };
   const backToLobby = () => {                               // v56: 판결 화면 탈출구(X · 로비 복귀)
