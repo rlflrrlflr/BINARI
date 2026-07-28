@@ -14,7 +14,7 @@ const results = [];
 const check = (name, pass, note = "") => { results.push({ name, pass, note }); console.log(`${pass ? "PASS" : "FAIL"} — ${name}${note ? " · " + note : ""}`); };
 
 // PW_CHROMIUM: playwright 번들 버전과 설치된 크로미움이 어긋나는 환경(CI·클라우드)에서 경로를 직접 준다
-const browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
+const browser = await chromium.launch((process.env.CHROME_PATH || process.env.PW_CHROMIUM) ? { executablePath: process.env.CHROME_PATH || process.env.PW_CHROMIUM } : {});
 
 // 새 브라우저(=새 localStorage)에서 한 번 열고, app_open 이벤트의 최종 속성을 돌려준다.
 // init 은 페이지 스크립트보다 먼저 실행되므로 사전 상태(동의·신념) 주입에 쓴다.

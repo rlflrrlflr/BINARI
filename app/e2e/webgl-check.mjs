@@ -44,7 +44,7 @@ const brightness = (page) => page.evaluate(() => {
   return s / (im.length / 4);
 });
 
-const b = await chromium.launch({ args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
+const b = await chromium.launch({ executablePath: process.env.CHROME_PATH || undefined, args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
 
 // ── ① WebGL 경로 + 픽셀 + 판결 반응 ──
 {

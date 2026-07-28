@@ -11,7 +11,7 @@ mkdirSync(SHOTS, { recursive: true });
 const results = [];
 const check = (name, pass, note = "") => { results.push({ name, pass, note }); console.log(`${pass ? "PASS" : "FAIL"} — ${name}${note ? " · " + note : ""}`); };
 
-const browser = await chromium.launch();
+const browser = await chromium.launch((process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}));
 const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
 page.setDefaultTimeout(8000);
 const shot = (n) => page.screenshot({ path: `${SHOTS}/${n}.png`, fullPage: false });

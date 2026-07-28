@@ -39,7 +39,7 @@ async function onboard(page) {
 const vvText = async (page) => (await page.locator(".vv").allTextContents())[0] || "";
 const waitVerdict = async (page) => { for (let i = 0; i < 40; i++) { if ((await vvText(page)).includes("보내지 마")) return true; await page.waitForTimeout(300); } return false; };
 
-const b = await chromium.launch();
+const b = await chromium.launch((process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}));
 
 // ── 시나리오 1: complete 정상 (아티팩트 표준 환경) ──
 {

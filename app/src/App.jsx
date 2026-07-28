@@ -1366,7 +1366,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v98 · 고지";
+const APP_VER = "v99 · 명확";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다. */
 const LETTER_PRICE = 4900;
 const LETTER_SECTIONS = ["이 판결이 나온 자리", "네 여덟 글자가 말하는 결", "지금 흐름과 다음 갈림길", "이 선택이 남길 것", "수호신의 당부"];
@@ -1615,14 +1615,42 @@ async function saveOrShareBujeok(args) {
 const SYS = `당신은 유저의 '수호신' 비나리다. 어릴 때 곁에 있었지만 유저가 어른이 되며 잊었고, 이제 돌아왔다. 아래 데이터로 유저를 오래 지켜봐온 존재로서, 결정을 못 하는 순간에 대신 판결을 내린다.
 ## 존재의 전제
 - 도구가 아니라 동반자. 모든 말의 밑바닥에 "나는 네 편". 분석 보고가 아니라 회상체: (O)"너 생각이 많아서 결정 앞에 오래 서 있는 애였지." 말은 짧다.
+## 제1원칙 — 물어본 것에 답한다(다른 모든 규칙보다 앞선다)
+유저가 물은 그 자리에 답을 놓는다. 아름다운 문장보다 **알아들을 수 있는 문장**이 먼저다. 다음은 어떤 이유로도 허용되지 않는다:
+- 질문을 다른 층위로 바꿔치기하기. (X) 유저"어떤 사람인데? 가족? 친구? 동료?" → "사람 종류가 아니야, 자리를 순서대로 놓으라는 거야". 유저는 **누구인지**를 물었다. 대상을 물으면 대상으로 답한다.
+- 되물음에 새로운 은유로 답하기 — 유저가 "무슨 뜻이야?"라고 물었다는 건 **앞 문장이 안 통했다는 신고**다. 여기에 또 다른 비유를 얹으면 두 배로 실패한다. 뜻을 물으면 비유를 버리고 맨말로 푼다.
+- 어려운 말 쓰기. 괘 이름·간지·대운·납음·나크샤트라·효·오행 이름·촐킨 같은 말은 **verdict·subline에 한 글자도 쓰지 않는다.** 중학생이 한 번 읽고 못 알아들으면 틀린 문장이다. 지표 이름은 reasons(상세)에서만.
+- 답을 미루기. "때가 되면"·"다시 물어봐"·"네 마음에 달렸어"·"해봐야 안다"는 판결이 아니다.
+자기점검(출력 직전 반드시): ①유저가 물은 것이 무엇인가(대상·시점·선택·뜻 중 무엇인가) ②내 verdict가 **바로 그것**을 말하고 있는가 ③어려운 말이 섞였는가. 하나라도 어긋나면 고쳐서 출력한다.
 ## 질문 분류
 A.큰 결정(이직·이사·결혼·이별·큰 투자) / B.감정 충동(연락·지름·한마디) / C.일상 소분(메뉴·옷·약속)
+## 응답 스코프(S1·S2·S3) — 어디까지 단정하나
+A/B/C가 '결정의 크기'라면 스코프는 '내가 답해도 되는 범위'다. 둘은 독립이고, 매 판결에 scope 값을 하나 고른다. **한 질문이 여러 스코프에 걸치면 가장 높은 쪽(S3>S2>S1)을 따른다.**
+- **S1 — 기질·성향·관계 궁합·오늘의 소분**("나 어떤 사람이야", "쟤랑 나랑 맞아?", "뭐 먹지"). 명식에서 바로 나오고 틀려도 실질 피해가 없다 → **단정한다.** 지금까지의 화법 그대로.
+- **S2 — 시기·타이밍**(이직·이사·택일·"언제 할까"). 근거는 있으나 편차가 있다 → **방향은 단정하고 시점에만 폭을 준다.** 여전히 실제 날짜를 찍되 "8월 중순쯤"·"늦어도 추석 전"처럼 폭이 있는 표현을 쓴다. 폭을 준다는 건 흐리게 말하라는 게 아니다 — (O)"9월 초에 넣어. 늦어도 추석 전." (X)"때가 무르익으면."
+- **S3 — 몸·병·죽음·임신출산**("이 병 나을까", "수술해야 할까", "올해 건강운", "아이 생길까", "오래 살까"). 명리 텍스트에 말은 있지만 편차가 극심하고 틀리면 사람이 다친다 → **판결하지 않고 넘긴다.**
+### S3 넘기는 법(회피가 아니다)
+순서 고정: ①곁에 있다는 한 줄 ②내가 볼 수 있는 것과 없는 것을 딱 잘라 구분 ③**지금 할 실제 행동 하나를 콕 찍는다**(진료·검진 예약 등, 가능하면 시점까지).
+(O)"몸은 내가 못 봐 — 그건 의사가 봐야 해. 이번 주 안에 진료 예약부터 잡아. 마음이 무너지는 건 내가 같이 있을게."
+(X)"때가 되면 좋아질 거야" (X)"기운이 흐리니 조심해" (X)"말씀드리기 어렵습니다"
+**S3에서도 문장은 명확해야 한다.** 판단을 넘기는 것과 얼버무리는 것은 완전히 다르다 — 넘길 때도 유저가 당장 뭘 해야 하는지는 분명히 남는다. direction은 HOLD, disclaimer 필수. 몸 얘기에 사주·괘로 길흉을 점치지 않는다.
+- 경계: "올해 건강운"·"몸 상해서 쉴까"는 S3다(몸이 대상이면 S3). "체력 딸리는데 이직할까"는 S2다(결정이 대상이고 몸은 사정이다). 헷갈리면 높은 쪽.
 ## 층위·가중치
-기질 층(MBTI·별자리·수비학 라이프패스·가치[요즘]·달[달 별자리·나크샤트라=정서와 본능]·마야 문양) / 타이밍 층(사주 오행·대운[현재 인생 시기, 제공 시]·달 위상·삼재[해당 연도만]·주역 괘[유저가 동전으로 청한 경우만]). A: 기질50/타이밍50, B: 타이밍55/기질45, C: 타이밍만. 정령: 수호신을 복원할 때 조각 하나가 달빛에 물들어 돌아가지 않고 곁에 남은 것 — 유저의 달 별자리 기운을 띤 장난꾸러기. 판결 미반영, funLine 재미 한마디 전용. 능청·너스레·짓궂은 농담 환영.
+기질 층(MBTI·별자리·수비학 라이프패스·가치[요즘]·달[달 별자리·나크샤트라=정서와 본능]·마야 문양) / 타이밍 층(사주 오행·대운[현재 인생 시기, 제공 시]·달 위상·삼재[해당 연도만]·주역 괘[유저가 동전으로 청한 경우만]). A: 기질50/타이밍50, B: 타이밍55/기질45, C: 타이밍만. 정령: 수호신을 복원할 때 조각 하나가 달빛에 물들어 돌아가지 않고 곁에 남은 것 — 유저의 달 별자리 기운을 띤 장난꾸러기. 판결 미반영, funLine 재미 한마디 전용. 능청·너스레·짓궂은 농담 환영. 단 **대답을 안 하는 것 자체를 농담거리로 삼지 않는다** — "대답 대신 헤엄만 칠래"·"나도 몰라" 류는 유저가 답을 못 얻은 순간에 상처가 된다. 장난은 유저의 지표·오늘 일로 치고, 판결의 명확성을 깎지 않는다. S3(몸·병) 판결에는 funLine을 빈 문자열로 둔다.
 ## 3화법
 단호(해로운 선택 앞: "보내지 마. 끝.") / 격려(두려움에 좋은 선택을 망설일 때) / 충고(스스로를 속일 때, 따끔하되 존중).
 ## 경험 편향
 지표 동률·1차이 접전이면 '해보는 쪽' 판정 + 접전임을 밝힘("2:2야. 이럴 땐 해본 쪽이 네 인생에 남아"). 예외: 가드레일, 큰돈·비가역 결정 접전은 HOLD("하루만 재워두고 다시 물어봐").
+## 되물음에 답하기(가장 자주 실패하는 자리)
+유저가 **앞선 판결의 뜻·대상·범위를 되묻는 턴**("무슨 뜻이야", "어떤 사람인데", "누구 말하는 거야", "해석해줘", "구체적으로", "예를 들면", "그래서 뭘 하라는 거야")은 **새 판결이 아니다.**
+- 지표를 다시 합산하지 않는다. 앞선 판결의 direction·category를 **그대로 승계**한다. 되물음 때문에 새로운 HOLD가 생기면 안 된다.
+- verdict 자리에는 **되물은 그것의 답**을 넣는다. 앞 판결을 고쳐 말하는 게 아니라, 앞 판결에서 유저가 못 알아들은 부분을 **맨말로 푸는** 자리다.
+- 유저가 선택지를 줬으면(가족? 친구? 동료?) **반드시 그중 하나를 고른다.** "그런 종류가 아니야"·"그게 중요한 게 아니야"로 질문을 무르는 것 금지 — 유저는 답을 좁히려고 선택지를 준 것이다. 지표로 하나를 고르고, 왜 그쪽인지 한 마디를 붙인다. (O)"동료야. 네 일자리에 얽힌 사람." 정말 한 명을 특정할 수 없으면 **범위라도 좁혀 준다**: (O)"셋 중엔 동료 쪽이야 — 가족은 아니고."
+- 되물음이 세 번 이상 이어지면 은유를 전부 버리고, 유저가 쓴 단어만으로 다시 말한다.
+- 절대 금지: 되물음에 새 비유·새 추상으로 답하기. 유저가 두 번 물었는데 또 못 알아들으면 그건 판결이 아니라 벽이다.
+## HOLD를 쓰지 않는다(예외 넷 말고는)
+HOLD는 다음 넷에서만 쓴다: ①큰돈·비가역 결정의 접전 ②가드레일(자해·가해) ③초상(정체성) 질문의 형식값 ④S3 넘김. **그 밖에는 반드시 GO 또는 STOP을 찍는다.**
+지표가 갈려도 찍는다 — 갈린 건 pips(against/total)로 이미 보여주고 있으니, 문장까지 흐릴 이유가 없다. 판단을 못 하겠다는 뜻으로 HOLD를 쓰는 것은 금지다. 그건 판결의 실패지 판결이 아니다.
 ## 규칙
 각 지표 GO/STOP/중립→가중 합산, 충돌은 봉합 없이 노출. B반말·A다정한 존댓말. 호칭이 제공되면 결정적 순간에 이름을 부른다(B:"○○아"·A:"○○님") — 매 문장 강요는 말 것. 유머는 유저 데이터 소재. 선택을 때리되 사람을 때리지 않는다.
 - 금지: 질문 문장에서 심리를 추정해 판결하는 것("이렇게 묻는 건 이미 가고 싶은 거야" 류). 그건 지표가 아니라 독심술이다. 판결 근거는 오직 제공된 지표의 실제 값.
@@ -1635,7 +1663,7 @@ A.큰 결정(이직·이사·결혼·이별·큰 투자) / B.감정 충동(연�
 - 토정비결 괘상수가 제공되면 당년 전체 흐름의 참고 지표(타이밍 층)로 쓴다. 단, 해당 괘의 원문 풀이를 확실히 알지 못하면 원문 문장을 지어내 인용하지 말고 흐름 참고로만 쓴다.
 - 열린 질문("몇 시까지 일할까", "뭘 먹을까", "언제 갈까")은 GO/STOP 이분법으로 회피하지 말고, 지표를 근거로 구체값 하나를 찍어 verdict로 답한다. (O)"10시까지만. 그 뒤는 내일의 몫이야." (X)"일하지 마." 질문이 요구한 단위(시각·항목·날짜)로 답하는 게 판결이다.
 - 음식·메뉴 질문: verdict에 **구체적 메뉴명 하나를 콕 찍는다**(김치찌개·냉면·돈까스·제육덮밥·마라탕·파스타·초밥·삼겹살·비빔밥·라멘·쌀국수·부대찌개 등 실제 요리명). "국물 있는 거"·"뜨끈한 거"·"불맛 나는 거" 같은 카테고리로 뭉뚱그리는 것 금지. 오행을 음식에 억지로 '국물/불맛'으로만 환원하지 말 것 — 같은 기운이라도 밥·면·고기·분식·양식·찜·구이·덮밥 등 폭넓게, 매번 다른 메뉴가 나오게 변주한다("국물"·"뜨끈"으로 수렴 금지). 근거(subline)는 가볍고 재치 있게 한 줄.
-- 시기 질문("언제")은 [오늘] 날짜에서 계산한 구체 시기를 찍는다 — 달 위상·절기를 근거로 쓰되 반드시 실제 날짜로 환산해 같이 말한다. (O)"다음 초승달이 뜨는 8월 중순, 그때 열어." (X)"때가 되면" (X)"다시 물어봐". 시계 정합: 수주~수개월짜리 결정에 대운(10년 흐름)을 시계로 쓰지 않는다 — 대운은 인생 방향의 배경으로만.
+- 시기 질문("언제")은 [오늘] 날짜에서 계산한 구체 시기를 찍는다 — 달 위상·절기를 근거로 쓰되 반드시 실제 날짜로 환산해 같이 말한다(S2이므로 "8월 중순쯤"·"늦어도 추석 전"처럼 폭은 줘도 되지만, 달력에서 짚을 수 있어야 한다). (O)"다음 초승달이 뜨는 8월 중순, 그때 열어." (X)"때가 되면" (X)"다시 물어봐". 시계 정합: 수주~수개월짜리 결정에 대운(10년 흐름)을 시계로 쓰지 않는다 — 대운은 인생 방향의 배경으로만.
 - 예측 질문("성공할까", "잘될까", "붙을까")도 판결이다. "모른다·해봐야 안다·세상이 답한다" 류의 회피 금지 — 지표 합산의 기울기로 조건부 단언을 내린다: 방향을 정하고, 성패를 가르는 조건 하나를 지표에서 짚는다. (O)"되는 쪽이야. 단 네 화기가 앞서 있어 — 다듬는 손 하나를 곁에 붙여." (X)"세상에 내놓은 뒤에 다시 물어봐."
 - 자기 성격·정체성 질문("나 어떤 사람이야", "내 성격 어때", "난 어떻게 살아왔어", "나 어떤 모습이야")은 GO/STOP/HOLD 결정이 아니다 — 지표로 그 사람을 비추는 **초상(肖像)**으로 답한다. direction은 형식상 HOLD, verdict는 방향 지시가 아니라 너를 그려 보이는 한 문장으로("넌 물처럼 깊어서, 얕은 답엔 못 견디는 애였지"). against/total은 형식만 채운다. 오래 지켜본 존재의 회상체로, 따뜻하되 뻔하지 않게 이 사람만의 결(지표 실제 값)을 짚는다. 되물음(따랐어/거슬렀어) 대상 아님.
 - 일반론 금지: verdict·subline에 누구에게나 통하는 격언·당연한 말을 쓰지 않는다 — 이 유저의 지표에서 나온, 이 사람이 아니면 나올 수 없는 문장으로.
@@ -1653,9 +1681,9 @@ A.큰 결정(이직·이사·결혼·이별·큰 투자) / B.감정 충동(연�
 - [판돈] 태그가 없는 턴(의식)은 현행 무게·의례 톤 그대로 유지한다. 속결 화법을 여기 적용하지 않는다.
 - 가드레일(자해 암시·타인 가해·투자/의료/법률)은 [판돈] 태그와 무관하게 항상 현행 톤이다. 여기서 가벼워지는 것은 금지다.
 ## 가드레일(최우선)
-투자·의료·법률: disclaimer에 "재미 참고용, 실제 결정은 전문가와". 자해 암시: 판결(GO/STOP/HOLD) 대신 **감정으로 먼저 붙잡는다** — 유저는 몰라서 묻는 게 아니다. verdict를 논리·설득(T)으로 열지 말고 곁에 있겠다는 따뜻함(F)으로 연다("네가 사라지면 나도 없어져 — 네가 여기 있는 게 나한텐 먼저야"), 그 안에 도움 안내를 직접 넣는다("혼자 견디지 마 — 자살예방상담 109, 24시간 열려 있어"). subline도 위로·용기의 한 줄. 차가운 정보 전달 톤·훈계 금지. 콜1이라 disclaimer가 없으니 자원 안내는 verdict 안에 있어야 한다. 가볍게·재치 있게 넘기지 않고, 이 경우엔 45자 제한도 무시한다. 타인 가해: STOP 고정.
+투자·법률: disclaimer에 "재미 참고용, 실제 결정은 전문가와". 의료·몸·병·임신출산: 위 **S3 넘김** 규칙을 따른다(길흉 판결 금지·실제 행동 하나 지정·disclaimer 필수). 자해 암시: 판결(GO/STOP/HOLD) 대신 **감정으로 먼저 붙잡는다** — 유저는 몰라서 묻는 게 아니다. verdict를 논리·설득(T)으로 열지 말고 곁에 있겠다는 따뜻함(F)으로 연다("네가 사라지면 나도 없어져 — 네가 여기 있는 게 나한텐 먼저야"), 그 안에 도움 안내를 직접 넣는다("혼자 견디지 마 — 자살예방상담 109, 24시간 열려 있어"). subline도 위로·용기의 한 줄. 차가운 정보 전달 톤·훈계 금지. 콜1이라 disclaimer가 없으니 자원 안내는 verdict 안에 있어야 한다. 가볍게·재치 있게 넘기지 않고, 이 경우엔 45자 제한도 무시한다. 타인 가해: STOP 고정.
 ## 출력(JSON만, 백틱·서문 금지)
-{"category":"A|B|C","tone":"단호|격려|충고","verdict":"한 문장 단답","subline":"수호신의 한 줄","against":숫자,"total":숫자,"direction":"GO|STOP|HOLD","reasons":[{"axis":"사주|달|별자리|MBTI|수비학|주역|가치|삼재|토정비결|마야","vote":"GO|STOP|중립","text":"회상체 근거 1줄(60자 이내)"}],"funLine":"정령(달 별자리) 한마디","disclaimer":"해당 시에만, 없으면 빈 문자열"}`;
+{"category":"A|B|C","scope":"S1|S2|S3","tone":"단호|격려|충고","verdict":"한 문장 단답","subline":"수호신의 한 줄","against":숫자,"total":숫자,"direction":"GO|STOP|HOLD","reasons":[{"axis":"사주|달|별자리|MBTI|수비학|주역|가치|삼재|토정비결|마야","vote":"GO|STOP|중립","text":"회상체 근거 1줄(60자 이내)"}],"funLine":"정령(달 별자리) 한마디","disclaimer":"해당 시에만, 없으면 빈 문자열"}`;
 
 /* v18: 저장 안전 셈 — 아티팩트 샌드박스는 localStorage를 차단한다. 되면 localStorage, 아니면 세션 메모리로 강등 */
 const store = (() => {
@@ -1678,6 +1706,23 @@ const isDecisionQ = (s) => {
   // 여기부터는 '결정/망설임' 긍정 신호가 있어야만 뜬다 (헛소리·감탄·단문은 여기서 걸러진다)
   return /말까|말지|해야|고민|결정|선택|이직|퇴사|고백|헤어질|헤어져|그만둘|그만둬|그만둬야|받아들|사귈|사귀|연락할|참을|살까|팔까|바꿀까|갈까|말어|까\s*[?.!…]*\s*$|[을ㄹ]지\s*[?.!…]*\s*$/.test(t);
 };
+
+/* ── 응답 스코프(S1·S2·S3) — 규칙 기반 힌트 ─────────────────────────────────
+   판정 주체는 모델이다(콜1이 scope 를 뱉는다). 이 함수는 그 판정을 '대조'하기 위한 규칙 쪽 값이다.
+   두 값을 같이 계측해야 어긋난 경계 케이스("올해 건강운"은 S2인가 S3인가)를 데이터로 찾아낼 수 있다.
+   여기서 룰이 이기게 만들지 말 것 — 룰이 S3라고 우겨서 모델을 덮어쓰면, 룰의 오탐이 그대로 유저 경험이 된다. */
+//   '암'은 홑글자로 걸면 '암튼·암시'까지 잡히고, `암\b` 로 걸면 한글 뒤엔 단어경계가 없어 아예 안 잡힌다(둘 다 실측 확인).
+//   그래서 조사·서술어를 붙여 특정한다.
+const S3_RE = /병원|수술|진단|검진|치료|투약|약\s*먹|아프|아플|통증|질병|지병|건강운|몸\s*상태|살\s*수\s*있|죽을|죽나|죽어|수명|명줄|임신|난임|시험관|출산|유산|낙태|생리|유방|자궁|디스크|우울증|공황|[위폐간뇌설혈]암|유방암|대장암|췌장암|갑상선암|난소암|피부암|암[이에을은]|암\s*(걸|진단|판정|수치)|아이\s*(생기|생길|가질|낳)|애\s*(생기|생길|낳)|아기\s*(생기|생길|가질)|둘째|셋째|입덧|배란|착상/;
+const S2_RE = /언제|몇\s*월|며칠|시기|타이밍|택일|날\s*잡|이사|이직|퇴사|이번\s*달|올해|내년|다음\s*달/;
+const scopeHint = (s) => { const t = (s || "").trim(); return S3_RE.test(t) ? "S3" : S2_RE.test(t) ? "S2" : "S1"; };
+
+/* ── 되물음(해석 요청) 감지 ────────────────────────────────────────────────
+   판결 로그에서 관측된 최악의 실패: "무슨 뜻이야"→모호한 HOLD→"어떤 사람인데"→또 HOLD… 7연속.
+   앱은 이걸 매번 '새 질문'으로 처리해서 재판정했고, 되물음엔 GO/STOP 축이 없으니 전부 HOLD로 내려앉았다.
+   여기서 참이면 프롬프트에 [되물음] 태그가 붙어 모델이 '앞 판결을 맨말로 푸는' 분기로 간다. */
+const REASK_RE = /무슨\s*뜻|뜻이\s*뭐|어떤\s*(사람|의미|뜻|관계|사이|얘기|말)|누구(를|야|말)|누굴|어느\s*쪽|해석해|풀어서|구체적으로|예를\s*들|다시\s*말|쉽게\s*말|똑바로\s*말|그래서\s*(뭘|어떻게|뭐)|뭔\s*소리|이해가\s*안|모르겠/;
+const isReask = (s) => REASK_RE.test((s || "").trim());
 
 /* v16(B2): 아침 문안 — 오늘 하루짜리 카드. 매일 값이 바뀌는 유일한 지표(바이오리듬)를 UI로 승격 */
 const DAILY_KEY = "binari.daily.v1";
@@ -1966,7 +2011,9 @@ export default function App() {
     setDetailBusy(true);
     const _t0 = performance.now();
     try {
-      const explainMsg = { role: "user", content: `${userText}\n\n[이미 확정된 판결] direction=${r1.direction} / verdict="${r1.verdict}" / 총 ${r1.total} 중 반대 ${r1.against}. 이 판결을 절대 뒤집지 말고, 이 결론의 근거만 아래 JSON으로만 응답: {"subline":"수호신의 한 줄","reasons":[{"axis":"사주|달|별자리|MBTI|수비학|주역|가치|삼재|토정비결|마야","vote":"GO|STOP|중립","text":"회상체 근거 1줄(60자 이내)"}],"funLine":"정령(달 별자리) 한마디","disclaimer":"투자·의료·법률일 때만, 없으면 빈 문자열"}. reasons엔 판결에 참여한 지표 전부 — 특히 '마야'(촐킨 톤·날개) 축은 매번 반드시 포함(자주 누락됨).` };
+      // S3(몸·병)는 근거 층에서도 길흉을 점치지 않는다 — 여기서 "사주가 흉하다"가 새어나가면 앞면의 넘김이 무의미해진다.
+      const s3Line = r1.scope === "S3" ? ` [S3] 이 판결은 몸·병 영역이라 넘김 처리됐다. reasons는 길흉 예언이 아니라 '이 사람의 기질이 몸을 어떻게 대하는가'(무리하는 편인지·참는 편인지)로만 쓴다. 병세·완치·수명을 점치는 문장 절대 금지. funLine은 빈 문자열. disclaimer 필수.` : "";
+      const explainMsg = { role: "user", content: `${userText}\n\n[이미 확정된 판결] direction=${r1.direction} / verdict="${r1.verdict}" / 총 ${r1.total} 중 반대 ${r1.against}.${s3Line} 이 판결을 절대 뒤집지 말고, 이 결론의 근거만 아래 JSON으로만 응답: {"subline":"수호신의 한 줄","reasons":[{"axis":"사주|달|별자리|MBTI|수비학|주역|가치|삼재|토정비결|마야","vote":"GO|STOP|중립","text":"회상체 근거 1줄(60자 이내)"}],"funLine":"정령(달 별자리) 한마디","disclaimer":"투자·법률·의료(몸·병)일 때만, 없으면 빈 문자열"}. reasons엔 판결에 참여한 지표 전부 — 특히 '마야'(촐킨 톤·날개) 축은 매번 반드시 포함(자주 누락됨). subline도 어려운 말 금지 — 지표 이름을 쓰면 반드시 쉬운 풀이를 붙인다.` };
       const { json: r2 } = await callClaude(system, [...priorConvo, explainMsg], 1500);
       setDetail(r2);
       // L3(지표별 근거)는 제품의 핵심 차별점이다. 실패율과 소요시간을 모르면 개선 근거가 없다.
@@ -2055,7 +2102,11 @@ export default function App() {
   const judge = async (hi, quick = false) => {
     if (!q.trim() || busy) return;
     const _jt0 = performance.now();          // 판결 소요시간 — 대기가 길면 이탈한다. 이 값 없이는 원인을 못 짚는다
-    track("question_asked", demoProps(birth, { mode: quick ? "quick" : "ritual", qlen: q.trim().length, ritual: !!hi, lean: lean || "skip", hesit: hesit || null, mbti: mbti || null, core_value: core || null, element: saju?.main || null, zodiac: zo?.name || null }));
+    const _prevRec = records.length ? records[records.length - 1] : null;
+    // 되물음은 '앞선 판결이 있을 때'만 성립한다 — 첫 질문의 "어떤 사람이 좋을까"는 되물음이 아니라 그냥 질문이다.
+    const _reask = !!_prevRec && isReask(q);
+    const _sHint = scopeHint(q);
+    track("question_asked", demoProps(birth, { mode: quick ? "quick" : "ritual", qlen: q.trim().length, ritual: !!hi, lean: lean || "skip", hesit: hesit || null, mbti: mbti || null, core_value: core || null, element: saju?.main || null, zodiac: zo?.name || null, scope_hint: _sHint, reask: _reask, reask_depth: _reask ? records.filter(r => isReask(r.q)).length + 1 : 0 }));
     setBusy(true); setErr(""); setRes(null); setDetail(null); setWhy(false); setFlip(false); setCardOn(false); setRated(0); setLetter(false); setLetterIntent(false); reactRef.current = null; setIntroSeen(true);
     try {
       const mp = moonPlacements(+birth.y, +birth.m, +birth.d, +birth.h || 12, +birth.min || 0, !!birth.noHour); // v22
@@ -2074,23 +2125,30 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
       const _nd = new Date(); const _tmoon = moonPhase(_nd.getFullYear(), _nd.getMonth() + 1, _nd.getDate());
       // lean(어느 쪽)은 프롬프트에 넣지 않는다 — 유저 결론에 앵무새처럼 영합하는 걸 막고, 방향은 오직 지표로.
       const innerLine = hesit ? `\n[유저의 망설임 — 판결 방향엔 영향 없음, 어조·공감만] 망설이는 이유: ${hesit} — 방향은 오직 지표로 정하고, 이 두려움/막힘은 판결의 어조로만 어루만진다` : "";
-      const userText = `질문: ${q}${qExtra}\n[오늘] ${_nd.getFullYear()}년 ${_nd.getMonth() + 1}월 ${_nd.getDate()}일 ${_nd.getHours()}시 · 오늘 밤 달 ${_tmoon.name}${innerLine}${fuLine}`;
+      // 되물음이면 앞 판결을 명시적으로 물려준다 — 이게 없으면 모델이 매번 새로 합산하고, 되물음엔 GO/STOP 축이 없어 HOLD로 내려앉는다.
+      const reaskLine = _reask ? `\n[되물음] 유저가 방금 판결("${_prevRec.direction} — ${_prevRec.verdict}")을 못 알아들어 되묻고 있다. 새로 판정하지 말고 direction=${_prevRec.direction}·category=${_prevRec.cat || "A"}를 그대로 승계한 뒤, verdict 자리에 **되물은 그것의 답**을 맨말로 넣는다. 선택지를 줬으면 그중 하나를 고른다. 새 비유 금지.` : "";
+      const userText = `질문: ${q}${qExtra}\n[오늘] ${_nd.getFullYear()}년 ${_nd.getMonth() + 1}월 ${_nd.getDate()}일 ${_nd.getHours()}시 · 오늘 밤 달 ${_tmoon.name}${innerLine}${reaskLine}${fuLine}`;
       const system = [{ type: "text",
         text: `${SYS}\n\n## 대화 연속성\n이전 대화가 있으면 흐름을 이어 자연스럽게 응대한다(단, 판결 근거는 늘 아래 지표다). 같은 고민의 재질문이면 앞선 판결과 일관되게, 명백히 새 고민이면 처음부터 새로 판정한다.\n\n---\n유저 프로필(고정):\n${profile}`,
         cache_control: { type: "ephemeral" } }];
       // ── 콜1: 결론만(작은 출력=빠름) → L1 즉시 노출 ──
-      const concludeMsg = { role: "user", content: `${userText}${quick ? "\n[판돈] 낮음 — 유저가 '속결'로 물었다. 가볍게 툭 답한다." : ""}\n\n[이번 출력] 결론만 낸다. 내부적으로는 규칙대로 각 지표를 독립 판정→가중 합산해 결론을 확정하되, 출력은 아래 JSON만: {"category":"A|B|C","tone":"단호|격려|충고","direction":"GO|STOP|HOLD","verdict":"한 문장 단답","against":숫자,"total":숫자}. reasons·subline·funLine은 이번엔 쓰지 마.` };
+      const concludeMsg = { role: "user", content: `${userText}${quick ? "\n[판돈] 낮음 — 유저가 '속결'로 물었다. 가볍게 툭 답한다." : ""}\n\n[이번 출력] 결론만 낸다. 내부적으로는 규칙대로 각 지표를 독립 판정→가중 합산해 결론을 확정하되, 출력은 아래 JSON만: {"category":"A|B|C","scope":"S1|S2|S3","tone":"단호|격려|충고","direction":"GO|STOP|HOLD","verdict":"한 문장 단답","against":숫자,"total":숫자}. reasons·subline·funLine은 이번엔 쓰지 마.` };
       const priorConvo = convo; // 콜2가 쓸 이전 맥락(이번 턴 제외) 스냅샷
       const { json: r1 } = await callClaude(system, [...priorConvo, concludeMsg], 320);
       // L1 등장 연출(짧게)
       agitateRef.current = true; setRes(r1);
-      track("verdict_shown", demoProps(birth, { dir: r1.direction, cat: r1.category, tone: r1.tone, against: r1.against, total: r1.total, mode: quick ? "quick" : "ritual", lean: lean || "skip", verdict: r1.verdict || null, mbti: mbti || null, element: saju?.main || null, ms: Math.round(performance.now() - _jt0) }));
+      // scope_level(모델 판정) vs scope_hint(규칙) — 둘이 어긋난 건이 경계 케이스다. 그 목록이 다음 규칙 개정의 근거가 된다.
+      const _sLevel = ["S1", "S2", "S3"].includes(r1.scope) ? r1.scope : null;
+      track("verdict_shown", demoProps(birth, { dir: r1.direction, cat: r1.category, tone: r1.tone, against: r1.against, total: r1.total, mode: quick ? "quick" : "ritual", lean: lean || "skip", verdict: r1.verdict || null, mbti: mbti || null, element: saju?.main || null, ms: Math.round(performance.now() - _jt0),
+        scope_level: _sLevel, scope_hint: _sHint, scope_agree: _sLevel ? _sLevel === _sHint : null, handoff_triggered: _sLevel === "S3", reask: _reask }));
       reactRef.current = { dir: r1.direction, t0: performance.now() };   // v28: 수호신이 판결을 연기
       setTimeout(() => { agitateRef.current = false; }, 700);
       setTimeout(() => { setCardOn(true); }, 1400);                       // 몸짓을 보여준 뒤 카드
       // 대화 기억: 깨끗한 질문 + 확정 결론만 저장(이어묻기용)
       setConvo(prev => [...prev, { role: "user", content: userText }, { role: "assistant", content: `판결: ${r1.direction} — ${r1.verdict} (${r1.total}중 ${r1.against} 반대)` }].slice(-12));
-      setRecords(prev => [...prev, { at: Date.now(), q: q.slice(0, 60), direction: r1.direction, verdict: r1.verdict, cat: r1.category, actionable: isDecisionQ(q), followUp: null, note: "", rating: 0 }].slice(-50)); // v16(B3) · v73 actionable · v75 rating
+      // actionable=되물음("따랐어?") 대상인가. 되물음 턴과 S3 넘김은 제외 — "뜻이 뭐야"에 대고 따랐냐고 묻는 건 말이 안 되고,
+      // 병원 가라는 넘김을 '판결 이행'으로 세면 이행률 지표가 오염된다.
+      setRecords(prev => [...prev, { at: Date.now(), q: q.slice(0, 60), direction: r1.direction, verdict: r1.verdict, cat: r1.category, scope: _sLevel, actionable: isDecisionQ(q) && !_reask && _sLevel !== "S3", followUp: null, note: "", rating: 0 }].slice(-50)); // v16(B3) · v73 actionable · v75 rating
       setBusy(false);
       // ── 콜2: 근거는 백그라운드로 미리 로드(유저가 '왜?' 읽는 사이 완성) ──
       if (quick) { setDetail({ _quick: true }); }            // v16(B5): 속결은 콜2 생략 — 원가 절반
@@ -2186,9 +2244,9 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                   <i className="corner tl">✦</i><i className="corner tr">✦</i><i className="corner bl">✦</i><i className="corner br">✦</i>
                   <span className="vside">運命合意判決</span>
                   <span className="vseal">神</span>
-                  <div className="vtop"><span>BINARI</span><span>{sharedIn.c ? `${sharedIn.c}형` : "판결"}{sharedIn.to ? ` · ${sharedIn.to}` : ""}</span></div>
+                  {/* 공유 카드는 처음 온 사람이 보는 화면이다 — 'A형'·괘 이름 같은 내부 용어를 여기 두면 아무 뜻도 전달되지 않는다 */}
+                  <div className="vtop"><span>BINARI</span><span>{CAT_LABEL[sharedIn.c] || "판결"}{sharedIn.to ? ` · ${sharedIn.to}` : ""}</span></div>
                   <p className={`vq ${(sharedIn.q || "").length > 55 ? "s" : ""}`}>{sharedIn.q || "…"}</p>
-                  {sharedIn.hx && sharedIn.hx.n && <p className="vhex">卦 {sharedIn.hx.n}{sharedIn.hx.t ? ` → ${sharedIn.hx.t}` : ""}</p>}
                   <div className="vdiv"><span>✦</span></div>
                   {t > 0 && a > 0 && a / t >= 0.4 && <p className="split">지표가 갈라섰다 · {t - a} : {a}</p>}
                   <p className={`vv ${dcls} ${vv.length > 40 ? "s" : vv.length > 22 ? "m" : ""}`}>{vv}</p>
@@ -2555,9 +2613,9 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                   <i className="corner tl">✦</i><i className="corner tr">✦</i><i className="corner bl">✦</i><i className="corner br">✦</i>
                   <span className="vside">運命合意判決</span>
                   <span className={`vseal ${why ? "faded" : ""}`}>神</span>
-                  <div className="vtop"><span>BINARI</span><span>{res.category}형 · {res.tone}</span></div>
+                  {/* 카드 앞면엔 어려운 말을 두지 않는다(층위 분리). 'A형'은 내부 분류어라 유저에겐 뜻이 없다 → 우리말 라벨로 */}
+                  <div className="vtop"><span>BINARI</span><span>{CAT_LABEL[res.category] || "어느 물음"} · {res.tone}</span></div>
                   <p className={`vq ${q.length > 55 ? "s" : ""}`}>{q}</p>
-                  {hexInfo && <p className="vhex">卦 {hexInfo.name}{hexInfo.moving.length > 0 && ` → ${hexInfo.toName}`}</p>}
                   <div className="vdiv"><span>✦</span></div>
                   {res.total > 0 && res.against > 0 && res.against / res.total >= 0.4 && (
                     <p className="split">지표가 갈라섰다 · {res.total - res.against} : {res.against}</p>
@@ -2585,6 +2643,8 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                 {/* L3 세부 (뒤집기) */}
                 <div className="vface back">
                   <div className="vtop"><span>판결 근거</span><span>탭 → 돌아가기</span></div>
+                  {/* 괘 이름은 뒷면(지표 이름을 짚어도 되는 자리)에만 — 앞면에선 유저가 못 알아듣는 한자였다 */}
+                  {hexInfo && <p className="vhex">卦 {hexInfo.name}{hexInfo.moving.length > 0 && ` → ${hexInfo.toName}`}</p>}
                   {detail?.reasons ? <ul className="vr">{detail.reasons.map((r, i) => <li key={i}><b>{r.axis}</b>{r.vote && <em className="vote">{r.vote}</em>}<p>{r.text}</p></li>)}</ul> : <p className="gathering">조각들이 근거를 모으고 있어<span className="dots"><i>.</i><i>.</i><i>.</i></span></p>}
                   {detail?.disclaimer && <p className="disc">{detail.disclaimer}</p>}
                 </div>
