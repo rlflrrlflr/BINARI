@@ -147,8 +147,7 @@ FAIL_KO = {
 # ══════════════════════════════════════════════════════════════════════════════
 MSG = {
     # ── 머리말 ──
-    "제목":        "비나리 데일리 리포트",
-    "인사":        "{날짜}",                 # 날짜+요일만. 다른 말은 넣지 않기로 함(2026-07-28 결정)
+    "제목":        "비나리 데일리 리포트 - {날짜}",   # 날짜+요일만. 다른 말은 넣지 않기로 함(2026-07-28 결정)
 
     # ── 총평: 넷 중 하나만 나간다 ──
     "총평_정상":    "질문 {질문}건 전부 판결까지 잘 나갔습니다. 문제 없습니다.",
@@ -194,6 +193,14 @@ def say(key, **kw):
         return tpl
 
 
+KST_TZ = datetime.timezone(datetime.timedelta(hours=9))
+
+
+def yesterday_kst():
+    """리포트가 다루는 날 = 한국 날짜로 어제. 데이터를 못 가져왔을 때 제목에 쓴다."""
+    return (datetime.datetime.now(KST_TZ) - datetime.timedelta(days=1)).date()
+
+
 def kdate(v):
     """2026-07-28 → 7/28(화). 매일 보는 리포트라 연도는 빼고 요일을 붙인다."""
     s = str(v)[:10]
@@ -224,14 +231,14 @@ def build_report(cfg):
     """
     rows = hogql(cfg, Q_DAILY)
     if not rows:
-        return MSG["제목"] + "\n" + MSG["데이터없음"]
+        return say("제목", 날짜=kdate(yesterday_kst())) + "\n" + MSG["데이터없음"]
 
     keys = ["d", "people", "internal_people", "visits", "ob_start", "ob_done",
             "asked", "verdicts", "failed", "rated", "letter", "letter_yes", "shared"]
     t = dict(zip(keys, rows[0]))
     p = dict(zip(keys, rows[1])) if len(rows) > 1 else {}
 
-    L = [MSG["제목"], say("인사", 날짜=kdate(t["d"]))]
+    L = [say("제목", 날짜=kdate(t["d"]))]
 
     # ── 총평: 이슈 유무를 한 문장으로 먼저 알린다 ──
     if t["failed"]:
