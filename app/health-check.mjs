@@ -135,6 +135,10 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
       fix: "'무리하지 마' 같은 누구에게나 하는 말을 막는 규칙입니다. 이게 빠지면 운세 앱일 이유가 사라집니다." },
     { name: "뒷면 용어·풀이 병기", pat: /반드시 쉬운 풀이를 붙여 병기한다/,
       fix: "사주 보러 가면 용어 뒤에 풀이를 붙여주듯, 근거는 '용어 — 쉬운 풀이' 형식이어야 합니다." },
+    { name: "희소성 통계 생성 금지", pat: /희소성 통계·비교 일화 생성 절대 금지/,
+      fix: "'100명 중 1명' 류 지어낸 숫자를 막는 규칙입니다. 재물 확정 서술 완화와 한 몸입니다 — 이게 빠지면 완화가 거짓말 제조기가 됩니다." },
+    { name: "명식 함수(십성·신살)", pat: /function sipseongDist\(/,
+      fix: "상세 리포트와 프로필 주입의 재료입니다. 사라지면 v101 리포트가 통째로 빕니다." },
     { name: "scope 계측", pat: /scope_level:/,
       fix: "S3 진입률·이탈률을 못 재면 스코프 설계가 맞는지 영영 알 수 없습니다. verdict_shown 의 scope_level/handoff_triggered 를 확인하세요." },
   ];

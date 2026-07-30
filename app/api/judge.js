@@ -1,5 +1,8 @@
 /* 비나리 판결 프록시 — API 키는 이 함수(서버) 안에서만 산다.
    Vercel 환경변수: ANTHROPIC_API_KEY(필수) · BINARI_MODEL(선택, 기본 claude-sonnet-5) · ALLOWED_ORIGIN(선택, 미설정 시 기본 허용 목록)
+   v101 — 콜1/콜2 모델 분리(선택): BINARI_MODEL_CALL1 / BINARI_MODEL_CALL2. 미설정 시 BINARI_MODEL 하나로 동작(현행 그대로).
+     구분은 max_tokens 800 경계(아래 로그와 동일 기준). 판결(콜1)을 바꾸기 전엔 반드시 평가 워크플로로
+     GUARD·REASK·S3 를 먼저 돌려볼 것 — 콜1이 가드레일(자해 감지)·스코프·표 판정을 전부 지고 있다.
    방어(v54): Origin 필수+허용목록 · 본문 크기 상한 · max_tokens 클램프 · SYS 프리픽스 대조(임의 프롬프트 주입 차단).
    방어(v76): CORS 응답 헤더+프리플라이트 · IP 레이트리밋 · 상류 에러 원문 미노출.
 
@@ -105,7 +108,11 @@ export default async function handler(req, res) {
     const r = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({ model: process.env.BINARI_MODEL || "claude-sonnet-5", max_tokens: mt, system, messages, thinking: { type: "disabled" } }),
+      body: JSON.stringify({
+        // 콜1(판결)과 콜2(근거)의 모델을 따로 지정할 수 있다 — 경계는 로그의 call 판정과 동일(mt<=800=콜1)
+        model: (mt <= 800 ? process.env.BINARI_MODEL_CALL1 : process.env.BINARI_MODEL_CALL2) || process.env.BINARI_MODEL || "claude-sonnet-5",
+        max_tokens: mt, system, messages, thinking: { type: "disabled" },
+      }),
     });
     const data = await r.json();
 

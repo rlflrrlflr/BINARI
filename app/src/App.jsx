@@ -319,9 +319,143 @@ function calcSaju(y, m, d, h, mi, hourUnknown, lon = 126.978) {
   return {
     pillars: { 년: GAN[yG] + JI[yJ], 월: GAN[mG] + JI[mJ], 일: GAN[dG] + JI[dJ], 시: hG !== null ? GAN[hG] + JI[hJ] : "미상" },
     counts: cnt, main, dayGan: GAN[dG], yJ,
+    idx: { yG, yJ, mG, mJ, dG, dJ, hG, hJ },   // v101: 십성·신살·택일·세운 계산용 원 인덱스
+
     nayin: NAYIN[Math.floor((((sy - 4) % 60 + 60) % 60) / 2)],   // v22: 납음오행
   };
 }
+
+/* ── 명리 심화(v101): 십성·신살·충/원진·택일·세운·직업 ───────────────────────
+   철학관 리딩의 어휘("재물복"·"암록"·"호랑이띠 조심"·"말날이 좋아"·"29년부터 풀려")를
+   지표로 갖추는 작업. 전부 순수 함수·정적 조회 — LLM 이 지어낼 여지가 없다.
+   ⚠ 상세 리포트(카드 뒷면)·프로필 주입 전용. votes 축을 신설하지 않는다(v100 tallyVotes 분모 보존).
+   ⚠ 지지의 십성은 지시서의 '인덱스 홀짝'이 아니라 지장간 정기(본기) 기준으로 구현했다 —
+     자(계)·오(정)·사(병)·해(임)는 겉 음양과 본기 음양이 뒤집히는 체용 문제가 있어,
+     실무 명리(연해자평 계열)와 어긋나지 않게 본기 천간으로 환원해 판정한다. */
+const JI_BONGI = [9, 5, 0, 1, 4, 2, 3, 5, 6, 7, 4, 8];   // 지지→본기 천간: 자계 축기 인갑 묘을 진무 사병 오정 미기 신경 유신 술무 해임
+const SAENG = { 목: "화", 화: "토", 토: "금", 금: "수", 수: "목" };   // 상생
+const GEUK = { 목: "토", 화: "금", 토: "수", 금: "목", 수: "화" };    // 상극
+function sipseong(dg, tg) {   // 둘 다 천간 인덱스 — 일간(dg)이 대상(tg)을 보는 관계
+  const me = GAN_EL[dg], ta = GAN_EL[tg], same = dg % 2 === tg % 2;
+  if (me === ta) return same ? "비견" : "겁재";
+  if (SAENG[me] === ta) return same ? "식신" : "상관";
+  if (GEUK[me] === ta) return same ? "편재" : "정재";
+  if (GEUK[ta] === me) return same ? "편관" : "정관";
+  return same ? "편인" : "정인";
+}
+function sipseongDist(idx) {   // 일간 제외 7자(시 미상이면 5자)의 십성 분포
+  const out = {};
+  const put = (g) => { const t = sipseong(idx.dG, g); out[t] = (out[t] || 0) + 1; };
+  [idx.yG, idx.mG].forEach(put);
+  if (idx.hG != null) put(idx.hG);
+  [idx.yJ, idx.mJ, idx.dJ].forEach((j) => put(JI_BONGI[j]));
+  if (idx.hJ != null) put(JI_BONGI[idx.hJ]);
+  return out;
+}
+const SS_TIP = { 정재: "꾸준히 들어와 쌓이는 재물", 편재: "크게 들어오고 크게 나가는 재물 — 사업 쪽 돈", 식신: "먹고사는 복과 표현하는 재능", 상관: "틀을 깨는 말·창작의 재능", 정관: "명예와 조직 — 자리가 따르는 힘", 편관: "승부수와 버티는 힘", 정인: "배움·문서·귀인의 복", 편인: "남다른 발상 — 한 우물 파는 힘", 비견: "같이 갈 동료의 복", 겁재: "경쟁 속에서 크는 힘 — 돈은 관리가 필요" };
+/* 신살 — 정적 조회. 암록·역마·도화·화개는 산출 근거가 검산 가능(암록=건록의 육합, 나머지=삼합 그룹).
+   천을귀인·문창귀인은 연해자평 계열 표준 표('갑무경우양')를 따른다. 이설 존재 — 바꾸려면 출처와 함께. */
+const AMROK = [11, 10, 8, 7, 8, 7, 5, 4, 2, 1];              // 건록(갑인 을묘 병사 정오 무사 기오 경신 신유 임해 계자)의 육합
+const CHEONEUL = [[1, 7], [0, 8], [11, 9], [11, 9], [1, 7], [0, 8], [1, 7], [2, 6], [5, 3], [5, 3]];   // 갑무경→축미 을기→자신 병정→해유 신→인오 임계→사묘
+const MUNCHANG = [5, 6, 8, 9, 8, 9, 11, 0, 2, 3];            // 갑사 을오 병신 정유 무신 기유 경해 신자 임인 계묘
+const SAMHAP_G = [1, 2, 0, 3];                                // j%4 → 삼합 그룹(0:인오술 1:신자진 2:사유축 3:해묘미)
+const YEOKMA = [8, 2, 11, 5], DOHWA = [3, 9, 6, 0], HWAGAE = [10, 4, 1, 7];   // 그룹별 역마/도화/화개
+function sinsalOf(idx) {
+  const jis = [idx.yJ, idx.mJ, idx.dJ, ...(idx.hJ != null ? [idx.hJ] : [])];
+  const has = (t) => jis.includes(t);
+  const found = [];
+  if (has(AMROK[idx.dG])) found.push({ name: "암록(暗祿)", tip: "겉으로 안 드러나는 복 — 막힐 때 사람이 나타나 뚫려" });
+  if (CHEONEUL[idx.dG].some(has)) found.push({ name: "천을귀인", tip: "하늘이 붙여준 귀인 — 어려울수록 돕는 손이 와" });
+  if (has(MUNCHANG[idx.dG])) found.push({ name: "문창귀인", tip: "글과 배움의 복 — 머리로 푸는 일이 맞아" });
+  for (const g of new Set([SAMHAP_G[idx.yJ % 4], SAMHAP_G[idx.dJ % 4]])) {
+    if (has(YEOKMA[g]) && !found.some((f) => f.name === "역마")) found.push({ name: "역마", tip: "움직여야 열리는 운 — 이동·출장·해외" });
+    if (has(DOHWA[g]) && !found.some((f) => f.name === "도화")) found.push({ name: "도화", tip: "사람을 끄는 매력 — 인기가 재산이 되는 자리" });
+    if (has(HWAGAE[g]) && !found.some((f) => f.name === "화개")) found.push({ name: "화개", tip: "홀로 깊어지는 힘 — 예술·공부·수행" });
+  }
+  return found;
+}
+const TTI = ["쥐", "소", "호랑이", "토끼", "용", "뱀", "말", "양", "원숭이", "닭", "개", "돼지"];
+const WONJIN = [7, 6, 9, 8, 11, 10, 1, 0, 3, 2, 5, 4];   // 원진: 자미 축오 인유 묘신 진해 사술
+const YUKHAP = [1, 0, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2];   // 육합: 자축 인해 묘술 진유 사신 오미 (택일용)
+function seun(dg, fromYear, n = 5) {   // 세운. ⚠ 판결의 시계로 쓰지 않는다(대운과 같은 규칙) — 리포트 배경 전용
+  const out = [];
+  for (let y = fromYear; y < fromYear + n; y++) {
+    const t = (((y - 4) % 60) + 60) % 60;
+    out.push({ year: y, ganji: GAN[t % 10] + JI[t % 12], ss: sipseong(dg, t % 10) });
+  }
+  return out;
+}
+function taekil(idx, from, days = 30) {   // 길일/피할 날 — 일진은 아침 문안(v16)과 같은 (JDN+49)%60
+  const good = [], bad = [];
+  for (let k = 1; k <= days; k++) {
+    const t = new Date(from.getTime() + k * 86400000);
+    const g = (jdn(t.getFullYear(), t.getMonth() + 1, t.getDate()) + 49) % 60;
+    const dj = g % 12, label = (t.getMonth() + 1) + "/" + t.getDate();
+    if (dj === (idx.dJ + 6) % 12) { bad.push({ label, why: "일지와 충하는 날" }); continue; }
+    const why = [];
+    if (dj === AMROK[idx.dG]) why.push("암록일");
+    if (CHEONEUL[idx.dG].includes(dj)) why.push("귀인일");
+    if (dj === YUKHAP[idx.dJ]) why.push("일지와 합하는 날");
+    if (why.length) good.push({ label, why: why.join("·") });
+  }
+  return { good: good.slice(0, 3), bad: bad.slice(0, 2) };
+}
+const JOB_EL = { 금: "금속·기계·건설장비·귀금속·정밀·의료기기·법조 — 쇠 소리 나는 일", 목: "교육·출판·목재·섬유·기획", 수: "유통·무역·수산·정보·물류", 화: "전기·전자·미디어·조명·요식", 토: "부동산·건축·농업·중개·컨설팅" };
+/* 프로필 주입용 텍스트 — 문자열 확장이지 구조 변경이 아니다. 세운·띠는 리포트 배경 전용임을 문장으로 명시 */
+function myeongsikText(saju, sex, now) {
+  const idx = saju && saju.idx;
+  if (!idx) return "";
+  const dist = Object.entries(sipseongDist(idx)).sort((a, b) => b[1] - a[1]);
+  const sins = sinsalOf(idx);
+  const se = seun(idx.dG, now.getFullYear(), 5);
+  const tk = taekil(idx, now);
+  const maxEl = Object.entries(saju.counts).sort((a, b) => b[1] - a[1])[0][0];
+  return "\n십성 분포(일간 " + GAN[idx.dG] + " 기준): " + dist.map(([k, v]) => k + " " + v).join(" · ") + (sex ? "" : " — 성별 미입력: 자식운 등 남녀 구분 해석은 말하지 않는다")
+    + "\n신살: " + (sins.length ? sins.map((x) => x.name).join(" · ") : "두드러진 것 없음")
+    + "\n세운(향후 5년 · 리포트 배경 전용, 판결의 시계로 쓰지 말 것): " + se.map((x) => x.year + " " + x.ganji + "(" + x.ss + ")").join(" / ")
+    + "\n띠 인연(정보 제시까지만 — 판결 근거 아님): 충 " + TTI[(idx.yJ + 6) % 12] + "띠 · 원진 " + TTI[WONJIN[idx.yJ]] + "띠 — 큰돈·보증은 신중히"
+    + (tk.good.length ? "\n길일(30일 내): " + tk.good.map((d) => d.label + "(" + d.why + ")").join(" · ") + (tk.bad.length ? " / 피할 날: " + tk.bad.map((d) => d.label).join(" · ") : "") : "")
+    + "\n직업 기운: 일간 " + GAN_EL[idx.dG] + " — " + JOB_EL[GAN_EL[idx.dG]] + (maxEl !== GAN_EL[idx.dG] ? " (분포 최다 " + maxEl + " 기질 겸함)" : "");
+}
+/* ── 명리 심화 끝 ── */
+
+/* v101: 상세 리포트(타고난 그릇) — 카드 뒷면 reasons 밖 별도 블록. 전부 클라이언트 계산이라 지어낼 수 없다.
+   서사 순서는 철학관 리딩을 따른다: 타고난 것 → 흐름 → 사람 → 날 → 일 ("나→시간→관계→행동"으로 좁혀지는 순서) */
+function MyeongsikReport({ saju, sex }) {
+  const [open, setOpen] = useState(false);
+  const idx = saju && saju.idx;
+  if (!idx) return null;
+  const now = new Date();
+  const dist = Object.entries(sipseongDist(idx)).sort((a, b) => b[1] - a[1]);
+  const sins = sinsalOf(idx);
+  const se = seun(idx.dG, now.getFullYear(), 5);
+  const tk = taekil(idx, now);
+  const jael = dist.filter(([k]) => k === "정재" || k === "편재").reduce((a, [, v]) => a + v, 0);
+  const child = sex ? dist.filter(([k]) => (sex === "M" ? k === "정관" || k === "편관" : k === "식신" || k === "상관")).reduce((a, [, v]) => a + v, 0) : null;
+  return (
+    <div className="msr" onClick={(e) => e.stopPropagation()}>
+      <button className="msrbtn" onClick={() => { if (!open) track("report_opened", { sinsal: sins.length, top_ss: dist[0] ? dist[0][0] : null }); setOpen(!open); }}>{open ? "▴ 타고난 그릇 접기" : "▾ 타고난 그릇 — 명식 깊이 보기"}</button>
+      {open && (
+        <div className="msrbody">
+          <p className="msrh">타고난 것</p>
+          {dist.slice(0, 3).map(([k, v]) => <p key={k}><b>{k} {v}</b> — {SS_TIP[k]}</p>)}
+          {jael >= 2 && <p><b>재물 자리 {jael}</b> — 재물이 명식에 실려 있어. 흐름이 열릴 때 크게 받는 그릇이야</p>}
+          {child != null && child >= 1 && <p><b>자식 인연</b> — 명식에 자식 복이 들어 있어</p>}
+          {sins.map((x) => <p key={x.name}><b>{x.name}</b> — {x.tip}</p>)}
+          <p className="msrh">흐름</p>
+          {se.map((x) => <p key={x.year}><b>{x.year} {x.ganji}</b> — {x.ss}의 해{x.ss === "정재" || x.ss === "편재" ? " · 재물이 움직여" : x.ss === "정관" || x.ss === "편관" ? " · 자리·명예가 걸려" : x.ss === "비견" || x.ss === "겁재" ? " · 경쟁·구설 조심" : ""}</p>)}
+          <p className="msrh">사람</p>
+          <p><b>충 {TTI[(idx.yJ + 6) % 12]}띠 · 원진 {TTI[WONJIN[idx.yJ]]}띠</b> — 미워하란 게 아니라, 큰돈·보증만 조심하란 뜻이야</p>
+          <p className="msrh">날</p>
+          {tk.good.length ? <p><b>좋은 날</b> — {tk.good.map((d) => d.label).join(" · ")}{tk.bad.length ? <> / <b>피할 날</b> — {tk.bad.map((d) => d.label).join(" · ")}</> : null}</p> : <p>이번 달엔 특별히 가리는 날 없음</p>}
+          <p className="msrh">일</p>
+          <p><b>{GAN_EL[idx.dG]} 기운</b> — {JOB_EL[GAN_EL[idx.dG]]}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const ganjiIdx = (g, j) => { for (let i = 0; i < 60; i++) if (i % 10 === g && i % 12 === j) return i; return 0; };
 function daeun(y, m, d, h, mi, hourUnknown, lon, isMale, nowY) {   // v25: 대운 — 현재 인생 10년 흐름(성별 필요)
   const jdBirth = jdFromKST(y, m, d, hourUnknown ? 12 : h, hourUnknown ? 0 : (mi || 0));
@@ -1404,7 +1538,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v100 · 표";
+const APP_VER = "v101 · 명식";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다. */
 const LETTER_PRICE = 4900;
 const LETTER_SECTIONS = ["이 판결이 나온 자리", "네 여덟 글자가 말하는 결", "지금 흐름과 다음 갈림길", "이 선택이 남길 것", "수호신의 당부"];
@@ -1704,6 +1838,7 @@ HOLD는 '판단 못 하겠음'이 아니라 **'지표가 지금은 멈추라고 
   **자가점검(출력 직전)**: 내 verdict를 생판 남에게 그대로 줘도 말이 되면 — 조언이지 판결이 아니다. 이 사람의 값(오행 개수·일간·대운·괘·촐킨 톤·달 별자리 등)이 아니면 나올 수 없는 문장으로 다시 쓴다. 단, 앞면이므로 값의 **이름**은 쓰지 말고 그 값이 **말하는 바**를 쉬운 말로 옮긴다.
   (X)"몸 챙기면서 천천히 가" — 누구에게나 하는 말
   (O)"불이 셋인 애가 여름에 더 달리면 탈 나. 8월 넘기고 시작해." — 이 사람 명식이 아니면 못 나오는 말
+- 재물·성공 서술(스코프 완화): 재물복·사업운은 **확정형으로 말해도 된다** — 단 반드시 이 유저의 지표 실제 값(십성 분포·신살·대운)에서 나와야 한다. (O)"편재 둘에 암록까지 — 크게 들어오는 재물의 그릇이야". **희소성 통계·비교 일화 생성 절대 금지**: "100명 중 1명"·"이런 사주 처음 봐"·"내가 본 사람 중에" 류는 지어낼 수 있는 숫자와 경험이다 — 출처 없는 통계는 토정비결 원문을 지어내는 것과 같은 위반이다. 있는 지표는 당당하게, 없는 숫자는 절대 만들지 않는다.
 - reasons에는 판결에 참여한 모든 지표를 각 1줄씩 빠짐없이 포함한다 — 사주·달·별자리·MBTI·수비학·마야와, 제공된 경우 삼재·가치·주역·토정비결까지 전부. 달 축은 위상·달 별자리·나크샤트라를 묶어 한 줄로, 사주 축은 납음·대운(제공 시 현재 인생 시기의 기운)을 함께 인용할 수 있다(대운은 별도 축을 신설하지 말고 사주 근거 안에 녹인다). 각 축이 왜 GO/STOP/중립인지 그 지표의 실제 값을 짚어서 말한다.
 - **뒷면(reasons)은 용어를 써도 된다 — 단 반드시 쉬운 풀이를 붙여 병기한다.** 사주 보러 가면 "무오 대운이라" 하고 끝내지 않고 "앞으로 십 년 불기운이 세지는 때야"까지 풀어주는 것과 같다. 형식: **용어 — 쉬운 풀이**. 용어만 던지면 유저는 못 알아듣고, 풀이만 있으면 왜 돈 주고 보는지 모른다. 둘 다 있어야 한다.
   (O)"**무오 대운** — 앞으로 십 년, 불기운이 세지는 때야. 밀어붙이면 되는 판이지." (O)"**중수감(重水坎)** — 물이 겹겹이란 뜻. 지금 뛰면 빠져."
@@ -1828,6 +1963,10 @@ function loadMemory() {
     if (!(m && m.saju && m.mbti && m.core)) return null;   // 필수 조각 검증 — 손상 시 새 출발 (구버전 저장분 호환)
     // v51: 주기운 기준을 '최다 오행'→'일간(나)'으로 교정 — 저장된 dayGan으로 소급 보정(멱등)
     if (m.saju.dayGan) { const _di = GAN.indexOf(m.saju.dayGan); if (_di >= 0) m.saju.main = GAN_EL[_di]; }
+    // v101: 구버전 저장분엔 idx(명식 인덱스)가 없다 — 생일이 있으면 소급 계산(멱등). 실패해도 리포트만 안 뜰 뿐 앱은 정상
+    if (!m.saju.idx && m.birth && m.birth.y) {
+      try { m.saju = calcSaju(+m.birth.y, +m.birth.m, +m.birth.d, m.birth.noHour ? 12 : +m.birth.h, m.birth.noHour ? 0 : (+m.birth.min || 0), !!m.birth.noHour, cityLon(m.birth.city)); } catch (_) {}
+    }
     return m;
   } catch (_) { return null; }
 }
@@ -2129,7 +2268,7 @@ export default function App() {
       const voteLine = Array.isArray(r1.votes) && r1.votes.length
         ? `\n[콜1이 이미 낸 지표 표 — 이 표를 그대로 설명한다. 축을 빼거나 vote 를 바꾸지 마라]\n${r1.votes.map((v) => `- ${v.axis}: ${v.v || v.vote}`).join("\n")}`
         : "";
-      const explainMsg = { role: "user", content: `${userText}\n\n[이미 확정된 판결] direction=${r1.direction} / verdict="${r1.verdict}" / 총 ${r1.total} 중 반대 ${r1.against}.${voteLine}${s3Line} 이 판결을 절대 뒤집지 말고, 이 결론의 근거만 아래 JSON으로만 응답: {"subline":"수호신의 한 줄","reasons":[{"axis":"사주|달|별자리|MBTI|수비학|주역|가치|삼재|토정비결|마야","vote":"GO|STOP|중립","text":"용어 — 쉬운 풀이 형식의 근거 1줄(70자 이내)"}],"funLine":"정령(달 별자리) 한마디","disclaimer":"투자·법률·의료(몸·병)일 때만, 없으면 빈 문자열"}. reasons엔 위 표의 축을 전부 같은 vote 로 넣는다 — 특히 '마야'(촐킨 톤·날개) 축은 매번 반드시 포함(자주 누락됨). **각 근거는 '용어 — 쉬운 풀이' 병기다**: 지표 이름·값을 짚고(무오 대운·중수감·촐킨 4의 톤 등) 곧바로 쉬운 말로 풀어준다. 사주 보러 가면 용어를 말한 뒤 반드시 풀이를 붙여주는 것과 같다. subline은 앞면 톤이므로 어려운 말 없이 쉬운 한 줄.` };
+      const explainMsg = { role: "user", content: `${userText}\n\n[이미 확정된 판결] direction=${r1.direction} / verdict="${r1.verdict}" / 총 ${r1.total} 중 반대 ${r1.against}.${voteLine}${s3Line} 이 판결을 절대 뒤집지 말고, 이 결론의 근거만 아래 JSON으로만 응답: {"subline":"수호신의 한 줄","reasons":[{"axis":"사주|달|별자리|MBTI|수비학|주역|가치|삼재|토정비결|마야","vote":"GO|STOP|중립","text":"용어 — 쉬운 풀이 형식의 근거 1줄(70자 이내)"}],"funLine":"정령(달 별자리) 한마디","disclaimer":"투자·법률·의료(몸·병)일 때만, 없으면 빈 문자열"}. reasons엔 위 표의 축을 전부 같은 vote 로 넣는다 — 특히 '마야'(촐킨 톤·날개) 축은 매번 반드시 포함(자주 누락됨). **각 근거는 '용어 — 쉬운 풀이' 병기다**: 지표 이름·값을 짚고(무오 대운·중수감·촐킨 4의 톤 등) 곧바로 쉬운 말로 풀어준다. 사주 보러 가면 용어를 말한 뒤 반드시 풀이를 붙여주는 것과 같다. subline은 앞면 톤이므로 어려운 말 없이 쉬운 한 줄. 프로필에 십성 분포·신살·세운이 있으면 '사주' 축 근거에서 그 실제 값을 우선 인용한다(예: "편재 둘 — 크게 도는 돈이 네 그릇이야", "암록 — 숨은 복이 받쳐줘").` };
       const { json: r2 } = await callClaude(system, [...priorConvo, explainMsg], 2000);   // 근거를 용어+풀이로 병기하면서 1500에선 잘렸다
       setDetail(r2);
       // L3(지표별 근거)는 제품의 핵심 차별점이다. 실패율과 소요시간을 모르면 개선 근거가 없다.
@@ -2240,10 +2379,11 @@ export default function App() {
       const sj = samjae(saju.yJ, new Date().getFullYear());
       const du = birth.sex ? daeun(+birth.y, +birth.m, +birth.d, birth.noHour ? 12 : +birth.h, birth.noHour || birth.min === "" ? 0 : +birth.min, !!birth.noHour, cityLon(birth.city), birth.sex === "M", new Date().getFullYear()) : null; // v25: 대운
       // v14: 세션 내내 고정인 프로필(주역 제외)은 system에 담아 프롬프트 캐싱 → 2번째 질문부터 빨라짐
+      const _ms = myeongsikText(saju, birth.sex, new Date());   // v101: 십성·신살·세운·길일·직업 — 문자열 확장(구조 불변)
       const profile = `${birth.name ? `호칭: ${birth.name}\n` : ""}${birth.sex ? `성별: ${birth.sex === "M" ? "남" : "여"}\n` : ""}사주: ${saju.pillars.년}년 ${saju.pillars.월}월 ${saju.pillars.일}일 ${saju.pillars.시}시 / 오행 ${Object.entries(saju.counts).map(([k, v]) => k + v).join(" ")} / 일간(나) ${saju.dayGan || "?"}·오행중심 ${saju.main}${saju.nayin ? ` / 납음 ${saju.nayin}` : ""}
 별자리: ${zo.name}(${zo.el}) / 달: 태어난 밤의 위상 ${moon.name} · 달 별자리 ${mp.moonSign}(정서·내면) · 나크샤트라 ${mp.nakshatra}(베다 27수)
 마야 촐킨: ${tzk.tone}의 톤 · ${tzk.sign}
-MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ? `\n대운: 아직 첫 대운 전 — 대운수 ${du.num}세부터 ${du.dir}(지금은 월주 기운이 지배)` : `\n대운(현재 인생 시기): ${du.ganji}(${du.el}) 대운 · ${du.startAge}~${du.endAge}세 · ${du.dir} — 10년 단위 큰 흐름`) : ""}${sj ? `\n삼재: 올해 ${sj} (입춘 경계 근사)` : ""}${tj ? `\n토정비결(당년 신수): 괘상수 ${tj.code} (상${tj.sang} 중${tj.jung} 하${tj.ha}), 음력 생일 ${tj.lunar}` : ""}${core ? `\n가치여정(워드소팅 16→6→3→1): 핵심 ${core} / 지킨 가치 ${vals4.filter(v => v !== core).join("·")} / 마지막에 내려놓은 ${vals8.filter(v => !vals4.includes(v)).join("·")}` : ""}${birth.job || birth.rel ? `\n요즘 삶의 국면(맥락): ${[birth.job, birth.rel].filter(Boolean).join(" · ")} — 질문의 무게·의미를 이 맥락에 비춰 읽되, 판결 근거는 지표다` : ""}`;
+MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ? `\n대운: 아직 첫 대운 전 — 대운수 ${du.num}세부터 ${du.dir}(지금은 월주 기운이 지배)` : `\n대운(현재 인생 시기): ${du.ganji}(${du.el}) 대운 · ${du.startAge}~${du.endAge}세 · ${du.dir} — 10년 단위 큰 흐름`) : ""}${sj ? `\n삼재: 올해 ${sj} (입춘 경계 근사)` : ""}${tj ? `\n토정비결(당년 신수): 괘상수 ${tj.code} (상${tj.sang} 중${tj.jung} 하${tj.ha}), 음력 생일 ${tj.lunar}` : ""}${core ? `\n가치여정(워드소팅 16→6→3→1): 핵심 ${core} / 지킨 가치 ${vals4.filter(v => v !== core).join("·")} / 마지막에 내려놓은 ${vals8.filter(v => !vals4.includes(v)).join("·")}` : ""}${birth.job || birth.rel ? `\n요즘 삶의 국면(맥락): ${[birth.job, birth.rel].filter(Boolean).join(" · ")} — 질문의 무게·의미를 이 맥락에 비춰 읽되, 판결 근거는 지표다` : ""}${_ms}`;
       // 주역 괘는 질문마다 달라지므로 유저 턴에
       const qExtra = hi ? `\n[이번에 청한 주역] 본괘 ${hi.name}${hi.moving.length ? ` / 변효 ${hi.moving.map(n => n + 1).join(",")}효 / 지괘 ${hi.toName}` : ""}` : "";
       const fuRec = [...records].reverse().find(r => r.followUp && r.followUp !== "later");
@@ -2806,6 +2946,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                   {/* 괘 이름은 뒷면(지표 이름을 짚어도 되는 자리)에만 — 앞면에선 유저가 못 알아듣는 한자였다 */}
                   {hexInfo && <p className="vhex">卦 {hexInfo.name}{hexInfo.moving.length > 0 && ` → ${hexInfo.toName}`}</p>}
                   {detail?.reasons ? <ul className="vr">{detail.reasons.map((r, i) => <li key={i}><b>{r.axis}</b>{r.vote && <em className="vote">{r.vote}</em>}<p>{r.text}</p></li>)}</ul> : <p className="gathering">조각들이 근거를 모으고 있어<span className="dots"><i>.</i><i>.</i><i>.</i></span></p>}
+                  {saju && saju.idx && <MyeongsikReport saju={saju} sex={birth.sex} />}
                   {detail?.disclaimer && <p className="disc">{detail.disclaimer}</p>}
                 </div>
               </div>
@@ -3090,6 +3231,12 @@ const CSS = `
 .vr{list-style:none;padding:0 2px 8px 0;margin:14px 0 0;display:flex;flex-direction:column;gap:10px;flex:1;min-height:0;max-height:340px;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .vr li{border-left:2px solid #c98f3d;padding-left:10px}.vr li.fun{border-left-color:#6f6580;opacity:.7}
 .vr b{color:#f0e2b8;font-size:12.5px}.vr em.vote{font-style:normal;font-family:sans-serif;font-size:9.5px;color:#c9b98f;margin-left:6px;letter-spacing:.08em}.vr p{margin:2px 0 0;color:#b5aac6;font-size:12px;line-height:1.55;font-family:sans-serif}
+.msr{margin-top:6px;font-family:sans-serif}
+.msrbtn{background:none;border:1px solid #c9b98f33;border-radius:8px;color:#c9b98f;font-size:11px;padding:5px 10px;width:100%;cursor:pointer}
+.msrbody{max-height:170px;overflow-y:auto;margin-top:6px;padding:2px 2px 6px}
+.msrbody p{font-size:11px;color:#bfb6cc;line-height:1.55;margin:3px 0}
+.msrbody b{color:#e6dff2;font-weight:700}
+.msrh{margin-top:7px !important;color:#c9b98f !important;letter-spacing:.14em;font-size:10px !important}
 .disc{margin-top:auto;font-family:sans-serif;font-size:10px;color:#8a7f95;line-height:1.5}
 .split{font-family:sans-serif;font-size:10.5px;letter-spacing:.22em;color:#e5b96b;margin:0 0 6px;animation:formPulse 1.8s ease-in-out infinite}
 .retrybtn{background:transparent;border:1px solid #c98f3d66;color:#e6d6a8;font-size:11px;padding:3px 12px;border-radius:14px;cursor:pointer;font-family:sans-serif;margin-left:8px}
