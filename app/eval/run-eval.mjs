@@ -246,10 +246,10 @@ if (errors < total) console.log(`다음: verdicts.csv를 열어 '사람평점' �
 `);
     L.push(`## 전체 판결
 `);
-    L.push(`| 질문 | 방향 | 표(votes) | 판결문 |`, `|---|---|---|---|`);
+    L.push(`| 질문 | 모드 | 방향 | 표(votes) | 판결문 | 수호신 한 줄(근거) |`, `|---|---|---|---|---|---|`);
     for (const it of items) {
       const cell = (x) => String(x || "").replace(/\|/g, "\\|").replace(/\n/g, " ");
-      L.push(`| ${cell(it.question).slice(0, 40)} | ${cell(it.dir)} | ${cell(it.votes).slice(0, 60)} | ${cell(it.verdict)} |`);
+      L.push(`| ${cell(it.question)} | ${cell(it.mode) === "quick" ? "가볍게" : "동전 의식"} | ${cell(it.dir)} | ${cell(it.votes).slice(0, 60)} | ${cell(it.verdict)} | ${cell(it.subline)} |`);
     }
     L.push(`
 > 자동검사는 '대놓고 틀린 것'만 잡습니다. **판결이 마음에 꽂히는지는 사람만 압니다** — verdicts.csv 의 '사람평점' 열을 채워주세요.`);

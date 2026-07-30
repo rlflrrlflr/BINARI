@@ -19,6 +19,10 @@ on:
         description: "몇 사람으로 볼까 (1~5. 많을수록 정확하지만 오래 걸린다)"
         default: "2"
         required: false
+      full:
+        description: "근거(수호신 한 줄)까지 받을까 — 채점 시트에 붙이려면 켜세요. 두 배 느리고 두 배 비쌉니다"
+        type: boolean
+        default: false
       via:
         description: "어느 주소를 거칠까 (보통 그대로 두세요)"
         default: "https://binari-sepia.vercel.app"
@@ -56,6 +60,7 @@ jobs:
         run: |
           args="--via=${{ inputs.via }} --personas=${{ inputs.personas }}"
           if [ -n "${{ inputs.cat }}" ]; then args="$args --cat=${{ inputs.cat }}"; fi
+          if [ "${{ inputs.full }}" = "true" ]; then args="$args --full"; fi
           echo "실행: node app/eval/run-eval.mjs $args"
           node app/eval/run-eval.mjs $args
         continue-on-error: true   # 실패해도 아래 요약을 보여줘야 원인을 안다
@@ -65,6 +70,7 @@ jobs:
         run: |
           if [ -f app/eval/summary.md ]; then
             cat app/eval/summary.md >> $GITHUB_STEP_SUMMARY
+            echo "===== 요약(로그용) ====="; cat app/eval/summary.md; echo "===== 요약 끝 ====="
           else
             echo "## 결과 파일이 만들어지지 않았습니다" >> $GITHUB_STEP_SUMMARY
             echo "평가가 시작조차 못 한 것 같습니다. 위 '평가 실행' 단계의 빨간 글씨를 확인하세요." >> $GITHUB_STEP_SUMMARY
