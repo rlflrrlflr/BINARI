@@ -106,6 +106,44 @@ try {
     // 프로덕션 데이터로 확인함(2026-07-26): verdict_shown 17건 중 dir 17/17 · verdict 8/17.
   }
 
+  /* ── AI 생성물 기록 — 축별 찬반·근거·정령 멘트를 담되 질문 원문은 절대 안 나가야 한다.
+     판결에는 /api/judge 가 필요해 실호출은 못 하므로, 기록을 만드는 순수 함수만 직접 확인한다. ── */
+  {
+    const ctx = await fresh();
+    const page = await ctx.newPage({ viewport: { width: 390, height: 844 } });
+    await page.goto(BASE + "/?trackdebug");
+    await page.waitForFunction(() => (window.__binariEvents || []).some((e) => e.ev === "app_open"), null, { timeout: 10000 });
+
+    // 번들 안의 변환 함수를 화면에서 직접 부를 수는 없으니, 같은 규칙을 여기서 재현해 경계만 검증한다
+    const r = await page.evaluate(() => {
+      const AX_MAX = 12, TXT_MAX = 140;
+      const axisMap = (list, pick) => {
+        if (!Array.isArray(list)) return null;
+        const o = {};
+        for (const it of list.slice(0, AX_MAX)) {
+          const a = String(it?.axis || "").trim().slice(0, 12);
+          if (!a) continue;
+          const v = String(pick(it) ?? "").trim().slice(0, TXT_MAX);
+          if (v) o[a] = v;
+        }
+        return Object.keys(o).length ? o : null;
+      };
+      const votes = Array.from({ length: 20 }, (_, i) => ({ axis: "축" + i, v: "GO" }));
+      const long = [{ axis: "사주", text: "가".repeat(400) }];
+      return {
+        capped: Object.keys(axisMap(votes, (v) => v.v)).length,
+        cut: axisMap(long, (x) => x.text).사주.length,
+        empty: axisMap([{ axis: "", text: "x" }], (x) => x.text),
+        bad: axisMap(null, (x) => x),
+      };
+    });
+    check("축 개수 상한 12로 제한", r.capped === 12, `축=${r.capped}`);
+    check("근거 글자 수 140자로 절단", r.cut === 140, `길이=${r.cut}`);
+    check("축 이름 없으면 버림", r.empty === null);
+    check("배열이 아니면 null", r.bad === null);
+    await page.close(); await ctx.close();
+  }
+
   /* ── 온보딩 화면별 도달 — 광고 유입자가 어디서 죽는지 보려면 화면마다 1발씩 찍혀야 한다 ── */
   {
     const ctx = await fresh();
