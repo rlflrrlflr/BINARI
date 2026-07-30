@@ -1959,6 +1959,28 @@ function demoProps(birth, extra) {
   return { sex: birth.sex || null, age: a, age_band: ageBand(a), job: birth.job || null, rel: birth.rel || null, city: birth.city || null, ...(extra || {}) };
 }
 
+/* ── AI 생성물 기록 (2026-07-28) ────────────────────────────────────────────
+   판결 품질을 고치려면 결과만이 아니라 "무엇을 근거로 그렇게 말했는지"가 남아야 한다.
+     · 축별 찬반이 없으면 HOLD 편중의 원인을 못 짚는다(특정 축이 늘 발목을 잡는지 알 수 없다)
+     · 정령 멘트가 없으면 톤을 바꿔도 전후 비교가 불가능하다
+     · 근거가 없으면 평가(딱이야/빗나갔어)와 묶어 "어떤 근거가 잘 맞았나"를 낼 수 없다
+   질문 원문은 여기에도 절대 넣지 않는다. 축 수·글자 수를 잘라 값이 무한정 커지지 않게 한다.
+   축을 키로 쓰는 객체로 담는 이유: PostHog 에서 properties.votes.삼재 처럼 축 하나만 바로 물을 수 있다. */
+const AX_MAX = 12, TXT_MAX = 140;
+function axisMap(list, pick) {
+  if (!Array.isArray(list)) return null;
+  const o = {};
+  for (const it of list.slice(0, AX_MAX)) {
+    const a = String(it?.axis || "").trim().slice(0, 12);
+    if (!a) continue;
+    const v = String(pick(it) ?? "").trim().slice(0, TXT_MAX);
+    if (v) o[a] = v;
+  }
+  return Object.keys(o).length ? o : null;
+}
+const voteMap = (votes) => axisMap(votes, (v) => v.v ?? v.vote);
+const reasonMap = (reasons) => axisMap(reasons, (r) => r.text);
+
 const encodeShare = (o) => { try { return _b64e(JSON.stringify(o)); } catch (_) { return ""; } };
 const decodeShare = (s) => { try { const o = JSON.parse(_b64d(s)); return o && o.v && o.d ? o : null; } catch (_) { return null; } };
 
@@ -2111,7 +2133,11 @@ export default function App() {
       const { json: r2 } = await callClaude(system, [...priorConvo, explainMsg], 1500);
       setDetail(r2);
       // L3(지표별 근거)는 제품의 핵심 차별점이다. 실패율과 소요시간을 모르면 개선 근거가 없다.
-      track("detail_shown", { ms: Math.round(performance.now() - _t0), dir: r1?.direction || null, retry: !!isRetry, axes: Array.isArray(r2?.reasons) ? r2.reasons.length : 0 });
+      track("detail_shown", { ms: Math.round(performance.now() - _t0), dir: r1?.direction || null, retry: !!isRetry, axes: Array.isArray(r2?.reasons) ? r2.reasons.length : 0,
+        subline: r2?.subline || null,        // 카드 앞면 설명 한 줄
+        funline: r2?.funLine || null,        // 정령 멘트 — 톤 개선의 유일한 측정 대상
+        reasons: reasonMap(r2?.reasons),     // 지표별 근거 전문(축별)
+        disclaimer: r2?.disclaimer || null });
     } catch (e) {
       setDetail({ _err: true });
       track("detail_failed", { reason: failReason(e), status: failStatus(e), ms: Math.round(performance.now() - _t0), dir: r1?.direction || null, retry: !!isRetry });
@@ -2250,7 +2276,8 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
       track("verdict_shown", demoProps(birth, { dir: r1.direction, cat: r1.category, tone: r1.tone, against: r1.against, total: r1.total, mode: quick ? "quick" : "ritual", lean: lean || "skip", verdict: r1.verdict || null, mbti: mbti || null, element: saju?.main || null, ms: Math.round(performance.now() - _jt0),
         scope_level: _sLevel, scope_hint: _sHint, scope_agree: _sLevel ? _sLevel === _sHint : null, handoff_triggered: _sLevel === "S3", reask: _reask,
         // 표가 없거나(votes_ok=false) 표와 결론이 어긋난(dir_overridden) 비율이 곧 '판결이 지표에서 나오는가'의 지표다
-        votes_ok: !!_tally, votes_n: _tally ? _tally.total : 0, dir_overridden: _tally ? _tally.overridden : null }));
+        votes_ok: !!_tally, votes_n: _tally ? _tally.total : 0, dir_overridden: _tally ? _tally.overridden : null,
+        votes: voteMap(r1.votes) }));      // 축별 찬반 — HOLD 편중의 원인을 여기서 짚는다
       reactRef.current = { dir: r1.direction, t0: performance.now() };   // v28: 수호신이 판결을 연기
       setTimeout(() => { agitateRef.current = false; }, 700);
       setTimeout(() => { setCardOn(true); }, 1400);                       // 몸짓을 보여준 뒤 카드
