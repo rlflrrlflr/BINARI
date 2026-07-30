@@ -2108,7 +2108,7 @@ export default function App() {
         ? `\n[콜1이 이미 낸 지표 표 — 이 표를 그대로 설명한다. 축을 빼거나 vote 를 바꾸지 마라]\n${r1.votes.map((v) => `- ${v.axis}: ${v.v || v.vote}`).join("\n")}`
         : "";
       const explainMsg = { role: "user", content: `${userText}\n\n[이미 확정된 판결] direction=${r1.direction} / verdict="${r1.verdict}" / 총 ${r1.total} 중 반대 ${r1.against}.${voteLine}${s3Line} 이 판결을 절대 뒤집지 말고, 이 결론의 근거만 아래 JSON으로만 응답: {"subline":"수호신의 한 줄","reasons":[{"axis":"사주|달|별자리|MBTI|수비학|주역|가치|삼재|토정비결|마야","vote":"GO|STOP|중립","text":"용어 — 쉬운 풀이 형식의 근거 1줄(70자 이내)"}],"funLine":"정령(달 별자리) 한마디","disclaimer":"투자·법률·의료(몸·병)일 때만, 없으면 빈 문자열"}. reasons엔 위 표의 축을 전부 같은 vote 로 넣는다 — 특히 '마야'(촐킨 톤·날개) 축은 매번 반드시 포함(자주 누락됨). **각 근거는 '용어 — 쉬운 풀이' 병기다**: 지표 이름·값을 짚고(무오 대운·중수감·촐킨 4의 톤 등) 곧바로 쉬운 말로 풀어준다. 사주 보러 가면 용어를 말한 뒤 반드시 풀이를 붙여주는 것과 같다. subline은 앞면 톤이므로 어려운 말 없이 쉬운 한 줄.` };
-      const { json: r2 } = await callClaude(system, [...priorConvo, explainMsg], 1500);
+      const { json: r2 } = await callClaude(system, [...priorConvo, explainMsg], 2000);   // 근거를 용어+풀이로 병기하면서 1500에선 잘렸다
       setDetail(r2);
       // L3(지표별 근거)는 제품의 핵심 차별점이다. 실패율과 소요시간을 모르면 개선 근거가 없다.
       track("detail_shown", { ms: Math.round(performance.now() - _t0), dir: r1?.direction || null, retry: !!isRetry, axes: Array.isArray(r2?.reasons) ? r2.reasons.length : 0 });

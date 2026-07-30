@@ -64,6 +64,18 @@ const CONCLUDE = `\n\n[이번 출력] 아래 JSON만. **votes를 먼저 채우�
 // 되물음 태그 — App.jsx 의 reaskLine 과 문자열이 같아야 한다(다르면 하네스가 앱과 다른 것을 잰다).
 const reaskTag = (prev) => `\n[되물음] 유저가 방금 판결("${prev.dir} — ${prev.verdict}")을 못 알아들어 되묻고 있다. 새로 판정하지 말고 direction=${prev.dir}·category=${prev.cat || "A"}를 그대로 승계한 뒤, verdict 자리에 **되물은 그것의 답**을 맨말로 넣는다. 선택지를 줬으면 그중 하나를 고른다. 새 비유 금지.`;
 
+/* 잘린 JSON 복구 — App.jsx 의 repairJSON 을 그대로 떼어 쓴다.
+   앱은 응답이 max_tokens 에서 잘려도 복구해서 보여주는데, 하네스가 그냥 JSON.parse 를 하면
+   **앱은 멀쩡한데 하네스만 실패**한다. 실측(2026-07-30): 근거(콜2)가 길어져 1500토큰에서 잘리자
+   하네스가 매 건 3번씩 재시도해 40분을 태우고도 결과를 못 냈다. 앱은 같은 응답을 정상 처리했다. */
+function pullRepairJSON() {
+  const i = APP.indexOf("function repairJSON(");
+  const j = APP.indexOf("\n}", i);
+  if (i < 0 || j < 0) { console.error("repairJSON 을 App.jsx 에서 찾지 못했습니다 — 이름이 바뀌었는지 확인하세요."); process.exit(1); }
+  return new Function(`${APP.slice(i, j + 2)}\nreturn repairJSON;`)();
+}
+const repairJSON = pullRepairJSON();
+
 async function call(sys, content, mt) {
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
@@ -90,7 +102,7 @@ async function call(sys, content, mt) {
       catch { throw new Error(`응답이 JSON 이 아님(HTTP ${r.status}) — ${raw.slice(0, 80).replace(/\s+/g, " ")}${VIA ? " · 배포본에 닿지 못한 것 같습니다(네트워크 차단·주소 오타 확인)" : ""}`); }
       if (d.error) throw new Error(d.error.message || JSON.stringify(d.error));
       const txt = (d.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
-      return { json: JSON.parse(txt.match(/\{[\s\S]*\}/)[0]), usage: d.usage };
+      return { json: repairJSON(txt), usage: d.usage };
     } catch (e) { if (attempt === 2) throw e; await new Promise((r) => setTimeout(r, 1500 * (attempt + 1))); }
   }
 }
@@ -177,7 +189,7 @@ for (const p of personas) {
       let sub = "", fun = "";
       if (FULL) {
         const explain = `${u}${STAKE}${REASK}\n\n[이미 확정된 판결] direction=${r1.direction} / verdict="${r1.verdict}" / 총 ${r1.total} 중 반대 ${r1.against}. 이 판결을 절대 뒤집지 말고, 근거만 JSON으로: {"subline":"수호신의 한 줄","reasons":[{"axis":"사주|달|별자리|MBTI|수비학|주역|가치|삼재|토정비결|마야","vote":"GO|STOP|중립","text":"회상체 근거 1줄(60자 이내)"}],"funLine":"정령 한마디","disclaimer":""}. reasons엔 참여 지표 전부.`;
-        const { json: r2, usage: us2 } = await call(sys, explain, 1500);
+        const { json: r2, usage: us2 } = await call(sys, explain, 2000);
         if (us2) { spend.in += us2.input_tokens || 0; spend.out += us2.output_tokens || 0; }
         sub = r2.subline || ""; fun = r2.funLine || "";
       }

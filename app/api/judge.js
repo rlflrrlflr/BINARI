@@ -99,7 +99,7 @@ export default async function handler(req, res) {
   try { if (JSON.stringify(req.body).length > 60000) return res.status(400).json({ error: { message: "요청이 너무 커" } }); } catch { return res.status(400).json({ error: { message: "본문을 읽을 수 없어" } }); }
   const sysText = Array.isArray(system) && system[0] && typeof system[0].text === "string" ? system[0].text : "";
   if (!sysText.startsWith(SYS_PREFIX)) return res.status(400).json({ error: { message: "판결 형식이 아니야" } });
-  const mt = Math.min(Math.max(parseInt(max_tokens, 10) || 320, 1), 1600);
+  const mt = Math.min(Math.max(parseInt(max_tokens, 10) || 320, 1), 2400);   // 근거를 용어+풀이로 병기하면서 1600에선 잘렸다(상한은 천장일 뿐 — 안 쓰면 비용 0)
 
   try {
     const r = await fetch("https://api.anthropic.com/v1/messages", {

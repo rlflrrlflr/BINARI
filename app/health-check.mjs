@@ -157,6 +157,17 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
     } else if (mt && cut) add("정상", "콜1/콜2 로그 경계", `콜1 ${mt} ≤ 경계 ${cut}`, "");
   } catch (_) { /* 구조가 바뀌면 조용히 넘어간다 */ }
 
+  // 콜2 상한(앱) vs 서버 클램프(judge.js) — 앱이 더 크면 서버가 잘라 근거가 조용히 사라진다
+  try {
+    const mt2 = +(src.match(/callClaude\(system, \[\.\.\.priorConvo, explainMsg\], (\d+)\)/) || [])[1];
+    const api2 = readFileSync("api/judge.js", "utf8");
+    const clamp = +(api2.match(/\|\| 320, 1\), (\d+)\)/) || [])[1];
+    if (mt2 && clamp && mt2 > clamp) {
+      add("심각", "서버가 근거 응답을 잘라냄", `콜2 상한 ${mt2} > 서버 클램프 ${clamp}`,
+        "api/judge.js 의 max_tokens 클램프를 콜2 상한 이상으로 올리세요. 안 그러면 판결 근거가 중간에 끊깁니다.");
+    } else if (mt2 && clamp) add("정상", "콜2/서버 클램프", `콜2 ${mt2} ≤ 클램프 ${clamp}`, "");
+  } catch (_) { /* 구조가 바뀌면 조용히 넘어간다 */ }
+
   // 카드 앞면에 한자 괘 이름이 돌아오는 회귀 방지 — 앞면은 쉬운 말만(층위 분리)
   //   범위: 공유 카드 앞면 ~ 판결 카드의 L1 결론. 마커가 사라졌으면(구조 변경) 조용히 통과시키지 말고 알린다.
   const fs0 = src.indexOf('<div className="vtop"><span>BINARI</span>'), fs1 = src.indexOf("{/* L1 결론 */}");
@@ -179,6 +190,7 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
     { name: "되물음 태그", tag: "[되물음] 유저가 방금 판결" },
     { name: "콜1 scope 필드", tag: '"scope":"S1|S2|S3"' },
     { name: "콜1 votes 필드", tag: '"votes":[{"axis":"지표명","v":"GO|STOP|중립"}]' },
+    { name: "잘림 복구(repairJSON)", tag: "function repairJSON(" },
   ];
   const evalPath = "eval/run-eval.mjs";
   if (existsSync(evalPath)) {
