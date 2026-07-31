@@ -146,6 +146,13 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
     if (r.pat.test(src)) add("정상", `판결 품질 규칙 — ${r.name}`, "있음", "");
     else add("심각", `판결 품질 규칙 사라짐 — ${r.name}`, "코드에서 찾을 수 없음", r.fix);
   }
+  // 티어 허용목록은 api/judge.js 에 있다 — 위 rules 루프는 App.jsx 만 보므로 여기서 따로 검사한다
+  try {
+    const api = readFileSync("api/judge.js", "utf8");
+    if (/const TIERS = \{ free:/.test(api)) add("정상", "판결 품질 규칙 — 티어 허용목록(모델 강제 차단)", "있음", "");
+    else add("심각", "티어를 허용목록으로 받지 않음", "api/judge.js 에서 TIERS 를 찾을 수 없음",
+      "tier 를 허용 목록(free/paid)으로만 받으세요. 임의 모델 지정을 열어두면 클라이언트가 비싼 모델을 강제해 비용이 샙니다.");
+  } catch (_) { /* 구조가 바뀌면 조용히 넘어간다 */ }
   // 콜1이 scope 를 안 뱉으면 계측값이 통째로 null 이 된다(조용한 고장)
   if (/"scope":"S1\|S2\|S3"/.test(src)) add("정상", "판결 품질 규칙 — 콜1 scope 필드", "있음", "");
   else add("심각", "콜1 출력 스키마에 scope 없음", "JSON 스키마에서 찾을 수 없음",
@@ -207,6 +214,27 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
       add("정상", "평가 도구 정합", `앱과 하네스가 같은 프롬프트를 사용(${shared.length}개 대조)`, "");
     }
   }
+}
+
+/* ── 검사 4-3. 결제가 붙는 날 깨어나는 검사 — tier 서버 검증 ─────────────
+   지금 tier("free"|"paid")는 클라이언트 말을 그대로 믿는다. 결제가 없어 무해하지만,
+   결제 라이브러리가 들어오는 순간 "누구나 paid 를 보내 비싼 모델을 무료로 쓰는" 구멍이 된다.
+   package.json 에 결제가 들어오면 자동으로 켜진다(검사 6·7·10과 같은 방식). */
+{
+  try {
+    const pkg = readFileSync("package.json", "utf8");
+    const payWired = /toss|portone|iamport|stripe|paypal/i.test(pkg);
+    const api = readFileSync("api/judge.js", "utf8");
+    const verified = /tier[\s\S]{0,400}(영수증|receipt|verify|검증)/.test(api) && !/클라이언트 말을 그대로 믿는다/.test(api);
+    if (payWired && !verified) {
+      add("심각", "결제가 붙었는데 유료 티어를 클라이언트 말만 믿음", "api/judge.js 의 tier 가 서버 검증 없이 통과됨",
+        "결제 영수증·토큰으로 tier='paid' 를 서버에서 검증하세요. 지금 상태면 누구나 유료 모델을 무료로 씁니다.");
+    } else if (payWired) {
+      add("정상", "유료 티어 서버 검증", "결제 연동 + tier 검증 있음", "");
+    } else {
+      add("정상", "유료 티어(대기)", "결제 미연동 — tier 는 아직 클라이언트 신뢰로 충분. 결제 붙는 날 이 검사가 깨어남", "");
+    }
+  } catch (_) { /* 구조가 바뀌면 조용히 넘어간다 */ }
 }
 
 /* ── 검사 5-2. e2e 모의응답이 앱과 같은 표지로 콜1/콜2를 가르는가 ─────────

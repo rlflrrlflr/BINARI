@@ -23,6 +23,10 @@ on:
         description: "근거(수호신 한 줄)까지 받을까 — 채점 시트에 붙이려면 켜세요. 두 배 느리고 두 배 비쌉니다"
         type: boolean
         default: false
+      tier:
+        description: "어느 모델로 볼까 — free(무료 카드) / paid(유료 서신). 비우면 서버 기본값"
+        default: ""
+        required: false
       via:
         description: "어느 주소를 거칠까 (보통 그대로 두세요)"
         default: "https://binari-sepia.vercel.app"
@@ -61,6 +65,7 @@ jobs:
           args="--via=${{ inputs.via }} --personas=${{ inputs.personas }}"
           if [ -n "${{ inputs.cat }}" ]; then args="$args --cat=${{ inputs.cat }}"; fi
           if [ "${{ inputs.full }}" = "true" ]; then args="$args --full"; fi
+          if [ -n "${{ inputs.tier }}" ]; then args="$args --tier=${{ inputs.tier }}"; fi
           echo "실행: node app/eval/run-eval.mjs $args"
           node app/eval/run-eval.mjs $args
         continue-on-error: true   # 실패해도 아래 요약을 보여줘야 원인을 안다

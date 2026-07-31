@@ -1,8 +1,14 @@
 /* 비나리 판결 프록시 — API 키는 이 함수(서버) 안에서만 산다.
    Vercel 환경변수: ANTHROPIC_API_KEY(필수) · BINARI_MODEL(선택, 기본 claude-sonnet-5) · ALLOWED_ORIGIN(선택, 미설정 시 기본 허용 목록)
-   v101 — 콜1/콜2 모델 분리(선택): BINARI_MODEL_CALL1 / BINARI_MODEL_CALL2. 미설정 시 BINARI_MODEL 하나로 동작(현행 그대로).
-     구분은 max_tokens 800 경계(아래 로그와 동일 기준). 판결(콜1)을 바꾸기 전엔 반드시 평가 워크플로로
-     GUARD·REASK·S3 를 먼저 돌려볼 것 — 콜1이 가드레일(자해 감지)·스코프·표 판정을 전부 지고 있다.
+   v102 — 티어별 모델(무료/유료 분리):
+     무료(카드 앞면 콜1 + 뒷면 근거 콜2) = BINARI_MODEL_FREE, 유료(서신) = BINARI_MODEL_PAID.
+     요청 본문의 tier("free"|"paid")로 고른다. 미설정 시 전부 BINARI_MODEL 하나로 동작(현행 그대로).
+     ⚠️ tier 는 지금 **클라이언트 말을 그대로 믿는다.** 결제가 아직 없어서 무해하지만,
+        결제를 붙이는 날 반드시 서버에서 영수증·토큰으로 검증할 것 — 안 그러면 누구나
+        무료로 비싼 모델을 쓸 수 있다. 허용 목록(TIERS)에 없는 값은 무시하므로
+        임의 모델 지정(예: 최고가 모델 강제)은 지금도 불가능하다.
+     ⚠️ 판결(콜1)의 모델을 바꾸기 전엔 반드시 평가 워크플로로 GUARD·REASK·S3 를 먼저 돌릴 것 —
+        콜1이 가드레일(자해 감지)·스코프·표 판정을 전부 지고 있다.
    방어(v54): Origin 필수+허용목록 · 본문 크기 상한 · max_tokens 클램프 · SYS 프리픽스 대조(임의 프롬프트 주입 차단).
    방어(v76): CORS 응답 헤더+프리플라이트 · IP 레이트리밋 · 상류 에러 원문 미노출.
 
@@ -96,23 +102,23 @@ export default async function handler(req, res) {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) return res.status(500).json({ error: { message: "서버에 ANTHROPIC_API_KEY가 없어 — Vercel 환경변수를 확인해" } });
 
-  const { system, messages, max_tokens } = req.body || {};
+  const { system, messages, max_tokens, tier } = req.body || {};
   if (!Array.isArray(messages) || messages.length === 0) return res.status(400).json({ error: { message: "messages가 비었어" } });
   if (messages.length > 40) return res.status(400).json({ error: { message: "대화가 너무 길어" } });
   try { if (JSON.stringify(req.body).length > 60000) return res.status(400).json({ error: { message: "요청이 너무 커" } }); } catch { return res.status(400).json({ error: { message: "본문을 읽을 수 없어" } }); }
   const sysText = Array.isArray(system) && system[0] && typeof system[0].text === "string" ? system[0].text : "";
   if (!sysText.startsWith(SYS_PREFIX)) return res.status(400).json({ error: { message: "판결 형식이 아니야" } });
   const mt = Math.min(Math.max(parseInt(max_tokens, 10) || 320, 1), 2400);   // 근거를 용어+풀이로 병기하면서 1600에선 잘렸다(상한은 천장일 뿐 — 안 쓰면 비용 0)
+  // 티어 → 모델. 허용 목록 방식이라 클라이언트가 임의 모델을 지정할 수 없다(비용 폭주 차단).
+  const TIERS = { free: process.env.BINARI_MODEL_FREE, paid: process.env.BINARI_MODEL_PAID };
+  const tierKey = tier === "paid" ? "paid" : "free";
+  const model = TIERS[tierKey] || process.env.BINARI_MODEL || "claude-sonnet-5";
 
   try {
     const r = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({
-        // 콜1(판결)과 콜2(근거)의 모델을 따로 지정할 수 있다 — 경계는 로그의 call 판정과 동일(mt<=800=콜1)
-        model: (mt <= 800 ? process.env.BINARI_MODEL_CALL1 : process.env.BINARI_MODEL_CALL2) || process.env.BINARI_MODEL || "claude-sonnet-5",
-        max_tokens: mt, system, messages, thinking: { type: "disabled" },
-      }),
+      body: JSON.stringify({ model, max_tokens: mt, system, messages, thinking: { type: "disabled" } }),
     });
     const data = await r.json();
 
@@ -132,7 +138,8 @@ export default async function handler(req, res) {
       const dir = (txt.match(/"direction"\s*:\s*"(GO|STOP|HOLD)"/) || [])[1] || null;
       const scope = (txt.match(/"scope"\s*:\s*"(S[123])"/) || [])[1] || null;   // S3(몸·병) 진입 비율은 서버 로그로도 본다
       // 콜1은 votes 를 함께 받느라 560토큰이 됐다 — 경계를 800으로 올리지 않으면 콜1이 콜2로 잘못 집계된다
-      console.log(JSON.stringify({ at: new Date().toISOString(), call: mt <= 800 ? 1 : 2, cat, dir, scope, usage: data.usage || null }));
+      // 모델을 같이 남긴다 — 티어 전환 뒤 "어느 모델이 이 판결을 냈나"를 못 되짚으면 A/B 비교가 불가능하다
+      console.log(JSON.stringify({ at: new Date().toISOString(), call: mt <= 800 ? 1 : 2, tier: tierKey, model, cat, dir, scope, usage: data.usage || null }));
     } catch {}
     return res.status(200).json(data);
   } catch (e) {

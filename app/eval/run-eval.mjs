@@ -29,6 +29,8 @@ if (!KEY && !VIA) {
 }
 const FULL = process.argv.includes("--full");
 const MODEL = process.env.BINARI_MODEL || "claude-sonnet-5";
+const tierArg = process.argv.find((a) => a.startsWith("--tier="));
+const TIER = tierArg ? tierArg.split("=")[1] : null;   // free|paid — 경유 모드에서 서버가 모델을 고르는 기준
 const VIA_GAP_MS = 1500;   // 경유 시 호출 간격 — 1분 90회 한도 아래로(판결 1건당 최대 2콜)
 
 const APP = readFileSync(join(HERE, "..", "src", "App.jsx"), "utf8");
@@ -86,7 +88,7 @@ async function call(sys, content, mt) {
         ? await fetch(`${VIA}/api/judge`, {
             method: "POST",
             headers: { "content-type": "application/json", origin: VIA },
-            body: JSON.stringify({ system: [{ type: "text", text: sys }], max_tokens: mt, messages: [{ role: "user", content }] }),
+            body: JSON.stringify({ system: [{ type: "text", text: sys }], max_tokens: mt, messages: [{ role: "user", content }], ...(TIER ? { tier: TIER } : {}) }),
           })
         : await fetch("https://api.anthropic.com/v1/messages", {
             method: "POST",
@@ -171,7 +173,7 @@ const esc = (s) => `"${String(s == null ? "" : s).replace(/"/g, '""')}"`;
 
 const rows = [["persona", "mbti", "main", "qid", "cat", "mode", "question", "dir", "scope", "votes", "tone", "against/total", "verdict", "auto", "subline", "funLine", "사람평점(1-5)", "메모"]];
 let flags = 0, errors = 0, spend = { in: 0, out: 0 };
-const route = VIA ? `경유 ${VIA}/api/judge (모델은 서버가 정함)` : `직접 api.anthropic.com · 모델 ${MODEL}`;
+const route = VIA ? `경유 ${VIA}/api/judge (모델은 서버가 정함${TIER ? " · tier=" + TIER : ""})` : `직접 api.anthropic.com · 모델 ${MODEL}`;
 console.log(`SYS 추출 OK (${SYS.length}자). ${route}. ${personas.length}인 × ${questions.length}문항 = ${personas.length * questions.length}판결${FULL ? " (+근거)" : ""}\n`);
 
 for (const p of personas) {
