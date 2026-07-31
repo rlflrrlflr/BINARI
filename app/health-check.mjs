@@ -179,6 +179,31 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
     } else if (mt2 && clamp) add("정상", "콜2/서버 클램프", `콜2 ${mt2} ≤ 클램프 ${clamp}`, "");
   } catch (_) { /* 구조가 바뀌면 조용히 넘어간다 */ }
 
+  // v103: 속결 제거 — 잔재가 남으면 죽은 분기가 조용히 살아 있는 셈이다
+  const quickLeft = ["looksQuick", "_quick", "QUICK_HINTS", "[판돈]"].filter((t) => src.includes(t));
+  if (quickLeft.length) {
+    add("주의", "속결(quick) 잔재가 남음", quickLeft.join(", "),
+      "v103에서 제거한 기능입니다. 남은 참조를 지우세요 — 죽은 분기는 다음 사람이 살아 있는 줄 압니다.");
+  } else add("정상", "속결 제거 완결", "quick 관련 잔재 없음", "");
+
+  /* e2e 가 화면에 없는 버튼을 누르고 있는가 — 실제 사고(2026-07-30):
+     속결 버튼을 지웠는데 verdict·v29·webgl 이 그 버튼을 클릭하고 있었다. 검진이 App.jsx 만 봐서 못 잡았고,
+     테스트를 돌려야만 타임아웃으로 드러났다. 앱에 없는 버튼 이름을 클릭하는 e2e 를 여기서 잡는다. */
+  try {
+    const bad = [];
+    for (const f of readdirSync("e2e").filter((f) => f.endsWith(".mjs"))) {
+      const t = readFileSync(`e2e/${f}`, "utf8");
+      for (const m of t.matchAll(/getByRole\("button",\s*\{\s*name:\s*"([^"]+)"\s*\}\)\.click\(\)/g)) {
+        // 클릭하는 버튼은 App.jsx 안에 그 문구가 있어야 한다(없으면 화면에 없는 버튼을 누르는 것)
+        if (!src.includes(m[1])) bad.push(`${f}: "${m[1]}"`);
+      }
+    }
+    if (bad.length) {
+      add("심각", "e2e 가 화면에 없는 버튼을 클릭", bad.join(" · "),
+        "앱에서 지운 버튼을 테스트가 아직 누르고 있습니다. 해당 e2e 를 새 경로로 고치세요 — 안 고치면 테스트가 타임아웃으로만 알려줍니다.");
+    } else add("정상", "e2e 버튼 문구 정합", "테스트가 누르는 버튼이 전부 앱에 존재", "");
+  } catch (_) { /* 구조가 바뀌면 조용히 넘어간다 */ }
+
   // 카드 앞면에 한자 괘 이름이 돌아오는 회귀 방지 — 앞면은 쉬운 말만(층위 분리)
   //   범위: 공유 카드 앞면 ~ 판결 카드의 L1 결론. 마커가 사라졌으면(구조 변경) 조용히 통과시키지 말고 알린다.
   const fs0 = src.indexOf('<div className="vtop"><span>BINARI</span>'), fs1 = src.indexOf("{/* L1 결론 */}");
@@ -197,7 +222,6 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
 {
   // 앱과 하네스가 반드시 같이 갖고 있어야 할 문자열들. 하나라도 어긋나면 채점이 앱과 무관해진다.
   const shared = [
-    { name: "판돈 태그", tag: "유저가 '속결'로 물었다" },
     { name: "되물음 태그", tag: "[되물음] 유저가 방금 판결" },
     { name: "콜1 scope 필드", tag: '"scope":"S1|S2|S3"' },
     { name: "콜1 votes 필드", tag: '"votes":[{"axis":"지표명","v":"GO|STOP|중립"}]' },

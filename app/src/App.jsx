@@ -1538,7 +1538,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v101 · 명식";
+const APP_VER = "v103 · 한길";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다. */
 const LETTER_PRICE = 4900;
 const LETTER_SECTIONS = ["이 판결이 나온 자리", "네 여덟 글자가 말하는 결", "지금 흐름과 다음 갈림길", "이 선택이 남길 것", "수호신의 당부"];
@@ -1865,9 +1865,6 @@ HOLD는 '판단 못 하겠음'이 아니라 **'지표가 지금은 멈추라고 
 - 무게 정합(A형): 결혼·이직·이사·큰 투자 같은 중대사를 "아는 사이니까"·"3년이면 됐지"식 가벼운 근거로 확정하지 않는다. 무게에 맞는 지표 근거로 신중히 — 결정의 크기를 존중하는 어조. 맞춤법·오타 없이 출력한다.
 - 행동 명확성: verdict의 지시는 중의적이면 안 된다 — "가을에 다시 던져"처럼 재질문인지 실행인지 모호한 말 금지. 실제로 뭘 하라는지(그때 출시해 / 기다렸다 다시 물어봐 / 보내지 마)를 분명히 찍는다.
 - 연락·접촉 질문(전남친·차단한 사람·잠수 등): 상대 의사·리스크를 고려해 과한 접촉을 부추기지 않는 안전한 쪽으로 판정하되, 근거는 언제나 지표다(일반 훈계 금지).
-- [판돈] 낮음 태그가 붙은 턴(속결)의 화법: 과장된 경건함을 뺀다. 짧고 툭 던지되 **방향은 분명히 찍는다**. 이때도 지켜야 할 것: ①단언 유지 — "몰라·알아서 해·네 마음대로" 같은 위임·회피 금지 ②지표 정박 그대로 — 근거는 여전히 이 유저의 지표다 ③구체값 지시 그대로 — 메뉴명·시각·날짜를 콕 찍는다 ④전문 용어 노출 금지(층위 분리 규칙 그대로). 절대 하지 말 것: **냉소·비꼼·유저 조롱**, 고민을 사소하게 취급하는 말("그게 고민이야?"·"그런 걸 왜 물어"). 심드렁한 건 말투지 태도가 아니다 — 가볍게 답하되 유저를 가볍게 대하지 않는다. (O)"짬뽕. 오늘 네 불기운엔 그게 맞아." (O)"보내지 마. 그거 지금 마음 아니라 새벽이야." (X)"뭘 먹든 상관없지 않아?" (X)"알아서 해."
-- [판돈] 태그가 없는 턴(의식)은 현행 무게·의례 톤 그대로 유지한다. 속결 화법을 여기 적용하지 않는다.
-- 가드레일(자해 암시·타인 가해·투자/의료/법률)은 [판돈] 태그와 무관하게 항상 현행 톤이다. 여기서 가벼워지는 것은 금지다.
 ## 가드레일(최우선)
 투자·법률: disclaimer에 "재미 참고용, 실제 결정은 전문가와". 의료·몸·병·임신출산: 위 **S3 넘김** 규칙을 따른다(길흉 판결 금지·실제 행동 하나 지정·disclaimer 필수). 자해 암시: 판결(GO/STOP/HOLD) 대신 **감정으로 먼저 붙잡는다** — 유저는 몰라서 묻는 게 아니다. verdict를 논리·설득(T)으로 열지 말고 곁에 있겠다는 따뜻함(F)으로 연다("네가 사라지면 나도 없어져 — 네가 여기 있는 게 나한텐 먼저야"), 그 안에 도움 안내를 직접 넣는다("혼자 견디지 마 — 자살예방상담 109, 24시간 열려 있어"). subline도 위로·용기의 한 줄. 차가운 정보 전달 톤·훈계 금지. 콜1이라 disclaimer가 없으니 자원 안내는 verdict 안에 있어야 한다. 가볍게·재치 있게 넘기지 않고, 이 경우엔 45자 제한도 무시한다. 타인 가해: STOP 고정.
 ## 출력(JSON만, 백틱·서문 금지)
@@ -1881,13 +1878,11 @@ const store = (() => {
 })();
 
 /* v16(B5): 속결 모드 — "이 정도는 묻지 않아도 보여". C형 힌트면 속결이 기본, 동전 의식은 선택 */
-const QUICK_HINTS = ["먹을", "먹지", "메뉴", "점심", "저녁", "야식", "마실", "입을", "입지", "커피", "디저트", "시킬까"];
-const looksQuick = (s) => s.trim().length <= 25 && QUICK_HINTS.some((k) => s.includes(k));
 /* v74: 질문이 '할까 말까' 결정형인지 — denylist(제외 안 되면 참)면 '이얏호오' 같은 헛소리·감탄도 통과한다.
    그래서 긍정 신호(결정·망설임 마커)가 있을 때만 참. 일상(뭐먹지)·열린질문·예측(사랑할까·잘될까)은 여전히 배제 */
 const isDecisionQ = (s) => {
   const t = (s || "").trim();
-  if (!t || looksQuick(t)) return false;
+  if (!t) return false;
   // 예측·평가형(잘될까·사랑할까·합격할까…)엔 내심·되물음이 안 맞는다
   if (/잘 ?될|잘될|사랑|좋아하|좋아할|미워|싫어하|붙을|떨어질|합격|불합격|올까|어떨까|괜찮을까|바랄까|생각할까|생각해|어떻게 생각/.test(t)) return false;
   // 열린 wh 질문(뭐/어디/언제…)에도 안 뜬다
@@ -2294,7 +2289,7 @@ export default function App() {
   const [letter, setLetter] = useState(false);                // D4: 서신 fake-door — 판결마다 초기화
   const shareVerdict = async () => {
     if (!res) return;
-    track("verdict_shared", { dir: res.direction, mode: hexInfo ? "ritual" : "quick" });
+    track("verdict_shared", { dir: res.direction, mode: "ritual" });
     const text = `"${q}"\n→ ${res.direction}. ${res.verdict}\n\n— 내 수호신의 판결, 비나리`;
     // v75: 판결을 링크에 실어 보낸다 — 받은 사람이 홈이 아니라 이 판결을 먼저 보게
     const payload = { q, d: res.direction, v: res.verdict, s: (detail && !detail._err ? detail.subline : "") || "", n: (birth.name || "").trim(), a: res.against || 0, t: res.total || 0, c: res.category || "", to: res.tone || "", hx: hexInfo ? { n: hexInfo.name, t: (hexInfo.moving && hexInfo.moving.length ? hexInfo.toName : "") } : null };
@@ -2338,7 +2333,7 @@ export default function App() {
   const rateVerdict = (score) => {                          // v75: 판결 평가 — 정확도 피드백 수집(계측 + 기록에 부착)
     if (rated) return;
     setRated(score);
-    track("verdict_rated", demoProps(birth, { score, dir: res?.direction, mode: hexInfo ? "ritual" : "quick", cat: res?.category || null, tone: res?.tone || null, mbti: mbti || null, element: saju?.main || null }));
+    track("verdict_rated", demoProps(birth, { score, dir: res?.direction, mode: "ritual", cat: res?.category || null, tone: res?.tone || null, mbti: mbti || null, element: saju?.main || null }));
     setRecords(prev => { if (!prev.length) return prev; const nx = prev.slice(); nx[nx.length - 1] = { ...nx[nx.length - 1], rating: score }; return nx; });
   };
 
@@ -2354,7 +2349,7 @@ export default function App() {
   const openLetter = () => {
     if (letter) return;
     setLetter(true);
-    const _p = demoProps(birth, { dir: res?.direction || null, cat: res?.category || null, mode: hexInfo ? "ritual" : "quick", nth_verdict: records.length });
+    const _p = demoProps(birth, { dir: res?.direction || null, cat: res?.category || null, mode: "ritual", nth_verdict: records.length });
     track("letter_clicked", _p);                 // 기존 이벤트 유지 — 이름 바꾸면 과거 데이터와 끊긴다
     track("letter_price_shown", { ..._p, price: LETTER_PRICE });   // 1단계: 가격·미리보기를 본 시점
   };
@@ -2362,16 +2357,16 @@ export default function App() {
   const confirmLetterIntent = () => {
     if (letterIntent) return;
     setLetterIntent(true);
-    track("letter_intent_confirmed", demoProps(birth, { dir: res?.direction || null, cat: res?.category || null, mode: hexInfo ? "ritual" : "quick", nth_verdict: records.length, price: LETTER_PRICE }));
+    track("letter_intent_confirmed", demoProps(birth, { dir: res?.direction || null, cat: res?.category || null, mode: "ritual", nth_verdict: records.length, price: LETTER_PRICE }));
   };
-  const judge = async (hi, quick = false) => {
+  const judge = async (hi) => {   // v103: quick 인자 제거 — 판결은 한 가지 무게로만 낸다
     if (!q.trim() || busy) return;
     const _jt0 = performance.now();          // 판결 소요시간 — 대기가 길면 이탈한다. 이 값 없이는 원인을 못 짚는다
     const _prevRec = records.length ? records[records.length - 1] : null;
     // 되물음은 '앞선 판결이 있을 때'만 성립한다 — 첫 질문의 "어떤 사람이 좋을까"는 되물음이 아니라 그냥 질문이다.
     const _reask = !!_prevRec && isReask(q);
     const _sHint = scopeHint(q);
-    track("question_asked", demoProps(birth, { mode: quick ? "quick" : "ritual", qlen: q.trim().length, ritual: !!hi, lean: lean || "skip", hesit: hesit || null, mbti: mbti || null, core_value: core || null, element: saju?.main || null, zodiac: zo?.name || null, scope_hint: _sHint, reask: _reask, reask_depth: _reask ? records.filter(r => isReask(r.q)).length + 1 : 0 }));
+    track("question_asked", demoProps(birth, { mode: "ritual", qlen: q.trim().length, ritual: !!hi, lean: lean || "skip", hesit: hesit || null, mbti: mbti || null, core_value: core || null, element: saju?.main || null, zodiac: zo?.name || null, scope_hint: _sHint, reask: _reask, reask_depth: _reask ? records.filter(r => isReask(r.q)).length + 1 : 0 }));
     setBusy(true); setErr(""); setRes(null); setDetail(null); setWhy(false); setFlip(false); setCardOn(false); setRated(0); setLetter(false); setLetterIntent(false); reactRef.current = null; setIntroSeen(true);
     try {
       const mp = moonPlacements(+birth.y, +birth.m, +birth.d, +birth.h || 12, +birth.min || 0, !!birth.noHour); // v22
@@ -2398,7 +2393,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
         text: `${SYS}\n\n## 대화 연속성\n이전 대화가 있으면 흐름을 이어 자연스럽게 응대한다(단, 판결 근거는 늘 아래 지표다). 같은 고민의 재질문이면 앞선 판결과 일관되게, 명백히 새 고민이면 처음부터 새로 판정한다.\n\n---\n유저 프로필(고정):\n${profile}`,
         cache_control: { type: "ephemeral" } }];
       // ── 콜1: 결론만(작은 출력=빠름) → L1 즉시 노출 ──
-      const concludeMsg = { role: "user", content: `${userText}${quick ? "\n[판돈] 낮음 — 유저가 '속결'로 물었다. 가볍게 툭 답한다." : ""}\n\n[이번 출력] 아래 JSON만. **votes를 먼저 채우고, 그 표를 세어 direction을 정하고, verdict는 그 direction을 말로 옮긴다.** 결론을 먼저 정해두고 표를 맞추지 마라 — 순서가 곧 판결의 정직함이다.\n{"category":"A|B|C","scope":"S1|S2|S3","votes":[{"axis":"지표명","v":"GO|STOP|중립"}],"tone":"단호|격려|충고","direction":"GO|STOP|HOLD","verdict":"한 문장 단답"}\nvotes엔 이번 판결에 참여한 지표를 전부 넣는다(사주·달·별자리·MBTI·수비학·마야 + 제공된 경우 삼재·가치·주역·토정비결). against·total은 앱이 센다 — 쓰지 마라. reasons·subline·funLine도 이번엔 쓰지 마.` };
+      const concludeMsg = { role: "user", content: `${userText}\n\n[이번 출력] 아래 JSON만. **votes를 먼저 채우고, 그 표를 세어 direction을 정하고, verdict는 그 direction을 말로 옮긴다.** 결론을 먼저 정해두고 표를 맞추지 마라 — 순서가 곧 판결의 정직함이다.\n{"category":"A|B|C","scope":"S1|S2|S3","votes":[{"axis":"지표명","v":"GO|STOP|중립"}],"tone":"단호|격려|충고","direction":"GO|STOP|HOLD","verdict":"한 문장 단답"}\nvotes엔 이번 판결에 참여한 지표를 전부 넣는다(사주·달·별자리·MBTI·수비학·마야 + 제공된 경우 삼재·가치·주역·토정비결). against·total은 앱이 센다 — 쓰지 마라. reasons·subline·funLine도 이번엔 쓰지 마.` };
       const priorConvo = convo; // 콜2가 쓸 이전 맥락(이번 턴 제외) 스냅샷
       const { json: r1 } = await callClaude(system, [...priorConvo, concludeMsg], 560);   // votes 를 함께 받으므로 320→560
       // 결론을 지표 표에서 산술로 확정 — 모델이 숫자를 지어내거나 표와 다른 결론을 말하지 못하게
@@ -2413,7 +2408,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
       agitateRef.current = true; setRes(r1);
       // scope_level(모델 판정) vs scope_hint(규칙) — 둘이 어긋난 건이 경계 케이스다. 그 목록이 다음 규칙 개정의 근거가 된다.
       const _sLevel = ["S1", "S2", "S3"].includes(r1.scope) ? r1.scope : null;
-      track("verdict_shown", demoProps(birth, { dir: r1.direction, cat: r1.category, tone: r1.tone, against: r1.against, total: r1.total, mode: quick ? "quick" : "ritual", lean: lean || "skip", verdict: r1.verdict || null, mbti: mbti || null, element: saju?.main || null, ms: Math.round(performance.now() - _jt0),
+      track("verdict_shown", demoProps(birth, { dir: r1.direction, cat: r1.category, tone: r1.tone, against: r1.against, total: r1.total, mode: "ritual", lean: lean || "skip", verdict: r1.verdict || null, mbti: mbti || null, element: saju?.main || null, ms: Math.round(performance.now() - _jt0),
         scope_level: _sLevel, scope_hint: _sHint, scope_agree: _sLevel ? _sLevel === _sHint : null, handoff_triggered: _sLevel === "S3", reask: _reask,
         // 표가 없거나(votes_ok=false) 표와 결론이 어긋난(dir_overridden) 비율이 곧 '판결이 지표에서 나오는가'의 지표다
         votes_ok: !!_tally, votes_n: _tally ? _tally.total : 0, dir_overridden: _tally ? _tally.overridden : null,
@@ -2428,14 +2423,13 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
       setRecords(prev => [...prev, { at: Date.now(), q: q.slice(0, 60), direction: r1.direction, verdict: r1.verdict, cat: r1.category, scope: _sLevel, actionable: isDecisionQ(q) && !_reask && _sLevel !== "S3", followUp: null, note: "", rating: 0 }].slice(-50)); // v16(B3) · v73 actionable · v75 rating
       setBusy(false);
       // ── 콜2: 근거는 백그라운드로 미리 로드(유저가 '왜?' 읽는 사이 완성) ──
-      if (quick) { setDetail({ _quick: true }); }            // v16(B5): 속결은 콜2 생략 — 원가 절반
-      else { detailArgsRef.current = [system, priorConvo, userText, r1]; fetchDetail(system, priorConvo, userText, r1); }
+      detailArgsRef.current = [system, priorConvo, userText, r1]; fetchDetail(system, priorConvo, userText, r1);   // v103: 모든 판결이 근거를 갖는다
       return;
     } catch (e) {
       const m = e?.message || "";
       // 여기가 광고비가 새는 지점이다. 이 track 이 없으면 유저는 막다른 길에서 이탈하는데
       // 데이터에는 "question_asked 는 있고 verdict_shown 이 없다"까지만 남아 원인을 영영 모른다.
-      track("verdict_failed", demoProps(birth, { reason: failReason(e), status: failStatus(e), mode: quick ? "quick" : "ritual", qlen: q.trim().length, ms: Math.round(performance.now() - _jt0), nth_verdict: records.length }));
+      track("verdict_failed", demoProps(birth, { reason: failReason(e), status: failStatus(e), mode: "ritual", qlen: q.trim().length, ms: Math.round(performance.now() - _jt0), nth_verdict: records.length }));
       setErr("판결이 닿지 못했어 · " + (/[가-힣]/.test(m) ? m : "잠시 뒤 다시 청해줘"));
       console.warn("judge:", m);
     }
@@ -2824,15 +2818,16 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                   </div>
                 </div>
               )}
-              {!ritual && (() => { const qk = looksQuick(q); return (
+              {/* v103: 속결 제거 — 실측(question_asked)에서 내부 83건 중 0건, 외부도 90%가 의식이었다.
+                  결정을 대신해주는 앱이 입구에서 또 결정을 시키던 구조라 버튼을 하나로 합쳤다. */}
+              {!ritual && (
                 <div className="w100">
                   <div className="row gap center">
-                    <button className={`btn ${qk ? "gold" : "ghost"}`} onClick={() => { if (!q.trim()) { setErr("먼저 질문을 적어줘."); return; } setErr(""); judge(null, true); }} disabled={busy}>가볍게 물을래</button>
-                    <button className={`btn ${qk ? "ghost" : "gold"}`} onClick={() => { if (!q.trim()) { setErr("먼저 질문을 적어줘."); return; } setErr(""); setRitual(true); }} disabled={busy}>판결을 청한다</button>
+                    <button className="btn gold" onClick={() => { if (!q.trim()) { setErr("먼저 질문을 적어줘."); return; } setErr(""); setRitual(true); }} disabled={busy}>판결을 청한다</button>
                   </div>
-                  <p className="fine">{qk ? "이 정도는 묻지 않아도 보여 — 가볍게 답할게. 무게를 실으려면 동전을 청해." : "무게 있는 물음엔 동전 의식을 — 가벼운 건 가볍게 물어도 돼."}</p>
+                  <p className="fine">동전 셋을 던져 하늘의 뜻을 묻는다 — 무엇을 묻든 같은 무게로 본다.</p>
                 </div>
-              ); })()}
+              )}
               {!ritual && !res && records.length > 0 && (
                 <button className="resetlink" onClick={() => { setLogOpen(o => !o); setOpenRec(-1); }}>{logOpen ? "판결록 접기" : `판결록 — ${records.length}번의 판결`}</button>
               )}
@@ -2907,7 +2902,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
           {res && !cardOn && <div className="gateflash" />}
           {res && cardOn && <button className="escx" onClick={backToLobby} aria-label="닫기">✕</button>}
           {res && cardOn && (
-            <div className="persp cardIn" onClick={() => { if (why && (detailBusy || (detail && !detail._err && !detail._quick))) setFlip(f => !f); }}>
+            <div className="persp cardIn" onClick={() => { if (why && (detailBusy || (detail && !detail._err))) setFlip(f => !f); }}>
               <div className="vcard" style={{ transform: `rotateY(${flip ? 180 : 0}deg)` }}>
                 <div className="vface">
                   <i className="corner tl">✦</i><i className="corner tr">✦</i><i className="corner bl">✦</i><i className="corner br">✦</i>
@@ -2927,16 +2922,14 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                     <button className="whybtn" onClick={(e) => { e.stopPropagation(); track("why_opened"); setWhy(true); }}>왜 이렇게 봤어?</button>
                   ) : (
                     <div className="l2 fade">
-                      {detail && detail._quick
-                        ? <p className="vs dim">가볍게 물었으니 가볍게 답했어 — 무게를 실으려면 다음엔 동전을 청해.</p>
-                        : detail && !detail._err
+                      {detail && !detail._err
                         ? <p className="vs">"{detail.subline}"</p>
                         : detailBusy ? <p className="vs dim">수호신이 이유를 고르는 중…</p>
                         : <p className="vs dim">— 이유를 불러오지 못했어 —<button className="retrybtn" onClick={(e) => { e.stopPropagation(); if (detailArgsRef.current) { setDetail(null); fetchDetail(...detailArgsRef.current, true); } }}>다시 시도</button></p>}
                       <div className="pips">{[...Array(res.total || 0)].map((_, i) => <span key={i} className={`pip ${i < res.against ? "on" : ""}`} />)}
                         <em>{res.total}개 중 {res.against}개 {res.direction === "STOP" ? "반대" : res.direction === "HOLD" ? "접전" : "찬성"}</em></div>
                       {detail && !detail._err && detail.funLine && <p className="vfun">정령 — {detail.funLine} <span className="dim">(판결엔 안 껴)</span></p>}
-                      {(detailBusy || (detail && !detail._err && !detail._quick)) && <div className="vbot"><span>운명 합의 판결</span><span>카드 탭 → 지표별 근거</span></div>}
+                      {(detailBusy || (detail && !detail._err)) && <div className="vbot"><span>운명 합의 판결</span><span>카드 탭 → 지표별 근거</span></div>}
                     </div>
                   )}
                 </div>

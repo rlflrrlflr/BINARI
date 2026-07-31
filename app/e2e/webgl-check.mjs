@@ -58,7 +58,9 @@ const b = await chromium.launch({ executablePath: process.env.CHROME_PATH || und
   const lum1 = await brightness(page);
   ck("① 입자 실제 렌더(평균 밝기 > 1)", lum1 > 1, "avg=" + lum1.toFixed(2));
   await page.locator("textarea.qbox").fill("이 길로 가도 될까?"); await page.waitForTimeout(200);
-  await page.getByRole("button", { name: "가볍게 물을래" }).click();
+  await page.getByRole("button", { name: "판결을 청한다" }).click();
+  await page.waitForSelector("text=동전 셋", { timeout: 5000 });
+  await page.getByRole("button", { name: "한 번에 던지기" }).click();
   let ok = false;
   for (let i = 0; i < 40; i++) { if (((await page.locator(".vv").allTextContents())[0] || "").includes("망설이지 마")) { ok = true; break; } await page.waitForTimeout(300); }
   ck("① WebGL 하에서 판결 L1 렌더", ok);

@@ -64,7 +64,9 @@ await page.waitForTimeout(300);
 
 // ── ③ 정독 스로틀 하에서 판결 렌더 정상 ──
 await page.locator("textarea.qbox").fill("이 길로 가도 될까?"); await page.waitForTimeout(300);
-await page.getByRole("button", { name: "가볍게 물을래" }).click();
+await page.getByRole("button", { name: "판결을 청한다" }).click();
+  await page.waitForSelector("text=동전 셋", { timeout: 5000 });
+  await page.getByRole("button", { name: "한 번에 던지기" }).click();
 let verdictOk = false;
 for (let i = 0; i < 40; i++) { if (((await page.locator(".vv").allTextContents())[0] || "").includes("망설이지 마")) { verdictOk = true; break; } await page.waitForTimeout(300); }
 ck("③ 스로틀 중에도 판결 L1 렌더", verdictOk);

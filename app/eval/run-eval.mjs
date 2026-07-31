@@ -182,7 +182,7 @@ for (const p of personas) {
     try {
       const sys = system(p);
       // 앱과 동일한 모드 태그를 붙인다(App.jsx concludeMsg와 문자열 일치) — 안 붙이면 하네스가 앱과 다른 것을 잰다
-      const STAKE = q.mode === "quick" ? "\n[판돈] 낮음 — 유저가 '속결'로 물었다. 가볍게 툭 답한다." : "";
+      const STAKE = "";   // v103: 속결(판돈 태그) 제거 — 앱에서 사라졌으므로 하네스도 붙이지 않는다
       const REASK = q.prev ? reaskTag(q.prev) : "";
       const { json: r1, usage: us1 } = await call(sys, u + STAKE + REASK + CONCLUDE, 560);
       if (us1) { spend.in += us1.input_tokens || 0; spend.out += us1.output_tokens || 0; }
