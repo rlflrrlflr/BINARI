@@ -25,7 +25,8 @@ from pathlib import Path
 
 ENV_PATH = Path.home() / ".binari-report.env"
 PH_HOST = "https://us.posthog.com"
-KEYS = ("POSTHOG_API_KEY", "POSTHOG_PROJECT_ID", "DISCORD_WEBHOOK_URL")
+KEYS = ("POSTHOG_API_KEY", "POSTHOG_PROJECT_ID", "DISCORD_WEBHOOK_URL",
+        "GITHUB_TOKEN", "GITHUB_REPO")   # 뒤 둘은 선택 — 없으면 변경 안내만 빠진다
 
 
 def load_env():
@@ -181,6 +182,10 @@ MSG = {
     "말_서신유보":  "서신은 아직 눌린 횟수가 적어 돈 낼 사람이 있는지 판단하기 이릅니다. 계속 지켜보겠습니다.",
     "말_서신판정":  "서신이 300번 넘게 노출됐습니다. 이제 돈 낼 사람이 있는지 판단할 수 있는 시점입니다.",
 
+    # ── 어제 앱에 반영된 것 ──
+    "변경_제목":    "📦 어제 앱에 반영된 것",
+    "변경_없음":    "",                      # 변경이 없으면 섹션 자체를 안 넣는다
+
     # ── 예외 ──
     "데이터없음":   "어제 데이터를 못 가져왔습니다. 앱이 살아있는지, 기록이 붙어있는지 봐야 합니다.",
     "연결확인":     "비나리 연결 확인 — 이 메시지가 보이면 디스코드 발송은 정상입니다.",
@@ -205,6 +210,46 @@ KST_TZ = datetime.timezone(datetime.timedelta(hours=9))
 def yesterday_kst():
     """리포트가 다루는 날 = 한국 날짜로 어제. 데이터를 못 가져왔을 때 제목에 쓴다."""
     return (datetime.datetime.now(KST_TZ) - datetime.timedelta(days=1)).date()
+
+
+def app_changes(cfg, day):
+    """어제(KST) 앱에 실제로 반영된 변경을 가져온다.
+
+    커밋 전부가 아니라 유저에게 닿는 경로(app/src·public·api)를 건드린 것만 본다.
+    2026-07-28 실측: main 커밋 38건 중 머지 9 · 앱 15 · 문서와 도구 14였다.
+    전부 나열하면 읽히지 않으므로 앱에 닿은 것만, 그것도 6건까지만 싣는다.
+    토큰이 없으면 조용히 건너뛴다 — 리포트 본체가 이것 때문에 죽으면 안 된다."""
+    tok, repo = cfg.get("GITHUB_TOKEN"), cfg.get("GITHUB_REPO")
+    if not tok or not repo:
+        return []
+    since = f"{day}T00:00:00+09:00"
+    until = f"{day}T23:59:59+09:00"
+    seen, out = set(), []
+    for path in ("app/src", "app/public", "app/api"):
+        url = (f"https://api.github.com/repos/{repo}/commits"
+               f"?sha=main&path={path}&since={since}&until={until}&per_page=30")
+        req = urllib.request.Request(url, headers={
+            "Authorization": f"Bearer {tok}", "Accept": "application/vnd.github+json",
+            "User-Agent": USER_AGENT})
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                rows = json.loads(r.read().decode("utf-8"))
+        except Exception:
+            continue                                   # 조회 실패는 리포트를 막지 않는다
+        for c in rows:
+            sha = c.get("sha")
+            if sha in seen:
+                continue
+            seen.add(sha)
+            title = (c.get("commit", {}).get("message") or "").strip().splitlines()
+            if not title:
+                continue
+            t = title[0].strip()
+            if t.startswith("Merge ") or t.startswith("정리:"):
+                continue                               # 머지·잡정리는 팀이 알 필요가 없다
+            out.append((c.get("commit", {}).get("committer", {}).get("date", ""), t))
+    out.sort(reverse=True)
+    return [t for _, t in out][:6]
 
 
 def kdate(v):
@@ -309,6 +354,10 @@ def build_report(cfg):
 
     if notes:
         L += [""] + [f"• {n}" for n in notes]
+
+    changes = app_changes(cfg, t["d"])
+    if changes and MSG.get("변경_제목"):
+        L += ["", MSG["변경_제목"]] + [f"• {c}" for c in changes]
 
     return "\n".join(L)
 
