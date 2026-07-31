@@ -10,8 +10,8 @@ const R = []; const ck = (n, p, note = "") => { R.push(p); console.log(`${p ? "P
 const CALL1 = JSON.stringify({ category: "B", votes: [{ axis: "사주", v: "GO" }, { axis: "달", v: "GO" }, { axis: "별자리", v: "STOP" }], tone: "단호", direction: "STOP", verdict: "보내지 마. 끝.", against: 4, total: 6 });
 const CALL2 = JSON.stringify({ subline: "밤이 널 속이는 거야.", reasons: [{ axis: "사주", vote: "STOP", text: "화기가 널 밀어." }], funLine: "욱하지 마.", disclaimer: "" });
 
-async function onboard(page) {
-  await page.goto(BASE); await page.waitForTimeout(900);
+async function onboard(page, qs = "") {   // qs: "?trackdebug" 처럼 쿼리를 붙일 때 쓴다(계측 검증용)
+  await page.goto(BASE + qs); await page.waitForTimeout(900);
   await page.getByRole("button", { name: "조각을 모으러 갈래" }).click(); await page.waitForTimeout(400);
   await page.getByRole("button", { name: "이름 없이 갈래" }).click(); // v26: 이름 장면 건너뛰기
   const ins = page.locator("input.in:not(.wide)");
@@ -48,7 +48,7 @@ const b = await chromium.launch((process.env.CHROME_PATH ? { executablePath: pro
   await page.addInitScript(({ c1, c2 }) => {
     window.claude = { complete: async (p) => (p.includes("[이미 확정된 판결]") ? c2 : c1) };
   }, { c1: CALL1, c2: CALL2 });
-  await onboard(page);
+  await onboard(page, "?trackdebug");
   ck("S1 complete 감지", await page.evaluate(() => typeof window.claude?.complete === "function"));
   await page.locator("textarea.qbox").fill("전남친에게 연락할까?"); await page.waitForTimeout(300);
   await page.getByRole("button", { name: "판결을 청한다" }).click();
@@ -68,6 +68,36 @@ const b = await chromium.launch((process.env.CHROME_PATH ? { executablePath: pro
   let subOk = false;
   for (let i = 0; i < 30; i++) { if (await page.getByText("밤이 널 속이는 거야.").isVisible().catch(() => false)) { subOk = true; break; } await page.waitForTimeout(300); }
   ck("S1 근거(콜2)", subOk);
+
+  /* v104 서신 대기 연출 — 봉인 5초 → '곧 답변이 있을 것이다' 2초 → 로비.
+     전체화면을 덮는 데다 되돌릴 버튼이 없으므로, 타이머가 끊기면 유저가 갇힌다. 끝까지 실제로 태워 본다. */
+  await page.getByRole("button", { name: /수호신의 서신/ }).click();
+  ck("서신 미리보기 + 환불 고지", await page.getByText("환불되지 않아요", { exact: false }).isVisible().catch(() => false));
+  await page.getByRole("button", { name: "받을게" }).click();
+  await page.waitForSelector(".sealwrap", { timeout: 3000 });
+  ck("① 봉인 연출 등장", await page.getByText("수호신이 붓을 들었어").isVisible().catch(() => false));
+  const t0 = Date.now();   // 연출 시작점 = 오버레이가 뜬 직후(클릭 처리 지연을 재지 않는다)
+  await page.waitForSelector("text=곧 답변이 있을 것이다.", { timeout: 9000 });
+  const dt = Date.now() - t0;
+  ck("② 대기 문구 전환(약 5초 뒤)", dt >= 4000 && dt <= 7000, `${(dt / 1000).toFixed(1)}초`);
+  await page.waitForSelector(".sealwrap", { state: "detached", timeout: 8000 });
+  ck("③ 로비 복귀 + 수호신 한마디", await page.getByText("기다림이 짙을수록 가야할길은 투명해진다.").isVisible().catch(() => false));
+  ck("④ 추가 질문 유도 문구", await page.getByText("지금 물어도 돼", { exact: false }).isVisible().catch(() => false));
+  const evs = await page.evaluate(() => (window.__binariEvents || []).map((e) => e.ev));
+  const seq = ["letter_clicked", "letter_intent_confirmed", "letter_seal_shown", "letter_wait_shown", "letter_lobby_returned"];
+  let at = -1, ordered = true;
+  for (const s of seq) { const i = evs.indexOf(s, at + 1); if (i < 0 || i < at) { ordered = false; break; } at = i; }
+  ck("⑤ 단계별 계측 순서", ordered, seq.join(" → "));
+  // 서신을 맡긴 뒤 한 번 더 묻는가 = 이 연출의 유일한 존재 이유. 그 표식이 실제로 붙는지 확인한다.
+  await page.locator("canvas").first().dblclick();
+  await page.waitForSelector("textarea.qbox", { timeout: 8000 });
+  await page.locator("textarea.qbox").fill("그럼 그동안 뭘 하면 좋을까"); await page.waitForTimeout(300);
+  await page.getByRole("button", { name: "판결을 청한다" }).click();
+  await page.waitForSelector("text=동전 셋", { timeout: 5000 });
+  await page.getByRole("button", { name: "한 번에 던지기" }).click();   // question_asked 는 괘를 뽑은 뒤 judge() 안에서 나간다
+  ck("서신 후 판결 성사", await waitVerdict(page));
+  const qa = await page.evaluate(() => (window.__binariEvents || []).filter((e) => e.ev === "question_asked").pop());
+  ck("⑥ 서신 후 재질문 표식(after_letter)", qa?.props?.after_letter === true, JSON.stringify(qa?.props?.after_letter));
   await page.close();
 }
 

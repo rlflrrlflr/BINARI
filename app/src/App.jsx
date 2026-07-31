@@ -1538,11 +1538,21 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v103 · 한길";
+const APP_VER = "v104 · 서신";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다. */
 const LETTER_PRICE = 4900;
 const LETTER_SECTIONS = ["이 판결이 나온 자리", "네 여덟 글자가 말하는 결", "지금 흐름과 다음 갈림길", "이 선택이 남길 것", "수호신의 당부"];
 const LETTER_PREVIEW = "네 일간은 갑(甲) — 곧게 자라려는 나무야. 그래서 굽히는 결정 앞에서 유독 오래 서 있었지. 이번 물음도 그랬어. 지표들은 갈라졌지만 갈라진 자리마다 같은 것을 가리키더라. 네가 두려워한 건 결과가 아니라, 결정을 되돌릴 수 없다는 사실이었어. 그 마음부터 짚고 시작할게.";
+/* v104: '받을게'(= 가짜 결제 완료) 이후의 대기 연출.
+   서신은 아직 만들지 않는다. 대신 "주문했다 → 기다린다 → 로비로 돌아간다"까지를 실제로 태워 보고
+   이 흐름을 사람이 견디는지, 그 끝에서 한 번 더 묻는지를 잰다. 단계마다 이벤트가 하나씩 붙어 있어
+   어디서 나가는지가 남는다(봉인 5초 → 대기 문구 2초 → 로비). */
+const LETTER_SEAL_MS = 5000;    // 1단계: 봉인 연출
+const LETTER_WAIT_MS = 2000;    // 2단계: '곧 답변이 있을 것이다'
+const LETTER_SEAL_LINE = "수호신이 붓을 들었어";
+const LETTER_WAIT_LINE = "곧 답변이 있을 것이다.";
+const LETTER_LOBBY_LINE = "기다림이 짙을수록 가야할길은 투명해진다.";
+const LETTER_NUDGE_LINE = "서신은 내가 쓰고 있을게. 그 사이에 더 걸리는 게 있으면 — 지금 물어도 돼.";
 function VerBadge() {
   const [r, setR] = useState("");
   useEffect(() => { const t = setInterval(() => { const m = typeof window !== "undefined" && window.__BINARI_R; if (m && m !== r) setR(m); }, 1200); return () => clearInterval(t); }, [r]);
@@ -2287,6 +2297,8 @@ export default function App() {
   const [letterIntent, setLetterIntent] = useState(false);  // 지시서 5: '받을게'까지 누른 지불 의사
   const [belief, setBelief] = useState(() => readBelief());   // D3: 신자/비신자 — 한 번만 묻는다
   const [letter, setLetter] = useState(false);                // D4: 서신 fake-door — 판결마다 초기화
+  const [letterStage, setLetterStage] = useState("");         // v104: "" | "seal"(5초) | "wait"(2초) — 결제 후 대기 연출
+  const [letterSent, setLetterSent] = useState(false);        // v104: 로비로 돌아온 뒤 수호신 한마디를 띄우는 표식
   const shareVerdict = async () => {
     if (!res) return;
     track("verdict_shared", { dir: res.direction, mode: "ritual" });
@@ -2326,9 +2338,14 @@ export default function App() {
     if (now - wakeTapRef.current < 350) { wakeTapRef.current = 0; if (!awake) { setAwake(true); trackVisitOnce("guardian_wake", {}); } }
     else { wakeTapRef.current = now; }
   };
+  // v104: 화면만 로비로 되돌린다(계측 없음). 유저가 X를 눌러 나가는 경우와
+  //       서신 대기 연출이 끝나 자동으로 돌아가는 경우가 같은 상태를 공유하되, 이벤트는 서로 달라야 한다.
+  const resetToLobby = () => {
+    setRes(null); setDetail(null); setWhy(false); setDetailBusy(false); setQ(""); setCardOn(false); setRitual(false); setTosses([]); setHexInfo(null); setBujeok(false); setLean(""); setHesit(""); setPaywall(""); setAwake(false); setRated(0); setLetter(false); setLetterIntent(false);
+  };
   const backToLobby = () => {                               // v56: 판결 화면 탈출구(X · 로비 복귀)
     track("another_question", { after_why: why });
-    setRes(null); setDetail(null); setWhy(false); setDetailBusy(false); setQ(""); setCardOn(false); setRitual(false); setTosses([]); setHexInfo(null); setBujeok(false); setLean(""); setHesit(""); setPaywall(""); setAwake(false); setRated(0); setLetter(false);
+    setLetterSent(false); resetToLobby();
   };
   const rateVerdict = (score) => {                          // v75: 판결 평가 — 정확도 피드백 수집(계측 + 기록에 부착)
     if (rated) return;
@@ -2357,8 +2374,27 @@ export default function App() {
   const confirmLetterIntent = () => {
     if (letterIntent) return;
     setLetterIntent(true);
+    setLetterStage("seal");   // v104: 여기서부터 대기 연출 — 결제창은 없다(fake door)
     track("letter_intent_confirmed", demoProps(birth, { dir: res?.direction || null, cat: res?.category || null, mode: "ritual", nth_verdict: records.length, price: LETTER_PRICE }));
   };
+  /* v104: 봉인(5초) → 대기 문구(2초) → 로비.
+     화면을 떠나거나 새 판결을 시작하면 타이머는 정리된다(클린업). 단계 진입마다 이벤트가 남으므로
+     "받을게는 눌렀는데 7초를 못 기다리고 나갔다"가 데이터로 보인다. */
+  useEffect(() => {
+    if (!letterStage) return;
+    const _p = () => demoProps(birth, { dir: res?.direction || null, cat: res?.category || null, mode: "ritual", nth_verdict: records.length, price: LETTER_PRICE });
+    if (letterStage === "seal") {
+      track("letter_seal_shown", _p());
+      const t = setTimeout(() => setLetterStage("wait"), LETTER_SEAL_MS);
+      return () => clearTimeout(t);
+    }
+    track("letter_wait_shown", _p());
+    const t = setTimeout(() => {
+      track("letter_lobby_returned", _p());
+      setLetterStage(""); setLetterSent(true); resetToLobby();
+    }, LETTER_WAIT_MS);
+    return () => clearTimeout(t);
+  }, [letterStage]);   // eslint-disable-line react-hooks/exhaustive-deps
   const judge = async (hi) => {   // v103: quick 인자 제거 — 판결은 한 가지 무게로만 낸다
     if (!q.trim() || busy) return;
     const _jt0 = performance.now();          // 판결 소요시간 — 대기가 길면 이탈한다. 이 값 없이는 원인을 못 짚는다
@@ -2366,8 +2402,8 @@ export default function App() {
     // 되물음은 '앞선 판결이 있을 때'만 성립한다 — 첫 질문의 "어떤 사람이 좋을까"는 되물음이 아니라 그냥 질문이다.
     const _reask = !!_prevRec && isReask(q);
     const _sHint = scopeHint(q);
-    track("question_asked", demoProps(birth, { mode: "ritual", qlen: q.trim().length, ritual: !!hi, lean: lean || "skip", hesit: hesit || null, mbti: mbti || null, core_value: core || null, element: saju?.main || null, zodiac: zo?.name || null, scope_hint: _sHint, reask: _reask, reask_depth: _reask ? records.filter(r => isReask(r.q)).length + 1 : 0 }));
-    setBusy(true); setErr(""); setRes(null); setDetail(null); setWhy(false); setFlip(false); setCardOn(false); setRated(0); setLetter(false); setLetterIntent(false); reactRef.current = null; setIntroSeen(true);
+    track("question_asked", demoProps(birth, { mode: "ritual", qlen: q.trim().length, ritual: !!hi, lean: lean || "skip", hesit: hesit || null, mbti: mbti || null, core_value: core || null, element: saju?.main || null, zodiac: zo?.name || null, scope_hint: _sHint, reask: _reask, reask_depth: _reask ? records.filter(r => isReask(r.q)).length + 1 : 0, after_letter: letterSent }));   // v104 after_letter: 서신 대기 중에 한 번 더 물었는가
+    setBusy(true); setErr(""); setRes(null); setDetail(null); setWhy(false); setFlip(false); setCardOn(false); setRated(0); setLetter(false); setLetterIntent(false); setLetterStage(""); setLetterSent(false); reactRef.current = null; setIntroSeen(true);
     try {
       const mp = moonPlacements(+birth.y, +birth.m, +birth.d, +birth.h || 12, +birth.min || 0, !!birth.noHour); // v22
       const tzk = tzolkin(jdn(+birth.y, +birth.m, +birth.d));                                                   // v22
@@ -2745,12 +2781,15 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
 
           {phase >= 1 && !res && !awake && (
             <div className="lobbypanel fade">
-              {returning ? (
+              {/* v104: 서신을 맡기고 돌아온 자리 — 인사말 대신 수호신의 한마디, 그리고 한 번 더 묻게 하는 말 */}
+              {letterSent ? (
+                <div><p className="gsay fade">{LETTER_LOBBY_LINE}</p><p className="gsay fade" style={{ animationDelay: ".95s" }}>{LETTER_NUDGE_LINE}</p></div>
+              ) : returning ? (
                 <p className="gsay fade">{"다시 왔네" + (birth.name ? ", " + birth.name : "") + ". 기다렸어."}</p>
               ) : justBorn ? (
                 <div><p className="gsay born fade">— 다시 만났네. 내가 너의 수호신이야.</p><p className="gsay fade" style={{ animationDelay: ".95s" }}>{guardianIntro}</p><p className="gsay sprite fade" style={{ animationDelay: "1.9s" }}>아, 조각 하나는 달빛에 물들어 곁에 남았어. 까불 거야 — '정령'이야.</p></div>
               ) : null}
-              <p className="wakehint">두드려봐 — 답은 거기 있어</p>
+              <p className="wakehint">{letterSent ? "두드려봐 — 하나 더 물어도 돼" : "두드려봐 — 답은 거기 있어"}</p>
             </div>
           )}
           {ritual && <div className="residue" style={{ "--elc": saju ? EL_COLOR[saju.main][0] : "#f5d98b" }} />}
@@ -2979,7 +3018,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
             !letter ? (
               <button className="btn ghost mt" onClick={openLetter}>수호신의 서신 — 이 판결의 깊은 풀이 · {LETTER_PRICE.toLocaleString()}원</button>
             ) : letterIntent ? (
-              <p className="ratedone">아직 준비 중이야 — 수호신이 서신을 쓰는 법을 익히고 있어. 준비되면 가장 먼저 너에게 알릴게.</p>
+              <p className="ratedone">서신을 맡겼어 — 수호신이 쓰기 시작했어.</p>
             ) : (
               <div className="letterwrap fade">
                 <p className="dtag">수호신의 서신 · {LETTER_PRICE.toLocaleString()}원</p>
@@ -3004,6 +3043,19 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
           {res && cardOn && <button className="btn ghost mt" onClick={backToLobby}>다른 걸 물어볼래</button>}
           {res && cardOn && <p className="ainote card">이 판결은 AI가 생성한 내용입니다</p>}
         </section>
+      )}
+
+      {/* v104: 서신 대기 연출 — 화면 전체를 덮는다. 되돌릴 버튼을 두지 않는 건 의도다.
+          '맡겼다'는 감각을 만드는 7초이고, 이 7초를 견디는 비율 자체가 재고 싶은 값이다. */}
+      {letterStage && (
+        <div className="sealwrap" role="status" aria-live="polite">
+          <div className="sealfx" aria-hidden="true">
+            <i className="sring s1" /><i className="sring s2" /><i className="sring s3" />
+            {[0, 1, 2, 3, 4, 5, 6, 7].map(i => <i key={i} className="spark" style={{ "--a": `${i * 45}deg`, animationDelay: `${i * 0.13}s` }} />)}
+            <b className="sealcore">書</b>
+          </div>
+          <p className={"sealline " + letterStage}>{letterStage === "seal" ? LETTER_SEAL_LINE : LETTER_WAIT_LINE}</p>
+        </div>
       )}
     </div>
   );
@@ -3069,6 +3121,20 @@ const CSS = `
 .letterprev{font-size:13px;line-height:1.85;color:#e2d9f2;margin:14px 0 0;text-align:left;overflow-wrap:anywhere}
 .letterprevtag{font-family:sans-serif;font-size:10.5px;color:#8a7f95;margin:6px 0 0}
 .refundnote{font-size:12px;line-height:1.7;color:#e5b96b;margin:14px 0 0;padding:9px 10px;border:1px solid rgba(229,185,107,.35);border-radius:9px}
+/* v104: 서신 대기 연출(봉인 5초 → 대기 문구 2초). 전부 CSS 애니메이션 — 자바스크립트 루프를 돌리지 않는다. */
+.sealwrap{position:fixed;inset:0;z-index:80;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:34px;background:radial-gradient(120% 80% at 50% 42%,#1c1330,#0b0817 56%,#050308);animation:fd .5s ease both}
+.sealfx{position:relative;width:190px;height:190px;display:flex;align-items:center;justify-content:center}
+.sring{position:absolute;inset:0;margin:auto;width:96px;height:96px;border-radius:50%;border:1px solid rgba(245,217,139,.55);opacity:0;animation:sealRing 2.6s cubic-bezier(.2,.65,.3,1) infinite}
+.sring.s2{animation-delay:.85s}.sring.s3{animation-delay:1.7s}
+.spark{position:absolute;left:50%;top:50%;width:2px;height:34px;margin:-17px 0 0 -1px;border-radius:2px;background:linear-gradient(to top,transparent,rgba(255,233,173,.95));transform:rotate(var(--a)) translateY(-58px);transform-origin:50% 50%;animation:sealSpark 2.2s ease-in-out infinite}
+.sealcore{position:relative;font-family:'Noto Serif KR',serif;font-size:42px;font-weight:900;color:#ffe9ad;text-shadow:0 0 30px rgba(245,217,139,.75),0 0 70px rgba(245,217,139,.35);animation:sealCore 2.6s ease-in-out infinite}
+.sealline{font-family:'Noto Serif KR',serif;font-size:15px;letter-spacing:.14em;color:#e8dcc0;margin:0;text-align:center;text-shadow:0 0 18px rgba(245,217,139,.4)}
+.sealline.seal{animation:formPulse 2.1s ease-in-out infinite}
+.sealline.wait{font-size:17px;color:#ffe9ad;animation:fd .7s cubic-bezier(.22,.7,.25,1) both}
+@keyframes sealRing{0%{opacity:0;transform:scale(.45)}18%{opacity:.85}100%{opacity:0;transform:scale(2.05)}}
+@keyframes sealSpark{0%,100%{opacity:.15;transform:rotate(var(--a)) translateY(-52px) scaleY(.6)}50%{opacity:.9;transform:rotate(var(--a)) translateY(-70px) scaleY(1.15)}}
+@keyframes sealCore{0%,100%{transform:scale(1);opacity:.9}50%{transform:scale(1.09);opacity:1}}
+@media (prefers-reduced-motion:reduce){.sring,.spark,.sealcore,.sealline.seal{animation:none}.spark{opacity:.35}}
 .ainote.card{margin-top:18px;opacity:.85}
 .err{color:#e58a8a;font-size:13px;font-family:sans-serif;margin:10px 0}
 .cards{display:flex;flex-direction:column;gap:14px;width:100%;margin-top:10px}

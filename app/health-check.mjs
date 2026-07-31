@@ -204,6 +204,33 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
     } else add("정상", "e2e 버튼 문구 정합", "테스트가 누르는 버튼이 전부 앱에 존재", "");
   } catch (_) { /* 구조가 바뀌면 조용히 넘어간다 */ }
 
+  /* v104 서신 대기 연출 — 화면 전체를 덮는 레이어라 '나가는 길'이 끊기면 유저가 갇힌다.
+     되돌릴 버튼을 일부러 안 두었으므로, 타이머가 끝까지 도는 것이 유일한 탈출구다. 여기서 그 배선을 고정한다. */
+  {
+    const wired = [
+      { name: "봉인 → 대기 전환", pat: /setTimeout\(\(\) => setLetterStage\("wait"\), LETTER_SEAL_MS\)/,
+        fix: "봉인 단계에서 다음으로 넘어가지 못하면 유저가 전체화면 연출에 갇힙니다. 나가는 버튼이 없으므로 이 타이머가 유일한 출구입니다." },
+      { name: "대기 → 로비 복귀", pat: /setLetterStage\(""\); setLetterSent\(true\); resetToLobby\(\)/,
+        fix: "연출이 끝나면 반드시 로비로 돌아가야 합니다. 이 줄이 없으면 7초 뒤에도 화면이 그대로 덮여 있습니다." },
+      { name: "로비 수호신 한마디", pat: /const LETTER_LOBBY_LINE =/,
+        fix: "서신을 맡기고 돌아온 자리에서 수호신이 건네는 말입니다. 이게 없으면 결제 뒤 화면이 그냥 처음으로 되돌아간 것처럼 보입니다." },
+      { name: "추가 질문 유도 문구", pat: /const LETTER_NUDGE_LINE =/,
+        fix: "서신을 기다리는 동안 한 번 더 묻게 하는 말입니다. after_letter 계측과 한 몸입니다." },
+      { name: "서신 후 재질문 계측", pat: /after_letter: letterSent/,
+        fix: "서신을 맡긴 사람이 실제로 한 번 더 묻는지를 재는 값입니다. 없으면 유도 문구가 먹히는지 영영 알 수 없습니다." },
+    ];
+    for (const w of wired) {
+      if (w.pat.test(src)) add("정상", `서신 대기 연출 — ${w.name}`, "있음", "");
+      else add("심각", `서신 대기 연출 끊김 — ${w.name}`, "코드에서 찾을 수 없음", w.fix);
+    }
+    // 연출 길이는 '기획된 값'이다. 리팩터링으로 0 이 되거나 분 단위로 늘어나는 사고를 막는다.
+    const seal = +(src.match(/const LETTER_SEAL_MS = (\d+)/) || [])[1];
+    const wait = +(src.match(/const LETTER_WAIT_MS = (\d+)/) || [])[1];
+    if (seal && wait && seal + wait <= 12000) add("정상", "서신 대기 시간", `봉인 ${seal / 1000}초 + 대기 ${wait / 1000}초`, "");
+    else add("주의", "서신 대기 시간이 기획 범위를 벗어남", `봉인 ${seal / 1000}초 + 대기 ${wait / 1000}초`,
+      "합계 12초를 넘으면 기다림이 아니라 멈춘 화면으로 읽힙니다. 5초 + 2초가 기준값입니다.");
+  }
+
   // 카드 앞면에 한자 괘 이름이 돌아오는 회귀 방지 — 앞면은 쉬운 말만(층위 분리)
   //   범위: 공유 카드 앞면 ~ 판결 카드의 L1 결론. 마커가 사라졌으면(구조 변경) 조용히 통과시키지 말고 알린다.
   const fs0 = src.indexOf('<div className="vtop"><span>BINARI</span>'), fs1 = src.indexOf("{/* L1 결론 */}");
