@@ -248,12 +248,23 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
         fix: "자기가 틀릴 조건을 적는 것이 이 서신의 차별점입니다. 지우면 흔한 운세 리포트가 됩니다." },
       { name: "서신 금지선(지어낸 숫자·겁주기)", pat: /겁을 준 뒤 해결책을 파는 구조/,
         fix: "겁주기→부적 판매는 이 업계의 기본 수법이고, 우리가 하지 않기로 한 것입니다." },
-      { name: "서신은 유료 모델로", pat: /callClaude\(ctx\.system, \[msg\], LETTER_MAXTOK, "paid"\)/,
+      { name: "서신은 유료 모델로", pat: /LETTER_TOK\[i\], "paid"\)/,
         fix: "tier 를 안 보내면 무료 모델로 4,900원짜리를 씁니다. paid 를 명시하세요." },
       { name: "서신 재료 스냅샷", pat: /letterCtxRef\.current = \{ system, userText \}/,
         fix: "판결 시점의 재료를 잡아두지 않으면, 서신을 쓸 때 바뀐 상태가 섞여 카드와 서신이 어긋납니다." },
-      { name: "반쪽 서신 차단", pat: /if \(ch\.length < 3\) throw new Error/,
+      { name: "반쪽 서신 차단", pat: /if \(doc\.chapters\.length < 3\) throw/,
         fix: "응답이 잘려 두 장짜리 서신이 나오면 실패로 처리해야 합니다. 반쪽을 파느니 못 썼다고 말하는 게 낫습니다." },
+      /* 실제 사고(2026-08-01 04:19): 서버는 200·1,600토큰으로 잘 돌아왔는데 유저에겐 아무것도 안 왔다.
+         원인 둘 — ①클라이언트가 chapters[].t/.body 라는 정확한 키만 받아서 0장 처리 ②한 방에 다섯 장을 쓰느라 29.7초.
+         둘 다 화면엔 오류가 안 뜬다. 아래 셋이 그 재발을 막는다. */
+      { name: "서신 키 이름 관대하게 받기", pat: /function normChapters\(json\)/,
+        fix: "모델이 title/text 로 써도 서신이 살아야 합니다. 정확한 키만 받으면 4,900원짜리가 키 이름 하나로 죽습니다." },
+      { name: "서신 병렬 분할", pat: /const LETTER_PARTS = \[\[0, 1\], \[2, 3, 4\]\]/,
+        fix: "다섯 장을 한 번에 쓰면 실측 29.7초입니다. 두 조각을 동시에 불러 기다림을 절반으로 줄이세요." },
+      { name: "서신 쓰는 중 표시", pat: /수호신이 서신을 쓰고 있어/,
+        fix: "20초를 정지 화면으로 두면 사람이 먼저 떠납니다. 실제로 그렇게 한 건을 잃었습니다." },
+      { name: "서신 실패 진단 정보", pat: /const letterShape = \(json, txt\)/,
+        fix: "실패했을 때 '어떤 키로 왔나'가 없으면 원인을 못 짚고 서버 로그부터 뒤져야 합니다. 본문은 담지 말고 키 이름만 남기세요." },
     ];
     for (const w of wired) {
       if (w.pat.test(src)) add("정상", `서신 대기 연출 — ${w.name}`, "있음", "");

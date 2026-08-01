@@ -12,13 +12,20 @@ const CALL2 = JSON.stringify({ subline: "밤이 널 속이는 거야.", reasons:
 // v105 콜3(서신). 콜2와 헷갈리지 않게 표지를 따로 둔다 — 콜3 지시문에 '[이미 확정된 판결]' 문자열이 들어가면
 // 아래 분기가 콜3을 콜2로 잘못 태운다. 앱 쪽 문구를 '[확정된 판결 —'로 바꿔 그 충돌을 없앴다.
 const LETTER_MARK = "[이번 출력 — 수호신의 서신]";
-const CALL3 = JSON.stringify({
+// v105.1 서신은 두 조각을 동시에 부른다. 조각별로 다른 응답을 돌려줘 합쳐지는지까지 본다.
+const CALL3A = JSON.stringify({
   chapters: [
-    { t: "네가 망설인 자리", body: "너는 '전남친에게 연락할까?'라고 물었어. 그 문장 하나에 오래 서 있었지." },
-    { t: "여덟 글자가 이 일을 보는 눈", body: "네 명식에서 사람 자리는 두터운데, 거둘 자리가 얇아." },
-    { t: "언제 — 흐름과 움직일 날", body: "이달 하순은 아니야. 다음 달 초순, 특히 말날이 열려 있어." },
-    { t: "누구와 — 도울 사람, 피할 자리", body: "돼지띠가 널 돕고, 뱀띠 앞에서는 말을 줄여." },
-    { t: "무엇을 걸고", body: "멈추면 미련이 남아. 대신 저쪽이 먼저 연락해 오면 이 판결을 뒤집어." },
+    { t: "네가 망설인 자리", body: "너는 '전남친에게 연락할까?'라고 물었어. 그 문장 하나에 오래 서 있었지. 관성이 두터운 사람이라 남의 눈이 먼저 보인다." },
+    { t: "여덟 글자가 이 일을 보는 눈", body: "네 명식에서 사람 자리는 두터운데, 거둘 자리가 얇아. 벌이는 힘은 있고 끝내는 힘이 모자란 구조야." },
+  ],
+});
+/* 조각 B는 일부러 t/body 가 아닌 title/text 로 준다 — 2026-08-01 실제 사고의 회귀 시험.
+   그때 서버는 200으로 잘 돌아왔는데 클라이언트가 정확한 키만 받아서 서신을 통째로 버렸다. */
+const CALL3B = JSON.stringify({
+  chapters: [
+    { title: "언제 — 흐름과 움직일 날", text: "이달 하순은 아니야. 다음 달 초순, 특히 말날이 열려 있어. 8월 12일과 24일을 적어둬." },
+    { title: "누구와 — 도울 사람, 피할 자리", text: "돼지띠가 널 돕고, 뱀띠 앞에서는 말을 줄여. 서쪽으로 난 자리에서 얘기를 꺼내는 게 낫다." },
+    { title: "무엇을 걸고", text: "멈추면 미련이 남아. 그건 치러야 할 값이야. 대신 저쪽이 먼저 연락해 오면 이 판결을 뒤집어." },
   ],
   closing: "네 편이야, 늘.",
 });
@@ -58,9 +65,9 @@ const b = await chromium.launch((process.env.CHROME_PATH ? { executablePath: pro
 {
   const page = await b.newPage({ viewport: { width: 430, height: 932 } });
   page.setDefaultTimeout(9000);
-  await page.addInitScript(({ c1, c2, c3, mk }) => {
-    window.claude = { complete: async (p) => (p.includes(mk) ? c3 : p.includes("[이미 확정된 판결]") ? c2 : c1) };
-  }, { c1: CALL1, c2: CALL2, c3: CALL3, mk: LETTER_MARK });
+  await page.addInitScript(({ c1, c2, c3a, c3b, mk }) => {
+    window.claude = { complete: async (p) => (p.includes(mk) ? (p.includes('1장 "') ? c3a : c3b) : p.includes("[이미 확정된 판결]") ? c2 : c1) };
+  }, { c1: CALL1, c2: CALL2, c3a: CALL3A, c3b: CALL3B, mk: LETTER_MARK });
   await onboard(page, "?trackdebug");
   ck("S1 complete 감지", await page.evaluate(() => typeof window.claude?.complete === "function"));
   await page.locator("textarea.qbox").fill("전남친에게 연락할까?"); await page.waitForTimeout(300);
@@ -109,7 +116,10 @@ const b = await chromium.launch((process.env.CHROME_PATH ? { executablePath: pro
   await page.getByRole("button", { name: "서신을 펼친다" }).click();
   await page.waitForSelector(".readwrap", { timeout: 5000 });
   const chaps = await page.locator(".rct").allTextContents();
-  ck("⑨ 다섯 장 전부 렌더", chaps.length === 5, chaps.map((s) => s.replace(/^\d/, "")).join(" · "));
+  ck("⑨ 두 조각이 다섯 장으로 합쳐짐", chaps.length === 5, chaps.map((s) => s.replace(/^\d/, "")).join(" · "));
+  // title/text 로 온 3~5장이 살아남았는지 = 2026-08-01 사고의 회귀 시험
+  ck("⑨-2 다른 키 이름(title/text)도 읽음", await page.getByText("8월 12일과 24일을 적어둬", { exact: false }).isVisible().catch(() => false));
+  ck("⑨-3 맺음말", await page.getByText("네 편이야, 늘.", { exact: false }).isVisible().catch(() => false));
   ck("⑩ 서신에 AI 생성 고지", await page.getByText("이 서신은 AI가 생성한 내용입니다", { exact: false }).isVisible().catch(() => false));
   await page.getByRole("button", { name: "값했어" }).click();
   const rated = await page.evaluate(() => (window.__binariEvents || []).find((e) => e.ev === "letter_rated"));

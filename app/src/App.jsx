@@ -1538,7 +1538,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v105 · 서신";
+const APP_VER = "v105.1 · 서신";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -1567,7 +1567,36 @@ const LETTER_NUDGE_LINE = "서신은 내가 쓰고 있을게. 그 사이에 더 
 /* 서신이 도착한 뒤에도 유도 문구는 남는다. 도착과 동시에 사라지면 '한 번 더 묻게 하기'라는
    이 연출의 목적이 정작 제일 좋은 타이밍에 없어진다(실측: e2e ④가 이걸 잡았다). */
 const LETTER_NUDGE_DONE = "읽고 나서 또 걸리는 게 있으면 — 지금 물어도 돼.";
-const LETTER_MAXTOK = 3200;   // 다섯 장 × 약 300자 ≈ 1,700자. 잘리면 마지막 장이 통째로 사라진다
+/* v105.1: 한 번에 다섯 장을 쓰게 했더니 실측 29.7초가 걸렸다(출력 1,600토큰).
+   유저가 30초를 기다리다 포기했다 — 서버는 200이었는데 사람이 먼저 떠난 것이다.
+   그래서 두 조각으로 쪼개 **동시에** 부른다. system 이 같아 캐시가 그대로 먹고,
+   벽시계 시간은 둘 중 느린 쪽(≈20초)으로 줄어든다. 각 조각은 다섯 장 전체 구성을 알되 맡은 장만 쓴다. */
+const LETTER_PARTS = [[0, 1], [2, 3, 4]];
+const LETTER_TOK = [1500, 2100];
+const LETTER_MAXTOK = 2100;   // 서버 클램프 대조용 — 두 조각 중 큰 쪽
+
+/* 모델이 키 이름을 조금 달리 써도 서신이 통째로 버려지지 않게 한다.
+   실제 사고(2026-08-01): 서버는 200·1,600토큰으로 잘 돌아왔는데 클라이언트가
+   chapters[].t / chapters[].body 라는 **정확한 키 이름만** 받아서 0장으로 처리하고 실패시켰다.
+   4,900원짜리가 키 이름 하나로 죽으면 안 된다 — 받을 수 있는 형태는 다 받는다. */
+const _pickStr = (o, keys) => { for (const k of keys) { const v = o?.[k]; if (typeof v === "string" && v.trim()) return v.trim(); } return ""; };
+function normChapters(json) {
+  if (!json) return [];
+  const cands = [json.chapters, json.sections, json["장"], Array.isArray(json) ? json : null,
+    ...Object.values(json).filter(Array.isArray)];
+  const arr = cands.find((a) => Array.isArray(a) && a.length);
+  if (!arr) return [];
+  return arr.map((c) => (typeof c === "string"
+    ? { t: "", body: c.trim() }
+    : { t: _pickStr(c, ["t", "title", "제목", "heading", "head", "name"]), body: _pickStr(c, ["body", "text", "content", "본문", "내용"]) }))
+    .filter((c) => c.body.length > 20);   // 제목만 있고 본문이 빈 항목은 장이 아니다
+}
+// 실패했을 때 '무엇이 왔길래 못 읽었나'를 남긴다. 키 이름만 보낸다 — 본문은 계측에 담지 않는다.
+const letterShape = (json, txt) => ({
+  keys: json && typeof json === "object" ? Object.keys(json).slice(0, 8).join(",") : typeof json,
+  k0: (() => { const a = (json && (json.chapters || json.sections)) || null; const f = Array.isArray(a) ? a[0] : null; return f && typeof f === "object" ? Object.keys(f).slice(0, 6).join(",") : typeof f; })(),
+  len: (txt || "").length,
+});
 
 /* ── 콜3: 서신 지시문 ────────────────────────────────────────────────────────
    system 은 판결과 **같은 SYS + 같은 프로필**을 그대로 쓴다. 이유가 셋이다:
@@ -1575,12 +1604,13 @@ const LETTER_MAXTOK = 3200;   // 다섯 장 × 약 300자 ≈ 1,700자. 잘리�
      ③ 프롬프트 캐시가 그대로 먹어 값이 싸진다.
    그래서 여기 담기는 건 '이번에 무엇을 쓰는가'뿐이다.
    제1규칙은 재판정 금지 — 카드는 GO인데 서신이 STOP이면 그건 환불 사유가 아니라 신뢰 종료다. */
-function letterTask(res, detail, hesit) {
+function letterTask(res, detail, hesit, part) {
   const rs = (detail?.reasons || []).map((r) => `${r.axis}(${r.vote || "?"}): ${r.text}`).join(" / ");
   const dir = res?.direction || "GO";
   const cost = dir === "GO" ? "이 방향으로 갔을 때 대신 포기하게 되는 것"
     : dir === "STOP" ? "멈춤으로써 실제로 놓치는 것"
       : "지금 기다리는 동안 실제로 치르는 값";
+  const mine = part.map((i) => `${i + 1}장 "${LETTER_SECTIONS[i]}"`).join(" · ");
   return `[이번 출력 — 수호신의 서신]
 이 사람은 방금 받은 판결에 ${LETTER_PRICE}원을 내고 깊은 풀이를 청했다.
 
@@ -1592,7 +1622,11 @@ direction=${dir} / verdict="${res?.verdict || ""}" / category=${res?.category ||
 무료 카드는 이미 '어느 쪽'에 답했다. 서신은 **'언제 · 누구와 · 무엇을 걸고'**에 답한다.
 카드에서 한 말을 길게 늘여 쓰면 이 서신은 실패다. 카드에 없던 것만 쓴다.
 
-[구성 — 다섯 장. 각 장 280~380자. 제목은 아래 그대로 쓴다]
+[이번에 네가 쓸 장 — ${mine}. 이 장들만 쓴다]
+서신은 아래 다섯 장으로 이뤄진다. 전체 흐름을 알고 쓰되, **네가 맡은 장의 본문만** 출력한다.
+맡지 않은 장의 내용은 한 줄도 쓰지 않는다(다른 조각이 그 장을 쓰고 있다).
+
+[전체 구성 — 각 장 280~380자. 제목은 아래 그대로 쓴다]
 1) "네가 망설인 자리" — 유저가 쓴 질문을 직접 인용하며 연다.${hesit ? ` 유저는 망설인 이유로 "${hesit}"를 골랐다 — 이걸 짚는다.` : ""} 그다음 **이 사람의 명식에서 이런 종류의 결정이 유독 어려운 이유**를 십성 분포로 진단한다(관성이 두터우면 남의 눈이 먼저 보이고, 비겁이 많으면 묻지 않고 밀어붙이고, 식상이 많으면 벌여놓고 못 거둔다 — 실제 분포대로). 위로가 아니라 진단이다.
 2) "여덟 글자가 이 일을 보는 눈" — 이 질문이 걸린 영역(돈·일·사람·몸)이 이 사람 명식에서 **두터운 자리인지 빈 자리인지**를 일간·오행 개수·십성으로 말한다. 카드 뒷면 근거를 반복하지 말고, 그 근거들이 왜 그렇게 갈렸는지 한 겹 아래로 내려간다.
 3) "언제 — 흐름과 움직일 날" — **이 서신에서 가장 중요한 장.** 대운(지금 어느 10년의 어디쯤인지), 올해 세운, 다음 석 달의 결. 그리고 **실제로 움직일 날을 프로필의 길일에서 골라 두셋 찍는다.** "때가 되면"은 금지. 날짜를 못 찍으면 "이달 하순"·"추석 전"처럼 폭을 주되 반드시 시점을 남긴다.
@@ -1608,9 +1642,10 @@ direction=${dir} / verdict="${res?.verdict || ""}" / category=${res?.category ||
 - 판결 방향과 어긋나는 결론, 그리고 "네 마음에 달렸어" 류의 되돌리기
 - 몸·병·수명의 의학적 판정(진단명·투약·수술 여부·수명)
 
-[출력 — JSON만, 백틱·서문 금지]
-{"chapters":[{"t":"장 제목","body":"본문"}],"closing":"수호신의 마지막 한 줄(35자 이내)"}
-chapters는 위 순서 그대로 다섯 개.`;
+[출력 — JSON만, 백틱·서문 금지. 키 이름은 아래 그대로 t·body 를 쓴다]
+{"chapters":[{"t":"장 제목","body":"본문"}]${part.includes(4) ? `,"closing":"수호신의 마지막 한 줄(35자 이내)"` : ""}}
+chapters 배열에는 **${mine}**${part.length > 1 ? `, 총 ${part.length}개` : ""}만 위 순서대로 담는다. 다른 장은 넣지 않는다.
+이 시스템 프롬프트 위쪽에 적힌 판결용 출력 형식(category·votes·direction·verdict…)은 **이번엔 쓰지 않는다.** 이번 출력은 오직 위 서신 형식이다.`;
 }
 function VerBadge() {
   const [r, setR] = useState("");
@@ -2457,18 +2492,30 @@ export default function App() {
     setLetterBusy(true);
     const t0 = performance.now();
     try {
-      const msg = { role: "user", content: `${ctx.userText}\n\n${letterTask(res, detail, hesit)}` };
-      const { json } = await callClaude(ctx.system, [msg], LETTER_MAXTOK, "paid");   // paid = 좋은 모델
-      const ch = Array.isArray(json?.chapters) ? json.chapters.filter((c) => c && c.t && c.body) : [];
-      if (ch.length < 3) throw new Error(`장이 ${ch.length}개뿐`);   // 잘렸거나 형식이 깨진 것 — 반쪽 서신을 파느니 실패로 둔다
-      const doc = { chapters: ch.slice(0, 5), closing: String(json.closing || "").slice(0, 60) };
+      // 두 조각을 동시에 부른다 — 순차로 하면 기다림이 두 배가 된다. 한쪽이 죽어도 다른 쪽은 살린다.
+      const outs = await Promise.allSettled(LETTER_PARTS.map((part, i) => callClaude(
+        ctx.system, [{ role: "user", content: `${ctx.userText}\n\n${letterTask(res, detail, hesit, part)}` }], LETTER_TOK[i], "paid")));
+      const ch = []; let closing = ""; let shape = null;
+      outs.forEach((o) => {
+        if (o.status !== "fulfilled") return;
+        const { json, txt } = o.value;
+        const got = normChapters(json);
+        if (!got.length && !shape) shape = letterShape(json, txt);   // 왜 못 읽었는지 한 조각만 남긴다
+        ch.push(...got);
+        if (!closing) closing = _pickStr(json || {}, ["closing", "맺음", "closing_line"]);
+      });
+      // 제목이 비면 정해진 목차로 메운다 — 본문만 오면 그건 우리가 채울 수 있는 결손이다
+      const doc = { chapters: ch.slice(0, 5).map((c, i) => ({ t: c.t || LETTER_SECTIONS[i] || "", body: c.body })), closing: closing.slice(0, 60) };
+      if (doc.chapters.length < 3) throw Object.assign(new Error(`장이 ${doc.chapters.length}개뿐`), { shape });   // 반쪽을 파느니 실패로 둔다
       setLetterDoc(doc);
       // 판결 기록에 붙여 둔다 — 판결록에서 다시 열어 읽을 수 있고, 새로고침에도 살아남는다
       setRecords((prev) => { if (!prev.length) return prev; const nx = prev.slice(); nx[nx.length - 1] = { ...nx[nx.length - 1], letter: doc }; return nx; });
       track("letter_written", { ..._base(), ms: Math.round(performance.now() - t0), chapters: doc.chapters.length, chars: doc.chapters.reduce((a, c) => a + c.body.length, 0) });
     } catch (e) {
       setLetterDoc({ _err: true });
-      track("letter_write_failed", { ..._base(), ms: Math.round(performance.now() - t0), reason: failReason(e), status: failStatus(e) });
+      // shape: 응답이 오긴 왔는데 못 읽은 경우 '어떤 키로 왔나'를 남긴다(본문은 담지 않는다).
+      //        이게 없어서 첫 실패 때 원인을 못 짚고 서버 로그부터 뒤져야 했다.
+      track("letter_write_failed", { ..._base(), ms: Math.round(performance.now() - t0), reason: failReason(e), status: failStatus(e), ...(e?.shape || {}) });
     } finally { setLetterBusy(false); }
   };
   const openLetterDoc = () => {
@@ -2906,6 +2953,10 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                   {letterDoc && letterDoc._err && (
                     <p className="gsay fade" style={{ animationDelay: ".95s" }}>서신이 손에서 흩어졌어 — 이번 건 내 잘못이야. 다시 물어봐 줄래?</p>
                   )}
+                  {/* v105.1: 쓰는 중이라는 걸 눈에 보이게 — 실측 20초를 정지 화면으로 두면 사람이 먼저 떠난다 */}
+                  {!letterDoc && (
+                    <p className="gsay writing fade" style={{ animationDelay: ".95s" }}>수호신이 서신을 쓰고 있어<span className="dots"><i>.</i><i>.</i><i>.</i></span></p>
+                  )}
                   {/* 유도 문구는 어느 상태에서도 남는다 — 이게 이 연출의 목적이다 */}
                   <p className="gsay fade" style={{ animationDelay: "1.5s" }}>{letterDoc && !letterDoc._err ? LETTER_NUDGE_DONE : LETTER_NUDGE_LINE}</p>
                 </div>
@@ -3293,7 +3344,12 @@ const CSS = `
 @keyframes sealCore{0%,100%{transform:scale(1);opacity:.9}50%{transform:scale(1.09);opacity:1}}
 @media (prefers-reduced-motion:reduce){.sring,.spark,.sealcore,.sealline.seal{animation:none}.spark{opacity:.35}}
 /* v105: 서신함(로비) + 서신 전문 읽기 화면 */
-.mailbox{margin-top:14px;display:flex;flex-direction:column;align-items:center;gap:8px}
+.mailbox{margin-top:14px;display:flex;flex-direction:column;align-items:center;gap:8px;animation:mailIn .8s cubic-bezier(.22,.7,.25,1) both}
+@keyframes mailIn{from{opacity:0;transform:translateY(10px) scale(.96)}to{opacity:1;transform:none}}
+.mailbox .btn{animation:mailPulse 2.6s ease-in-out 1s infinite}
+@keyframes mailPulse{0%,100%{box-shadow:0 0 0 0 rgba(245,217,139,0)}50%{box-shadow:0 0 22px 2px rgba(245,217,139,.28)}}
+.gsay.writing{color:#c9b98f;animation:formPulse 2.2s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){.mailbox,.mailbox .btn,.gsay.writing{animation:none}}
 .readwrap{position:fixed;inset:0;z-index:75;overflow-y:auto;-webkit-overflow-scrolling:touch;background:radial-gradient(120% 74% at 50% 10%,#171029,#0b0817 58%,#060409)}
 .readbody{max-width:520px;margin:0 auto;padding:calc(58px + env(safe-area-inset-top,0px)) 22px calc(48px + env(safe-area-inset-bottom,0px));text-align:center}
 .dtag.center{text-align:center}
