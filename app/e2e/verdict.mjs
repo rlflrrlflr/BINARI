@@ -129,6 +129,11 @@ const b = await chromium.launch((process.env.CHROME_PATH ? { executablePath: pro
   // 서신을 맡긴 뒤 한 번 더 묻는가 = 이 연출의 유일한 존재 이유. 그 표식이 실제로 붙는지 확인한다.
   await page.locator("canvas").first().dblclick();
   await page.waitForSelector("textarea.qbox", { timeout: 8000 });
+  // v105.2 홈 서신함 — 유료로 산 것이니 판결이 끝난 뒤에도 홈에서 상시 열려야 한다
+  ck("⑫ 홈 서신함 상시 노출", await page.getByRole("button", { name: /수호신의 서신함/ }).isVisible().catch(() => false));
+  await page.getByRole("button", { name: /수호신의 서신함/ }).click();
+  ck("⑬ 서신 번호 표시", /[2-9A-Z]{4}-[2-9A-Z]{4}/.test((await page.locator(".lboxno").allTextContents())[0] || ""), (await page.locator(".lboxno").allTextContents())[0] || "");
+  await page.getByRole("button", { name: "서신함 접기" }).click();
   await page.locator("textarea.qbox").fill("그럼 그동안 뭘 하면 좋을까"); await page.waitForTimeout(300);
   await page.getByRole("button", { name: "판결을 청한다" }).click();
   await page.waitForSelector("text=동전 셋", { timeout: 5000 });
@@ -136,6 +141,27 @@ const b = await chromium.launch((process.env.CHROME_PATH ? { executablePath: pro
   ck("서신 후 판결 성사", await waitVerdict(page));
   const qa = await page.evaluate(() => (window.__binariEvents || []).filter((e) => e.ev === "question_asked").pop());
   ck("⑥ 서신 후 재질문 표식(after_letter)", qa?.props?.after_letter === true, JSON.stringify(qa?.props?.after_letter));
+
+  /* v105.2 재발행 — "고객이 서신을 날렸다"를 실제로 재현한다.
+     저장소에서 본문만 지우고 새로고침 = 기기를 바꿨거나 iOS 가 저장소를 비운 상황.
+     영수증(paid)과 재료(lmat)가 남아 있으면 값을 다시 받지 않고 되살릴 수 있어야 한다. */
+  await page.evaluate(() => {
+    const k = "binari.v1"; const m = JSON.parse(localStorage.getItem(k) || "{}");
+    (m.records || []).forEach((r) => { delete r.letter; });
+    localStorage.setItem(k, JSON.stringify(m));
+  });
+  await page.reload();
+  await page.waitForSelector("text=두드려봐", { timeout: 12000 });
+  await page.locator("canvas").first().dblclick();
+  await page.waitForSelector("textarea.qbox", { timeout: 12000 });
+  const boxBtn = page.getByRole("button", { name: /수호신의 서신함/ });
+  ck("⑭ 잃어버린 서신도 서신함에 남음", (await boxBtn.textContent().catch(() => "") || "").includes("못 받은 게 있어"), await boxBtn.textContent().catch(() => ""));
+  await boxBtn.click();
+  await page.getByRole("button", { name: "다시 받기" }).click();
+  await page.waitForSelector(".readwrap", { timeout: 25000 });
+  ck("⑮ 재발행 성공(값 다시 안 받음)", await page.getByText("8월 12일과 24일을 적어둬", { exact: false }).isVisible().catch(() => false));
+  const rei = await page.evaluate(() => (window.__binariEvents || []).find((e) => e.ev === "letter_reissued"));
+  ck("⑯ 재발행 계측", !!rei, rei ? `${rei.props.chapters}장` : "이벤트 없음");
   await page.close();
 }
 

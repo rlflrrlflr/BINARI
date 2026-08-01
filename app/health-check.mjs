@@ -265,6 +265,21 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
         fix: "20초를 정지 화면으로 두면 사람이 먼저 떠납니다. 실제로 그렇게 한 건을 잃었습니다." },
       { name: "서신 실패 진단 정보", pat: /const letterShape = \(json, txt\)/,
         fix: "실패했을 때 '어떤 키로 왔나'가 없으면 원인을 못 짚고 서버 로그부터 뒤져야 합니다. 본문은 담지 말고 키 이름만 남기세요." },
+      /* v105.2 — 유료 물건의 최소 조건: 산 사람은 언제든 다시 받는다.
+         localStorage 는 iOS 에서 7일이면 비워질 수 있는 그릇이다. 본문 하나만 믿으면
+         "돈은 냈는데 아무것도 없다"가 조용히 만들어진다. 그 상태를 코드가 못 만들게 고정한다. */
+      { name: "영수증을 본문보다 먼저 남김", pat: /nx\[nx\.length - 1\] = \{ \.\.\.nx\[nx\.length - 1\], paid: LETTER_PRICE, lmat: _mat \}/,
+        fix: "본문 생성 전에 paid·lmat 를 기록해야 합니다. 생성이 실패하거나 앱이 닫혀도 '값을 치렀다'가 남아야 다시 써 줄 수 있습니다." },
+      { name: "서신 재발행", pat: /const reissueLetter = async \(i\)/,
+        fix: "산 사람이 서신을 잃었을 때 되살리는 유일한 경로입니다. 값은 다시 받지 않습니다." },
+      { name: "최초 발행과 재발행이 같은 함수", pat: /const runLetter = async \(mat\)/,
+        fix: "발행 경로가 두 벌로 갈리면 재발행본만 조용히 규칙이 낡습니다. runLetter 하나를 양쪽이 쓰게 하세요." },
+      { name: "서신함은 영수증 기준", pat: /filter\(\(\{ r \}\) => r\.paid \|\| r\.letter\)/,
+        fix: "본문(letter) 기준으로 목록을 만들면 잃어버린 서신이 목록에서 통째로 사라집니다. paid 를 기준으로 잡으세요." },
+      { name: "서신 번호", pat: /function letterNo\(rec\)/,
+        fix: "유료 물건에는 번호가 있어야 합니다. 고객이 불러 줄 수 있어야 '그 서신'을 특정할 수 있습니다." },
+      { name: "서신 파일 백업", pat: /const saveLetterFile = \(\)/,
+        fix: "기기 저장소 하나에만 유료 물건을 맡기면 안 됩니다. 유저가 영구히 갖는 사본을 주세요." },
     ];
     for (const w of wired) {
       if (w.pat.test(src)) add("정상", `서신 대기 연출 — ${w.name}`, "있음", "");

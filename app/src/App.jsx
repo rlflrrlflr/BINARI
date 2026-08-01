@@ -1538,7 +1538,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v105.1 · 서신";
+const APP_VER = "v105.2 · 서신함";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -1592,6 +1592,17 @@ function normChapters(json) {
     .filter((c) => c.body.length > 20);   // 제목만 있고 본문이 빈 항목은 장이 아니다
 }
 // 실패했을 때 '무엇이 왔길래 못 읽었나'를 남긴다. 키 이름만 보낸다 — 본문은 계측에 담지 않는다.
+/* 서신 번호 — 유료 물건에는 번호가 있어야 한다. 사람이 불러 줄 수 있게 짧고, 헷갈리는 글자(0·O·1·I)는 뺀다.
+   판결 시각과 물음에서 뽑으므로 같은 서신은 언제 다시 계산해도 같은 번호가 나온다(재발행해도 번호가 안 바뀐다). */
+const NO_ABC = "23456789ACDEFGHJKLMNPQRSTUVWXYZ";
+function letterNo(rec) {
+  const seed = `${rec?.at || 0}|${rec?.q || ""}`;
+  let h1 = 0x811c9dc5, h2 = 0x01000193;
+  for (let i = 0; i < seed.length; i++) { h1 = ((h1 ^ seed.charCodeAt(i)) * 0x01000193) >>> 0; h2 = ((h2 + seed.charCodeAt(i) * (i + 7)) * 0x85ebca6b) >>> 0; }
+  let out = "";
+  for (let i = 0; i < 8; i++) { const v = i < 4 ? (h1 >>> (i * 5)) : (h2 >>> ((i - 4) * 5)); out += NO_ABC[v % NO_ABC.length]; }
+  return `${out.slice(0, 4)}-${out.slice(4)}`;
+}
 const letterShape = (json, txt) => ({
   keys: json && typeof json === "object" ? Object.keys(json).slice(0, 8).join(",") : typeof json,
   k0: (() => { const a = (json && (json.chapters || json.sections)) || null; const f = Array.isArray(a) ? a[0] : null; return f && typeof f === "object" ? Object.keys(f).slice(0, 6).join(",") : typeof f; })(),
@@ -2399,6 +2410,8 @@ export default function App() {
   const [letterBusy, setLetterBusy] = useState(false);        // v105: 서신을 쓰는 중
   const [letterOpen, setLetterOpen] = useState(false);        // v105: 서신 전문 읽기 화면
   const [letterRated, setLetterRated] = useState(0);          // v105: 값했나 평가 — 0 미평가 · 1 아니다 · 2 값했다
+  const [letterIdx, setLetterIdx] = useState(-1);             // v105.2: 지금 읽는 서신이 몇 번째 판결의 것인가(번호·저장에 쓴다)
+  const [boxOpen, setBoxOpen] = useState(false);              // v105.2: 홈 서신함 펼침
   /* 서신은 판결과 **같은 재료**로 써야 한다. 여기 담아두지 않고 서신 시점에 다시 만들면
      그 사이 바뀐 상태(다음 질문 등)가 섞여 카드와 서신이 어긋난다. 판결이 성사된 순간의 스냅샷을 잡아둔다. */
   const letterCtxRef = useRef(null);
@@ -2474,17 +2487,41 @@ export default function App() {
     track("letter_clicked", _p);                 // 기존 이벤트 유지 — 이름 바꾸면 과거 데이터와 끊긴다
     track("letter_price_shown", { ..._p, price: LETTER_PRICE });   // 1단계: 가격·미리보기를 본 시점
   };
-  // 2단계: 가격을 보고도 '받을게'를 누른 사람만 지불 의사로 센다(호기심과 분리)
+  /* 2단계: 가격을 보고도 '받을게'를 누른 사람만 지불 의사로 센다(호기심과 분리).
+     v105.2 — 여기서 **영수증을 먼저 남긴다.** 서신 본문보다 영수증이 먼저다:
+     본문 생성이 실패하든 유저가 앱을 닫든, "이 사람은 이 판결에 값을 치렀다"는 사실이 남아 있어야
+     나중에 다시 써 줄 수 있다. 산 사람이 못 받는 상황을 코드가 구조적으로 못 만들게 하는 것이다. */
   const confirmLetterIntent = () => {
     if (letterIntent) return;
     setLetterIntent(true);
     setLetterStage("seal");   // v104: 여기서부터 대기 연출 — 결제창은 없다(fake door)
     track("letter_intent_confirmed", demoProps(birth, { dir: res?.direction || null, cat: res?.category || null, mode: "ritual", nth_verdict: records.length, price: LETTER_PRICE }));
+    // 재발행에 필요한 재료를 판결 기록에 붙인다. userText 한 덩이(수백 자)면 같은 서신을 다시 쓸 수 있다 —
+    // system(프로필)은 같은 사람이니 그때 다시 조립하면 되고, 통째로 저장하면 저장소가 금방 찬다.
+    const _mat = { at: Date.now(), lu: letterCtxRef.current?.userText || "", reasons: (detail?.reasons || []).map((r) => ({ axis: r.axis, vote: r.vote, text: r.text })), hesit: hesit || "" };
+    setRecords((prev) => { if (!prev.length) return prev; const nx = prev.slice(); nx[nx.length - 1] = { ...nx[nx.length - 1], paid: LETTER_PRICE, lmat: _mat }; return nx; });
     writeLetter();            // v105: 연출을 기다리지 않고 지금 쓰기 시작한다 — 7초가 대기시간을 그만큼 먹어준다
   };
-  /* v105 — 콜3. 판결을 낸 그 재료로 서신을 쓴다.
-     실패해도 앱은 멈추지 않는다: 대기 연출은 그대로 끝나고, 로비의 서신함이 '못 썼다'를 정직하게 말한다.
-     (fake door 단계라 실제 결제가 없으므로 환불 경로도 없다 — 실패는 조용히 삼키지 말고 화면에 남겨야 한다) */
+  /* v105 — 콜3. 판결을 낸 그 재료로 서신을 쓴다. 최초 발행과 재발행이 같은 함수를 탄다
+     (두 벌로 갈리면 재발행본만 조용히 규칙이 낡는다).
+     실패해도 앱은 멈추지 않는다: 영수증은 이미 남아 있으므로 언제든 다시 부를 수 있다. */
+  const runLetter = async (mat) => {
+    const outs = await Promise.allSettled(LETTER_PARTS.map((part, i) => callClaude(
+      mat.system, [{ role: "user", content: `${mat.userText}\n\n${letterTask(mat.res, { reasons: mat.reasons }, mat.hesit, part)}` }], LETTER_TOK[i], "paid")));
+    const ch = []; let closing = ""; let shape = null;
+    outs.forEach((o) => {
+      if (o.status !== "fulfilled") return;
+      const { json, txt } = o.value;
+      const got = normChapters(json);
+      if (!got.length && !shape) shape = letterShape(json, txt);   // 왜 못 읽었는지 한 조각만 남긴다
+      ch.push(...got);
+      if (!closing) closing = _pickStr(json || {}, ["closing", "맺음", "closing_line"]);
+    });
+    // 제목이 비면 정해진 목차로 메운다 — 본문만 오면 그건 우리가 채울 수 있는 결손이다
+    const doc = { chapters: ch.slice(0, 5).map((c, i) => ({ t: c.t || LETTER_SECTIONS[i] || "", body: c.body })), closing: closing.slice(0, 60), at: Date.now() };
+    if (doc.chapters.length < 3) throw Object.assign(new Error(`장이 ${doc.chapters.length}개뿐`), { shape });   // 반쪽을 파느니 실패로 둔다
+    return doc;
+  };
   const writeLetter = async () => {
     const ctx = letterCtxRef.current;
     const _base = () => demoProps(birth, { dir: res?.direction || null, cat: res?.category || null, scope: res?.scope || null, nth_verdict: records.length });
@@ -2492,23 +2529,9 @@ export default function App() {
     setLetterBusy(true);
     const t0 = performance.now();
     try {
-      // 두 조각을 동시에 부른다 — 순차로 하면 기다림이 두 배가 된다. 한쪽이 죽어도 다른 쪽은 살린다.
-      const outs = await Promise.allSettled(LETTER_PARTS.map((part, i) => callClaude(
-        ctx.system, [{ role: "user", content: `${ctx.userText}\n\n${letterTask(res, detail, hesit, part)}` }], LETTER_TOK[i], "paid")));
-      const ch = []; let closing = ""; let shape = null;
-      outs.forEach((o) => {
-        if (o.status !== "fulfilled") return;
-        const { json, txt } = o.value;
-        const got = normChapters(json);
-        if (!got.length && !shape) shape = letterShape(json, txt);   // 왜 못 읽었는지 한 조각만 남긴다
-        ch.push(...got);
-        if (!closing) closing = _pickStr(json || {}, ["closing", "맺음", "closing_line"]);
-      });
-      // 제목이 비면 정해진 목차로 메운다 — 본문만 오면 그건 우리가 채울 수 있는 결손이다
-      const doc = { chapters: ch.slice(0, 5).map((c, i) => ({ t: c.t || LETTER_SECTIONS[i] || "", body: c.body })), closing: closing.slice(0, 60) };
-      if (doc.chapters.length < 3) throw Object.assign(new Error(`장이 ${doc.chapters.length}개뿐`), { shape });   // 반쪽을 파느니 실패로 둔다
+      const doc = await runLetter({ system: ctx.system, userText: ctx.userText, res, reasons: detail?.reasons || [], hesit });
       setLetterDoc(doc);
-      // 판결 기록에 붙여 둔다 — 판결록에서 다시 열어 읽을 수 있고, 새로고침에도 살아남는다
+      // 판결 기록에 붙여 둔다 — 홈 서신함에서 언제든 다시 열 수 있고, 새로고침에도 살아남는다
       setRecords((prev) => { if (!prev.length) return prev; const nx = prev.slice(); nx[nx.length - 1] = { ...nx[nx.length - 1], letter: doc }; return nx; });
       track("letter_written", { ..._base(), ms: Math.round(performance.now() - t0), chapters: doc.chapters.length, chars: doc.chapters.reduce((a, c) => a + c.body.length, 0) });
     } catch (e) {
@@ -2518,10 +2541,45 @@ export default function App() {
       track("letter_write_failed", { ..._base(), ms: Math.round(performance.now() - t0), reason: failReason(e), status: failStatus(e), ...(e?.shape || {}) });
     } finally { setLetterBusy(false); }
   };
+  /* v105.2 재발행 — 산 사람은 언제든 다시 받는다. 값은 다시 받지 않는다.
+     본문이 날아가도 영수증(paid)과 재료(lmat)가 남아 있으면 여기서 되살린다. */
+  const reissueLetter = async (i) => {
+    const rec = records[i];
+    if (!rec || letterBusy) return;
+    if (rec.letter) { setLetterDoc(rec.letter); setLetterIdx(i); setLetterOpen(true); track("letter_opened", demoProps(birth, { dir: rec.direction || null, reissued: false })); return; }
+    if (!rec.lmat?.lu) { setLetterDoc({ _err: true }); setLetterIdx(i); return; }   // 재료까지 없으면 여기서 되살릴 방법이 없다
+    setLetterBusy(true); setLetterIdx(i);
+    const t0 = performance.now();
+    try {
+      const doc = await runLetter({ system: makeSystem(), userText: rec.lmat.lu, res: { direction: rec.direction, verdict: rec.verdict, category: rec.cat, scope: rec.scope }, reasons: rec.lmat.reasons || [], hesit: rec.lmat.hesit || "" });
+      setRecords((prev) => { const nx = prev.slice(); if (nx[i]) nx[i] = { ...nx[i], letter: doc }; return nx; });
+      setLetterDoc(doc); setLetterRated(0); setLetterOpen(true);
+      track("letter_reissued", demoProps(birth, { dir: rec.direction || null, ms: Math.round(performance.now() - t0), chapters: doc.chapters.length }));
+    } catch (e) {
+      setLetterDoc({ _err: true });
+      track("letter_reissue_failed", demoProps(birth, { dir: rec.direction || null, reason: failReason(e), status: failStatus(e), ...(e?.shape || {}) }));
+    } finally { setLetterBusy(false); }
+  };
   const openLetterDoc = () => {
     if (!letterDoc || letterDoc._err) return;
+    setLetterIdx(records.length - 1);
     setLetterOpen(true);
     track("letter_opened", demoProps(birth, { dir: res?.direction || null, nth_verdict: records.length }));
+  };
+  // 서신을 기기 밖으로 꺼내 둔다. localStorage 는 iOS 에서 7일이면 지워질 수 있는 그릇이라,
+  // 유료 물건을 그 하나에만 맡길 수 없다. 파일은 유저가 영구히 갖는 사본이다.
+  const saveLetterFile = () => {
+    if (!letterDoc || letterDoc._err) return;
+    const rec = records[letterIdx] || {};
+    const body = [`수호신의 서신 · ${letterNo(rec)}`, rec.q ? `물음: ${rec.q}` : "", rec.direction ? `판결: ${rec.direction} — ${rec.verdict || ""}` : "", "",
+      ...letterDoc.chapters.map((c, i) => `${i + 1}. ${c.t}\n${c.body}\n`), letterDoc.closing ? `— ${letterDoc.closing}` : "",
+      "", "비나리 · 이 서신은 AI가 생성한 내용입니다(재미로 보는 참고용)"].filter((s) => s !== null).join("\n");
+    try {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([body], { type: "text/plain;charset=utf-8" }));
+      a.download = `비나리-서신-${letterNo(rec)}.txt`; document.body.appendChild(a); a.click(); a.remove();
+      track("letter_saved", demoProps(birth, { no: letterNo(rec) }));
+    } catch (_) {}
   };
   // 완성도를 재는 유일한 질문. 값했나/아니다 두 갈래로만 묻는다 — 다섯 단계는 아무도 안 고른다.
   const rateLetter = (v) => {
@@ -2547,6 +2605,24 @@ export default function App() {
     }, LETTER_WAIT_MS);
     return () => clearTimeout(t);
   }, [letterStage]);   // eslint-disable-line react-hooks/exhaustive-deps
+  /* v105.2: 프로필·system 조립을 판결에서 떼어냈다. 서신 재발행이 같은 재료로 다시 써야 하는데,
+     조립 코드가 judge() 안에만 있으면 재발행 경로가 프로필을 두 벌로 만들게 된다(이 리포가 제일 조심하는 일).
+     한 곳에서만 만들어야 판결과 서신이 같은 사람을 본다. */
+  const makeSystem = () => {
+    const mp = moonPlacements(+birth.y, +birth.m, +birth.d, +birth.h || 12, +birth.min || 0, !!birth.noHour); // v22
+    const tzk = tzolkin(jdn(+birth.y, +birth.m, +birth.d));                                                   // v22
+    const sj = samjae(saju.yJ, new Date().getFullYear());
+    const du = birth.sex ? daeun(+birth.y, +birth.m, +birth.d, birth.noHour ? 12 : +birth.h, birth.noHour || birth.min === "" ? 0 : +birth.min, !!birth.noHour, cityLon(birth.city), birth.sex === "M", new Date().getFullYear()) : null; // v25: 대운
+    // v14: 세션 내내 고정인 프로필(주역 제외)은 system에 담아 프롬프트 캐싱 → 2번째 질문부터 빨라짐
+    const _ms = myeongsikText(saju, birth.sex, new Date());   // v101: 십성·신살·세운·길일·직업 — 문자열 확장(구조 불변)
+    const profile = `${birth.name ? `호칭: ${birth.name}\n` : ""}${birth.sex ? `성별: ${birth.sex === "M" ? "남" : "여"}\n` : ""}사주: ${saju.pillars.년}년 ${saju.pillars.월}월 ${saju.pillars.일}일 ${saju.pillars.시}시 / 오행 ${Object.entries(saju.counts).map(([k, v]) => k + v).join(" ")} / 일간(나) ${saju.dayGan || "?"}·오행중심 ${saju.main}${saju.nayin ? ` / 납음 ${saju.nayin}` : ""}
+별자리: ${zo.name}(${zo.el}) / 달: 태어난 밤의 위상 ${moon.name} · 달 별자리 ${mp.moonSign}(정서·내면) · 나크샤트라 ${mp.nakshatra}(베다 27수)
+마야 촐킨: ${tzk.tone}의 톤 · ${tzk.sign}
+MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ? `\n대운: 아직 첫 대운 전 — 대운수 ${du.num}세부터 ${du.dir}(지금은 월주 기운이 지배)` : `\n대운(현재 인생 시기): ${du.ganji}(${du.el}) 대운 · ${du.startAge}~${du.endAge}세 · ${du.dir} — 10년 단위 큰 흐름`) : ""}${sj ? `\n삼재: 올해 ${sj} (입춘 경계 근사)` : ""}${tj ? `\n토정비결(당년 신수): 괘상수 ${tj.code} (상${tj.sang} 중${tj.jung} 하${tj.ha}), 음력 생일 ${tj.lunar}` : ""}${core ? `\n가치여정(워드소팅 16→6→3→1): 핵심 ${core} / 지킨 가치 ${vals4.filter(v => v !== core).join("·")} / 마지막에 내려놓은 ${vals8.filter(v => !vals4.includes(v)).join("·")}` : ""}${birth.job || birth.rel ? `\n요즘 삶의 국면(맥락): ${[birth.job, birth.rel].filter(Boolean).join(" · ")} — 질문의 무게·의미를 이 맥락에 비춰 읽되, 판결 근거는 지표다` : ""}${_ms}`;
+    return [{ type: "text",
+      text: `${SYS}\n\n## 대화 연속성\n이전 대화가 있으면 흐름을 이어 자연스럽게 응대한다(단, 판결 근거는 늘 아래 지표다). 같은 고민의 재질문이면 앞선 판결과 일관되게, 명백히 새 고민이면 처음부터 새로 판정한다.\n\n---\n유저 프로필(고정):\n${profile}`,
+      cache_control: { type: "ephemeral" } }];
+  };
   const judge = async (hi) => {   // v103: quick 인자 제거 — 판결은 한 가지 무게로만 낸다
     if (!q.trim() || busy) return;
     const _jt0 = performance.now();          // 판결 소요시간 — 대기가 길면 이탈한다. 이 값 없이는 원인을 못 짚는다
@@ -2555,18 +2631,8 @@ export default function App() {
     const _reask = !!_prevRec && isReask(q);
     const _sHint = scopeHint(q);
     track("question_asked", demoProps(birth, { mode: "ritual", qlen: q.trim().length, ritual: !!hi, lean: lean || "skip", hesit: hesit || null, mbti: mbti || null, core_value: core || null, element: saju?.main || null, zodiac: zo?.name || null, scope_hint: _sHint, reask: _reask, reask_depth: _reask ? records.filter(r => isReask(r.q)).length + 1 : 0, after_letter: letterSent }));   // v104 after_letter: 서신 대기 중에 한 번 더 물었는가
-    setBusy(true); setErr(""); setRes(null); setDetail(null); setWhy(false); setFlip(false); setCardOn(false); setRated(0); setLetter(false); setLetterIntent(false); setLetterStage(""); setLetterSent(false); setLetterDoc(null); setLetterOpen(false); setLetterRated(0); reactRef.current = null; setIntroSeen(true);
+    setBusy(true); setErr(""); setRes(null); setDetail(null); setWhy(false); setFlip(false); setCardOn(false); setRated(0); setLetter(false); setLetterIntent(false); setLetterStage(""); setLetterSent(false); setLetterDoc(null); setLetterOpen(false); setLetterRated(0); setBoxOpen(false); reactRef.current = null; setIntroSeen(true);
     try {
-      const mp = moonPlacements(+birth.y, +birth.m, +birth.d, +birth.h || 12, +birth.min || 0, !!birth.noHour); // v22
-      const tzk = tzolkin(jdn(+birth.y, +birth.m, +birth.d));                                                   // v22
-      const sj = samjae(saju.yJ, new Date().getFullYear());
-      const du = birth.sex ? daeun(+birth.y, +birth.m, +birth.d, birth.noHour ? 12 : +birth.h, birth.noHour || birth.min === "" ? 0 : +birth.min, !!birth.noHour, cityLon(birth.city), birth.sex === "M", new Date().getFullYear()) : null; // v25: 대운
-      // v14: 세션 내내 고정인 프로필(주역 제외)은 system에 담아 프롬프트 캐싱 → 2번째 질문부터 빨라짐
-      const _ms = myeongsikText(saju, birth.sex, new Date());   // v101: 십성·신살·세운·길일·직업 — 문자열 확장(구조 불변)
-      const profile = `${birth.name ? `호칭: ${birth.name}\n` : ""}${birth.sex ? `성별: ${birth.sex === "M" ? "남" : "여"}\n` : ""}사주: ${saju.pillars.년}년 ${saju.pillars.월}월 ${saju.pillars.일}일 ${saju.pillars.시}시 / 오행 ${Object.entries(saju.counts).map(([k, v]) => k + v).join(" ")} / 일간(나) ${saju.dayGan || "?"}·오행중심 ${saju.main}${saju.nayin ? ` / 납음 ${saju.nayin}` : ""}
-별자리: ${zo.name}(${zo.el}) / 달: 태어난 밤의 위상 ${moon.name} · 달 별자리 ${mp.moonSign}(정서·내면) · 나크샤트라 ${mp.nakshatra}(베다 27수)
-마야 촐킨: ${tzk.tone}의 톤 · ${tzk.sign}
-MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ? `\n대운: 아직 첫 대운 전 — 대운수 ${du.num}세부터 ${du.dir}(지금은 월주 기운이 지배)` : `\n대운(현재 인생 시기): ${du.ganji}(${du.el}) 대운 · ${du.startAge}~${du.endAge}세 · ${du.dir} — 10년 단위 큰 흐름`) : ""}${sj ? `\n삼재: 올해 ${sj} (입춘 경계 근사)` : ""}${tj ? `\n토정비결(당년 신수): 괘상수 ${tj.code} (상${tj.sang} 중${tj.jung} 하${tj.ha}), 음력 생일 ${tj.lunar}` : ""}${core ? `\n가치여정(워드소팅 16→6→3→1): 핵심 ${core} / 지킨 가치 ${vals4.filter(v => v !== core).join("·")} / 마지막에 내려놓은 ${vals8.filter(v => !vals4.includes(v)).join("·")}` : ""}${birth.job || birth.rel ? `\n요즘 삶의 국면(맥락): ${[birth.job, birth.rel].filter(Boolean).join(" · ")} — 질문의 무게·의미를 이 맥락에 비춰 읽되, 판결 근거는 지표다` : ""}${_ms}`;
       // 주역 괘는 질문마다 달라지므로 유저 턴에
       const qExtra = hi ? `\n[이번에 청한 주역] 본괘 ${hi.name}${hi.moving.length ? ` / 변효 ${hi.moving.map(n => n + 1).join(",")}효 / 지괘 ${hi.toName}` : ""}` : "";
       const fuRec = [...records].reverse().find(r => r.followUp && r.followUp !== "later");
@@ -2577,9 +2643,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
       // 되물음이면 앞 판결을 명시적으로 물려준다 — 이게 없으면 모델이 매번 새로 합산하고, 되물음엔 GO/STOP 축이 없어 HOLD로 내려앉는다.
       const reaskLine = _reask ? `\n[되물음] 유저가 방금 판결("${_prevRec.direction} — ${_prevRec.verdict}")을 못 알아들어 되묻고 있다. 새로 판정하지 말고 direction=${_prevRec.direction}·category=${_prevRec.cat || "A"}를 그대로 승계한 뒤, verdict 자리에 **되물은 그것의 답**을 맨말로 넣는다. 선택지를 줬으면 그중 하나를 고른다. 새 비유 금지.` : "";
       const userText = `질문: ${q}${qExtra}\n[오늘] ${_nd.getFullYear()}년 ${_nd.getMonth() + 1}월 ${_nd.getDate()}일 ${_nd.getHours()}시 · 오늘 밤 달 ${_tmoon.name}${innerLine}${reaskLine}${fuLine}`;
-      const system = [{ type: "text",
-        text: `${SYS}\n\n## 대화 연속성\n이전 대화가 있으면 흐름을 이어 자연스럽게 응대한다(단, 판결 근거는 늘 아래 지표다). 같은 고민의 재질문이면 앞선 판결과 일관되게, 명백히 새 고민이면 처음부터 새로 판정한다.\n\n---\n유저 프로필(고정):\n${profile}`,
-        cache_control: { type: "ephemeral" } }];
+      const system = makeSystem();
       // v105: 서신(콜3)은 이 재료를 그대로 쓴다. 같은 system 이라 프롬프트 캐시도 그대로 먹는다.
       letterCtxRef.current = { system, userText };
       // ── 콜1: 결론만(작은 출력=빠름) → L1 즉시 노출 ──
@@ -2694,6 +2758,9 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
      S3에서 우리가 하는 일은 '판단을 넘기는 것'인데, 넘긴 판단에 4,900원을 받으면 그건 파는 게 아니라 등치는 거다.
      모델 판정(res.scope)과 규칙 판정(scopeHint) 중 하나라도 S3면 버튼을 숨긴다 — 안전 쪽으로 틀린다. */
   const letterOk = !!res && res.scope !== "S3" && scopeHint(q) !== "S3";
+  /* 값을 치른 판결들. 본문(letter)이 있든 없든 여기 들어온다 — 없는 건 '다시 받기' 대상이다.
+     paid 를 기준으로 잡는 게 핵심: 본문을 기준으로 잡으면 잃어버린 서신이 목록에서 통째로 사라진다. */
+  const paidRecs = records.map((r, i) => ({ r, i })).filter(({ r }) => r.paid || r.letter);
   const dailyData = returning && !dailySeen && birth.y ? (() => {
     const bio = biorhythm(+birth.y, +birth.m, +birth.d);
     const d = new Date();
@@ -3043,6 +3110,30 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                   <p className="fine">동전 셋을 던져 하늘의 뜻을 묻는다 — 무엇을 묻든 같은 무게로 본다.</p>
                 </div>
               )}
+              {/* v105.2 서신함 — 유료로 산 것이니 홈에서 언제든 다시 열린다.
+                  본문이 날아간 건(paid 는 있는데 letter 가 없는 것)도 여기 그대로 세워 두고 '다시 받기'를 준다.
+                  숨기면 산 사람이 잃은 걸 모른 채 넘어간다 — 그게 제일 나쁜 상태다. */}
+              {!ritual && !res && paidRecs.length > 0 && (
+                <button className="knock fade" onClick={() => { setBoxOpen((o) => !o); if (!boxOpen) track("letterbox_opened", { n: paidRecs.length, lost: paidRecs.filter((p) => !p.r.letter).length }); }}>
+                  {boxOpen ? "서신함 접기" : `수호신의 서신함 — ${paidRecs.length}통${paidRecs.some((p) => !p.r.letter) ? " · 못 받은 게 있어" : ""}`}
+                </button>
+              )}
+              {!ritual && !res && boxOpen && (
+                <div className="lbox fade">
+                  {paidRecs.slice().reverse().map(({ r, i }) => (
+                    <div key={i} className="lboxrow">
+                      <div className="lboxtxt">
+                        <p className="lboxq">"{r.q}"</p>
+                        <p className="lboxno">서신 번호 {letterNo(r)} · {new Date(r.at).toLocaleDateString("ko-KR")}</p>
+                      </div>
+                      <button className={"btn sm " + (r.letter ? "ghost" : "gold")} disabled={letterBusy} onClick={() => reissueLetter(i)}>
+                        {r.letter ? "펼치기" : letterBusy ? "쓰는 중…" : "다시 받기"}
+                      </button>
+                    </div>
+                  ))}
+                  <p className="fine">서신은 이 기기에 보관돼. 기기를 바꾸거나 지워졌다면 <b>번호를 대고 다시 받으면</b> 돼 — 값은 다시 안 받아.</p>
+                </div>
+              )}
               {!ritual && !res && records.length > 0 && (
                 <button className="resetlink" onClick={() => { setLogOpen(o => !o); setOpenRec(-1); }}>{logOpen ? "판결록 접기" : `판결록 — ${records.length}번의 판결`}</button>
               )}
@@ -3239,7 +3330,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
         <div className="readwrap">
           <button className="escx" onClick={() => setLetterOpen(false)} aria-label="닫기">✕</button>
           <div className="readbody">
-            <p className="dtag center">수호신의 서신</p>
+            <p className="dtag center">수호신의 서신 · {letterNo(records[letterIdx] || {})}</p>
             {letterDoc.chapters.map((c, i) => (
               <div key={i} className="rchap">
                 <h3 className="rct"><span>{i + 1}</span>{c.t}</h3>
@@ -3260,6 +3351,9 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                 </>
               )}
             </div>
+            {/* 유료 물건은 기기 하나에만 맡기지 않는다 — iOS 는 7일이면 저장소를 지울 수 있다 */}
+            <button className="btn ghost mt" onClick={saveLetterFile}>서신 간직하기 — 파일로</button>
+            <p className="fine">서신함(홈)에서 언제든 다시 열려. 기기가 바뀌어도 번호 <b>{letterNo(records[letterIdx] || {})}</b>로 다시 받을 수 있어.</p>
             <p className="ainote">이 서신은 AI가 생성한 내용입니다 · 재미로 보는 참고용이야</p>
             <button className="btn ghost mt" onClick={() => setLetterOpen(false)}>접어둘게</button>
           </div>
@@ -3349,6 +3443,12 @@ const CSS = `
 .mailbox .btn{animation:mailPulse 2.6s ease-in-out 1s infinite}
 @keyframes mailPulse{0%,100%{box-shadow:0 0 0 0 rgba(245,217,139,0)}50%{box-shadow:0 0 22px 2px rgba(245,217,139,.28)}}
 .gsay.writing{color:#c9b98f;animation:formPulse 2.2s ease-in-out infinite}
+.lbox{margin-top:12px;width:100%;max-width:340px;display:flex;flex-direction:column;gap:8px}
+.lboxrow{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid rgba(245,217,139,.2);border-radius:12px;background:rgba(20,15,34,.5);text-align:left}
+.lboxtxt{flex:1;min-width:0}
+.lboxq{margin:0;font-size:12.5px;color:#e2d9f2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lboxno{margin:3px 0 0;font-family:sans-serif;font-size:10px;letter-spacing:.06em;color:#8a7f95}
+.lboxrow .btn{flex:none;padding:7px 14px;font-size:11.5px;letter-spacing:.06em}
 @media (prefers-reduced-motion:reduce){.mailbox,.mailbox .btn,.gsay.writing{animation:none}}
 .readwrap{position:fixed;inset:0;z-index:75;overflow-y:auto;-webkit-overflow-scrolling:touch;background:radial-gradient(120% 74% at 50% 10%,#171029,#0b0817 58%,#060409)}
 .readbody{max-width:520px;margin:0 auto;padding:calc(58px + env(safe-area-inset-top,0px)) 22px calc(48px + env(safe-area-inset-bottom,0px));text-align:center}
