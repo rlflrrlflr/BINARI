@@ -218,6 +218,10 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
         fix: "서신을 기다리는 동안 한 번 더 묻게 하는 말입니다. after_letter 계측과 한 몸입니다." },
       { name: "서신 후 재질문 계측", pat: /after_letter: letterSent/,
         fix: "서신을 맡긴 사람이 실제로 한 번 더 묻는지를 재는 값입니다. 없으면 유도 문구가 먹히는지 영영 알 수 없습니다." },
+      { name: "S3(몸·병)에는 서신을 팔지 않음", pat: /const letterOk = !!res && res\.scope !== "S3" && scopeHint\(q\) !== "S3"/,
+        fix: "S3에서 우리가 하는 일은 판단을 넘기는 것입니다. 넘긴 판단에 돈을 받으면 그건 판매가 아닙니다. 모델·규칙 중 하나라도 S3면 버튼을 숨기세요." },
+      { name: "미리보기는 실제 명식에서 생성", pat: /function letterPreview\(saju, hesit\)/,
+        fix: "미리보기에 자기 것이 아닌 일간이 찍히면 그 한 줄에서 신뢰가 끝납니다. saju.dayGan 에서 뽑아 쓰세요." },
     ];
     for (const w of wired) {
       if (w.pat.test(src)) add("정상", `서신 대기 연출 — ${w.name}`, "있음", "");
@@ -229,6 +233,14 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
     if (seal && wait && seal + wait <= 12000) add("정상", "서신 대기 시간", `봉인 ${seal / 1000}초 + 대기 ${wait / 1000}초`, "");
     else add("주의", "서신 대기 시간이 기획 범위를 벗어남", `봉인 ${seal / 1000}초 + 대기 ${wait / 1000}초`,
       "합계 12초를 넘으면 기다림이 아니라 멈춘 화면으로 읽힙니다. 5초 + 2초가 기준값입니다.");
+    /* 목차는 fake door 가 재는 '약속' 그 자체다. 여기가 조용히 줄면 클릭률이 다른 물건을 잰 값이 된다.
+       특히 3장(언제)·4장(누구)이 무료 카드와 서신을 가르는 지점이라, 이 둘의 존재를 이름으로 고정한다. */
+    const secs = (src.match(/const LETTER_SECTIONS = \[([^\]]*)\]/) || [])[1] || "";
+    const n = (secs.match(/"/g) || []).length / 2;
+    const 언제 = /언제/.test(secs), 누구 = /누구/.test(secs);
+    if (n === 5 && 언제 && 누구) add("정상", "서신 목차", `${n}장 · '언제'와 '누구' 포함`, "");
+    else add("주의", "서신 목차가 약속과 어긋남", `${n}장 · 언제 ${언제 ? "있음" : "없음"} · 누구 ${누구 ? "있음" : "없음"}`,
+      "목차는 fake door 가 재는 약속입니다. 5장 구조와 '언제(시기)'·'누구(사람)' 장이 유료의 핵심이니 이름째로 유지하세요.");
   }
 
   // 카드 앞면에 한자 괘 이름이 돌아오는 회귀 방지 — 앞면은 쉬운 말만(층위 분리)

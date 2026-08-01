@@ -1539,10 +1539,21 @@ function Guardian(props) {
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
 const APP_VER = "v104 · 서신";
-/* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다. */
+/* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
+   목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
+   실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
+   분업: 무료 카드는 '어느 쪽'(방향)에 답하고, 서신은 '언제·누구와·무엇을 걸고'에 답한다. */
 const LETTER_PRICE = 4900;
-const LETTER_SECTIONS = ["이 판결이 나온 자리", "네 여덟 글자가 말하는 결", "지금 흐름과 다음 갈림길", "이 선택이 남길 것", "수호신의 당부"];
-const LETTER_PREVIEW = "네 일간은 갑(甲) — 곧게 자라려는 나무야. 그래서 굽히는 결정 앞에서 유독 오래 서 있었지. 이번 물음도 그랬어. 지표들은 갈라졌지만 갈라진 자리마다 같은 것을 가리키더라. 네가 두려워한 건 결과가 아니라, 결정을 되돌릴 수 없다는 사실이었어. 그 마음부터 짚고 시작할게.";
+const LETTER_SECTIONS = ["네가 망설인 자리", "여덟 글자가 이 일을 보는 눈", "언제 — 흐름과 움직일 날", "누구와 — 도울 사람, 피할 자리", "무엇을 걸고 — 이 판결이 틀릴 조건까지"];
+/* 일간별 한 줄 — 미리보기 첫 문장에 쓴다. 예전엔 '갑(甲)' 고정 문구였는데,
+   자기 사주와 다른 글자를 미리보기에서 보면 그 순간 신뢰가 깨진다. 실제 명식에서 뽑아 쓴다. */
+const GAN_READ = { 갑: "곧게 자라려는 나무", 을: "휘어도 끝내 자라는 덩굴", 병: "한낮의 해", 정: "어둠에 켜 두는 등불", 무: "움직이지 않는 산", 기: "받아서 기르는 땅", 경: "아직 벼려지지 않은 쇠", 신: "이미 날이 선 칼", 임: "흐름이 큰 물", 계: "스며드는 비" };
+function letterPreview(saju, hesit) {
+  const g = saju?.dayGan || "";
+  const head = GAN_READ[g] ? `네 일간은 ${g} — ${GAN_READ[g]}야.` : "네 여덟 글자를 먼저 펼쳤어.";
+  const mid = hesit ? `네가 망설인 이유로 "${hesit}"를 골랐지. 거기부터 짚을게.` : "너는 이미 한쪽으로 기울어 있었어. 그런데도 물었지.";
+  return `${head} ${mid} 지표들은 갈라졌지만 갈라진 자리마다 같은 것을 가리키더라. 네가 두려워한 건 결과가 아니라, 되돌릴 수 없다는 사실이었어.`;
+}
 /* v104: '받을게'(= 가짜 결제 완료) 이후의 대기 연출.
    서신은 아직 만들지 않는다. 대신 "주문했다 → 기다린다 → 로비로 돌아간다"까지를 실제로 태워 보고
    이 흐름을 사람이 견디는지, 그 끝에서 한 번 더 묻는지를 잰다. 단계마다 이벤트가 하나씩 붙어 있어
@@ -2536,6 +2547,10 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
   };
 
   const asking = phase >= 1 && awake && !res && !busy && !ritual;   // v55: 수호신이 물러난 순수 질문입력 구간
+  /* v104: 몸·병·임신출산(S3)에는 서신을 팔지 않는다.
+     S3에서 우리가 하는 일은 '판단을 넘기는 것'인데, 넘긴 판단에 4,900원을 받으면 그건 파는 게 아니라 등치는 거다.
+     모델 판정(res.scope)과 규칙 판정(scopeHint) 중 하나라도 S3면 버튼을 숨긴다 — 안전 쪽으로 틀린다. */
+  const letterOk = !!res && res.scope !== "S3" && scopeHint(q) !== "S3";
   const dailyData = returning && !dailySeen && birth.y ? (() => {
     const bio = biorhythm(+birth.y, +birth.m, +birth.d);
     const d = new Date();
@@ -3014,7 +3029,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
           )}
           {res && cardOn && <button className="btn gold mt" onClick={shareVerdict}>{shared ? "복사했어 — 붙여넣으면 돼" : "카톡·라인으로 판결 보내기"}</button>}
           {/* D4: 결제 fake-door — 지불 의사만 잰다. 결제 인프라는 만들지 않는다. */}
-          {res && cardOn && (
+          {res && cardOn && letterOk && (
             !letter ? (
               <button className="btn ghost mt" onClick={openLetter}>수호신의 서신 — 이 판결의 깊은 풀이 · {LETTER_PRICE.toLocaleString()}원</button>
             ) : letterIntent ? (
@@ -3023,7 +3038,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
               <div className="letterwrap fade">
                 <p className="dtag">수호신의 서신 · {LETTER_PRICE.toLocaleString()}원</p>
                 <ul className="letterlist">{LETTER_SECTIONS.map((t, i) => <li key={i}>{t}</li>)}</ul>
-                <p className="letterprev">{LETTER_PREVIEW}</p>
+                <p className="letterprev">{letterPreview(saju, hesit)}</p>
                 <p className="letterprevtag">— 여기까지가 미리보기야</p>
                 {/* 전상법 제17조⑥: 미리보기 제공 + 철회 배제 고지를 '알아보기 쉬운 곳'에 함께 둔다 */}
                 <p className="refundnote">서신은 열어보는 순간 전해지는 글이라, 열람 후에는 환불되지 않아요. 위 미리보기로 먼저 확인해 주세요.</p>
