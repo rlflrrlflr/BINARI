@@ -108,7 +108,7 @@ export default async function handler(req, res) {
   try { if (JSON.stringify(req.body).length > 60000) return res.status(400).json({ error: { message: "요청이 너무 커" } }); } catch { return res.status(400).json({ error: { message: "본문을 읽을 수 없어" } }); }
   const sysText = Array.isArray(system) && system[0] && typeof system[0].text === "string" ? system[0].text : "";
   if (!sysText.startsWith(SYS_PREFIX)) return res.status(400).json({ error: { message: "판결 형식이 아니야" } });
-  const mt = Math.min(Math.max(parseInt(max_tokens, 10) || 320, 1), 2400);   // 근거를 용어+풀이로 병기하면서 1600에선 잘렸다(상한은 천장일 뿐 — 안 쓰면 비용 0)
+  const mt = Math.min(Math.max(parseInt(max_tokens, 10) || 320, 1), 3400);   // 콜3(서신)이 다섯 장 1,700자를 쓴다 — 2400에선 마지막 장이 통째로 잘린다(상한은 천장일 뿐 — 안 쓰면 비용 0)
   // 티어 → 모델. 허용 목록 방식이라 클라이언트가 임의 모델을 지정할 수 없다(비용 폭주 차단).
   const TIERS = { free: process.env.BINARI_MODEL_FREE, paid: process.env.BINARI_MODEL_PAID };
   const tierKey = tier === "paid" ? "paid" : "free";
@@ -139,7 +139,7 @@ export default async function handler(req, res) {
       const scope = (txt.match(/"scope"\s*:\s*"(S[123])"/) || [])[1] || null;   // S3(몸·병) 진입 비율은 서버 로그로도 본다
       // 콜1은 votes 를 함께 받느라 560토큰이 됐다 — 경계를 800으로 올리지 않으면 콜1이 콜2로 잘못 집계된다
       // 모델을 같이 남긴다 — 티어 전환 뒤 "어느 모델이 이 판결을 냈나"를 못 되짚으면 A/B 비교가 불가능하다
-      console.log(JSON.stringify({ at: new Date().toISOString(), call: mt <= 800 ? 1 : 2, tier: tierKey, model, cat, dir, scope, usage: data.usage || null }));
+      console.log(JSON.stringify({ at: new Date().toISOString(), call: mt <= 800 ? 1 : mt <= 2400 ? 2 : 3, tier: tierKey, model, cat, dir, scope, usage: data.usage || null }));
     } catch {}
     return res.status(200).json(data);
   } catch (e) {

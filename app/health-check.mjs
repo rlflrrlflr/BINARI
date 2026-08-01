@@ -179,6 +179,22 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
     } else if (mt2 && clamp) add("정상", "콜2/서버 클램프", `콜2 ${mt2} ≤ 클램프 ${clamp}`, "");
   } catch (_) { /* 구조가 바뀌면 조용히 넘어간다 */ }
 
+  /* v105 콜3(서신) — 서버가 잘라내면 마지막 장('무엇을 걸고', 반증 조건이 있는 장)이 통째로 사라진다.
+     그런데 화면엔 오류가 안 뜬다 — 네 장짜리 서신이 그냥 나올 뿐이다. 전형적인 조용한 고장이라 검사로 고정한다. */
+  try {
+    const mt3 = +(src.match(/const LETTER_MAXTOK = (\d+)/) || [])[1];
+    const api3 = readFileSync("api/judge.js", "utf8");
+    const clamp3 = +(api3.match(/\|\| 320, 1\), (\d+)\)/) || [])[1];
+    if (mt3 && clamp3 && mt3 > clamp3) {
+      add("심각", "서버가 서신을 잘라냄", `콜3 상한 ${mt3} > 서버 클램프 ${clamp3}`,
+        "api/judge.js 의 max_tokens 클램프를 콜3 상한 이상으로 올리세요. 안 그러면 마지막 장이 조용히 사라집니다.");
+    } else if (mt3 && clamp3) add("정상", "콜3(서신)/서버 클램프", `콜3 ${mt3} ≤ 클램프 ${clamp3}`, "");
+    // 서버 로그가 콜3을 콜2로 세면 티어별 비용을 못 가른다(무료 카드와 유료 서신이 한 통에 섞인다)
+    if (/call: mt <= \d+ \? 1 : mt <= \d+ \? 2 : 3/.test(api3)) add("정상", "콜1/콜2/콜3 로그 구분", "세 콜을 따로 셈", "");
+    else add("주의", "서버 로그가 콜3을 콜2로 셈", "judge.js 의 call 분류가 2단계뿐",
+      "'mt <= 800 ? 1 : mt <= 2400 ? 2 : 3' 형태로 콜3을 분리하세요. 안 그러면 유료 서신 비용이 무료 카드와 섞입니다.");
+  } catch (_) { /* 구조가 바뀌면 조용히 넘어간다 */ }
+
   // v103: 속결 제거 — 잔재가 남으면 죽은 분기가 조용히 살아 있는 셈이다
   const quickLeft = ["looksQuick", "_quick", "QUICK_HINTS", "[판돈]"].filter((t) => src.includes(t));
   if (quickLeft.length) {
@@ -222,6 +238,22 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
         fix: "S3에서 우리가 하는 일은 판단을 넘기는 것입니다. 넘긴 판단에 돈을 받으면 그건 판매가 아닙니다. 모델·규칙 중 하나라도 S3면 버튼을 숨기세요." },
       { name: "미리보기는 실제 명식에서 생성", pat: /function letterPreview\(saju, hesit\)/,
         fix: "미리보기에 자기 것이 아닌 일간이 찍히면 그 한 줄에서 신뢰가 끝납니다. saju.dayGan 에서 뽑아 쓰세요." },
+      /* v105 콜3 — 서신 본문. 여기서 제일 무서운 고장은 '서신이 판결을 다시 판정하는 것'이다.
+         카드는 GO 인데 서신이 STOP 이면 환불 사유가 아니라 신뢰 종료다. 그 규칙을 코드에 붙잡아 둔다. */
+      { name: "서신 재판정 금지 규칙", pat: /\[확정된 판결 — 다시 판정하지 않는다\]/,
+        fix: "서신은 재판이 아니라 집행 계획서입니다. 이 블록이 빠지면 카드와 서신이 반대 결론을 낼 수 있습니다." },
+      { name: "서신 분업 규칙(언제·누구와)", pat: /서신은 \*\*'언제 · 누구와 · 무엇을 걸고'\*\*에 답한다/,
+        fix: "무료 카드와 유료 서신을 가르는 단 하나의 규칙입니다. 없으면 서신이 카드를 길게 늘여 쓴 물건이 됩니다." },
+      { name: "서신 반증 조건 요구", pat: /반증 조건.*이 판결을 뒤집어라/,
+        fix: "자기가 틀릴 조건을 적는 것이 이 서신의 차별점입니다. 지우면 흔한 운세 리포트가 됩니다." },
+      { name: "서신 금지선(지어낸 숫자·겁주기)", pat: /겁을 준 뒤 해결책을 파는 구조/,
+        fix: "겁주기→부적 판매는 이 업계의 기본 수법이고, 우리가 하지 않기로 한 것입니다." },
+      { name: "서신은 유료 모델로", pat: /callClaude\(ctx\.system, \[msg\], LETTER_MAXTOK, "paid"\)/,
+        fix: "tier 를 안 보내면 무료 모델로 4,900원짜리를 씁니다. paid 를 명시하세요." },
+      { name: "서신 재료 스냅샷", pat: /letterCtxRef\.current = \{ system, userText \}/,
+        fix: "판결 시점의 재료를 잡아두지 않으면, 서신을 쓸 때 바뀐 상태가 섞여 카드와 서신이 어긋납니다." },
+      { name: "반쪽 서신 차단", pat: /if \(ch\.length < 3\) throw new Error/,
+        fix: "응답이 잘려 두 장짜리 서신이 나오면 실패로 처리해야 합니다. 반쪽을 파느니 못 썼다고 말하는 게 낫습니다." },
     ];
     for (const w of wired) {
       if (w.pat.test(src)) add("정상", `서신 대기 연출 — ${w.name}`, "있음", "");

@@ -1538,7 +1538,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v104 · 서신";
+const APP_VER = "v105 · 서신";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -1564,6 +1564,54 @@ const LETTER_SEAL_LINE = "수호신이 붓을 들었어";
 const LETTER_WAIT_LINE = "곧 답변이 있을 것이다.";
 const LETTER_LOBBY_LINE = "기다림이 짙을수록 가야할길은 투명해진다.";
 const LETTER_NUDGE_LINE = "서신은 내가 쓰고 있을게. 그 사이에 더 걸리는 게 있으면 — 지금 물어도 돼.";
+/* 서신이 도착한 뒤에도 유도 문구는 남는다. 도착과 동시에 사라지면 '한 번 더 묻게 하기'라는
+   이 연출의 목적이 정작 제일 좋은 타이밍에 없어진다(실측: e2e ④가 이걸 잡았다). */
+const LETTER_NUDGE_DONE = "읽고 나서 또 걸리는 게 있으면 — 지금 물어도 돼.";
+const LETTER_MAXTOK = 3200;   // 다섯 장 × 약 300자 ≈ 1,700자. 잘리면 마지막 장이 통째로 사라진다
+
+/* ── 콜3: 서신 지시문 ────────────────────────────────────────────────────────
+   system 은 판결과 **같은 SYS + 같은 프로필**을 그대로 쓴다. 이유가 셋이다:
+     ① 서버가 SYS 프리픽스로 요청을 검증한다(다른 프롬프트는 400) ② 가드레일·금지선을 서신이 물려받는다
+     ③ 프롬프트 캐시가 그대로 먹어 값이 싸진다.
+   그래서 여기 담기는 건 '이번에 무엇을 쓰는가'뿐이다.
+   제1규칙은 재판정 금지 — 카드는 GO인데 서신이 STOP이면 그건 환불 사유가 아니라 신뢰 종료다. */
+function letterTask(res, detail, hesit) {
+  const rs = (detail?.reasons || []).map((r) => `${r.axis}(${r.vote || "?"}): ${r.text}`).join(" / ");
+  const dir = res?.direction || "GO";
+  const cost = dir === "GO" ? "이 방향으로 갔을 때 대신 포기하게 되는 것"
+    : dir === "STOP" ? "멈춤으로써 실제로 놓치는 것"
+      : "지금 기다리는 동안 실제로 치르는 값";
+  return `[이번 출력 — 수호신의 서신]
+이 사람은 방금 받은 판결에 ${LETTER_PRICE}원을 내고 깊은 풀이를 청했다.
+
+[확정된 판결 — 다시 판정하지 않는다]
+direction=${dir} / verdict="${res?.verdict || ""}" / category=${res?.category || "A"} / scope=${res?.scope || "S1"} / 표 ${res?.total || 0} 중 반대 ${res?.against || 0}${rs ? `\n축별 근거: ${rs}` : ""}
+이 방향을 뒤집거나 흐리는 문장은 한 줄도 쓰지 않는다. 서신은 재판이 아니라 **집행 계획서**다.
+
+[분업 — 이 서신이 실패하는 단 하나의 방법]
+무료 카드는 이미 '어느 쪽'에 답했다. 서신은 **'언제 · 누구와 · 무엇을 걸고'**에 답한다.
+카드에서 한 말을 길게 늘여 쓰면 이 서신은 실패다. 카드에 없던 것만 쓴다.
+
+[구성 — 다섯 장. 각 장 280~380자. 제목은 아래 그대로 쓴다]
+1) "네가 망설인 자리" — 유저가 쓴 질문을 직접 인용하며 연다.${hesit ? ` 유저는 망설인 이유로 "${hesit}"를 골랐다 — 이걸 짚는다.` : ""} 그다음 **이 사람의 명식에서 이런 종류의 결정이 유독 어려운 이유**를 십성 분포로 진단한다(관성이 두터우면 남의 눈이 먼저 보이고, 비겁이 많으면 묻지 않고 밀어붙이고, 식상이 많으면 벌여놓고 못 거둔다 — 실제 분포대로). 위로가 아니라 진단이다.
+2) "여덟 글자가 이 일을 보는 눈" — 이 질문이 걸린 영역(돈·일·사람·몸)이 이 사람 명식에서 **두터운 자리인지 빈 자리인지**를 일간·오행 개수·십성으로 말한다. 카드 뒷면 근거를 반복하지 말고, 그 근거들이 왜 그렇게 갈렸는지 한 겹 아래로 내려간다.
+3) "언제 — 흐름과 움직일 날" — **이 서신에서 가장 중요한 장.** 대운(지금 어느 10년의 어디쯤인지), 올해 세운, 다음 석 달의 결. 그리고 **실제로 움직일 날을 프로필의 길일에서 골라 두셋 찍는다.** "때가 되면"은 금지. 날짜를 못 찍으면 "이달 하순"·"추석 전"처럼 폭을 주되 반드시 시점을 남긴다.
+4) "누구와 — 도울 사람, 피할 자리" — 프로필의 신살·합충으로 이번 일에서 **힘이 되는 띠·사람 유형**과 **부딪히는 띠·자리**를 짚는다. 방위·직업 오행이 이 질문에 걸리면 함께. 프로필에 없는 것은 지어내지 않는다 — 있는 것만 쓴다.
+5) "무엇을 걸고" — 두 가지를 반드시 담는다. ①${cost}을 하나, 정직하게 명시한다(좋은 말만 하지 않는다). ②마지막 줄에 **반증 조건**: "이런 일이 벌어지면 이 판결을 뒤집어라". 조건은 감정이 아니라 **눈으로 확인되는 사건**이어야 한다.
+
+[금지 — 하나라도 어기면 서신 전체가 무효다]
+- 지어낸 숫자·통계·확률("100명 중 셋", "70%", "역대 몇 번째")
+- 겁을 준 뒤 해결책을 파는 구조(부적·기도·굿·추가 결제 유도)
+- 카드 앞면/뒷면에 이미 있는 문장을 그대로 다시 쓰기
+- 용어를 홑으로 던지기 — 명리 용어는 **"용어 — 쉬운 풀이"** 형식으로만
+- 평생 총운·전반적 성격 분석. 이건 **이 질문 하나에 대한** 서신이다
+- 판결 방향과 어긋나는 결론, 그리고 "네 마음에 달렸어" 류의 되돌리기
+- 몸·병·수명의 의학적 판정(진단명·투약·수술 여부·수명)
+
+[출력 — JSON만, 백틱·서문 금지]
+{"chapters":[{"t":"장 제목","body":"본문"}],"closing":"수호신의 마지막 한 줄(35자 이내)"}
+chapters는 위 순서 그대로 다섯 개.`;
+}
 function VerBadge() {
   const [r, setR] = useState("");
   useEffect(() => { const t = setInterval(() => { const m = typeof window !== "undefined" && window.__BINARI_R; if (m && m !== r) setR(m); }, 1200); return () => clearInterval(t); }, [r]);
@@ -2007,11 +2055,12 @@ function repairJSON(txt) {
 }
 /* v18: 듀얼 모드 Claude 호출 — 배포면 /api/judge(키는 서버에만), 아니면(아티팩트 등) 직접 호출로 자동 폴백. 첫 성공 경로를 기억 */
 let API_MODE = null; // "server" | "direct"
-async function callServer(system, messages, maxTokens) {
+async function callServer(system, messages, maxTokens, tier) {
   const r = await fetch("/api/judge", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ system, messages, max_tokens: maxTokens }),
+    // tier: 무료 카드는 싼 모델, 유료 서신은 좋은 모델. 서버가 허용목록으로 걸러 실제 모델을 고른다.
+    body: JSON.stringify({ system, messages, max_tokens: maxTokens, tier: tier === "paid" ? "paid" : "free" }),
   });
   const ct = r.headers.get("content-type") || "";
   if (!r.ok && r.status === 404) throw new Error("프록시 없음");
@@ -2053,15 +2102,16 @@ async function callComplete(system, messages, maxTokens) {
 }
 /* v20(QC): 폭포수 — 한 경로가 어떤 이유로든 실패하면(호출 오류·쓰레기 응답·파싱 실패) 다음 경로로 자동 이동.
    성공한 경로만 기억, 기억한 경로가 실패하면 기억을 버리고 전체 재탐색. 모바일 브리지가 죽어도 다른 길로 판결이 간다. */
-async function callClaude(system, messages, maxTokens) {
+async function callClaude(system, messages, maxTokens, tier) {
   const all = hasComplete() ? ["complete", "server", "direct"] : ["server", "direct"];
   const order = API_MODE && all.includes(API_MODE) ? [API_MODE, ...all.filter((m) => m !== API_MODE)] : all;
   let lastErr = null;
   const fails = [];                    // 경로별 실패 기록 — verdict_failed 의 원인 분류에 쓴다
   for (const mode of order) {
     try {
+      // tier 는 서버 경로에만 의미가 있다 — complete(아티팩트)·direct 는 런타임이 모델을 정한다
       const data = mode === "complete" ? await callComplete(system, messages, maxTokens)
-        : mode === "server" ? await callServer(system, messages, maxTokens)
+        : mode === "server" ? await callServer(system, messages, maxTokens, tier)
         : await callDirect(system, messages, maxTokens);
       if (!data || data.type === "error" || data.error) throw new Error((data && data.error && data.error.message) || "API 오류");
       const txt = (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n");
@@ -2310,6 +2360,13 @@ export default function App() {
   const [letter, setLetter] = useState(false);                // D4: 서신 fake-door — 판결마다 초기화
   const [letterStage, setLetterStage] = useState("");         // v104: "" | "seal"(5초) | "wait"(2초) — 결제 후 대기 연출
   const [letterSent, setLetterSent] = useState(false);        // v104: 로비로 돌아온 뒤 수호신 한마디를 띄우는 표식
+  const [letterDoc, setLetterDoc] = useState(null);           // v105: 콜3 결과 {chapters,closing} | {_err:true}
+  const [letterBusy, setLetterBusy] = useState(false);        // v105: 서신을 쓰는 중
+  const [letterOpen, setLetterOpen] = useState(false);        // v105: 서신 전문 읽기 화면
+  const [letterRated, setLetterRated] = useState(0);          // v105: 값했나 평가 — 0 미평가 · 1 아니다 · 2 값했다
+  /* 서신은 판결과 **같은 재료**로 써야 한다. 여기 담아두지 않고 서신 시점에 다시 만들면
+     그 사이 바뀐 상태(다음 질문 등)가 섞여 카드와 서신이 어긋난다. 판결이 성사된 순간의 스냅샷을 잡아둔다. */
+  const letterCtxRef = useRef(null);
   const shareVerdict = async () => {
     if (!res) return;
     track("verdict_shared", { dir: res.direction, mode: "ritual" });
@@ -2356,7 +2413,8 @@ export default function App() {
   };
   const backToLobby = () => {                               // v56: 판결 화면 탈출구(X · 로비 복귀)
     track("another_question", { after_why: why });
-    setLetterSent(false); resetToLobby();
+    // 유저가 스스로 나가는 길에서는 서신함까지 치운다. 대기 연출이 끝나 돌아오는 길(resetToLobby)과 다른 점이 이것뿐이다.
+    setLetterSent(false); setLetterDoc(null); setLetterOpen(false); setLetterRated(0); resetToLobby();
   };
   const rateVerdict = (score) => {                          // v75: 판결 평가 — 정확도 피드백 수집(계측 + 기록에 부착)
     if (rated) return;
@@ -2387,6 +2445,42 @@ export default function App() {
     setLetterIntent(true);
     setLetterStage("seal");   // v104: 여기서부터 대기 연출 — 결제창은 없다(fake door)
     track("letter_intent_confirmed", demoProps(birth, { dir: res?.direction || null, cat: res?.category || null, mode: "ritual", nth_verdict: records.length, price: LETTER_PRICE }));
+    writeLetter();            // v105: 연출을 기다리지 않고 지금 쓰기 시작한다 — 7초가 대기시간을 그만큼 먹어준다
+  };
+  /* v105 — 콜3. 판결을 낸 그 재료로 서신을 쓴다.
+     실패해도 앱은 멈추지 않는다: 대기 연출은 그대로 끝나고, 로비의 서신함이 '못 썼다'를 정직하게 말한다.
+     (fake door 단계라 실제 결제가 없으므로 환불 경로도 없다 — 실패는 조용히 삼키지 말고 화면에 남겨야 한다) */
+  const writeLetter = async () => {
+    const ctx = letterCtxRef.current;
+    const _base = () => demoProps(birth, { dir: res?.direction || null, cat: res?.category || null, scope: res?.scope || null, nth_verdict: records.length });
+    if (!ctx || !res) { setLetterDoc({ _err: true }); track("letter_write_failed", { ..._base(), reason: "no_context" }); return; }
+    setLetterBusy(true);
+    const t0 = performance.now();
+    try {
+      const msg = { role: "user", content: `${ctx.userText}\n\n${letterTask(res, detail, hesit)}` };
+      const { json } = await callClaude(ctx.system, [msg], LETTER_MAXTOK, "paid");   // paid = 좋은 모델
+      const ch = Array.isArray(json?.chapters) ? json.chapters.filter((c) => c && c.t && c.body) : [];
+      if (ch.length < 3) throw new Error(`장이 ${ch.length}개뿐`);   // 잘렸거나 형식이 깨진 것 — 반쪽 서신을 파느니 실패로 둔다
+      const doc = { chapters: ch.slice(0, 5), closing: String(json.closing || "").slice(0, 60) };
+      setLetterDoc(doc);
+      // 판결 기록에 붙여 둔다 — 판결록에서 다시 열어 읽을 수 있고, 새로고침에도 살아남는다
+      setRecords((prev) => { if (!prev.length) return prev; const nx = prev.slice(); nx[nx.length - 1] = { ...nx[nx.length - 1], letter: doc }; return nx; });
+      track("letter_written", { ..._base(), ms: Math.round(performance.now() - t0), chapters: doc.chapters.length, chars: doc.chapters.reduce((a, c) => a + c.body.length, 0) });
+    } catch (e) {
+      setLetterDoc({ _err: true });
+      track("letter_write_failed", { ..._base(), ms: Math.round(performance.now() - t0), reason: failReason(e), status: failStatus(e) });
+    } finally { setLetterBusy(false); }
+  };
+  const openLetterDoc = () => {
+    if (!letterDoc || letterDoc._err) return;
+    setLetterOpen(true);
+    track("letter_opened", demoProps(birth, { dir: res?.direction || null, nth_verdict: records.length }));
+  };
+  // 완성도를 재는 유일한 질문. 값했나/아니다 두 갈래로만 묻는다 — 다섯 단계는 아무도 안 고른다.
+  const rateLetter = (v) => {
+    if (letterRated) return;
+    setLetterRated(v);
+    track("letter_rated", demoProps(birth, { worth: v === 2, price: LETTER_PRICE, chapters: letterDoc?.chapters?.length || 0 }));
   };
   /* v104: 봉인(5초) → 대기 문구(2초) → 로비.
      화면을 떠나거나 새 판결을 시작하면 타이머는 정리된다(클린업). 단계 진입마다 이벤트가 남으므로
@@ -2414,7 +2508,7 @@ export default function App() {
     const _reask = !!_prevRec && isReask(q);
     const _sHint = scopeHint(q);
     track("question_asked", demoProps(birth, { mode: "ritual", qlen: q.trim().length, ritual: !!hi, lean: lean || "skip", hesit: hesit || null, mbti: mbti || null, core_value: core || null, element: saju?.main || null, zodiac: zo?.name || null, scope_hint: _sHint, reask: _reask, reask_depth: _reask ? records.filter(r => isReask(r.q)).length + 1 : 0, after_letter: letterSent }));   // v104 after_letter: 서신 대기 중에 한 번 더 물었는가
-    setBusy(true); setErr(""); setRes(null); setDetail(null); setWhy(false); setFlip(false); setCardOn(false); setRated(0); setLetter(false); setLetterIntent(false); setLetterStage(""); setLetterSent(false); reactRef.current = null; setIntroSeen(true);
+    setBusy(true); setErr(""); setRes(null); setDetail(null); setWhy(false); setFlip(false); setCardOn(false); setRated(0); setLetter(false); setLetterIntent(false); setLetterStage(""); setLetterSent(false); setLetterDoc(null); setLetterOpen(false); setLetterRated(0); reactRef.current = null; setIntroSeen(true);
     try {
       const mp = moonPlacements(+birth.y, +birth.m, +birth.d, +birth.h || 12, +birth.min || 0, !!birth.noHour); // v22
       const tzk = tzolkin(jdn(+birth.y, +birth.m, +birth.d));                                                   // v22
@@ -2439,6 +2533,8 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
       const system = [{ type: "text",
         text: `${SYS}\n\n## 대화 연속성\n이전 대화가 있으면 흐름을 이어 자연스럽게 응대한다(단, 판결 근거는 늘 아래 지표다). 같은 고민의 재질문이면 앞선 판결과 일관되게, 명백히 새 고민이면 처음부터 새로 판정한다.\n\n---\n유저 프로필(고정):\n${profile}`,
         cache_control: { type: "ephemeral" } }];
+      // v105: 서신(콜3)은 이 재료를 그대로 쓴다. 같은 system 이라 프롬프트 캐시도 그대로 먹는다.
+      letterCtxRef.current = { system, userText };
       // ── 콜1: 결론만(작은 출력=빠름) → L1 즉시 노출 ──
       const concludeMsg = { role: "user", content: `${userText}\n\n[이번 출력] 아래 JSON만. **votes를 먼저 채우고, 그 표를 세어 direction을 정하고, verdict는 그 direction을 말로 옮긴다.** 결론을 먼저 정해두고 표를 맞추지 마라 — 순서가 곧 판결의 정직함이다.\n{"category":"A|B|C","scope":"S1|S2|S3","votes":[{"axis":"지표명","v":"GO|STOP|중립"}],"tone":"단호|격려|충고","direction":"GO|STOP|HOLD","verdict":"한 문장 단답"}\nvotes엔 이번 판결에 참여한 지표를 전부 넣는다(사주·달·별자리·MBTI·수비학·마야 + 제공된 경우 삼재·가치·주역·토정비결). against·total은 앱이 센다 — 쓰지 마라. reasons·subline·funLine도 이번엔 쓰지 마.` };
       const priorConvo = convo; // 콜2가 쓸 이전 맥락(이번 턴 제외) 스냅샷
@@ -2798,7 +2894,21 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
             <div className="lobbypanel fade">
               {/* v104: 서신을 맡기고 돌아온 자리 — 인사말 대신 수호신의 한마디, 그리고 한 번 더 묻게 하는 말 */}
               {letterSent ? (
-                <div><p className="gsay fade">{LETTER_LOBBY_LINE}</p><p className="gsay fade" style={{ animationDelay: ".95s" }}>{LETTER_NUDGE_LINE}</p></div>
+                <div>
+                  <p className="gsay fade">{LETTER_LOBBY_LINE}</p>
+                  {/* v105: 서신함 — 쓰는 중 / 도착 / 못 씀. 세 상태를 숨기지 않는다. */}
+                  {letterDoc && !letterDoc._err && (
+                    <div className="mailbox fade" style={{ animationDelay: ".95s" }}>
+                      <p className="dtag">수호신의 서신 · 도착</p>
+                      <button className="btn gold sm" onClick={openLetterDoc}>서신을 펼친다</button>
+                    </div>
+                  )}
+                  {letterDoc && letterDoc._err && (
+                    <p className="gsay fade" style={{ animationDelay: ".95s" }}>서신이 손에서 흩어졌어 — 이번 건 내 잘못이야. 다시 물어봐 줄래?</p>
+                  )}
+                  {/* 유도 문구는 어느 상태에서도 남는다 — 이게 이 연출의 목적이다 */}
+                  <p className="gsay fade" style={{ animationDelay: "1.5s" }}>{letterDoc && !letterDoc._err ? LETTER_NUDGE_DONE : LETTER_NUDGE_LINE}</p>
+                </div>
               ) : returning ? (
                 <p className="gsay fade">{"다시 왔네" + (birth.name ? ", " + birth.name : "") + ". 기다렸어."}</p>
               ) : justBorn ? (
@@ -3072,6 +3182,38 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
           <p className={"sealline " + letterStage}>{letterStage === "seal" ? LETTER_SEAL_LINE : LETTER_WAIT_LINE}</p>
         </div>
       )}
+
+      {/* v105: 서신 전문. 판결 카드 위가 아니라 별도 화면인 건, 이건 '읽는 것'이지 '보는 것'이 아니어서다. */}
+      {letterOpen && letterDoc && !letterDoc._err && (
+        <div className="readwrap">
+          <button className="escx" onClick={() => setLetterOpen(false)} aria-label="닫기">✕</button>
+          <div className="readbody">
+            <p className="dtag center">수호신의 서신</p>
+            {letterDoc.chapters.map((c, i) => (
+              <div key={i} className="rchap">
+                <h3 className="rct"><span>{i + 1}</span>{c.t}</h3>
+                <p className="rcb">{c.body}</p>
+              </div>
+            ))}
+            {letterDoc.closing && <p className="rclose">{letterDoc.closing}</p>}
+            <div className="raterow">
+              {letterRated ? (
+                <p className="ratedone">담아뒀어 — 다음 서신이 더 나아질 거야.</p>
+              ) : (
+                <>
+                  <span className="ratelab">이 서신, {LETTER_PRICE.toLocaleString()}원 값 했어?</span>
+                  <div className="row gap center">
+                    <button type="button" className="calbtn sm" onClick={() => rateLetter(1)}>아니</button>
+                    <button type="button" className="calbtn sm" onClick={() => rateLetter(2)}>값했어</button>
+                  </div>
+                </>
+              )}
+            </div>
+            <p className="ainote">이 서신은 AI가 생성한 내용입니다 · 재미로 보는 참고용이야</p>
+            <button className="btn ghost mt" onClick={() => setLetterOpen(false)}>접어둘게</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -3150,6 +3292,18 @@ const CSS = `
 @keyframes sealSpark{0%,100%{opacity:.15;transform:rotate(var(--a)) translateY(-52px) scaleY(.6)}50%{opacity:.9;transform:rotate(var(--a)) translateY(-70px) scaleY(1.15)}}
 @keyframes sealCore{0%,100%{transform:scale(1);opacity:.9}50%{transform:scale(1.09);opacity:1}}
 @media (prefers-reduced-motion:reduce){.sring,.spark,.sealcore,.sealline.seal{animation:none}.spark{opacity:.35}}
+/* v105: 서신함(로비) + 서신 전문 읽기 화면 */
+.mailbox{margin-top:14px;display:flex;flex-direction:column;align-items:center;gap:8px}
+.readwrap{position:fixed;inset:0;z-index:75;overflow-y:auto;-webkit-overflow-scrolling:touch;background:radial-gradient(120% 74% at 50% 10%,#171029,#0b0817 58%,#060409)}
+.readbody{max-width:520px;margin:0 auto;padding:calc(58px + env(safe-area-inset-top,0px)) 22px calc(48px + env(safe-area-inset-bottom,0px));text-align:center}
+.dtag.center{text-align:center}
+.rchap{margin-top:26px;text-align:left}
+.rct{display:flex;align-items:baseline;gap:9px;margin:0 0 9px;font-size:14.5px;font-weight:600;color:#ffe9ad;letter-spacing:.02em;text-shadow:0 0 18px rgba(245,217,139,.3)}
+.rct span{font-family:sans-serif;font-size:10px;letter-spacing:.1em;color:#8a7f95;border:1px solid rgba(245,217,139,.3);border-radius:999px;width:19px;height:19px;display:inline-flex;align-items:center;justify-content:center;flex:none}
+.rcb{margin:0;font-size:14px;line-height:2.05;color:#ddd3ee;text-align:left;overflow-wrap:anywhere;word-break:keep-all}
+.rclose{margin:32px 0 0;font-size:14.5px;line-height:1.9;color:#ffe9ad;letter-spacing:.03em;text-shadow:0 0 20px rgba(245,217,139,.35)}
+.readbody .raterow{margin-top:34px}
+.readbody .ainote{margin-top:26px}
 .ainote.card{margin-top:18px;opacity:.85}
 .err{color:#e58a8a;font-size:13px;font-family:sans-serif;margin:10px 0}
 .cards{display:flex;flex-direction:column;gap:14px;width:100%;margin-top:10px}

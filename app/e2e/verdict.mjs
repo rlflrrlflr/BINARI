@@ -9,6 +9,19 @@ const BASE = process.env.BASE || "http://localhost:4173";
 const R = []; const ck = (n, p, note = "") => { R.push(p); console.log(`${p ? "PASS" : "FAIL"} — ${n}${note ? " · " + note : ""}`); };
 const CALL1 = JSON.stringify({ category: "B", votes: [{ axis: "사주", v: "GO" }, { axis: "달", v: "GO" }, { axis: "별자리", v: "STOP" }], tone: "단호", direction: "STOP", verdict: "보내지 마. 끝.", against: 4, total: 6 });
 const CALL2 = JSON.stringify({ subline: "밤이 널 속이는 거야.", reasons: [{ axis: "사주", vote: "STOP", text: "화기가 널 밀어." }], funLine: "욱하지 마.", disclaimer: "" });
+// v105 콜3(서신). 콜2와 헷갈리지 않게 표지를 따로 둔다 — 콜3 지시문에 '[이미 확정된 판결]' 문자열이 들어가면
+// 아래 분기가 콜3을 콜2로 잘못 태운다. 앱 쪽 문구를 '[확정된 판결 —'로 바꿔 그 충돌을 없앴다.
+const LETTER_MARK = "[이번 출력 — 수호신의 서신]";
+const CALL3 = JSON.stringify({
+  chapters: [
+    { t: "네가 망설인 자리", body: "너는 '전남친에게 연락할까?'라고 물었어. 그 문장 하나에 오래 서 있었지." },
+    { t: "여덟 글자가 이 일을 보는 눈", body: "네 명식에서 사람 자리는 두터운데, 거둘 자리가 얇아." },
+    { t: "언제 — 흐름과 움직일 날", body: "이달 하순은 아니야. 다음 달 초순, 특히 말날이 열려 있어." },
+    { t: "누구와 — 도울 사람, 피할 자리", body: "돼지띠가 널 돕고, 뱀띠 앞에서는 말을 줄여." },
+    { t: "무엇을 걸고", body: "멈추면 미련이 남아. 대신 저쪽이 먼저 연락해 오면 이 판결을 뒤집어." },
+  ],
+  closing: "네 편이야, 늘.",
+});
 
 async function onboard(page, qs = "") {   // qs: "?trackdebug" 처럼 쿼리를 붙일 때 쓴다(계측 검증용)
   await page.goto(BASE + qs); await page.waitForTimeout(900);
@@ -45,9 +58,9 @@ const b = await chromium.launch((process.env.CHROME_PATH ? { executablePath: pro
 {
   const page = await b.newPage({ viewport: { width: 430, height: 932 } });
   page.setDefaultTimeout(9000);
-  await page.addInitScript(({ c1, c2 }) => {
-    window.claude = { complete: async (p) => (p.includes("[이미 확정된 판결]") ? c2 : c1) };
-  }, { c1: CALL1, c2: CALL2 });
+  await page.addInitScript(({ c1, c2, c3, mk }) => {
+    window.claude = { complete: async (p) => (p.includes(mk) ? c3 : p.includes("[이미 확정된 판결]") ? c2 : c1) };
+  }, { c1: CALL1, c2: CALL2, c3: CALL3, mk: LETTER_MARK });
   await onboard(page, "?trackdebug");
   ck("S1 complete 감지", await page.evaluate(() => typeof window.claude?.complete === "function"));
   await page.locator("textarea.qbox").fill("전남친에게 연락할까?"); await page.waitForTimeout(300);
@@ -88,6 +101,21 @@ const b = await chromium.launch((process.env.CHROME_PATH ? { executablePath: pro
   let at = -1, ordered = true;
   for (const s of seq) { const i = evs.indexOf(s, at + 1); if (i < 0 || i < at) { ordered = false; break; } at = i; }
   ck("⑤ 단계별 계측 순서", ordered, seq.join(" → "));
+  /* v105 서신 본문 — 로비 서신함 → 전문 → 값했나 평가. 콜3이 실제로 다녀왔는지까지 본다. */
+  await page.waitForSelector("text=서신을 펼친다", { timeout: 20000 });
+  ck("⑦ 로비 서신함 도착", true);
+  const wrote = await page.evaluate(() => (window.__binariEvents || []).find((e) => e.ev === "letter_written"));
+  ck("⑧ 콜3 성사(letter_written)", !!wrote, wrote ? `${wrote.props.chapters}장 · ${wrote.props.chars}자` : "이벤트 없음");
+  await page.getByRole("button", { name: "서신을 펼친다" }).click();
+  await page.waitForSelector(".readwrap", { timeout: 5000 });
+  const chaps = await page.locator(".rct").allTextContents();
+  ck("⑨ 다섯 장 전부 렌더", chaps.length === 5, chaps.map((s) => s.replace(/^\d/, "")).join(" · "));
+  ck("⑩ 서신에 AI 생성 고지", await page.getByText("이 서신은 AI가 생성한 내용입니다", { exact: false }).isVisible().catch(() => false));
+  await page.getByRole("button", { name: "값했어" }).click();
+  const rated = await page.evaluate(() => (window.__binariEvents || []).find((e) => e.ev === "letter_rated"));
+  ck("⑪ 값했나 평가 계측", rated?.props?.worth === true, JSON.stringify(rated?.props?.worth));
+  await page.getByRole("button", { name: "접어둘게" }).click();
+  await page.waitForSelector(".readwrap", { state: "detached", timeout: 5000 });
   // 서신을 맡긴 뒤 한 번 더 묻는가 = 이 연출의 유일한 존재 이유. 그 표식이 실제로 붙는지 확인한다.
   await page.locator("canvas").first().dblclick();
   await page.waitForSelector("textarea.qbox", { timeout: 8000 });
