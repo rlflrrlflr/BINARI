@@ -139,7 +139,9 @@ export default async function handler(req, res) {
       const scope = (txt.match(/"scope"\s*:\s*"(S[123])"/) || [])[1] || null;   // S3(몸·병) 진입 비율은 서버 로그로도 본다
       // 콜1은 votes 를 함께 받느라 560토큰이 됐다 — 경계를 800으로 올리지 않으면 콜1이 콜2로 잘못 집계된다
       // 모델을 같이 남긴다 — 티어 전환 뒤 "어느 모델이 이 판결을 냈나"를 못 되짚으면 A/B 비교가 불가능하다
-      console.log(JSON.stringify({ at: new Date().toISOString(), call: mt <= 800 ? 1 : mt <= 2400 ? 2 : 3, tier: tierKey, model, cat, dir, scope, usage: data.usage || null }));
+      // 콜3(서신)은 토큰 상한이 아니라 tier 로 가른다 — v105.1에서 서신을 두 조각으로 쪼개며 상한이 2100까지
+      // 내려가, 토큰 경계로는 콜2와 구분이 안 된다(실측: 유료 서신이 call:2 로 찍혔다). paid 는 서신 전용이다.
+      console.log(JSON.stringify({ at: new Date().toISOString(), call: tierKey === "paid" ? 3 : mt <= 800 ? 1 : 2, tier: tierKey, model, cat, dir, scope, usage: data.usage || null }));
     } catch {}
     return res.status(200).json(data);
   } catch (e) {
