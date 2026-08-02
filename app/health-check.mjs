@@ -139,6 +139,11 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
       fix: "'100명 중 1명' 류 지어낸 숫자를 막는 규칙입니다. 재물 확정 서술 완화와 한 몸입니다 — 이게 빠지면 완화가 거짓말 제조기가 됩니다." },
     { name: "명식 함수(십성·신살)", pat: /function sipseongDist\(/,
       fix: "상세 리포트와 프로필 주입의 재료입니다. 사라지면 v101 리포트가 통째로 빕니다." },
+    /* 실제 사고(2026-08-02): GO 판결에서 반대 수(against)를 '찬성'이라고 표기해,
+       7:1로 이긴 판결이 화면엔 "8개 중 1개 찬성"으로 찍혔다. 판결문과 표가 정반대로 읽히는 사고인데
+       오류가 안 뜬다 — 유저가 스크린샷을 보내주기 전까지 아무도 몰랐다. */
+    { name: "알(pip) 표기 = 지지 수", pat: /const pipLit = res \?/,
+      fix: "against 는 '반대한 수'입니다. 그대로 켜면 강한 판결일수록 알이 적게 켜져 정반대로 읽힙니다. pipLit(=총합-반대)로 켜세요." },
     { name: "scope 계측", pat: /scope_level:/,
       fix: "S3 진입률·이탈률을 못 재면 스코프 설계가 맞는지 영영 알 수 없습니다. verdict_shown 의 scope_level/handoff_triggered 를 확인하세요." },
   ];

@@ -88,6 +88,15 @@ const b = await chromium.launch((process.env.CHROME_PATH ? { executablePath: pro
   let subOk = false;
   for (let i = 0; i < 30; i++) { if (await page.getByText("밤이 널 속이는 거야.").isVisible().catch(() => false)) { subOk = true; break; } await page.waitForTimeout(300); }
   ck("S1 근거(콜2)", subOk);
+  /* 알(pip) 표기 — 2026-08-02 실측 사고: 7:1로 이긴 GO 판결이 "8개 중 1개 찬성"으로 찍혀
+     화면상 1:7로 뒤집혀 보였다. 켜진 알은 언제나 '이 판결과 같은 쪽'이어야 한다.
+     이 픽스처의 표는 사주 GO·달 GO·별자리 STOP → 앱이 GO 로 집계(3개 중 2개 같은 쪽, 알 2개). */
+  {
+    await page.waitForSelector(".pips em", { timeout: 15000 }).catch(() => {});
+    const label = (await page.locator(".pips em").allTextContents())[0] || "";
+    const lit = await page.locator(".pips .pip.on").count();
+    ck("알 표기가 지지 수를 가리킴", label.includes("2개 같은 쪽") && lit === 2, `${label} · 켜진 알 ${lit}`);
+  }
 
   /* v104 서신 대기 연출 — 봉인 5초 → '곧 답변이 있을 것이다' 2초 → 로비.
      전체화면을 덮는 데다 되돌릴 버튼이 없으므로, 타이머가 끊기면 유저가 갇힌다. 끝까지 실제로 태워 본다. */

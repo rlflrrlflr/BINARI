@@ -1538,7 +1538,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v105.2 · 서신함";
+const APP_VER = "v105.3 · 서신함";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -2758,6 +2758,9 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
      S3에서 우리가 하는 일은 '판단을 넘기는 것'인데, 넘긴 판단에 4,900원을 받으면 그건 파는 게 아니라 등치는 거다.
      모델 판정(res.scope)과 규칙 판정(scopeHint) 중 하나라도 S3면 버튼을 숨긴다 — 안전 쪽으로 틀린다. */
   const letterOk = !!res && res.scope !== "S3" && scopeHint(q) !== "S3";
+  /* 판결 카드의 알(pip) — 켜진 개수는 '이 판결과 같은 쪽에 선 지표'다.
+     res.against 는 반대한 수이므로 그대로 켜면 강한 판결일수록 알이 적게 켜진다(정반대로 읽힌다). */
+  const pipLit = res ? (res.direction === "HOLD" ? (res.against || 0) : Math.max(0, (res.total || 0) - (res.against || 0))) : 0;
   /* 값을 치른 판결들. 본문(letter)이 있든 없든 여기 들어온다 — 없는 건 '다시 받기' 대상이다.
      paid 를 기준으로 잡는 게 핵심: 본문을 기준으로 잡으면 잃어버린 서신이 목록에서 통째로 사라진다. */
   const paidRecs = records.map((r, i) => ({ r, i })).filter(({ r }) => r.paid || r.letter);
@@ -3232,8 +3235,11 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                         ? <p className="vs">"{detail.subline}"</p>
                         : detailBusy ? <p className="vs dim">수호신이 이유를 고르는 중…</p>
                         : <p className="vs dim">— 이유를 불러오지 못했어 —<button className="retrybtn" onClick={(e) => { e.stopPropagation(); if (detailArgsRef.current) { setDetail(null); fetchDetail(...detailArgsRef.current, true); } }}>다시 시도</button></p>}
-                      <div className="pips">{[...Array(res.total || 0)].map((_, i) => <span key={i} className={`pip ${i < res.against ? "on" : ""}`} />)}
-                        <em>{res.total}개 중 {res.against}개 {res.direction === "STOP" ? "반대" : res.direction === "HOLD" ? "접전" : "찬성"}</em></div>
+                      {/* v105.3 — against 는 '이 판결에 반대한 지표 수'다. GO에서 이걸 '찬성'이라고 써서
+                          7:1로 이긴 판결이 화면엔 "8개 중 1개 찬성"으로, 즉 1:7로 뒤집혀 보였다(실측 사고).
+                          이제 켜진 알은 언제나 '이 판결과 같은 쪽'을 뜻한다 — HOLD만 갈린 수를 보여준다. */}
+                      <div className="pips">{[...Array(res.total || 0)].map((_, i) => <span key={i} className={`pip ${i < pipLit ? "on" : ""}`} />)}
+                        <em>{res.total}개 중 {pipLit}개 {res.direction === "HOLD" ? "갈림" : "같은 쪽"}</em></div>
                       {detail && !detail._err && detail.funLine && <p className="vfun">정령 — {detail.funLine} <span className="dim">(판결엔 안 껴)</span></p>}
                       {(detailBusy || (detail && !detail._err)) && <div className="vbot"><span>운명 합의 판결</span><span>카드 탭 → 지표별 근거</span></div>}
                     </div>
