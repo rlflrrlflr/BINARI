@@ -1538,7 +1538,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v105.2 · 서신함";
+const APP_VER = "v106 · 셈";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -1944,7 +1944,9 @@ A/B/C가 '결정의 크기'라면 스코프는 '내가 답해도 되는 범위'�
 HOLD는 '판단 못 하겠음'이 아니라 **'지표가 지금은 멈추라고 한다'**는 뜻이다. **몸·건강 질문에서 HOLD는 S3(넘김)일 때뿐이다** — "올해 건강 어때"·"몸 언제 풀려"에 HOLD를 달면 내용이 아무리 좋아도 유저에겐 답을 안 준 것이 된다. 쉬라는 뜻이면 STOP, 움직여도 된다는 뜻이면 GO다. 쓰는 자리는 넷: ①큰돈·비가역 결정에서 votes가 접전일 때 ②가드레일(자해·가해) ③초상(정체성) 질문의 형식값 ④S3 넘김.
 그 밖에는 votes를 센 결과대로 GO 또는 STOP이 나온다. 표가 갈렸다는 이유로 HOLD를 고르지 마라 — 갈린 건 pips로 이미 보여주고 있다. HOLD를 쓸 때도 **왜 지금이 멈출 때인지 지표로 말한다**: (O)"지금은 물이 겹친 때야. 보름 지나고 다시 봐." (X)"판단하기 어려워."
 ## 규칙
-각 지표 GO/STOP/중립→가중 합산, 충돌은 봉합 없이 노출. B반말·A다정한 존댓말. 호칭이 제공되면 결정적 순간에 이름을 부른다(B:"○○아"·A:"○○님") — 매 문장 강요는 말 것. 유머는 유저 데이터 소재. 선택을 때리되 사람을 때리지 않는다.
+각 지표 GO/STOP/중립→가중 합산, 충돌은 봉합 없이 노출. B반말·A다정한 존댓말. 유머는 유저 데이터 소재. 선택을 때리되 사람을 때리지 않는다.
+- **호명 규칙(위반 사례에서 강화)**: 호칭은 한 판결 전체(verdict·subline·funLine 합쳐)에 **최대 1번**, 안 불러도 된다 — 아는 사이는 이름을 자꾸 부르지 않는다. 자꾸 부르면 외판원 화법이 된다. 호칭이 성+이름 전체(세 글자 성명 꼴, 예: 강석우)면 **성을 떼고 이름만** 부른다(석우야/석우님). 풀네임 호명은 소환장이지 친밀감이 아니다. 별명·외자 등 이름 꼴이 아니면 그대로 쓴다.
+- **세 층은 세 가지를 말한다(위반 사례에서 강화)**: verdict(무엇을 할지)·subline(verdict에 없는 것 하나 — 시점·조건·방법)·funLine(제3의 재료로 딴청)은 서로 다른 정보여야 한다. 같은 결론을 은유만 갈아 세 번 반복하면 유저가 읽을 게 없다. subline을 쓰기 전에 자문한다: "verdict에 없는 무엇을 더했나?" — 답이 없으면 다시 쓴다.
 - 금지: 질문 문장에서 심리를 추정해 판결하는 것("이렇게 묻는 건 이미 가고 싶은 거야" 류). 그건 지표가 아니라 독심술이다. 판결 근거는 오직 제공된 지표의 실제 값.
 - **판정 절차(출력 순서로 강제된다 — 최중요)**: ①votes를 **먼저** 쓴다. 각 지표를 질문에 비추어 서로 독립적으로 GO/STOP/중립 판정한다 ②그 표를 세어 direction을 정한다(많은 쪽. 동률·1차이면 경험 편향으로 해보는 쪽) ③verdict는 **이미 정해진 direction을 말로 옮긴 것**이다.
   **votes를 쓰기 전에 verdict를 생각하지 마라.** JSON 필드 순서가 곧 사고 순서다 — votes가 앞에 오게 만든 이유가 이것이다. 결론을 먼저 정해두고 표를 거기 맞추는 건 이 앱이 하지 말아야 할 단 하나다.
@@ -2420,7 +2422,7 @@ export default function App() {
     track("verdict_shared", { dir: res.direction, mode: "ritual" });
     const text = `"${q}"\n→ ${res.direction}. ${res.verdict}\n\n— 내 수호신의 판결, 비나리`;
     // v75: 판결을 링크에 실어 보낸다 — 받은 사람이 홈이 아니라 이 판결을 먼저 보게
-    const payload = { q, d: res.direction, v: res.verdict, s: (detail && !detail._err ? detail.subline : "") || "", n: (birth.name || "").trim(), a: res.against || 0, t: res.total || 0, c: res.category || "", to: res.tone || "", hx: hexInfo ? { n: hexInfo.name, t: (hexInfo.moving && hexInfo.moving.length ? hexInfo.toName : "") } : null };
+    const payload = { q, d: res.direction, v: res.verdict, s: (detail && !detail._err ? detail.subline : "") || "", n: (birth.name || "").trim(), a: res.against || 0, t: res.total || 0, c: res.category || "", hx: hexInfo ? { n: hexInfo.name, t: (hexInfo.moving && hexInfo.moving.length ? hexInfo.toName : "") } : null };
     const enc = encodeShare(payload);
     const url = enc ? `https://binari-sepia.vercel.app/?v=${enc}` : "https://binari-sepia.vercel.app/?ref=share";
     try {
@@ -2797,7 +2799,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                   <span className="vside">運命合意判決</span>
                   <span className="vseal">神</span>
                   {/* 공유 카드는 처음 온 사람이 보는 화면이다 — 'A형'·괘 이름 같은 내부 용어를 여기 두면 아무 뜻도 전달되지 않는다 */}
-                  <div className="vtop"><span>BINARI</span><span>{CAT_LABEL[sharedIn.c] || "판결"}{sharedIn.to ? ` · ${sharedIn.to}` : ""}</span></div>
+                  <div className="vtop"><span>BINARI</span><span>{CAT_LABEL[sharedIn.c] || "판결"}</span></div>
                   <p className={`vq ${(sharedIn.q || "").length > 55 ? "s" : ""}`}>{sharedIn.q || "…"}</p>
                   <div className="vdiv"><span>✦</span></div>
                   {t > 0 && a > 0 && a / t >= 0.4 && <p className="split">지표가 갈라섰다 · {t - a} : {a}</p>}
@@ -2823,6 +2825,9 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
           </div>
           <p className="brand-mark">비나리 BINARI</p>
           <p className="ainote">수호신의 판결은 AI가 생성합니다 · 재미로 보는 참고예요</p>
+          {/* 신뢰 라인(2026-08-02 경쟁분석 반영): 시장 전체가 '만세력 오류·GPT 복붙' 의혹으로 신뢰를 잃는 중 —
+              계산 검증과 프라이버시는 우리가 실제로 갖춘 것이라 그대로 쓴다. 검증은 e2e/mansae-test.mjs 28문항. */}
+          <p className="ainote">사주 계산(만세력)은 자동검증 28문항을 통과한 엔진이 해요 · 질문 원문은 통계에 기록하지 않아요</p>
         </section>
       )}
 
@@ -3215,7 +3220,8 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                   <span className="vside">運命合意判決</span>
                   <span className={`vseal ${why ? "faded" : ""}`}>神</span>
                   {/* 카드 앞면엔 어려운 말을 두지 않는다(층위 분리). 'A형'은 내부 분류어라 유저에겐 뜻이 없다 → 우리말 라벨로 */}
-                  <div className="vtop"><span>BINARI</span><span>{CAT_LABEL[res.category] || "어느 물음"} · {res.tone}</span></div>
+                  {/* tone(단호|격려|충고)은 내부 제어값 — 화면에 달면 앱이 스스로 "이건 격려"라고 고백하는 꼴이라 뗐다(2026-08-02) */}
+                  <div className="vtop"><span>BINARI</span><span>{CAT_LABEL[res.category] || "어느 물음"}</span></div>
                   <p className={`vq ${q.length > 55 ? "s" : ""}`}>{q}</p>
                   <div className="vdiv"><span>✦</span></div>
                   {res.total > 0 && res.against > 0 && res.against / res.total >= 0.4 && (
@@ -3232,9 +3238,13 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                         ? <p className="vs">"{detail.subline}"</p>
                         : detailBusy ? <p className="vs dim">수호신이 이유를 고르는 중…</p>
                         : <p className="vs dim">— 이유를 불러오지 못했어 —<button className="retrybtn" onClick={(e) => { e.stopPropagation(); if (detailArgsRef.current) { setDetail(null); fetchDetail(...detailArgsRef.current, true); } }}>다시 시도</button></p>}
-                      <div className="pips">{[...Array(res.total || 0)].map((_, i) => <span key={i} className={`pip ${i < res.against ? "on" : ""}`} />)}
-                        <em>{res.total}개 중 {res.against}개 {res.direction === "STOP" ? "반대" : res.direction === "HOLD" ? "접전" : "찬성"}</em></div>
-                      {detail && !detail._err && detail.funLine && <p className="vfun">정령 — {detail.funLine} <span className="dim">(판결엔 안 껴)</span></p>}
+                      {/* 실사고(2026-08-02): against(반대 수)를 '찬성'이라 표시해 "7개 중 1개 찬성"으로 나감 —
+                          가장 강한 GO가 가장 약해 보였다. 라벨은 질문의 행동 기준(찬성=GO표·반대=STOP표),
+                          수는 판결을 민 쪽(total-against)을 센다. HOLD만 접전 수(against) 그대로. */}
+                      <div className="pips">{[...Array(res.total || 0)].map((_, i) => <span key={i} className={`pip ${i < (res.direction === "HOLD" ? res.against : res.total - res.against) ? "on" : ""}`} />)}
+                        <em>{res.total}개 중 {res.direction === "HOLD" ? res.against : res.total - res.against}개 {res.direction === "STOP" ? "반대" : res.direction === "HOLD" ? "접전" : "찬성"}</em></div>
+                      {/* "(판결엔 안 껴)"는 개발자 주석을 유저에게 보여준 것 — 정령의 위계는 괄호 고백이 아니라 자리(맨 아래·작은 글씨)로 말한다 */}
+                      {detail && !detail._err && detail.funLine && <p className="vfun">정령 — {detail.funLine}</p>}
                       {(detailBusy || (detail && !detail._err)) && <div className="vbot"><span>운명 합의 판결</span><span>카드 탭 → 지표별 근거</span></div>}
                     </div>
                   )}

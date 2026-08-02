@@ -153,6 +153,22 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
     else add("심각", "티어를 허용목록으로 받지 않음", "api/judge.js 에서 TIERS 를 찾을 수 없음",
       "tier 를 허용 목록(free/paid)으로만 받으세요. 임의 모델 지정을 열어두면 클라이언트가 비싼 모델을 강제해 비용이 샙니다.");
   } catch (_) { /* 구조가 바뀌면 조용히 넘어간다 */ }
+  /* 실사고(2026-08-02): 카드가 against(반대 수)를 '찬성'이라는 라벨로 표시 — "7개 중 1개 찬성".
+     실제로는 6개 찬성이라, 가장 강한 GO가 화면에선 가장 약해 보였다. 숫자가 그럴듯해서 아무도 의심하지 않았다.
+     라벨과 값이 다시 어긋나면 잡는다. */
+  if (/\{res\.total\}개 중 \{res\.against\}개/.test(src) || /pip \$\{i < res\.against \?/.test(src)) {
+    add("심각", "카드가 반대 수를 찬성처럼 표시", "표시부가 res.against(반대 표)를 그대로 렌더 중",
+      "GO/STOP 판결의 표시 수는 total - against(판결을 민 표)여야 합니다. 실제로 '7개 중 1개 찬성' 사고가 났던 자리입니다.");
+  } else if (/res\.total - res\.against/.test(src)) {
+    add("정상", "판결 지지 수 표시", "카드가 판결을 민 표 수(total-against)를 표시", "");
+  }
+  // tone(단호|격려|충고)은 내부 제어값 — 화면에 노출되면 앱이 판결 포지션을 스스로 무른다(실사고: 헤더 '· 격려')
+  if (/CAT_LABEL\[[^\]]*\][^<\n]*(res\.tone|sharedIn\.to)/.test(src)) {
+    add("심각", "내부 톤 값이 화면에 노출", "카드 헤더가 tone(단호/격려/충고)을 렌더 중",
+      "tone 은 프롬프트 제어값입니다. 헤더에서 {res.tone}·{sharedIn.to} 를 제거하세요.");
+  } else {
+    add("정상", "내부 톤 값 비노출", "카드 헤더에 tone 없음", "");
+  }
   // 콜1이 scope 를 안 뱉으면 계측값이 통째로 null 이 된다(조용한 고장)
   if (/"scope":"S1\|S2\|S3"/.test(src)) add("정상", "판결 품질 규칙 — 콜1 scope 필드", "있음", "");
   else add("심각", "콜1 출력 스키마에 scope 없음", "JSON 스키마에서 찾을 수 없음",
