@@ -1354,7 +1354,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v98 · 고지";
+const APP_VER = "v99 · 온보딩";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다. */
 const LETTER_PRICE = 4900;
 const LETTER_SECTIONS = ["이 판결이 나온 자리", "네 여덟 글자가 말하는 결", "지금 흐름과 다음 갈림길", "이 선택이 남길 것", "수호신의 당부"];
@@ -1807,6 +1807,19 @@ function exactAge(y, m, d) {
   return a >= 0 && a < 130 ? a : null;
 }
 const ageBand = (a) => (a == null ? null : a < 20 ? "10대 이하" : a >= 70 ? "70대 이상" : `${Math.floor(a / 10) * 10}대`);
+/* v99: 입력 확인 한 줄 — 만세력은 생시·경도까지 쓰는데 사용자는 자기가 뭘 넣었는지 확인할 곳이 없었다.
+   정확도가 이 서비스의 최대 강점이므로, 넣은 값을 사람 말로 되읽어 준다. */
+function bornSummary(b) {
+  const y = +b.y, m = +b.m, d = +b.d;
+  if (!y || !m || !d) return "";
+  const cal = b.cal === "lunar" ? `음력${b.leap ? " 윤달" : ""} ` : "";
+  let t = "태어난 시각은 흐릿한 채로";
+  if (!b.noHour && b.h !== "" && b.h != null) {
+    const h = +b.h, mi = b.min === "" || b.min == null ? 0 : +b.min;
+    t = `${h < 12 ? "오전" : "오후"} ${h % 12 === 0 ? 12 : h % 12}시${mi ? ` ${mi}분` : ""}`;
+  }
+  return `${cal}${y}년 ${m}월 ${d}일 · ${t}${b.city && b.city.trim() ? ` · ${b.city.trim()}` : ""}`;
+}
 /* 판결 품질을 세그먼트별로 보기 위한 공통 속성 — 질문 원문·이름·생일 원값은 제외 */
 function demoProps(birth, extra) {
   const a = exactAge(birth.y, birth.m, birth.d);
@@ -2205,14 +2218,18 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
       )}
 
       {step === 1 && (
-        <section className="scene fade">
+        <section className="scene stepv fade">
           <div className="orb"><DustOrb size={170} stage={0} /></div>
           {bstep === 0 && (
             <div className="bscene" key={0}>
               <p className="line">네 이름을 다시 들려줄래.</p>
               <p className="sub2">어릴 적 내가 부르던 그 이름. 부르고 싶은 이름이면 뭐든 좋아.</p>
-              <input className="in wide center" lang="ko" placeholder="…" maxLength={12} value={birth.name} onChange={e => setBirth({ ...birth, name: e.target.value })} />
-              <button className="btn gold mt" onClick={() => { setBirth({ ...birth, name: birth.name.trim() }); setBstep(1); }}>{birth.name.trim() ? birth.name.trim() + " — 그래, 기억했어" : "이름 없이 갈래"}</button>
+              <input className="in wide center box" lang="ko" placeholder="예: 서연" maxLength={12} value={birth.name} onChange={e => setBirth({ ...birth, name: e.target.value })} />
+              {/* v99: 위계 교정 — 이름을 적었을 때만 금색(주경로). 비었을 땐 고스트(건너뛰기)로,
+                     '이름 없이 갈래'가 화면에서 가장 강한 버튼이던 상태를 되돌린다. */}
+              {birth.name.trim()
+                ? <button className="btn gold mt" onClick={() => { setBirth({ ...birth, name: birth.name.trim() }); setBstep(1); }}>{birth.name.trim()} — 그래, 기억했어</button>
+                : <button className="btn ghost mt" onClick={() => setBstep(1)}>이름 없이 갈래</button>}
             </div>
           )}
           {bstep === 1 && (
@@ -2239,9 +2256,11 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
               <div className="row gap center">
                 <input className="in sm" placeholder="14" inputMode="numeric" maxLength={2} disabled={birth.noHour} value={birth.h} onChange={e => setBirth({ ...birth, h: e.target.value })} /><span className="unit">시</span>
                 <input className="in sm" placeholder="30" inputMode="numeric" maxLength={2} disabled={birth.noHour} value={birth.min} onChange={e => setBirth({ ...birth, min: e.target.value })} /><span className="unit">분</span>
-                <label className="chk"><input type="checkbox" checked={birth.noHour} onChange={e => setBirth({ ...birth, noHour: e.target.checked })} /> 모름 <em>(괜찮아, 조금 흐리게 보일 뿐이야)</em></label>
               </div>
-              <input className="in wide center" lang="ko" placeholder="태어난 도시 (건너뛰어도 돼)" value={birth.city} onChange={e => setBirth({ ...birth, city: e.target.value })} />
+              {/* v99: '모름'을 시·분 옆에서 아래 줄로 — 부연이 옆으로 삐져나와 행이 어수선했다 */}
+              <label className="chk"><input type="checkbox" checked={birth.noHour} onChange={e => setBirth({ ...birth, noHour: e.target.checked })} /> 모름 <em>(괜찮아, 조금 흐리게 보일 뿐이야)</em></label>
+              <input className="in wide center box" lang="ko" placeholder="태어난 도시 (건너뛰어도 돼)" value={birth.city} onChange={e => setBirth({ ...birth, city: e.target.value })} />
+              {bornSummary(birth) && <p className="confirmline">{bornSummary(birth)} — 맞아?</p>}
               {err && <p className="err">{err}</p>}
               <button className="btn gold mt" onClick={() => { if (!birth.noHour) { const h = +birth.h; if (birth.h === "" || h < 0 || h > 23) { setErr("태어난 시(0~23시)를 알려주거나 '모름'을 선택해줘."); return; } if (birth.min !== "" && (+birth.min < 0 || +birth.min > 59)) { setErr("분은 0~59 사이로 알려줘."); return; } } setErr(""); setBstep(3); }}>기억났어</button>
             </div>
@@ -2348,13 +2367,12 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
       )}
 
       {step === 25 && (
-        <section className="scene fade">
+        <section className="scene stepv fade">
           <div className="halo">
             <DustOrb size={210} stage={vstage > 0 ? 3 : 2} tint={saju ? EL_COLOR[saju.main] : undefined} />
-            <div className="gtext">
-              <p className="gname" key={vstage}>{vstage === 0 ? "마음의 방" : vstage === 1 ? "포기의 방" : "단 하나"}</p>
-            </div>
           </div>
+          {/* v99: 방 이름을 오브 위 겹침 → 아래로. v22 '장면 분리(수호신 영역/대화 영역 겹침 제로)' 원칙의 마지막 예외를 정리 */}
+          <p className="gname under">{vstage === 0 ? "마음의 방" : vstage === 1 ? "포기의 방" : "단 하나"}</p>
           <div key={vstage} className="fade">
           <p className="sub2">{vstage === 0 ? "너를 움직이는 말들이야. 생각 말고, 손이 가는 대로 여섯 개." : vstage === 1 ? "여섯 중 셋만 지킬 수 있어. 무엇을 내려놓는지가 진짜 너야." : "마지막이야 — 단 하나만 지킬 수 있다면."}</p>
           <div className="grid16">{(vstage === 0 ? VALUES16 : vstage === 1 ? vals8 : vals4).map(v => (
@@ -2650,9 +2668,11 @@ const CSS = `
 .stage::before{content:"";position:absolute;inset:0;pointer-events:none;background-image:radial-gradient(1px 1px at 12% 22%,#ffffff55,transparent),radial-gradient(1px 1px at 78% 14%,#ffe9ad44,transparent),radial-gradient(1.5px 1.5px at 62% 68%,#ffffff33,transparent),radial-gradient(1px 1px at 30% 84%,#ffe9ad33,transparent),radial-gradient(1px 1px at 88% 48%,#ffffff40,transparent),radial-gradient(1.5px 1.5px at 8% 58%,#ffe9ad2e,transparent);animation:twk 6s ease-in-out infinite alternate}
 @keyframes twk{to{opacity:.45}}
 .scene{width:100%;max-width:400px;display:flex;flex-direction:column;align-items:center;text-align:center;position:relative;word-break:keep-all}
+/* v99: 스텝형 화면은 세로 중앙 정렬 — 하단 35~45%가 비고 CTA가 화면 중앙에 뜨던 것을 정리 */
+.scene.stepv{justify-content:center;min-height:calc(100dvh - 96px)}
 .line,.sub2,.mention,.dimq,.gsay,.gintro,.forming,.vv,.vs,.vq,.qquote,.dmain,.gname,.vlogverdict{text-wrap:balance}
 .fade{animation:fd 1.15s cubic-bezier(.22,.7,.25,1) both}@keyframes fd{from{opacity:0;transform:translateY(14px) scale(.985);filter:blur(7px)}to{opacity:1;transform:none;filter:blur(0)}}
-.orb{position:relative;width:170px;height:170px;margin:48px 0 36px;filter:drop-shadow(0 0 24px rgba(245,217,139,.2))}
+.orb{position:relative;width:170px;height:170px;margin:20px 0 28px;filter:drop-shadow(0 0 24px rgba(245,217,139,.2))}
 .line{font-size:17px;line-height:1.8;margin:8px 0;opacity:0;animation:fd 1.6s cubic-bezier(.22,.7,.25,1) forwards}.d1{animation-delay:1.4s}.d2{animation-delay:3s}
 .brand-mark{margin-top:56px;font-size:11px;letter-spacing:.4em;color:#8a7f95;font-family:sans-serif}
 .verbadge{position:fixed;right:9px;bottom:7px;z-index:70;font-family:sans-serif;font-size:9px;letter-spacing:.08em;color:#575070;pointer-events:none;user-select:none}
@@ -2660,12 +2680,18 @@ const CSS = `
 .sub2{font-size:14px;color:#9d8fb5;line-height:1.7;margin:6px 0 18px}
 .form{display:flex;flex-direction:column;gap:12px;width:100%;margin-bottom:14px}
 .row{display:flex;align-items:center;justify-content:center}.gap{gap:8px}.center{justify-content:center}
-.in{background:transparent;border:none;border-bottom:1px solid rgba(245,217,139,.35);color:#f0e2b8;padding:10px 4px;font-size:19px;width:96px;text-align:center;font-family:inherit;letter-spacing:.06em;transition:border-color .3s, box-shadow .3s}
+.in{background:transparent;border:none;border-bottom:1px solid rgba(245,217,139,.45);color:#fff3d4;font-weight:600;padding:10px 4px;font-size:19px;width:96px;text-align:center;font-family:inherit;letter-spacing:.06em;transition:border-color .3s, box-shadow .3s}
+.in::placeholder{color:#5c5470;font-weight:400}
+/* v99: 이름·도시처럼 자유입력 칸은 밑줄이 아니라 박스로(질문칸과 같은 어포던스) */
+.in.box{background:rgba(16,12,26,.72);border:1px solid rgba(245,217,139,.34);border-radius:12px;padding:13px 14px;box-shadow:0 6px 20px rgba(0,0,0,.4)}
+.in.box:focus{outline:none;border-color:rgba(245,217,139,.7);box-shadow:0 6px 24px rgba(0,0,0,.45),0 0 16px rgba(245,217,139,.18)}
+/* v99: 넣은 값을 사람 말로 되읽어 준다 — 만세력 정확도가 화면에서 보이게 */
+.confirmline{font-size:12.5px;color:#c9bb96;letter-spacing:.02em;margin:2px 0 0;padding:7px 14px;border:1px dashed rgba(245,217,139,.28);border-radius:10px;background:rgba(245,217,139,.045)}
 .in::placeholder{color:#4d445f}
 .in.sm{width:60px}.in.wide{width:100%;text-align:center;font-size:15px}
 .in:focus{outline:none;border-bottom-color:#ffe9ad;box-shadow:0 12px 18px -14px rgba(245,217,139,.6)}
 .in:disabled{opacity:.35}
-.unit{color:#8a7f95;font-size:13px}
+.unit{color:#6f6580;font-size:12.5px}
 .chk{font-family:sans-serif;font-size:12px;color:#c9b98f;display:flex;align-items:center;gap:6px}.chk em{color:#8a7f95;font-style:normal}
 .caltoggle{align-items:center}
 .calbtn{font-family:inherit;font-size:13px;padding:7px 18px;border-radius:999px;border:1px solid rgba(138,127,149,.35);background:transparent;color:#9d8fb5;cursor:pointer;transition:all .2s}
@@ -2726,9 +2752,9 @@ const CSS = `
 .bar i{height:6px;border-radius:3px;display:block;min-width:4px}.bar b{color:#c9b98f}
 .mread{font-size:13.5px;line-height:1.75;color:#cbc0dd;text-align:left;margin:6px 0 0}
 .grid16{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;width:100%}
-.cell{font-family:inherit;font-size:12px;letter-spacing:.08em;padding:10px 0;border-radius:999px;border:1px solid rgba(138,127,149,.35);background:transparent;color:#9d8fb5;cursor:pointer;transition:all .25s}
+.cell{font-family:inherit;font-size:12.5px;letter-spacing:.08em;padding:11px 0;border-radius:999px;border:1px solid rgba(168,158,185,.55);background:rgba(255,255,255,.02);color:#cfc4de;cursor:pointer;transition:all .25s}
 .cell:hover{border-color:rgba(245,217,139,.5)}
-.cell.sel{border-color:#ffe9ad;color:#ffe9ad;box-shadow:0 0 14px rgba(245,217,139,.3),inset 0 0 10px rgba(245,217,139,.08)}
+.cell.sel{border-color:#ffe9ad;color:#241a08;font-weight:600;background:linear-gradient(180deg,#f5d98b,#d9ad5c);box-shadow:0 0 16px rgba(245,217,139,.35)}
 .halo{position:relative;filter:drop-shadow(0 0 30px rgba(245,217,139,.15));margin:8px 0;transition:filter .6s}
 .halo.wide{width:100vw;margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);display:flex;justify-content:center;margin-top:calc(min(110vw,57vh,640px)*-0.09);margin-bottom:calc(min(110vw,57vh,640px)*-0.16);transition:filter .6s,transform .9s cubic-bezier(.2,.8,.2,1),opacity .8s ease}
 .halo.wide.lobbyscale{transform:translateY(7vh) scale(1.52)}
@@ -2782,6 +2808,7 @@ const CSS = `
 .formsteps li.now{color:#f5d98b;text-shadow:0 0 12px rgba(245,217,139,.5);transform:translateY(0)}
 @keyframes formPulse{0%,100%{opacity:.5}50%{opacity:1}}
 .gname{font-size:14px;line-height:1.9;color:#f0e2b8;margin:0;text-shadow:0 2px 18px rgba(5,4,8,.95),0 0 26px rgba(245,217,139,.28);background:rgba(5,4,8,.5);padding:8px 16px;border-radius:14px}
+.gname.under{background:none;padding:0;margin:2px 0 4px;font-size:15px;letter-spacing:.06em;color:#ffe9ad;text-shadow:0 0 20px rgba(245,217,139,.3)}
 .gsay{font-size:14.5px;line-height:1.8;color:#f0e2b8;margin:2px 0 10px;text-align:center;text-shadow:0 1px 12px rgba(4,3,10,.8)}
 .gsay.sprite{font-size:12.5px;color:#9d8fb5;margin:-4px 0 10px}
 .gsay.born{font-weight:600;color:#ffe9ad;text-shadow:0 0 18px rgba(245,217,139,.35)}
