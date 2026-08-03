@@ -1,5 +1,5 @@
 // 실행: npm run preview -- --port 4173 & 후 node e2e/smoke.mjs (playwright 필요)
-// 비나리 v16 런타임 스모크 테스트 — 모바일 뷰포트, 온보딩→수호신→속결/의식 실패 복구→재회(localStorage)
+// 비나리 v16 런타임 스모크 테스트 — 모바일 뷰포트, 온보딩→수호신→의식 실패 복구→재회(localStorage)
 import { createRequire } from "node:module";
 import { mkdirSync } from "node:fs";
 const require = createRequire(import.meta.url);
@@ -11,7 +11,7 @@ mkdirSync(SHOTS, { recursive: true });
 const results = [];
 const check = (name, pass, note = "") => { results.push({ name, pass, note }); console.log(`${pass ? "PASS" : "FAIL"} — ${name}${note ? " · " + note : ""}`); };
 
-const browser = await chromium.launch();
+const browser = await chromium.launch((process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}));
 const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
 page.setDefaultTimeout(8000);
 const shot = (n) => page.screenshot({ path: `${SHOTS}/${n}.png`, fullPage: false });
@@ -72,23 +72,19 @@ try {
   check("첫 방문엔 데일리 카드 없음", (await page.locator(".daily").count()) === 0);
   await shot("05b_awake");
 
-  // 6. 속결 모드 — C형 힌트면 '가볍게'가 gold, 실패해도 데드엔드 없음
+  // 6. v103 — 속결 제거. 질문 화면에 길은 하나뿐이어야 한다(입구에서 또 고르게 하지 않는다)
   await page.locator("textarea.qbox").fill("점심 뭐 먹지");
   await page.waitForTimeout(300);
-  const quickCls = (await page.getByRole("button", { name: "가볍게 물을래" }).getAttribute("class")) || "";
-  check("C형 힌트 → 속결이 기본(gold)", quickCls.includes("gold"));
-  await page.getByRole("button", { name: "가볍게 물을래" }).click();
-  await page.waitForSelector("text=판결이 닿지 못했어", { timeout: 10000 });
-  check("속결 실패 시 에러 표시", true);
-  check("속결 실패 후 버튼 생존(데드엔드 없음)", await page.getByRole("button", { name: "가볍게 물을래" }).isVisible());
-  await shot("06_quick_fail");
+  check("속결 버튼 사라짐", (await page.getByRole("button", { name: "가볍게 물을래" }).count()) === 0);
+  check("가벼운 질문에도 '판결을 청한다' 단일 경로", await page.getByRole("button", { name: "판결을 청한다" }).isVisible());
+  const onlyCls = (await page.getByRole("button", { name: "판결을 청한다" }).getAttribute("class")) || "";
+  check("단일 버튼이 기본 강조(gold)", onlyCls.includes("gold"));
+  await shot("06_single_path");
 
   // 7. 동전 의식 — 실패 시 '다시 청하기'+'질문을 고칠래' (데드엔드 수리 검증)
   await page.locator("textarea.qbox").fill("이직할까?");
   await page.waitForTimeout(300);
-  const ritualCls = (await page.getByRole("button", { name: "판결을 청한다" }).getAttribute("class")) || "";
-  check("무게 질문 → 의식이 기본(gold)", ritualCls.includes("gold"));
-  await page.getByRole("button", { name: "판결을 청한다" }).click();
+    await page.getByRole("button", { name: "판결을 청한다" }).click();
   await page.waitForSelector("text=동전 셋", { timeout: 5000 });
   await page.getByRole("button", { name: "한 번에 던지기" }).click();
   await page.waitForSelector("text=판결이 닿지 못했어", { timeout: 12000 });

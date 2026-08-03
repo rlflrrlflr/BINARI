@@ -6,15 +6,15 @@ let pw; try { pw = require("playwright"); } catch { pw = require("/opt/node22/li
 const { chromium } = pw;
 const BASE = process.env.BASE || "http://localhost:4173";
 const R = []; const ck = (n, p, note = "") => { R.push(p); console.log(`${p ? "PASS" : "FAIL"} — ${n}${note ? " · " + note : ""}`); };
-const CALL1 = JSON.stringify({ category: "C", tone: "단호", direction: "GO", verdict: "가. 망설이지 마.", against: 2, total: 6 });
+const CALL1 = JSON.stringify({ category: "C", votes: [{ axis: "사주", v: "GO" }, { axis: "달", v: "GO" }, { axis: "별자리", v: "STOP" }], tone: "단호", direction: "GO", verdict: "가. 망설이지 마.", against: 2, total: 6 });
 const CALL2 = JSON.stringify({ subline: "이미 답을 알잖아.", reasons: [{ axis: "사주", vote: "GO", text: "목기가 뻗어." }], funLine: "가자.", disclaimer: "" });
 
-const b = await chromium.launch();
+const b = await chromium.launch((process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}));
 const page = await b.newPage({ viewport: { width: 430, height: 932 } });
 page.setDefaultTimeout(9000);
 const errs = [];
 page.on("pageerror", e => errs.push(e.message));
-await page.addInitScript(({ c1, c2 }) => { window.claude = { complete: async (p) => (p.includes("결론만") ? c1 : c2) }; }, { c1: CALL1, c2: CALL2 });
+await page.addInitScript(({ c1, c2 }) => { window.claude = { complete: async (p) => (p.includes("[이미 확정된 판결]") ? c2 : c1) }; }, { c1: CALL1, c2: CALL2 });
 
 // ── 온보딩: MBTI 화면까지 ──
 await page.goto(BASE); await page.waitForTimeout(900);
@@ -64,7 +64,9 @@ await page.waitForTimeout(300);
 
 // ── ③ 정독 스로틀 하에서 판결 렌더 정상 ──
 await page.locator("textarea.qbox").fill("이 길로 가도 될까?"); await page.waitForTimeout(300);
-await page.getByRole("button", { name: "가볍게 물을래" }).click();
+await page.getByRole("button", { name: "판결을 청한다" }).click();
+  await page.waitForSelector("text=동전 셋", { timeout: 5000 });
+  await page.getByRole("button", { name: "한 번에 던지기" }).click();
 let verdictOk = false;
 for (let i = 0; i < 40; i++) { if (((await page.locator(".vv").allTextContents())[0] || "").includes("망설이지 마")) { verdictOk = true; break; } await page.waitForTimeout(300); }
 ck("③ 스로틀 중에도 판결 L1 렌더", verdictOk);

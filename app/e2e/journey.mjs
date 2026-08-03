@@ -11,7 +11,7 @@ const SHOTS = process.env.SHOTS_DIR || "/tmp/binari-journey";
 const [BY, BM, BD] = (process.env.BIRTH || "1993-7-15").split("-");
 mkdirSync(SHOTS, { recursive: true });
 
-const b = await chromium.launch();
+const b = await chromium.launch((process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}));
 const page = await b.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
 page.setDefaultTimeout(9000);
 const shot = (n) => page.screenshot({ path: `${SHOTS}/${n}.png`, fullPage: true });

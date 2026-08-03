@@ -1,5 +1,14 @@
 /* 비나리 판결 프록시 — API 키는 이 함수(서버) 안에서만 산다.
    Vercel 환경변수: ANTHROPIC_API_KEY(필수) · BINARI_MODEL(선택, 기본 claude-sonnet-5) · ALLOWED_ORIGIN(선택, 미설정 시 기본 허용 목록)
+   v102 — 티어별 모델(무료/유료 분리):
+     무료(카드 앞면 콜1 + 뒷면 근거 콜2) = BINARI_MODEL_FREE, 유료(서신) = BINARI_MODEL_PAID.
+     요청 본문의 tier("free"|"paid")로 고른다. 미설정 시 전부 BINARI_MODEL 하나로 동작(현행 그대로).
+     ⚠️ tier 는 지금 **클라이언트 말을 그대로 믿는다.** 결제가 아직 없어서 무해하지만,
+        결제를 붙이는 날 반드시 서버에서 영수증·토큰으로 검증할 것 — 안 그러면 누구나
+        무료로 비싼 모델을 쓸 수 있다. 허용 목록(TIERS)에 없는 값은 무시하므로
+        임의 모델 지정(예: 최고가 모델 강제)은 지금도 불가능하다.
+     ⚠️ 판결(콜1)의 모델을 바꾸기 전엔 반드시 평가 워크플로로 GUARD·REASK·S3 를 먼저 돌릴 것 —
+        콜1이 가드레일(자해 감지)·스코프·표 판정을 전부 지고 있다.
    방어(v54): Origin 필수+허용목록 · 본문 크기 상한 · max_tokens 클램프 · SYS 프리픽스 대조(임의 프롬프트 주입 차단).
    방어(v76): CORS 응답 헤더+프리플라이트 · IP 레이트리밋 · 상류 에러 원문 미노출.
 
@@ -9,7 +18,28 @@
       실질 방어가 필요해지면 Upstash/Vercel KV 같은 공유 저장소로 옮길 것.
       그 전까지의 최종 방어선은 여전히 Anthropic 콘솔의 월 지출 한도다. */
 const SYS_PREFIX = "당신은 유저의 '수호신' 비나리다";
+/* ── 허용 출처 ────────────────────────────────────────────────────────────────
+   여기서 막히면 판결 요청이 403이 되고, 유저 눈에는 "판결이 닿지 못했어"로만 보인다.
+   자체 도메인(binari.xxx)을 붙이는 날 이 목록을 같이 안 고치면 앱이 통째로 죽는다.
+
+   ALLOWED_ORIGIN 환경변수는 쉼표로 여러 개를 받는다. 값이 하나뿐이던 예전 방식으로는
+   "새 도메인 + 기존 vercel.app(내부 테스트용)"을 동시에 열 수 없었다.
+     예) ALLOWED_ORIGIN="https://binari.life,https://binari-sepia.vercel.app"
+   설정하면 아래 기본 목록을 완전히 대체한다(로컬 주소도 함께 적어야 개발이 된다).
+
+   프리뷰 배포(binari-<해시>-binari.vercel.app, binari-git-<브랜치>-binari.vercel.app)는
+   패턴으로 허용한다. 끝의 `binari`는 Vercel 팀 슬러그라 남이 같은 주소를 만들 수 없다.
+   이게 없으면 프리뷰 URL에서 판결이 전부 막혀 내부 테스트를 프리뷰로 돌릴 수 없다. */
 const DEFAULT_ORIGINS = ["https://binari-sepia.vercel.app", "http://localhost:5173", "http://localhost:4173"];
+const PREVIEW_RE = /^https:\/\/[a-z0-9][a-z0-9-]*-binari\.vercel\.app$/;
+const norm = (o) => String(o || "").trim().replace(/\/+$/, "").toLowerCase();   // 끝 슬래시는 흔한 오타 — Origin 헤더엔 붙지 않는다
+
+export function isAllowedOrigin(origin, envAllowed = process.env.ALLOWED_ORIGIN) {
+  const o = norm(origin);
+  if (!o) return false;                                  // Origin 없는 요청(직접 호출·서버간)은 거절
+  const list = (envAllowed ? String(envAllowed).split(",") : DEFAULT_ORIGINS).map(norm).filter(Boolean);
+  return list.includes(o) || PREVIEW_RE.test(o);
+}
 
 // ── 레이트리밋: IP당 고정 윈도(기본 1분 90회 = 질문 45개분, 판결 1건당 2콜) ──
 //    한국 이동통신은 CGNAT로 수백 명이 한 IP를 공유한다. 광고로 모바일 트래픽이 몰리면
@@ -45,9 +75,8 @@ const clientIp = (req) =>
   "unknown";
 
 export default async function handler(req, res) {
-  const allowed = process.env.ALLOWED_ORIGIN ? [process.env.ALLOWED_ORIGIN] : DEFAULT_ORIGINS;
   const origin = req.headers.origin || "";
-  const originOk = !!origin && allowed.includes(origin);
+  const originOk = isAllowedOrigin(origin);
 
   // 허용 목록을 통과한 출처에만 CORS를 되돌려준다(임의 반사 금지).
   if (originOk) {
@@ -73,19 +102,23 @@ export default async function handler(req, res) {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) return res.status(500).json({ error: { message: "서버에 ANTHROPIC_API_KEY가 없어 — Vercel 환경변수를 확인해" } });
 
-  const { system, messages, max_tokens } = req.body || {};
+  const { system, messages, max_tokens, tier } = req.body || {};
   if (!Array.isArray(messages) || messages.length === 0) return res.status(400).json({ error: { message: "messages가 비었어" } });
   if (messages.length > 40) return res.status(400).json({ error: { message: "대화가 너무 길어" } });
   try { if (JSON.stringify(req.body).length > 60000) return res.status(400).json({ error: { message: "요청이 너무 커" } }); } catch { return res.status(400).json({ error: { message: "본문을 읽을 수 없어" } }); }
   const sysText = Array.isArray(system) && system[0] && typeof system[0].text === "string" ? system[0].text : "";
   if (!sysText.startsWith(SYS_PREFIX)) return res.status(400).json({ error: { message: "판결 형식이 아니야" } });
-  const mt = Math.min(Math.max(parseInt(max_tokens, 10) || 320, 1), 1600);
+  const mt = Math.min(Math.max(parseInt(max_tokens, 10) || 320, 1), 3400);   // 콜3(서신)이 다섯 장 1,700자를 쓴다 — 2400에선 마지막 장이 통째로 잘린다(상한은 천장일 뿐 — 안 쓰면 비용 0)
+  // 티어 → 모델. 허용 목록 방식이라 클라이언트가 임의 모델을 지정할 수 없다(비용 폭주 차단).
+  const TIERS = { free: process.env.BINARI_MODEL_FREE, paid: process.env.BINARI_MODEL_PAID };
+  const tierKey = tier === "paid" ? "paid" : "free";
+  const model = TIERS[tierKey] || process.env.BINARI_MODEL || "claude-sonnet-5";
 
   try {
     const r = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({ model: process.env.BINARI_MODEL || "claude-sonnet-5", max_tokens: mt, system, messages, thinking: { type: "disabled" } }),
+      body: JSON.stringify({ model, max_tokens: mt, system, messages, thinking: { type: "disabled" } }),
     });
     const data = await r.json();
 
@@ -103,7 +136,12 @@ export default async function handler(req, res) {
       const txt = (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
       const cat = (txt.match(/"category"\s*:\s*"([ABC])"/) || [])[1] || null;
       const dir = (txt.match(/"direction"\s*:\s*"(GO|STOP|HOLD)"/) || [])[1] || null;
-      console.log(JSON.stringify({ at: new Date().toISOString(), call: mt <= 400 ? 1 : 2, cat, dir, usage: data.usage || null }));
+      const scope = (txt.match(/"scope"\s*:\s*"(S[123])"/) || [])[1] || null;   // S3(몸·병) 진입 비율은 서버 로그로도 본다
+      // 콜1은 votes 를 함께 받느라 560토큰이 됐다 — 경계를 800으로 올리지 않으면 콜1이 콜2로 잘못 집계된다
+      // 모델을 같이 남긴다 — 티어 전환 뒤 "어느 모델이 이 판결을 냈나"를 못 되짚으면 A/B 비교가 불가능하다
+      // 콜3(서신)은 토큰 상한이 아니라 tier 로 가른다 — v105.1에서 서신을 두 조각으로 쪼개며 상한이 2100까지
+      // 내려가, 토큰 경계로는 콜2와 구분이 안 된다(실측: 유료 서신이 call:2 로 찍혔다). paid 는 서신 전용이다.
+      console.log(JSON.stringify({ at: new Date().toISOString(), call: tierKey === "paid" ? 3 : mt <= 800 ? 1 : 2, tier: tierKey, model, cat, dir, scope, usage: data.usage || null }));
     } catch {}
     return res.status(200).json(data);
   } catch (e) {

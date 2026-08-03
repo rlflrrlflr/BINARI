@@ -1,0 +1,69 @@
+name: 데일리 리포트
+
+# 매일 아침 8시(한국)에 전일 지표를 디스코드로 보낸다.
+# GitHub이 대신 돌려주므로 맥을 켜둘 필요가 없다.
+# cron 은 UTC 기준이라 23:00 UTC = 다음날 08:00 KST.
+on:
+  schedule:
+    - cron: "0 23 * * *"
+  workflow_dispatch:      # 저장소 Actions 탭에서 손으로 즉시 실행할 수도 있다
+    inputs:
+      mode:
+        description: "무엇을 보낼지"
+        type: choice
+        default: report
+        options:
+          - report        # 전일 리포트 전체
+          - ping          # 디스코드 연결만 확인(PostHog 조회 없음). 문제 생기면 이걸로 원인을 가른다
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read        # 아래 스크립트 내려받기에만 쓴다
+    steps:
+      # 저장소를 통째로 받지 않고 필요한 파일 하나만 가져온다.
+      # actions/checkout 을 쓰면 "Node.js 20 is deprecated" 경고가 매번 붙는데,
+      # 이 작업엔 파일 하나면 충분해서 액션 자체를 걷어냈다(경고도 사라진다).
+      # 토큰은 GitHub 이 자동으로 넣어주므로 비저장소가 되어도 그대로 동작한다.
+      - name: 리포트 스크립트 가져오기
+        run: |
+          curl -fsSL \
+            -H "Authorization: Bearer ${{ github.token }}" \
+            -H "Accept: application/vnd.github.raw" \
+            "https://api.github.com/repos/${{ github.repository }}/contents/app/tools/daily-report.py?ref=${{ github.sha }}" \
+            -o daily-report.py
+          python3 -c "import ast,sys; ast.parse(open('daily-report.py',encoding='utf-8').read())" \
+            || { echo "스크립트를 제대로 못 받았습니다."; exit 1; }
+
+      - name: 설정값 확인
+        # 비밀값이 하나라도 비면 조용히 실패하는 대신 무엇이 없는지 알려준다.
+        env:
+          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+          POSTHOG_PROJECT_ID: ${{ secrets.POSTHOG_PROJECT_ID }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          miss=""
+          [ -z "$POSTHOG_API_KEY" ] && miss="$miss POSTHOG_API_KEY"
+          [ -z "$POSTHOG_PROJECT_ID" ] && miss="$miss POSTHOG_PROJECT_ID"
+          [ -z "$DISCORD_WEBHOOK_URL" ] && miss="$miss DISCORD_WEBHOOK_URL"
+          if [ -n "$miss" ]; then
+            echo "저장소 Settings > Secrets and variables > Actions 에 아래를 넣어주세요:$miss"
+            exit 1
+          fi
+
+      - name: 리포트 발송
+        env:
+          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+          POSTHOG_PROJECT_ID: ${{ secrets.POSTHOG_PROJECT_ID }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          # 아래 둘은 '어제 앱에 반영된 것' 섹션용. 토큰은 GitHub 이 자동으로 넣어주므로
+          # 사장님이 따로 등록할 값이 아니다. 없으면 그 섹션만 빠지고 리포트는 그대로 나간다.
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPO: ${{ github.repository }}
+        run: |
+          if [ "${{ inputs.mode }}" = "ping" ]; then
+            python3 daily-report.py --ping
+          else
+            python3 daily-report.py
+          fi

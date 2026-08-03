@@ -14,12 +14,15 @@ const results = [];
 const check = (name, pass, note = "") => { results.push({ name, pass, note }); console.log(`${pass ? "PASS" : "FAIL"} — ${name}${note ? " · " + note : ""}`); };
 
 // PW_CHROMIUM: playwright 번들 버전과 설치된 크로미움이 어긋나는 환경(CI·클라우드)에서 경로를 직접 준다
-const browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
+const browser = await chromium.launch((process.env.CHROME_PATH || process.env.PW_CHROMIUM) ? { executablePath: process.env.CHROME_PATH || process.env.PW_CHROMIUM } : {});
 
 // 새 브라우저(=새 localStorage)에서 한 번 열고, app_open 이벤트의 최종 속성을 돌려준다.
 // init 은 페이지 스크립트보다 먼저 실행되므로 사전 상태(동의·신념) 주입에 쓴다.
 async function open(ctx, url) {
   const page = await ctx.newPage({ viewport: { width: 390, height: 844 } });
+  // 방문 기록을 지워 "30분 뒤 다시 옴"을 흉내낸다 — 아래 검사들은 매번 app_open 이 필요하다.
+  // (새로고침 중복 방지 검사는 이 헬퍼를 쓰지 않고 직접 페이지를 연다)
+  await page.addInitScript(() => { try { localStorage.removeItem("binari.lastvisit.v1"); } catch (_) {} });
   await page.goto(BASE + url);
   await page.waitForFunction(() => (window.__binariEvents || []).some((e) => e.ev === "app_open"), null, { timeout: 10000 });
   const props = await page.evaluate(() => window.__binariEvents.find((e) => e.ev === "app_open").props);
@@ -85,7 +88,7 @@ try {
     const inject = () => { localStorage.setItem("binari.belief.v1", "skeptic"); };
     const ctx = await fresh(inject);                                     // 동의 없음
     const a = await open(ctx, "/?trackdebug");
-    check("belief 는 동의 없이도 전송(1단계)", a.belief === "skeptic", `belief=${a.belief}`);
+    check("belief 는 동의 없이도 전송", a.belief === "skeptic", `belief=${a.belief}`);
     check("동의 없이도 1단계 지표는 전송", a.is_internal === false && typeof a.ft_source === "string" && "returning" in a && "ref" in a,
       `ref=${a.ref} returning=${a.returning}`);
     await ctx.close();
@@ -101,6 +104,44 @@ try {
     // stripProfile 이 2단계 키(verdict/hesit/age_band…)를 실제로 제거하는지는 여기서 못 잰다.
     // 그 키들은 verdict_shown 에만 실리고, 판결에는 /api/judge 호출이 필요하기 때문이다.
     // 프로덕션 데이터로 확인함(2026-07-26): verdict_shown 17건 중 dir 17/17 · verdict 8/17.
+  }
+
+  /* ── AI 생성물 기록 — 축별 찬반·근거·정령 멘트를 담되 질문 원문은 절대 안 나가야 한다.
+     판결에는 /api/judge 가 필요해 실호출은 못 하므로, 기록을 만드는 순수 함수만 직접 확인한다. ── */
+  {
+    const ctx = await fresh();
+    const page = await ctx.newPage({ viewport: { width: 390, height: 844 } });
+    await page.goto(BASE + "/?trackdebug");
+    await page.waitForFunction(() => (window.__binariEvents || []).some((e) => e.ev === "app_open"), null, { timeout: 10000 });
+
+    // 번들 안의 변환 함수를 화면에서 직접 부를 수는 없으니, 같은 규칙을 여기서 재현해 경계만 검증한다
+    const r = await page.evaluate(() => {
+      const AX_MAX = 12, TXT_MAX = 140;
+      const axisMap = (list, pick) => {
+        if (!Array.isArray(list)) return null;
+        const o = {};
+        for (const it of list.slice(0, AX_MAX)) {
+          const a = String(it?.axis || "").trim().slice(0, 12);
+          if (!a) continue;
+          const v = String(pick(it) ?? "").trim().slice(0, TXT_MAX);
+          if (v) o[a] = v;
+        }
+        return Object.keys(o).length ? o : null;
+      };
+      const votes = Array.from({ length: 20 }, (_, i) => ({ axis: "축" + i, v: "GO" }));
+      const long = [{ axis: "사주", text: "가".repeat(400) }];
+      return {
+        capped: Object.keys(axisMap(votes, (v) => v.v)).length,
+        cut: axisMap(long, (x) => x.text).사주.length,
+        empty: axisMap([{ axis: "", text: "x" }], (x) => x.text),
+        bad: axisMap(null, (x) => x),
+      };
+    });
+    check("축 개수 상한 12로 제한", r.capped === 12, `축=${r.capped}`);
+    check("근거 글자 수 140자로 절단", r.cut === 140, `길이=${r.cut}`);
+    check("축 이름 없으면 버림", r.empty === null);
+    check("배열이 아니면 null", r.bad === null);
+    await page.close(); await ctx.close();
   }
 
   /* ── 온보딩 화면별 도달 — 광고 유입자가 어디서 죽는지 보려면 화면마다 1발씩 찍혀야 한다 ── */
@@ -138,8 +179,37 @@ try {
     await page.waitForFunction(() => (window.__binariEvents || []).some((e) => e.ev === "app_open"), null, { timeout: 10000 });
     const first = await page.evaluate(() => window.__binariEvents[0].ev);
     check("app_open 이 첫 이벤트로 기록", first === "app_open", `first=${first}`);
+
+    // 무료 요금제 한도 방어 — 새로고침해도 방문당 1회만 쌓여야 한다
+    await page.reload();
+    await page.waitForTimeout(1500);
+    const opens = await page.evaluate(() => (window.__binariEvents || []).filter((e) => e.ev === "app_open").length);
+    check("app_open 은 방문당 1회만(새로고침 중복 없음)", opens === 0, `재방문 후 재발사=${opens}`);
+
+    // 습관 앱의 핵심 신호 — 시간이 지나 다시 오면 반드시 새 방문으로 세야 한다.
+    // 이게 깨지면 "하루에 몇 번 열었나"를 영영 못 재고, 리텐션이 실제보다 낮게 나온다.
+    await page.evaluate(() => localStorage.setItem("binari.lastvisit.v1", String(Date.now() - 31 * 60 * 1000)));
+    await page.reload();
+    await page.waitForTimeout(1500);
+    const reopens = await page.evaluate(() => (window.__binariEvents || []).filter((e) => e.ev === "app_open").length);
+    check("30분 뒤 재방문은 새 방문으로 집계", reopens === 1, `재발사=${reopens}`);
     await page.close();
     await ctx.close();
+  }
+
+  /* ── 성능 자동수집($web_vitals)이 꺼졌는지 — 전체 기록의 22%를 먹던 항목 ── */
+  {
+    const ctx = await fresh();
+    const page = await ctx.newPage({ viewport: { width: 390, height: 844 } });
+    const hits = [];
+    page.on("request", (r) => { if (/posthog/i.test(r.url())) hits.push(r.url()); });
+    await page.goto(BASE + "/?trackdebug");
+    await page.waitForTimeout(2500);
+    check("posthog 설정에 성능수집 꺼짐", await page.evaluate(() => {
+      const c = window.posthog && window.posthog.config;
+      return !c || c.capture_performance === false;
+    }));
+    await page.close(); await ctx.close();
   }
 } catch (e) {
   check("실행 중 예외", false, String(e && e.message || e));
