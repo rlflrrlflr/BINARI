@@ -1538,7 +1538,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v105.4 · 서신함";
+const APP_VER = "v105.5 · 서신함";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -1947,6 +1947,8 @@ HOLD는 '판단 못 하겠음'이 아니라 **'지표가 지금은 멈추라고 
 각 지표 GO/STOP/중립→가중 합산, 충돌은 봉합 없이 노출. B반말·A다정한 존댓말. 유머는 유저 데이터 소재. 선택을 때리되 사람을 때리지 않는다.
 - **이름은 판결 한 건에 딱 한 번.** 호칭이 있으면 가장 결정적인 한 자리에서만 부른다(B:"○○아"·A:"○○님"). verdict에서 불렀으면 subline·funLine·reasons에는 **한 글자도 다시 쓰지 않는다.** 이름을 두 번 부르면 친밀함이 아니라 이름을 외워 온 판매원 화법이 된다 — 유저는 그 순간 "이거 대사구나"를 알아챈다. 안 부르는 편이 두 번 부르는 것보다 낫다.
 - **유저를 3인칭으로 부르지 않는다.** "이 사람", "그", "본인" 금지 — 수호신은 유저에게 직접 말한다. (X)"이 사람 결에 맞아" (O)"네 결에 맞아"
+- **풀네임으로 부르지 않는다.** 호칭이 성+이름 꼴이면(예: 강석우) 성을 떼고 이름만 부른다 — "석우야"·"석우님". 풀네임 호명은 친밀감이 아니라 소환장이다. 별명·외자처럼 성명 꼴이 아니면 그대로 쓴다.
+- **세 층은 서로 다른 것을 말한다.** verdict(무엇을 할지) · subline(verdict에 **없는** 것 하나 — 시점·조건·방법 중 하나) · funLine(제3의 재료로 딴청). 같은 결론을 은유만 갈아 세 번 반복하면 유저가 읽을 게 없다. subline을 쓰기 전에 자문한다 — "verdict에 없는 무엇을 더했나?" 답이 없으면 다시 쓴다. (X)verdict "손볼 데 다듬고 나가" → subline "손볼 데를 마저 다듬고 나가는 게 맞아"
 - 금지: 질문 문장에서 심리를 추정해 판결하는 것("이렇게 묻는 건 이미 가고 싶은 거야" 류). 그건 지표가 아니라 독심술이다. 판결 근거는 오직 제공된 지표의 실제 값.
 - **판정 절차(출력 순서로 강제된다 — 최중요)**: ①votes를 **먼저** 쓴다. 각 지표를 질문에 비추어 서로 독립적으로 GO/STOP/중립 판정한다 ②그 표를 세어 direction을 정한다(많은 쪽. 동률·1차이면 경험 편향으로 해보는 쪽) ③verdict는 **이미 정해진 direction을 말로 옮긴 것**이다.
   **votes를 쓰기 전에 verdict를 생각하지 마라.** JSON 필드 순서가 곧 사고 순서다 — votes가 앞에 오게 만든 이유가 이것이다. 결론을 먼저 정해두고 표를 거기 맞추는 건 이 앱이 하지 말아야 할 단 하나다.
@@ -2427,7 +2429,7 @@ export default function App() {
     track("verdict_shared", { dir: res.direction, mode: "ritual" });
     const text = `"${q}"\n→ ${res.direction}. ${res.verdict}\n\n— 내 수호신의 판결, 비나리`;
     // v75: 판결을 링크에 실어 보낸다 — 받은 사람이 홈이 아니라 이 판결을 먼저 보게
-    const payload = { q, d: res.direction, v: res.verdict, s: (detail && !detail._err ? detail.subline : "") || "", n: (birth.name || "").trim(), a: res.against || 0, t: res.total || 0, c: res.category || "", to: res.tone || "", hx: hexInfo ? { n: hexInfo.name, t: (hexInfo.moving && hexInfo.moving.length ? hexInfo.toName : "") } : null };
+    const payload = { q, d: res.direction, v: res.verdict, s: (detail && !detail._err ? detail.subline : "") || "", n: (birth.name || "").trim(), a: res.against || 0, t: res.total || 0, c: res.category || "", hx: hexInfo ? { n: hexInfo.name, t: (hexInfo.moving && hexInfo.moving.length ? hexInfo.toName : "") } : null };
     const enc = encodeShare(payload);
     const url = enc ? `https://binari-sepia.vercel.app/?v=${enc}` : "https://binari-sepia.vercel.app/?ref=share";
     try {
@@ -2807,7 +2809,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                   <span className="vside">運命合意判決</span>
                   <span className="vseal">神</span>
                   {/* 공유 카드는 처음 온 사람이 보는 화면이다 — 'A형'·괘 이름 같은 내부 용어를 여기 두면 아무 뜻도 전달되지 않는다 */}
-                  <div className="vtop"><span>BINARI</span><span>{CAT_LABEL[sharedIn.c] || "판결"}{sharedIn.to ? ` · ${sharedIn.to}` : ""}</span></div>
+                  <div className="vtop"><span>BINARI</span><span>{CAT_LABEL[sharedIn.c] || "판결"}</span></div>
                   <p className={`vq ${(sharedIn.q || "").length > 55 ? "s" : ""}`}>{sharedIn.q || "…"}</p>
                   <div className="vdiv"><span>✦</span></div>
                   {t > 0 && a > 0 && a / t >= 0.4 && <p className="split">지표가 갈라섰다 · {t - a} : {a}</p>}
@@ -2833,6 +2835,11 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
           </div>
           <p className="brand-mark">비나리 BINARI</p>
           <p className="ainote">수호신의 판결은 AI가 생성합니다 · 재미로 보는 참고예요</p>
+          {/* 신뢰 라인(2026-08-02 경쟁분석 반영): 시장 전체가 '만세력 오류·GPT 복붙' 의혹으로 신뢰를 잃는 중이다.
+              계산 검증과 프라이버시는 우리가 실제로 갖춘 것이라 그대로 쓴다 — 둘 다 검증된 사실만 적는다.
+              근거: e2e/mansae-test.mjs 28문항 전수 통과 / track() 은 질문 원문을 안 싣고 qlen(글자수)만 싣는다.
+              문항 수가 바뀌면 이 문장도 바꿔야 한다 — 검진이 숫자 대조로 잡는다. */}
+          <p className="ainote">사주 계산(만세력)은 자동검증 28문항을 통과한 엔진이 해요 · 질문 원문은 통계에 기록하지 않아요</p>
         </section>
       )}
 
@@ -3225,7 +3232,8 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                   <span className="vside">運命合意判決</span>
                   <span className={`vseal ${why ? "faded" : ""}`}>神</span>
                   {/* 카드 앞면엔 어려운 말을 두지 않는다(층위 분리). 'A형'은 내부 분류어라 유저에겐 뜻이 없다 → 우리말 라벨로 */}
-                  <div className="vtop"><span>BINARI</span><span>{CAT_LABEL[res.category] || "어느 물음"} · {res.tone}</span></div>
+                  {/* tone(단호|격려|충고)은 프롬프트 제어값 — 화면에 달면 앱이 스스로 "이건 격려였어"라고 고백하는 꼴이라 뗐다(2026-08-02) */}
+                  <div className="vtop"><span>BINARI</span><span>{CAT_LABEL[res.category] || "어느 물음"}</span></div>
                   <p className={`vq ${q.length > 55 ? "s" : ""}`}>{q}</p>
                   <div className="vdiv"><span>✦</span></div>
                   {res.total > 0 && res.against > 0 && res.against / res.total >= 0.4 && (
@@ -3247,7 +3255,8 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                           이제 켜진 알은 언제나 '이 판결과 같은 쪽'을 뜻한다 — HOLD만 갈린 수를 보여준다. */}
                       <div className="pips">{[...Array(res.total || 0)].map((_, i) => <span key={i} className={`pip ${i < pipLit ? "on" : ""}`} />)}
                         <em>{res.total}개 중 {pipLit}개 {res.direction === "HOLD" ? "갈림" : "같은 쪽"}</em></div>
-                      {detail && !detail._err && detail.funLine && <p className="vfun">정령 — {detail.funLine} <span className="dim">(판결엔 안 껴)</span></p>}
+                      {/* "(판결엔 안 껴)"는 개발자 주석을 유저에게 보여준 것이었다 — 정령의 위계는 괄호 고백이 아니라 자리(맨 아래·작은 글씨)로 말한다 */}
+                      {detail && !detail._err && detail.funLine && <p className="vfun">정령 — {detail.funLine}</p>}
                       {(detailBusy || (detail && !detail._err)) && <div className="vbot"><span>운명 합의 판결</span><span>카드 탭 → 지표별 근거</span></div>}
                     </div>
                   )}
