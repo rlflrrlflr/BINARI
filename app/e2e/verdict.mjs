@@ -30,10 +30,13 @@ const CALL3B = JSON.stringify({
   closing: "네 편이야, 늘.",
 });
 
-async function onboard(page, qs = "") {   // qs: "?trackdebug" 처럼 쿼리를 붙일 때 쓴다(계측 검증용)
+async function onboard(page, qs = "", nm = "") {   // qs: "?trackdebug" 처럼 쿼리(계측 검증용) / nm: 호칭을 넣고 들어갈 때
   await page.goto(BASE + qs); await page.waitForTimeout(900);
   await page.getByRole("button", { name: "조각을 모으러 갈래" }).click(); await page.waitForTimeout(400);
-  await page.getByRole("button", { name: "이름 없이 갈래" }).click(); // v26: 이름 장면 건너뛰기
+  if (nm) {                                                            // v105.4: 이름을 넣고 들어가는 경로
+    await page.locator("input.in.wide.center").fill(nm); await page.waitForTimeout(200);
+    await page.getByRole("button", { name: new RegExp(nm + " — 그래") }).click();
+  } else await page.getByRole("button", { name: "이름 없이 갈래" }).click(); // v26: 이름 장면 건너뛰기
   const ins = page.locator("input.in:not(.wide)");
   await ins.nth(0).fill("1990"); await ins.nth(1).fill("2"); await ins.nth(2).fill("25");
   await page.getByRole("button", { name: "이 하늘이야" }).click();
@@ -88,6 +91,15 @@ const b = await chromium.launch((process.env.CHROME_PATH ? { executablePath: pro
   let subOk = false;
   for (let i = 0; i < 30; i++) { if (await page.getByText("밤이 널 속이는 거야.").isVisible().catch(() => false)) { subOk = true; break; } await page.waitForTimeout(300); }
   ck("S1 근거(콜2)", subOk);
+  /* 알(pip) 표기 — 2026-08-02 실측 사고: 7:1로 이긴 GO 판결이 "8개 중 1개 찬성"으로 찍혀
+     화면상 1:7로 뒤집혀 보였다. 켜진 알은 언제나 '이 판결과 같은 쪽'이어야 한다.
+     이 픽스처의 표는 사주 GO·달 GO·별자리 STOP → 앱이 GO 로 집계(3개 중 2개 같은 쪽, 알 2개). */
+  {
+    await page.waitForSelector(".pips em", { timeout: 15000 }).catch(() => {});
+    const label = (await page.locator(".pips em").allTextContents())[0] || "";
+    const lit = await page.locator(".pips .pip.on").count();
+    ck("알 표기가 지지 수를 가리킴", label.includes("2개 같은 쪽") && lit === 2, `${label} · 켜진 알 ${lit}`);
+  }
 
   /* v104 서신 대기 연출 — 봉인 5초 → '곧 답변이 있을 것이다' 2초 → 로비.
      전체화면을 덮는 데다 되돌릴 버튼이 없으므로, 타이머가 끊기면 유저가 갇힌다. 끝까지 실제로 태워 본다. */
@@ -212,6 +224,32 @@ const b = await chromium.launch((process.env.CHROME_PATH ? { executablePath: pro
   ck("S3 앱 웹뷰: complete 호출 안 함(아티팩트 사망 방지)", (await page.evaluate(() => window.__completeCalled)) === false);
   ck("S3 앱 웹뷰: 정직한 안내 표시", errTxt.includes("사파리"), errTxt.slice(0, 80));
   ck("S3 앱 웹뷰: 재시도 UI 생존", await page.getByRole("button", { name: "다시 청하기" }).isVisible());
+  await page.close();
+}
+
+/* ── 시나리오 4: 호칭 중복 차단 (2026-08-02 실사고 회귀) ──────────────────
+   앞면 "강석우, 8월 중순 넘겨서 내" · 뒷면 "…이 사람 결에 맞아, 강석우." 한 카드에 이름이 두 번 나왔다.
+   콜1·콜2는 서로 다른 호출이라 둘 다 "결정적 순간에 이름을 부른다"를 각자 지킨 결과다 — 콜2는 자기가
+   두 번째인 줄 모른다. 그래서 앱이 콜1 판결문을 훑어 세고 콜2에 알려준다. 여기서 보는 건 그 '알려주기'다.
+   (모델이 실제로 안 부르는지는 e2e가 못 본다. 앱이 신호를 넣었는지까지가 코드의 책임이다.) */
+for (const [nmCase, v1, want] of [["앞면이 이름을 부름", "강석우, 보내지 마. 끝.", true],
+                                  ["앞면이 안 부름", "보내지 마. 끝.", false]]) {
+  const page = await b.newPage({ viewport: { width: 430, height: 932 } });
+  page.setDefaultTimeout(9000);
+  const c1n = JSON.stringify({ ...JSON.parse(CALL1), verdict: v1 });
+  await page.addInitScript(({ c1, c2 }) => {
+    window.__p2 = "";
+    window.claude = { complete: async (p) => { if (p.includes("[이미 확정된 판결]")) { window.__p2 = p; return c2; } return c1; } };
+  }, { c1: c1n, c2: CALL2 });
+  await onboard(page, "", "강석우");
+  await page.locator("textarea.qbox").fill("전남친에게 연락할까?"); await page.waitForTimeout(300);
+  await page.getByRole("button", { name: "판결을 청한다" }).click();
+  await page.waitForSelector("text=동전 셋", { timeout: 5000 });
+  await page.getByRole("button", { name: "한 번에 던지기" }).click();
+  ck(`⑰ 호칭 — ${nmCase}: 판결 성사`, await waitVerdict(page));
+  await page.getByRole("button", { name: "왜 이렇게 봤어?" }).click().catch(() => {});
+  let p2 = ""; for (let i = 0; i < 30; i++) { p2 = await page.evaluate(() => window.__p2); if (p2) break; await page.waitForTimeout(300); }
+  ck(`⑰ 호칭 — ${nmCase}: 콜2에 중복 알림 ${want ? "넣음" : "안 넣음"}`, p2.includes("[호칭] 앞면에서 이미 이름을 불렀다") === want);
   await page.close();
 }
 

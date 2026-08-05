@@ -1612,7 +1612,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v107 · 그릇";
+const APP_VER = "v108 · 용신";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -2019,8 +2019,10 @@ HOLD는 '판단 못 하겠음'이 아니라 **'지표가 지금은 멈추라고 
 그 밖에는 votes를 센 결과대로 GO 또는 STOP이 나온다. 표가 갈렸다는 이유로 HOLD를 고르지 마라 — 갈린 건 pips로 이미 보여주고 있다. HOLD를 쓸 때도 **왜 지금이 멈출 때인지 지표로 말한다**: (O)"지금은 물이 겹친 때야. 보름 지나고 다시 봐." (X)"판단하기 어려워."
 ## 규칙
 각 지표 GO/STOP/중립→가중 합산, 충돌은 봉합 없이 노출. B반말·A다정한 존댓말. 유머는 유저 데이터 소재. 선택을 때리되 사람을 때리지 않는다.
-- **호명 규칙(위반 사례에서 강화)**: 호칭은 한 판결 전체(verdict·subline·funLine 합쳐)에 **최대 1번**, 안 불러도 된다 — 아는 사이는 이름을 자꾸 부르지 않는다. 자꾸 부르면 외판원 화법이 된다. 호칭이 성+이름 전체(세 글자 성명 꼴, 예: 강석우)면 **성을 떼고 이름만** 부른다(석우야/석우님). 풀네임 호명은 소환장이지 친밀감이 아니다. 별명·외자 등 이름 꼴이 아니면 그대로 쓴다.
-- **세 층은 세 가지를 말한다(위반 사례에서 강화)**: verdict(무엇을 할지)·subline(verdict에 없는 것 하나 — 시점·조건·방법)·funLine(제3의 재료로 딴청)은 서로 다른 정보여야 한다. 같은 결론을 은유만 갈아 세 번 반복하면 유저가 읽을 게 없다. subline을 쓰기 전에 자문한다: "verdict에 없는 무엇을 더했나?" — 답이 없으면 다시 쓴다.
+- **이름은 판결 한 건에 딱 한 번.** 호칭이 있으면 가장 결정적인 한 자리에서만 부른다(B:"○○아"·A:"○○님"). verdict에서 불렀으면 subline·funLine·reasons에는 **한 글자도 다시 쓰지 않는다.** 이름을 두 번 부르면 친밀함이 아니라 이름을 외워 온 판매원 화법이 된다 — 유저는 그 순간 "이거 대사구나"를 알아챈다. 안 부르는 편이 두 번 부르는 것보다 낫다.
+- **유저를 3인칭으로 부르지 않는다.** "이 사람", "그", "본인" 금지 — 수호신은 유저에게 직접 말한다. (X)"이 사람 결에 맞아" (O)"네 결에 맞아"
+- **풀네임으로 부르지 않는다.** 호칭이 성+이름 꼴이면(예: 강석우) 성을 떼고 이름만 부른다 — "석우야"·"석우님". 풀네임 호명은 친밀감이 아니라 소환장이다. 별명·외자처럼 성명 꼴이 아니면 그대로 쓴다.
+- **세 층은 서로 다른 것을 말한다.** verdict(무엇을 할지) · subline(verdict에 **없는** 것 하나 — 시점·조건·방법 중 하나) · funLine(제3의 재료로 딴청). 같은 결론을 은유만 갈아 세 번 반복하면 유저가 읽을 게 없다. subline을 쓰기 전에 자문한다 — "verdict에 없는 무엇을 더했나?" 답이 없으면 다시 쓴다. (X)verdict "손볼 데 다듬고 나가" → subline "손볼 데를 마저 다듬고 나가는 게 맞아"
 - 금지: 질문 문장에서 심리를 추정해 판결하는 것("이렇게 묻는 건 이미 가고 싶은 거야" 류). 그건 지표가 아니라 독심술이다. 판결 근거는 오직 제공된 지표의 실제 값.
 - **판정 절차(출력 순서로 강제된다 — 최중요)**: ①votes를 **먼저** 쓴다. 각 지표를 질문에 비추어 서로 독립적으로 GO/STOP/중립 판정한다 ②그 표를 세어 direction을 정한다(많은 쪽. 동률·1차이면 경험 편향으로 해보는 쪽) ③verdict는 **이미 정해진 direction을 말로 옮긴 것**이다.
   **votes를 쓰기 전에 verdict를 생각하지 마라.** JSON 필드 순서가 곧 사고 순서다 — votes가 앞에 오게 만든 이유가 이것이다. 결론을 먼저 정해두고 표를 거기 맞추는 건 이 앱이 하지 말아야 할 단 하나다.
@@ -2456,7 +2458,12 @@ export default function App() {
       const voteLine = Array.isArray(r1.votes) && r1.votes.length
         ? `\n[콜1이 이미 낸 지표 표 — 이 표를 그대로 설명한다. 축을 빼거나 vote 를 바꾸지 마라]\n${r1.votes.map((v) => `- ${v.axis}: ${v.v || v.vote}`).join("\n")}`
         : "";
-      const explainMsg = { role: "user", content: `${userText}\n\n[이미 확정된 판결] direction=${r1.direction} / verdict="${r1.verdict}" / 총 ${r1.total} 중 반대 ${r1.against}.${voteLine}${s3Line} 이 판결을 절대 뒤집지 말고, 이 결론의 근거만 아래 JSON으로만 응답: {"subline":"수호신의 한 줄","reasons":[{"axis":"사주|달|별자리|MBTI|수비학|주역|가치|삼재|토정비결|마야","vote":"GO|STOP|중립","text":"용어 — 쉬운 풀이 형식의 근거 1줄(70자 이내)"}],"funLine":"정령(달 별자리) 한마디","disclaimer":"투자·법률·의료(몸·병)일 때만, 없으면 빈 문자열"}. reasons엔 위 표의 축을 전부 같은 vote 로 넣는다 — 특히 '마야'(촐킨 톤·날개) 축은 매번 반드시 포함(자주 누락됨). **각 근거는 '용어 — 쉬운 풀이' 병기다**: 지표 이름·값을 짚고(무오 대운·중수감·촐킨 4의 톤 등) 곧바로 쉬운 말로 풀어준다. 사주 보러 가면 용어를 말한 뒤 반드시 풀이를 붙여주는 것과 같다. subline은 앞면 톤이므로 어려운 말 없이 쉬운 한 줄. 프로필에 십성 분포·신살·세운이 있으면 '사주' 축 근거에서 그 실제 값을 우선 인용한다(예: "편재 둘 — 크게 도는 돈이 네 그릇이야", "암록 — 숨은 복이 받쳐줘").` };
+      /* v105.4 — 콜1과 콜2는 서로 다른 호출이라, 둘 다 "결정적 순간에 이름을 부른다"를 각자 지킨다.
+         그래서 앞면(verdict)과 뒷면(subline)에 이름이 각각 들어가 한 카드에 두 번 나온다 — 실측으로 확인.
+         프롬프트에 "한 번만"이라고 써도 콜2는 자기가 두 번째인 줄 모른다. 그래서 앱이 세어서 알려준다. */
+      const _nameUsed = !!(birth.name || "").trim() && String(r1.verdict || "").includes(birth.name.trim());
+      const nameLine = _nameUsed ? ` [호칭] 앞면에서 이미 이름을 불렀다 — subline·funLine·reasons에는 이름을 쓰지 마라.` : "";
+      const explainMsg = { role: "user", content: `${userText}\n\n[이미 확정된 판결]${nameLine} direction=${r1.direction} / verdict="${r1.verdict}" / 총 ${r1.total} 중 반대 ${r1.against}.${voteLine}${s3Line} 이 판결을 절대 뒤집지 말고, 이 결론의 근거만 아래 JSON으로만 응답: {"subline":"수호신의 한 줄","reasons":[{"axis":"사주|달|별자리|MBTI|수비학|주역|가치|삼재|토정비결|마야","vote":"GO|STOP|중립","text":"용어 — 쉬운 풀이 형식의 근거 1줄(70자 이내)"}],"funLine":"정령(달 별자리) 한마디","disclaimer":"투자·법률·의료(몸·병)일 때만, 없으면 빈 문자열"}. reasons엔 위 표의 축을 전부 같은 vote 로 넣는다 — 특히 '마야'(촐킨 톤·날개) 축은 매번 반드시 포함(자주 누락됨). **각 근거는 '용어 — 쉬운 풀이' 병기다**: 지표 이름·값을 짚고(무오 대운·중수감·촐킨 4의 톤 등) 곧바로 쉬운 말로 풀어준다. 사주 보러 가면 용어를 말한 뒤 반드시 풀이를 붙여주는 것과 같다. subline은 앞면 톤이므로 어려운 말 없이 쉬운 한 줄. 프로필에 십성 분포·신살·세운이 있으면 '사주' 축 근거에서 그 실제 값을 우선 인용한다(예: "편재 둘 — 크게 도는 돈이 네 그릇이야", "암록 — 숨은 복이 받쳐줘").` };
       const { json: r2 } = await callClaude(system, [...priorConvo, explainMsg], 2000);   // 근거를 용어+풀이로 병기하면서 1500에선 잘렸다
       setDetail(r2);
       // L3(지표별 근거)는 제품의 핵심 차별점이다. 실패율과 소요시간을 모르면 개선 근거가 없다.
@@ -2834,6 +2841,9 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
      S3에서 우리가 하는 일은 '판단을 넘기는 것'인데, 넘긴 판단에 4,900원을 받으면 그건 파는 게 아니라 등치는 거다.
      모델 판정(res.scope)과 규칙 판정(scopeHint) 중 하나라도 S3면 버튼을 숨긴다 — 안전 쪽으로 틀린다. */
   const letterOk = !!res && res.scope !== "S3" && scopeHint(q) !== "S3";
+  /* 판결 카드의 알(pip) — 켜진 개수는 '이 판결과 같은 쪽에 선 지표'다.
+     res.against 는 반대한 수이므로 그대로 켜면 강한 판결일수록 알이 적게 켜진다(정반대로 읽힌다). */
+  const pipLit = res ? (res.direction === "HOLD" ? (res.against || 0) : Math.max(0, (res.total || 0) - (res.against || 0))) : 0;
   /* 값을 치른 판결들. 본문(letter)이 있든 없든 여기 들어온다 — 없는 건 '다시 받기' 대상이다.
      paid 를 기준으로 잡는 게 핵심: 본문을 기준으로 잡으면 잃어버린 서신이 목록에서 통째로 사라진다. */
   const paidRecs = records.map((r, i) => ({ r, i })).filter(({ r }) => r.paid || r.letter);
@@ -2899,8 +2909,10 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
           </div>
           <p className="brand-mark">비나리 BINARI</p>
           <p className="ainote">수호신의 판결은 AI가 생성합니다 · 재미로 보는 참고예요</p>
-          {/* 신뢰 라인(2026-08-02 경쟁분석 반영): 시장 전체가 '만세력 오류·GPT 복붙' 의혹으로 신뢰를 잃는 중 —
-              계산 검증과 프라이버시는 우리가 실제로 갖춘 것이라 그대로 쓴다. 검증은 e2e/mansae-test.mjs 28문항. */}
+          {/* 신뢰 라인(2026-08-02 경쟁분석 반영): 시장 전체가 '만세력 오류·GPT 복붙' 의혹으로 신뢰를 잃는 중이다.
+              계산 검증과 프라이버시는 우리가 실제로 갖춘 것이라 그대로 쓴다 — 둘 다 검증된 사실만 적는다.
+              근거: e2e/mansae-test.mjs 28문항 전수 통과 / track() 은 질문 원문을 안 싣고 qlen(글자수)만 싣는다.
+              문항 수가 바뀌면 이 문장도 바꿔야 한다 — 검진이 숫자 대조로 잡는다. */}
           <p className="ainote">사주 계산(만세력)은 자동검증 28문항을 통과한 엔진이 해요 · 질문 원문은 통계에 기록하지 않아요</p>
         </section>
       )}
@@ -3294,7 +3306,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                   <span className="vside">運命合意判決</span>
                   <span className={`vseal ${why ? "faded" : ""}`}>神</span>
                   {/* 카드 앞면엔 어려운 말을 두지 않는다(층위 분리). 'A형'은 내부 분류어라 유저에겐 뜻이 없다 → 우리말 라벨로 */}
-                  {/* tone(단호|격려|충고)은 내부 제어값 — 화면에 달면 앱이 스스로 "이건 격려"라고 고백하는 꼴이라 뗐다(2026-08-02) */}
+                  {/* tone(단호|격려|충고)은 프롬프트 제어값 — 화면에 달면 앱이 스스로 "이건 격려였어"라고 고백하는 꼴이라 뗐다(2026-08-02) */}
                   <div className="vtop"><span>BINARI</span><span>{CAT_LABEL[res.category] || "어느 물음"}</span></div>
                   <p className={`vq ${q.length > 55 ? "s" : ""}`}>{q}</p>
                   <div className="vdiv"><span>✦</span></div>
@@ -3312,12 +3324,12 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                         ? <p className="vs">"{detail.subline}"</p>
                         : detailBusy ? <p className="vs dim">수호신이 이유를 고르는 중…</p>
                         : <p className="vs dim">— 이유를 불러오지 못했어 —<button className="retrybtn" onClick={(e) => { e.stopPropagation(); if (detailArgsRef.current) { setDetail(null); fetchDetail(...detailArgsRef.current, true); } }}>다시 시도</button></p>}
-                      {/* 실사고(2026-08-02): against(반대 수)를 '찬성'이라 표시해 "7개 중 1개 찬성"으로 나감 —
-                          가장 강한 GO가 가장 약해 보였다. 라벨은 질문의 행동 기준(찬성=GO표·반대=STOP표),
-                          수는 판결을 민 쪽(total-against)을 센다. HOLD만 접전 수(against) 그대로. */}
-                      <div className="pips">{[...Array(res.total || 0)].map((_, i) => <span key={i} className={`pip ${i < (res.direction === "HOLD" ? res.against : res.total - res.against) ? "on" : ""}`} />)}
-                        <em>{res.total}개 중 {res.direction === "HOLD" ? res.against : res.total - res.against}개 {res.direction === "STOP" ? "반대" : res.direction === "HOLD" ? "접전" : "찬성"}</em></div>
-                      {/* "(판결엔 안 껴)"는 개발자 주석을 유저에게 보여준 것 — 정령의 위계는 괄호 고백이 아니라 자리(맨 아래·작은 글씨)로 말한다 */}
+                      {/* v105.3 — against 는 '이 판결에 반대한 지표 수'다. GO에서 이걸 '찬성'이라고 써서
+                          7:1로 이긴 판결이 화면엔 "8개 중 1개 찬성"으로, 즉 1:7로 뒤집혀 보였다(실측 사고).
+                          이제 켜진 알은 언제나 '이 판결과 같은 쪽'을 뜻한다 — HOLD만 갈린 수를 보여준다. */}
+                      <div className="pips">{[...Array(res.total || 0)].map((_, i) => <span key={i} className={`pip ${i < pipLit ? "on" : ""}`} />)}
+                        <em>{res.total}개 중 {pipLit}개 {res.direction === "HOLD" ? "갈림" : "같은 쪽"}</em></div>
+                      {/* "(판결엔 안 껴)"는 개발자 주석을 유저에게 보여준 것이었다 — 정령의 위계는 괄호 고백이 아니라 자리(맨 아래·작은 글씨)로 말한다 */}
                       {detail && !detail._err && detail.funLine && <p className="vfun">정령 — {detail.funLine}</p>}
                       {(detailBusy || (detail && !detail._err)) && <div className="vbot"><span>운명 합의 판결</span><span>카드 탭 → 지표별 근거</span></div>}
                     </div>
