@@ -421,33 +421,72 @@ function myeongsikText(saju, sex, now) {
 
 /* v101: 상세 리포트(타고난 그릇) — 카드 뒷면 reasons 밖 별도 블록. 전부 클라이언트 계산이라 지어낼 수 없다.
    서사 순서는 철학관 리딩을 따른다: 타고난 것 → 흐름 → 사람 → 날 → 일 ("나→시간→관계→행동"으로 좁혀지는 순서) */
-function MyeongsikReport({ saju, sex }) {
+function MyeongsikReport({ saju, sex, birth }) {
   const [open, setOpen] = useState(false);
   const idx = saju && saju.idx;
   if (!idx) return null;
   const now = new Date();
   const dist = Object.entries(sipseongDist(idx)).sort((a, b) => b[1] - a[1]);
+  /* 십성 동률 처리(실사고 2026-08-02): 상위 3개만 자르면 동률일 때 어느 게 뽑히는지가 실력이 아니라
+     객체 삽입 순서다 — 일곱 개 전부 1인 명식에서 근거 없는 셋이 대표가 됐다. 3위와 같은 값은 전부 보여준다. */
+  const cutV = dist.length > 3 ? dist[2][1] : 0;
+  const top = dist.filter(([, v], i) => i < 3 || v === cutV);
+  /* 힘의 저울 — 간이 신강·신약(통설: 일간 제외 비겁+인성 4↑ 신강 · 2↓ 신약). 월령 가중 없는 개수 판정이라
+     '간이'를 명시한다. 근거: 전략로그 2026-08-02 딥리서치(사자사주·정해만세력 조견 기준) */
+  const grp = (ks) => dist.filter(([k]) => ks.includes(k)).reduce((a, [, v]) => a + v, 0);
+  const support = grp(["비견", "겁재", "정인", "편인"]);
+  const strength = support >= 4 ? "신강" : support <= 2 ? "신약" : "중간";
+  /* 비어 있는 자리 — 없는 것이 있는 것만큼 말해준다(십성 5그룹 + 오행). 동률 명식에서 특히 이게 유일한 특징이 된다 */
+  const GRP5 = { "나를 받치는 힘(비겁)": ["비견", "겁재"], "표현·창작(식상)": ["식신", "상관"], "재물(재성)": ["정재", "편재"], "조직·자리(관성)": ["정관", "편관"], "배움·받는 복(인성)": ["정인", "편인"] };
+  const lackSS = Object.entries(GRP5).filter(([, ks]) => grp(ks) === 0).map(([n]) => n);
+  const lackEl = Object.entries(saju.counts).filter(([, v]) => v === 0).map(([k]) => k);
   const sins = sinsalOf(idx);
   const se = seun(idx.dG, now.getFullYear(), 5);
-  const tk = taekil(idx, now);
-  const jael = dist.filter(([k]) => k === "정재" || k === "편재").reduce((a, [, v]) => a + v, 0);
-  const child = sex ? dist.filter(([k]) => (sex === "M" ? k === "정관" || k === "편관" : k === "식신" || k === "상관")).reduce((a, [, v]) => a + v, 0) : null;
+  /* 대운 사다리 — 흐름의 주 시계는 대운이고 세운은 배경인데, 리포트에 보조 축(세운)만 있고 주 축이 없었다.
+     성별이 있어야 방향(순행/역행)이 선다. daeun()을 10년 간격으로 호출해 여든까지 편다. */
+  const ladder = [];
+  if (sex && birth && birth.y) {
+    try {
+      for (let a = 1; a <= 71; a += 10) {
+        const du = daeun(+birth.y, +birth.m, +birth.d, birth.noHour ? 12 : +birth.h, birth.noHour || birth.min === "" ? 0 : +birth.min, !!birth.noHour, cityLon(birth.city), sex === "M", +birth.y + a - 1);
+        if (du && !du.pre && !ladder.some((x) => x.startAge === du.startAge)) ladder.push(du);
+      }
+    } catch (_) { /* 대운 실패가 리포트 전체를 죽이면 안 된다 */ }
+  }
+  const nowAge = birth && birth.y ? now.getFullYear() - +birth.y + 1 : null;
+  /* 택일 가드 — 미래 생일(출산 예정 등)에 "이번 주 좋은 날"을 주는 건 오답. 14세 게이트가 있어 인앱에선
+     드물지만, 값이 틀릴 조건을 아는데 그대로 내보내지 않는다. */
+  const bornYet = !(birth && birth.y && new Date(+birth.y, (+birth.m || 1) - 1, +birth.d || 1) > now);
+  const tk = bornYet ? taekil(idx, now) : { good: [], bad: [] };
+  const jael = grp(["정재", "편재"]);
+  const child = sex ? grp(sex === "M" ? ["정관", "편관"] : ["식신", "상관"]) : null;
   return (
     <div className="msr" onClick={(e) => e.stopPropagation()}>
-      <button className="msrbtn" onClick={() => { if (!open) track("report_opened", { sinsal: sins.length, top_ss: dist[0] ? dist[0][0] : null }); setOpen(!open); }}>{open ? "▴ 타고난 그릇 접기" : "▾ 타고난 그릇 — 명식 깊이 보기"}</button>
+      <button className="msrbtn" onClick={() => { if (!open) track("report_opened", { sinsal: sins.length, top_ss: dist[0] ? dist[0][0] : null, strength, lack_el: lackEl.join("") || null }); setOpen(!open); }}>{open ? "▴ 타고난 그릇 접기" : "▾ 타고난 그릇 — 명식 깊이 보기"}</button>
       {open && (
         <div className="msrbody">
           <p className="msrh">타고난 것</p>
-          {dist.slice(0, 3).map(([k, v]) => <p key={k}><b>{k} {v}</b> — {SS_TIP[k]}</p>)}
+          {top.map(([k, v]) => <p key={k}><b>{k} {v}</b> — {SS_TIP[k]}</p>)}
           {jael >= 2 && <p><b>재물 자리 {jael}</b> — 재물이 명식에 실려 있어. 흐름이 열릴 때 크게 받는 그릇이야</p>}
           {child != null && child >= 1 && <p><b>자식 인연</b> — 명식에 자식 복이 들어 있어</p>}
           {sins.map((x) => <p key={x.name}><b>{x.name}</b> — {x.tip}</p>)}
+          {(lackSS.length > 0 || lackEl.length > 0) && (
+            <p><b>비어 있는 자리</b> — {[...lackEl.map((e) => `${e} 기운`), ...lackSS].join(" · ")}. 없는 건 흠이 아니라 채우는 자리야{lackEl.length ? " — 그 기운이 대운으로 들어오는 때를 아래 흐름에서 봐" : ""}</p>
+          )}
+          <p><b>힘의 저울</b> — {strength} · 나를 받치는 글자 {support}개 <span className="dim">(간이 판정: 비겁+인성 4개 이상 신강 · 2개 이하 신약)</span>{strength === "신약" ? " — 그릇보다 팔 힘이 늦게 붙는 몸이야. 받쳐주는 운이 올 때 크게 받아" : strength === "신강" ? " — 제 힘으로 미는 몸이야. 쓸 곳(일·표현)이 열릴 때 풀려" : ""}</p>
           <p className="msrh">흐름</p>
-          {se.map((x) => <p key={x.year}><b>{x.year} {x.ganji}</b> — {x.ss}의 해{x.ss === "정재" || x.ss === "편재" ? " · 재물이 움직여" : x.ss === "정관" || x.ss === "편관" ? " · 자리·명예가 걸려" : x.ss === "비견" || x.ss === "겁재" ? " · 경쟁·구설 조심" : ""}</p>)}
+          {ladder.length > 0 && ladder.map((du) => {
+            const ss = sipseong(idx.dG, GAN.indexOf(du.ganji[0]));
+            const isNow = nowAge != null && nowAge >= du.startAge && nowAge <= du.endAge;
+            const fills = lackEl.includes(du.el);
+            return <p key={du.startAge}><b>{du.startAge}~{du.endAge}세 {du.ganji}</b> — {ss}·{du.el} 기운{fills ? " · 비어 있던 " + du.el + "이 채워지는 구간" : ""}{isNow ? " ◂ 지금" : ""}</p>;
+          })}
+          {ladder.length === 0 && <p className="dim">대운(10년 단위 큰 흐름)은 성별이 있어야 방향이 서 — 프로필에 성별을 더하면 여든까지 펼쳐줄게</p>}
+          {se.map((x) => <p key={x.year} className="msrsub"><b>{x.year} {x.ganji}</b> — {x.ss}의 해{x.ss === "정재" || x.ss === "편재" ? " · 재물이 움직여" : x.ss === "정관" || x.ss === "편관" ? " · 자리·명예가 걸려" : x.ss === "비견" || x.ss === "겁재" ? " · 경쟁·구설 조심" : ""}</p>)}
           <p className="msrh">사람</p>
           <p><b>충 {TTI[(idx.yJ + 6) % 12]}띠 · 원진 {TTI[WONJIN[idx.yJ]]}띠</b> — 미워하란 게 아니라, 큰돈·보증만 조심하란 뜻이야</p>
-          <p className="msrh">날</p>
-          {tk.good.length ? <p><b>좋은 날</b> — {tk.good.map((d) => d.label).join(" · ")}{tk.bad.length ? <> / <b>피할 날</b> — {tk.bad.map((d) => d.label).join(" · ")}</> : null}</p> : <p>이번 달엔 특별히 가리는 날 없음</p>}
+          {bornYet && <p className="msrh">날</p>}
+          {bornYet && (tk.good.length ? <p><b>좋은 날</b> — {tk.good.map((d) => d.label).join(" · ")}{tk.bad.length ? <> / <b>피할 날</b> — {tk.bad.map((d) => d.label).join(" · ")}</> : null}</p> : <p>이번 달엔 특별히 가리는 날 없음</p>)}
           <p className="msrh">일</p>
           <p><b>{GAN_EL[idx.dG]} 기운</b> — {JOB_EL[GAN_EL[idx.dG]]}</p>
         </div>
@@ -1538,7 +1577,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v106 · 셈";
+const APP_VER = "v107 · 그릇";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -3255,7 +3294,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                   {/* 괘 이름은 뒷면(지표 이름을 짚어도 되는 자리)에만 — 앞면에선 유저가 못 알아듣는 한자였다 */}
                   {hexInfo && <p className="vhex">卦 {hexInfo.name}{hexInfo.moving.length > 0 && ` → ${hexInfo.toName}`}</p>}
                   {detail?.reasons ? <ul className="vr">{detail.reasons.map((r, i) => <li key={i}><b>{r.axis}</b>{r.vote && <em className="vote">{r.vote}</em>}<p>{r.text}</p></li>)}</ul> : <p className="gathering">조각들이 근거를 모으고 있어<span className="dots"><i>.</i><i>.</i><i>.</i></span></p>}
-                  {saju && saju.idx && <MyeongsikReport saju={saju} sex={birth.sex} />}
+                  {saju && saju.idx && <MyeongsikReport saju={saju} sex={birth.sex} birth={birth} />}
                   {detail?.disclaimer && <p className="disc">{detail.disclaimer}</p>}
                 </div>
               </div>
@@ -3630,6 +3669,7 @@ const CSS = `
 .msrbody{max-height:170px;overflow-y:auto;margin-top:6px;padding:2px 2px 6px}
 .msrbody p{font-size:11px;color:#bfb6cc;line-height:1.55;margin:3px 0}
 .msrbody b{color:#e6dff2;font-weight:700}
+.msrsub{opacity:.72;font-size:12.5px}
 .msrh{margin-top:7px !important;color:#c9b98f !important;letter-spacing:.14em;font-size:10px !important}
 .disc{margin-top:auto;font-family:sans-serif;font-size:10px;color:#8a7f95;line-height:1.5}
 .split{font-family:sans-serif;font-size:10.5px;letter-spacing:.22em;color:#e5b96b;margin:0 0 6px;animation:formPulse 1.8s ease-in-out infinite}
