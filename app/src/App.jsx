@@ -352,6 +352,33 @@ function sipseongDist(idx) {   // 일간 제외 7자(시 미상이면 5자)의 �
   if (idx.hJ != null) put(JI_BONGI[idx.hJ]);
   return out;
 }
+/* 용신(用神) — 억부(抑扶) 기준. 신약이면 나를 돕는 것(인성·비겁), 신강이면 덜어내는 것(식상·재성·관성).
+   억부는 실무에서 약 70%에 적용되는 주 방법이고 **신강·신약에서 기계적으로 도출**되므로 지어낼 여지가 없다.
+   조후(계절 균형)는 보조로만 본다 — 궁통보감 조견표(일간10×월지12) 원문을 아직 확보하지 못했으므로
+   표를 흉내 내지 않고, 계절과 오행 편중이라는 **계산 가능한 사실**로만 판정한다.
+   억부와 조후가 갈릴 때 어느 쪽을 택하는지는 유파가 나뉘므로 우리가 정하지 않고 둘 다 보여준다. */
+const EL_USE = {   // 오행별 실생활 대응 — 색·방위·소리(작명). 통설이며 유파 차이가 없는 부분만 담는다
+  목: { color: "청록·초록", dir: "동쪽", sound: "ㄱ·ㅋ" },
+  화: { color: "붉은색", dir: "남쪽", sound: "ㄴ·ㄷ·ㄹ·ㅌ" },
+  토: { color: "노랑·황토", dir: "중앙", sound: "ㅇ·ㅎ" },
+  금: { color: "흰색", dir: "서쪽", sound: "ㅅ·ㅈ·ㅊ" },
+  수: { color: "검정·남색", dir: "북쪽", sound: "ㅁ·ㅂ·ㅍ" },
+};
+const SUMMER = [5, 6, 7], WINTER = [11, 0, 1];   // 월지 인덱스: 사오미 / 해자축
+function yongsin(idx, counts, strength) {
+  const me = GAN_EL[idx.dG];
+  const inseong = Object.keys(SAENG).find((k) => SAENG[k] === me);   // 나를 생하는 오행
+  const sikssang = SAENG[me], jaeseong = GEUK[me];
+  const gwanseong = Object.keys(GEUK).find((k) => GEUK[k] === me);
+  // 억부: 약하면 돕고(인성·비겁), 강하면 덜어낸다(식상·재성·관성)
+  const eokbu = strength === "신약" ? [inseong, me] : strength === "신강" ? [sikssang, jaeseong, gwanseong] : [];
+  // 조후: 여름에 화가 과하면 물·쇠로 식히고, 겨울에 물이 과하면 불·나무로 덥힌다. 그 밖엔 판정하지 않는다
+  let johu = [], season = null;
+  if (SUMMER.includes(idx.mJ)) { season = "여름"; if ((counts.화 || 0) >= 3) johu = ["수", "금"]; }
+  else if (WINTER.includes(idx.mJ)) { season = "겨울"; if ((counts.수 || 0) >= 3) johu = ["화", "목"]; }
+  const agree = johu.length > 0 && eokbu.length > 0 && johu.some((e) => eokbu.includes(e));
+  return { eokbu, johu, season, agree, me };
+}
 const SS_TIP = { 정재: "꾸준히 들어와 쌓이는 재물", 편재: "크게 들어오고 크게 나가는 재물 — 사업 쪽 돈", 식신: "먹고사는 복과 표현하는 재능", 상관: "틀을 깨는 말·창작의 재능", 정관: "명예와 조직 — 자리가 따르는 힘", 편관: "승부수와 버티는 힘", 정인: "배움·문서·귀인의 복", 편인: "남다른 발상 — 한 우물 파는 힘", 비견: "같이 갈 동료의 복", 겁재: "경쟁 속에서 크는 힘 — 돈은 관리가 필요" };
 /* 신살 — 정적 조회. 암록·역마·도화·화개는 산출 근거가 검산 가능(암록=건록의 육합, 나머지=삼합 그룹).
    천을귀인·문창귀인은 연해자평 계열 표준 표('갑무경우양')를 따른다. 이설 존재 — 바꾸려면 출처와 함께. */
@@ -436,6 +463,7 @@ function MyeongsikReport({ saju, sex, birth }) {
   const grp = (ks) => dist.filter(([k]) => ks.includes(k)).reduce((a, [, v]) => a + v, 0);
   const support = grp(["비견", "겁재", "정인", "편인"]);
   const strength = support >= 4 ? "신강" : support <= 2 ? "신약" : "중간";
+  const ys = yongsin(idx, saju.counts, strength);
   /* 비어 있는 자리 — 없는 것이 있는 것만큼 말해준다(십성 5그룹 + 오행). 동률 명식에서 특히 이게 유일한 특징이 된다 */
   const GRP5 = { "나를 받치는 힘(비겁)": ["비견", "겁재"], "표현·창작(식상)": ["식신", "상관"], "재물(재성)": ["정재", "편재"], "조직·자리(관성)": ["정관", "편관"], "배움·받는 복(인성)": ["정인", "편인"] };
   const lackSS = Object.entries(GRP5).filter(([, ks]) => grp(ks) === 0).map(([n]) => n);
@@ -462,7 +490,7 @@ function MyeongsikReport({ saju, sex, birth }) {
   const child = sex ? grp(sex === "M" ? ["정관", "편관"] : ["식신", "상관"]) : null;
   return (
     <div className="msr" onClick={(e) => e.stopPropagation()}>
-      <button className="msrbtn" onClick={() => { if (!open) track("report_opened", { sinsal: sins.length, top_ss: dist[0] ? dist[0][0] : null, strength, lack_el: lackEl.join("") || null }); setOpen(!open); }}>{open ? "▴ 타고난 그릇 접기" : "▾ 타고난 그릇 — 명식 깊이 보기"}</button>
+      <button className="msrbtn" onClick={() => { if (!open) track("report_opened", { sinsal: sins.length, top_ss: dist[0] ? dist[0][0] : null, strength, lack_el: lackEl.join("") || null, yong: ys.eokbu.join("") || null, yong_agree: ys.agree }); setOpen(!open); }}>{open ? "▴ 타고난 그릇 접기" : "▾ 타고난 그릇 — 명식 깊이 보기"}</button>
       {open && (
         <div className="msrbody">
           <p className="msrh">타고난 것</p>
@@ -474,12 +502,16 @@ function MyeongsikReport({ saju, sex, birth }) {
             <p><b>비어 있는 자리</b> — {[...lackEl.map((e) => `${e} 기운`), ...lackSS].join(" · ")}. 없는 건 흠이 아니라 채우는 자리야{lackEl.length ? " — 그 기운이 대운으로 들어오는 때를 아래 흐름에서 봐" : ""}</p>
           )}
           <p><b>힘의 저울</b> — {strength} · 나를 받치는 글자 {support}개 <span className="dim">(간이 판정: 비겁+인성 4개 이상 신강 · 2개 이하 신약)</span>{strength === "신약" ? " — 그릇보다 팔 힘이 늦게 붙는 몸이야. 받쳐주는 운이 올 때 크게 받아" : strength === "신강" ? " — 제 힘으로 미는 몸이야. 쓸 곳(일·표현)이 열릴 때 풀려" : ""}</p>
+          {ys.eokbu.length > 0 && (
+            <p><b>채울 기운</b> — {ys.eokbu.join("·")}{ys.agree ? <> <span className="dim">(힘의 저울과 계절({ys.season}) 두 방법이 같은 답)</span></> : ys.johu.length ? <> · 계절({ys.season})로 보면 {ys.johu.join("·")} <span className="dim">— 두 방법이 갈려. 유파에 따라 답이 달라지는 자리야</span></> : ""}. 이 기운이 들어오는 때가 네 계절이야</p>
+          )}
           <p className="msrh">흐름</p>
           {ladder.length > 0 && ladder.map((du) => {
             const ss = sipseong(idx.dG, GAN.indexOf(du.ganji[0]));
             const isNow = nowAge != null && nowAge >= du.startAge && nowAge <= du.endAge;
+            const isYong = ys.eokbu.includes(du.el);
             const fills = lackEl.includes(du.el);
-            return <p key={du.startAge}><b>{du.startAge}~{du.endAge}세 {du.ganji}</b> — {ss}·{du.el} 기운{fills ? " · 비어 있던 " + du.el + "이 채워지는 구간" : ""}{isNow ? " ◂ 지금" : ""}</p>;
+            return <p key={du.startAge} className={isYong ? "msrkey" : ""}><b>{du.startAge}~{du.endAge}세 {du.ganji}</b> — {ss}·{du.el} 기운{isYong ? " · 채울 기운이 들어오는 구간 ★" : fills ? " · 비어 있던 " + du.el + "이 채워지는 구간" : ""}{isNow ? " ◂ 지금" : ""}</p>;
           })}
           {ladder.length === 0 && <p className="dim">대운(10년 단위 큰 흐름)은 성별이 있어야 방향이 서 — 프로필에 성별을 더하면 여든까지 펼쳐줄게</p>}
           {se.map((x) => <p key={x.year} className="msrsub"><b>{x.year} {x.ganji}</b> — {x.ss}의 해{x.ss === "정재" || x.ss === "편재" ? " · 재물이 움직여" : x.ss === "정관" || x.ss === "편관" ? " · 자리·명예가 걸려" : x.ss === "비견" || x.ss === "겁재" ? " · 경쟁·구설 조심" : ""}</p>)}
@@ -489,6 +521,9 @@ function MyeongsikReport({ saju, sex, birth }) {
           {bornYet && (tk.good.length ? <p><b>좋은 날</b> — {tk.good.map((d) => d.label).join(" · ")}{tk.bad.length ? <> / <b>피할 날</b> — {tk.bad.map((d) => d.label).join(" · ")}</> : null}</p> : <p>이번 달엔 특별히 가리는 날 없음</p>)}
           <p className="msrh">일</p>
           <p><b>{GAN_EL[idx.dG]} 기운</b> — {JOB_EL[GAN_EL[idx.dG]]}</p>
+          {ys.eokbu.length > 0 && EL_USE[ys.eokbu[0]] && (
+            <p><b>곁에 두면 좋은 것</b> — {ys.eokbu.map((e) => `${e}: ${EL_USE[e].color}·${EL_USE[e].dir}`).join(" / ")} <span className="dim">· 이름 소리로는 {ys.eokbu.map((e) => EL_USE[e].sound).join(", ")}</span></p>
+          )}
         </div>
       )}
     </div>
@@ -3670,6 +3705,7 @@ const CSS = `
 .msrbody p{font-size:11px;color:#bfb6cc;line-height:1.55;margin:3px 0}
 .msrbody b{color:#e6dff2;font-weight:700}
 .msrsub{opacity:.72;font-size:12.5px}
+.msrkey b{color:#f0d9a0}
 .msrh{margin-top:7px !important;color:#c9b98f !important;letter-spacing:.14em;font-size:10px !important}
 .disc{margin-top:auto;font-family:sans-serif;font-size:10px;color:#8a7f95;line-height:1.5}
 .split{font-family:sans-serif;font-size:10.5px;letter-spacing:.22em;color:#e5b96b;margin:0 0 6px;animation:formPulse 1.8s ease-in-out infinite}

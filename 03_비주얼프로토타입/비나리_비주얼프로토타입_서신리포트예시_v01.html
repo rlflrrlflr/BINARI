@@ -146,6 +146,18 @@
   .seg .fnote b { color: var(--gold); font-weight: 600; }
   .flowcap { font-family: var(--sans); font-size: 12px; color: var(--dim); text-align: center; margin: 12px 0 0; }
 
+
+  /* 곁에 둘 것 — 용신의 실생활 대응(색·방위·소리) */
+  .use { display: flex; gap: 10px; margin: 20px 0 14px; flex-wrap: wrap; }
+  .usecell {
+    flex: 1 1 108px; border: 1px solid var(--line); border-radius: 3px;
+    padding: 12px 10px; text-align: center; background: rgba(237,241,247,.028);
+    display: flex; flex-direction: column; gap: 3px;
+  }
+  .usecell .ut { font-family: var(--sans); font-size: 10px; letter-spacing: .2em; color: var(--gold-2); }
+  .usecell b { font-size: 17px; color: var(--metal); font-weight: 600; }
+  .usecell .us { font-family: var(--sans); font-size: 10.5px; color: var(--dim); }
+
   /* ── 기록 카드(5장) ── */
   .note-list { display: flex; flex-direction: column; gap: 13px; margin-top: 20px; }
   .note {
@@ -229,6 +241,12 @@
     <p>마르지 않을까 걱정할 것 없다. 이 강은 <b>제 발밑에 샘을 파고 나온다</b> — 앉은 자리가 자수(子水), 물의 우두머리 자리다. 겉은 여름인데 발밑은 깊은 우물이라, 쉽게 들뜨지 않고 쉽게 마르지 않는다.</p>
 
     <p class="soft">옛 책은 이 계절의 임수에게 처방을 하나 남겼다 — 물의 근원이 되어줄 <span class="term">금(金)</span>을 구하라. 그런데 위에서 봤듯 이 아이의 여덟 글자에 금만 비어 있다. 가장 필요한 것이 가장 없는 것. 이 이야기는 3장에서 다시 하겠다. 거기가 이 서신의 심장이다.</p>
+
+    <div class="aside">
+      <span class="t">채울 기운 — 두 방법이 같은 답을 냈다</span>
+      명리에는 부족한 기운을 찾는 길이 둘 있다. 하나는 <b>힘의 저울</b>(억부) — 나를 받치는 글자가 여덟 중 하나뿐이니 <b>받쳐줄 기운</b>을 구한다. 다른 하나는 <b>계절</b>(조후) — 한여름 불 셋에 마르는 물이니 <b>식혀줄 기운</b>을 구한다.
+      <p style="margin:10px 0 0"><b>두 길이 같은 곳을 가리켰다 — 금(金), 그리고 수(水).</b> 방법이 갈리면 유파에 따라 답이 달라지는데, 이 아이는 갈리지 않았다. 그만큼 분명한 명식이다.</p>
+    </div>
   </div>
 
   <!-- ══════════ 2장 ══════════ -->
@@ -290,6 +308,13 @@
       <span class="soft">— 참고로 아버지 '석우(ㅅ+ㅇ)'의 첫소리가 이미 금이다. 항렬이든 돌림자든, 소리 하나는 이 계열에서 고르면 된다.</span>
     </div>
 
+    <div class="use">
+      <div class="usecell"><span class="ut">곁에 둘 색</span><b>흰색</b><span class="us">그다음 검정·남색</span></div>
+      <div class="usecell"><span class="ut">방위</span><b>서쪽</b><span class="us">그다음 북쪽</span></div>
+      <div class="usecell"><span class="ut">이름 소리</span><b>ㅅ·ㅈ·ㅊ</b><span class="us">그다음 ㅁ·ㅂ·ㅍ</span></div>
+    </div>
+    <p class="soft" style="margin-top:-4px">아이 방의 커튼 색을 바꾸라는 말이 아니다. <b>고를 일이 생겼을 때 기울일 방향</b>이 있다는 뜻이고, 그 방향은 위에서 두 방법이 함께 가리킨 금(金)과 수(水)다.</p>
+
     <p>기질을 다루는 법도 하나만 적는다. 이 아이는 말대꾸가 빠르고(상관 둘) 누르는 힘에 약하다(받치는 글자 하나). <b>이기려 들면 지는 쪽은 아이다 — 겉으론 수그리고 속으로 문을 닫는다.</b> "왜?"에는 짧아도 진짜 이유로 답해주고, 혼낼 일은 자리를 끝낸 뒤 일대일로 해라. 그거면 충분하다.</p>
 
     <p class="soft">사람 인연 하나 — 이 아이는 쥐띠와 부딪히고 소띠와 어긋나는 자리를 갖고 태어난다. 미워하란 뜻이 아니다. 훗날 그 띠와 큰돈·보증이 얽힐 때만 한 번 더 살피면 된다.</p>
@@ -325,7 +350,7 @@
       건강 이야기는 오행의 오랜 상징일 뿐 의학이 아닙니다 · 아이의 몸은 소아과가 봅니다<br>
       열람 후에는 환불되지 않아요 · 구매 전 미리보기로 확인하셨습니다
     </p>
-    <div class="vbadge">BINARI · 수호신의 서신 · 리포트 예시 v1</div>
+    <div class="vbadge">BINARI · 수호신의 서신 · 리포트 예시 v2 (앱 v107.1 반영)</div>
   </footer>
 
 </div>
