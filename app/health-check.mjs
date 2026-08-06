@@ -455,6 +455,38 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
   }
 }
 
+/* ── 검사 5-b. 알 권리(헌장 2026-08-06) ─────────────────────────────────
+   사고 #7 (2026-08-06): 리포트가 세 겹으로 숨어 있었다.
+   ① 상세 리포트가 기본 접힘 ② 본문이 170px 스크롤 상자 ③ 사주 여덟 글자·오행 개수는
+   온보딩 연출에만 있어서, 재방문하면(온보딩 생략) 유저가 자기 사주를 두 번 다시 못 봤다.
+   실측 지적 2건이 같은 증상이었다 — "4,900원 답변이 중복됨"·"카드 뒷면을 안 알려줘서 몰랐다".
+   헌장은 '모를 권리'를 판결 국면으로 좁히고 리포트에는 '알 권리'를 세웠다. 되돌아가는 걸 막는다. */
+{
+  const openDefault = /function MyeongsikReportBody[\s\S]{0,400}?useState\(true\)/.test(src);
+  add(openDefault ? "정상" : "심각", openDefault ? "알 권리 — 상세 리포트 기본 펼침" : "알 권리 위반 — 상세 리포트가 다시 접힘",
+    openDefault ? "useState(true)" : "MyeongsikReportBody 의 open 기본값이 false 입니다",
+    "리포트는 유저가 이미 값을 치르고 당긴 문서입니다. 접어두면 값어치 은닉입니다 — CLAUDE.md 설계 헌장 '알 권리'.");
+
+  const capped = /\.msrbody\{[^}]*max-height/.test(src);
+  add(capped ? "심각" : "정상", capped ? "알 권리 위반 — 리포트 본문에 높이 상한" : "알 권리 — 리포트 본문 높이 제한 없음",
+    capped ? ".msrbody 에 max-height 가 다시 붙었습니다" : "스크롤은 .vscroll 하나가 맡음",
+    "본문을 작은 상자에 가두면 한 번에 몇 줄만 보입니다. 스크롤은 뒷면 전체(.vscroll)가 맡아야 합니다.");
+
+  /* 뒷면이 카드 높이를 정하면 앞면 판결 아래가 텅 빈다(실측 1681px). 레이아웃 회귀는 눈으로만 잡힌다 */
+  const backAbs = /\.vface\.back\{[^}]*position:absolute/.test(src);
+  const rowCap = /\.vcard\{[^}]*grid-template-rows:minmax\(0,1fr\)/.test(src);
+  add(backAbs && rowCap ? "정상" : "심각",
+    backAbs && rowCap ? "카드 높이 — 앞면이 정함(뒷면 문서가 늘려도 안 자람)" : "카드 높이를 뒷면 문서가 정함",
+    backAbs && rowCap ? ".vface.back absolute + .vcard grid-template-rows 고정" : `back-absolute=${backAbs} row-cap=${rowCap}`,
+    "뒷면이 카드 크기 산정에 끼면 리포트가 길어질수록 카드가 자라고, 앞면 판결문 아래가 텅 빕니다(실측 1681px).");
+
+  /* 명식 원판이 리포트에 있는지 — 온보딩 연출에만 있으면 재방문 유저는 영영 못 본다 */
+  const hasWonpan = /명식 — 태어난 순간의 여덟 글자/.test(src) && /나\(일간\)/.test(src);
+  add(hasWonpan ? "정상" : "심각", hasWonpan ? "리포트에 명식 원판(여덟 글자·일간·오행)" : "리포트에 명식 원판 없음",
+    hasWonpan ? "있음" : "사주 여덟 글자가 온보딩 연출에만 있으면 재방문 유저는 다시 못 봅니다",
+    "모든 판단의 뿌리입니다. 리포트 첫 절에 있어야 합니다.");
+}
+
 /* ── 검사 6. 의존성 취약점 (npm audit) ───────────────────────────────────
    남이 만든 부품에서 보안 구멍이 발견되는 일은 우리가 코드를 안 건드려도 일어난다.
    중요한 구분: **사용자에게 배달되는 부품(prod)** 과 **내 컴퓨터에서만 쓰는 부품(dev)** 은

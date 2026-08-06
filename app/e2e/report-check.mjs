@@ -68,7 +68,10 @@ ck("근거(콜2) 도착 — 뒤집기 활성화 조건", sub);
 await page.locator(".persp").first().click(); await page.waitForTimeout(800);
 const btn = page.locator(".msrbtn");
 ck("리포트 버튼 노출(뒷면)", (await btn.count()) > 0);
-await btn.first().click(); await page.waitForTimeout(400);
+// v109 알 권리 — 리포트는 기본 펼침이다. 클릭하지 않고 바로 본문이 있어야 한다.
+// (예전엔 여기서 msrbtn 을 눌러야 열렸다. 이제 누르면 오히려 접힌다.)
+ck("리포트 기본 펼침(알 권리)", (await page.locator(".msrbody").count()) > 0);
+ck("버튼 문구가 '접기'", /접기/.test((await btn.first().textContent()) || ""));
 
 const body = (await page.locator(".msrbody").textContent().catch(() => "")) || "";
 ck("힘의 저울(간이 신강·신약) 표시", /힘의 저울/.test(body) && /(신강|신약|중간)/.test(body));
@@ -82,6 +85,15 @@ ck("곁에 두면 좋은 것(색·방위·이름 소리)", /곁에 두면 좋은
 // 1990-02-25 14:30 남 — 십성에 동률이 있으면 3위 값과 같은 항목이 모두 나와야 한다(잘림 검출은 개수 하한으로)
 const ssLines = (body.match(/(비견|겁재|식신|상관|정재|편재|정관|편관|정인|편인) \d/g) || []).length;
 ck("십성 표기 3개 이상(동률 잘림 없음)", ssLines >= 3, `${ssLines}개`);
+// v109 명식 원판 — 사주 8자·오행 개수·일간은 온보딩 연출에만 있었고 리포트엔 없었다.
+// 재방문하면 온보딩을 건너뛰므로 유저는 자기 사주를 두 번 다시 볼 수 없었다.
+ck("명식 — 사주 네 기둥 전부 표시", (body.match(/[갑을병정무기경신임계][자축인묘진사오미신유술해]/g) || []).length >= 4,
+   (body.match(/[갑을병정무기경신임계][자축인묘진사오미신유술해]/g) || []).slice(0, 4).join(" "));
+ck("명식 — 일간(나)이 누구인지 명시", /나\(일간\) [갑을병정무기경신임계] · [목화토금수]/.test(body));
+ck("명식 — 오행 개수 막대 5종", (await page.locator(".msrbody .bar").count()) === 5);
+ck("계산 근거 고지(절기·일주·자동검증)", /태양황경/.test(body) && /율리우스일/.test(body) && /자동검증/.test(body));
+ck("진태양시 보정 분 공개", /진태양시로 [+−]\d+분/.test(body), (body.match(/진태양시로 [+−]\d+분/) || [])[0] || "");
+ck("십성 전량 공개(그 밖의 십성)", /그 밖의 십성/.test(body) || ssLines >= 10);
 ck("화면 오류 없음", errs.length === 0, errs.join(" / "));
 
 await b.close();

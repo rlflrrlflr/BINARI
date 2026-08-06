@@ -304,9 +304,12 @@ function calcSaju(y, m, d, h, mi, hourUnknown, lon = 126.978) {
   const g = (jdn(y, m, d) + 49) % 60;
   const dG = g % 10, dJ = g % 12;
   // 시주: 진태양시 = 시계 + (경도-135°)×4분 + 균시차 (v18 — 고정 -30분 폐기)
-  let hG = null, hJ = null;
+  let hG = null, hJ = null, tstAdj = null;
   if (!hourUnknown) {
-    const tst = h + (mi || 0) / 60 + ((lon - 135) * 4 + equationOfTime(jdBirth)) / 60;
+    /* v109: 보정값을 밖으로 내보낸다 — 리포트가 "몇 분을 왜 당겼는지" 보여줘야 하기 때문(알 권리).
+       지금까지 이 숫자는 계산만 되고 화면 어디에도 없었다. */
+    tstAdj = Math.round((lon - 135) * 4 + equationOfTime(jdBirth));
+    const tst = h + (mi || 0) / 60 + tstAdj / 60;
     hJ = Math.floor(((((tst + 1) % 24) + 24) % 24) / 2);
     hG = ((dG % 5) * 2 + hJ) % 10;
   }
@@ -318,7 +321,7 @@ function calcSaju(y, m, d, h, mi, hourUnknown, lon = 126.978) {
   const main = GAN_EL[dG];   // v51: 나 = 일간(日干)의 오행(명리 정통). 오행 분포(counts)는 강조색으로 별도 반영
   return {
     pillars: { 년: GAN[yG] + JI[yJ], 월: GAN[mG] + JI[mJ], 일: GAN[dG] + JI[dJ], 시: hG !== null ? GAN[hG] + JI[hJ] : "미상" },
-    counts: cnt, main, dayGan: GAN[dG], yJ,
+    counts: cnt, main, dayGan: GAN[dG], yJ, tstAdj,
     idx: { yG, yJ, mG, mJ, dG, dJ, hG, hJ },   // v101: 십성·신살·택일·세운 계산용 원 인덱스
 
     nayin: NAYIN[Math.floor((((sy - 4) % 60 + 60) % 60) / 2)],   // v22: 납음오행
@@ -448,10 +451,18 @@ function myeongsikText(saju, sex, now) {
 
 /* v101: 상세 리포트(타고난 그릇) — 카드 뒷면 reasons 밖 별도 블록. 전부 클라이언트 계산이라 지어낼 수 없다.
    서사 순서는 철학관 리딩을 따른다: 타고난 것 → 흐름 → 사람 → 날 → 일 ("나→시간→관계→행동"으로 좁혀지는 순서) */
+/* v109 알 권리(헌장 2026-08-06) — 리포트는 '모를 권리'의 반대편이다.
+   값을 치르고 문서를 여는 유저는 이미 깊이를 당긴 상태라, 여기서 정보를 클릭 뒤에 숨기는 건
+   권리 존중이 아니라 값어치 은닉이다. 실측 근거 2건: "4,900원 답변이 중복됨"(줄 게 더 있는데 안 줌)·
+   "카드 뒷면 근거를 안 알려줘서 몰랐다"(있는데 숨김). → 기본 펼침, 접기는 선택. */
 function MyeongsikReport({ saju, sex, birth }) {
-  const [open, setOpen] = useState(false);
-  const idx = saju && saju.idx;
-  if (!idx) return null;
+  /* 훅 순서를 지키려고 널 가드를 겉껍질로 뺀다 — 본체는 idx가 있을 때만 마운트된다 */
+  if (!saju || !saju.idx) return null;
+  return <MyeongsikReportBody saju={saju} sex={sex} birth={birth} />;
+}
+function MyeongsikReportBody({ saju, sex, birth }) {
+  const [open, setOpen] = useState(true);
+  const idx = saju.idx;
   const now = new Date();
   const dist = Object.entries(sipseongDist(idx)).sort((a, b) => b[1] - a[1]);
   /* 십성 동률 처리(실사고 2026-08-02): 상위 3개만 자르면 동률일 때 어느 게 뽑히는지가 실력이 아니라
@@ -488,13 +499,38 @@ function MyeongsikReport({ saju, sex, birth }) {
   const tk = bornYet ? taekil(idx, now) : { good: [], bad: [] };
   const jael = grp(["정재", "편재"]);
   const child = sex ? grp(sex === "M" ? ["정관", "편관"] : ["식신", "상관"]) : null;
+  /* 알 권리: 상위에 못 든 십성도 숨기지 않는다. sipseongDist 는 0개인 십성을 아예 빼고 주므로
+     열 개 전부를 기준으로 채워 넣는다 — 없는 것이 있는 것만큼 말해주는 자리다 */
+  const SS10 = ["비견", "겁재", "식신", "상관", "정재", "편재", "정관", "편관", "정인", "편인"];
+  const restSS = SS10.filter((k) => !top.some(([tk2]) => tk2 === k)).map((k) => [k, dist.find(([d]) => d === k)?.[1] || 0]);
+  /* 계측은 클릭이 아니라 노출 시점에 — 기본 펼침이 되면서 onClick 계측이 영영 안 찍히게 됐다 */
+  useEffect(() => { track("report_shown", { sinsal: sins.length, top_ss: dist[0] ? dist[0][0] : null, strength, lack_el: lackEl.join("") || null, yong: ys.eokbu.join("") || null, yong_agree: ys.agree }); }, []);
   return (
     <div className="msr" onClick={(e) => e.stopPropagation()}>
-      <button className="msrbtn" onClick={() => { if (!open) track("report_opened", { sinsal: sins.length, top_ss: dist[0] ? dist[0][0] : null, strength, lack_el: lackEl.join("") || null, yong: ys.eokbu.join("") || null, yong_agree: ys.agree }); setOpen(!open); }}>{open ? "▴ 타고난 그릇 접기" : "▾ 타고난 그릇 — 명식 깊이 보기"}</button>
+      <button className="msrbtn" onClick={() => setOpen(!open)}>{open ? "▴ 타고난 그릇 접기" : "▾ 타고난 그릇 — 명식 깊이 보기"}</button>
       {open && (
         <div className="msrbody">
+          {/* v109: 명식 원판 — 지금까지 사주 여덟 글자와 오행 개수는 '온보딩 연출'에만 있었다.
+              재방문하면 온보딩을 건너뛰므로 유저는 자기 사주를 두 번 다시 볼 수 없었다.
+              모든 판단의 뿌리인데 리포트에 없던 것 — 알 권리의 첫 항목으로 올린다. */}
+          <p className="msrh">명식 — 태어난 순간의 여덟 글자</p>
+          <div className="msrp">
+            {["년", "월", "일", "시"].map((k) => (
+              <span key={k} className={k === "일" ? "msrpi me" : "msrpi"}><i>{k}</i><b>{saju.pillars[k]}</b></span>
+            ))}
+          </div>
+          <p className="dim">년=뿌리·조상 · 월=부모·사회 · <b>일=나·배우자</b> · 시=자식·말년</p>
+          <p><b>나(일간) {saju.dayGan} · {saju.main}</b> — {EL_READ[saju.main]} <span className="dim">여덟 글자 중 '일'기둥 위 글자가 나 자신이고, 나머지는 내가 놓인 환경이야</span></p>
+          <div className="bars">{Object.entries(saju.counts).map(([k, v]) => (
+            <div key={k} className="bar"><span>{k}</span><i style={{ width: `${v * 14}%`, background: EL_COLOR[k][0] }} /><b>{v}</b></div>
+          ))}</div>
+          <p className="dim">
+            절기는 태양황경을 직접 계산해서 가르고, 일주는 율리우스일로 뽑아. 만세력 대조 28건 자동검증을 통과한 값이야
+            {saju.tstAdj != null ? <> · 시(時)는 <b>진태양시로 {saju.tstAdj >= 0 ? "+" : "−"}{Math.abs(saju.tstAdj)}분</b> 보정했어{birth && birth.city ? ` (${birth.city} 경도 + 균시차)` : " (서울 경도 + 균시차)"}</> : " · 태어난 시를 몰라서 시(時)기둥은 비워뒀어 — 십성·신살이 그만큼 덜 잡혀"}
+          </p>
           <p className="msrh">타고난 것</p>
           {top.map(([k, v]) => <p key={k}><b>{k} {v}</b> — {SS_TIP[k]}</p>)}
+          {restSS.length > 0 && <p className="msrsub"><b>그 밖의 십성</b> — {restSS.map(([k, v]) => `${k} ${v}`).join(" · ")} <span className="dim">개수가 적을수록 그 영역은 이번 생에 덜 쥐고 태어났다는 뜻이야</span></p>}
           {jael >= 2 && <p><b>재물 자리 {jael}</b> — 재물이 명식에 실려 있어. 흐름이 열릴 때 크게 받는 그릇이야</p>}
           {child != null && child >= 1 && <p><b>자식 인연</b> — 명식에 자식 복이 들어 있어</p>}
           {sins.map((x) => <p key={x.name}><b>{x.name}</b> — {x.tip}</p>)}
@@ -1612,7 +1648,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v108 · 용신";
+const APP_VER = "v109 · 알 권리";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -3022,7 +3058,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                 그래 — {birth.name ? <><b>{birth.name}</b>, </> : ""}원래 <b>{EL_TRAIT[saju.main]}</b> 너였지.<br />
                 <b>{MOON_DRIVE[moon.name]}</b> 모습이 늘 멋있었어.
               </p>
-              <details className="refbox">
+              <details className="refbox" open>
                 <summary>기억의 근거 살펴보기</summary>
                 <div className="bars">{Object.entries(saju.counts).map(([k, v]) => (
                   <div key={k} className="bar"><span>{k}</span><i style={{ width: `${v * 14}%`, background: EL_COLOR[k][0] }} /><b>{v}</b></div>
@@ -3338,11 +3374,16 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                 {/* L3 세부 (뒤집기) */}
                 <div className="vface back">
                   <div className="vtop"><span>판결 근거</span><span>탭 → 돌아가기</span></div>
-                  {/* 괘 이름은 뒷면(지표 이름을 짚어도 되는 자리)에만 — 앞면에선 유저가 못 알아듣는 한자였다 */}
-                  {hexInfo && <p className="vhex">卦 {hexInfo.name}{hexInfo.moving.length > 0 && ` → ${hexInfo.toName}`}</p>}
-                  {detail?.reasons ? <ul className="vr">{detail.reasons.map((r, i) => <li key={i}><b>{r.axis}</b>{r.vote && <em className="vote">{r.vote}</em>}<p>{r.text}</p></li>)}</ul> : <p className="gathering">조각들이 근거를 모으고 있어<span className="dots"><i>.</i><i>.</i><i>.</i></span></p>}
-                  {saju && saju.idx && <MyeongsikReport saju={saju} sex={birth.sex} birth={birth} />}
-                  {detail?.disclaimer && <p className="disc">{detail.disclaimer}</p>}
+                  {/* v109: 뒷면을 스크롤 상자 하나로 합친다. 예전엔 근거(340px)와 리포트(170px)가 각각
+                      제 스크롤을 갖고 세로로 쌓여서, 리포트를 키우면 카드 전체가 늘어나 앞면 판결 아래가
+                      텅 비었다(실측 593px). 헤더만 고정하고 나머지는 한 문서로 흐르게 한다. */}
+                  <div className="vscroll">
+                    {/* 괘 이름은 뒷면(지표 이름을 짚어도 되는 자리)에만 — 앞면에선 유저가 못 알아듣는 한자였다 */}
+                    {hexInfo && <p className="vhex">卦 {hexInfo.name}{hexInfo.moving.length > 0 && ` → ${hexInfo.toName}`}</p>}
+                    {detail?.reasons ? <ul className="vr">{detail.reasons.map((r, i) => <li key={i}><b>{r.axis}</b>{r.vote && <em className="vote">{r.vote}</em>}<p>{r.text}</p></li>)}</ul> : <p className="gathering">조각들이 근거를 모으고 있어<span className="dots"><i>.</i><i>.</i><i>.</i></span></p>}
+                    {saju && saju.idx && <MyeongsikReport saju={saju} sex={birth.sex} birth={birth} />}
+                    {detail?.disclaimer && <p className="disc">{detail.disclaimer}</p>}
+                  </div>
                 </div>
               </div>
             </div>
@@ -3680,16 +3721,23 @@ const CSS = `
 .season{font-family:sans-serif;font-size:10.5px;color:#8a7f95;margin-top:12px;letter-spacing:.04em;line-height:1.7}.season b{color:#ffe9ad}
 .findlink{font-family:sans-serif;font-size:11.5px;color:#c9b98f;text-decoration:none;border-bottom:1px dotted #c9b98f66;margin-top:8px;display:inline-block}
 .findlink:hover{color:#ffe9ad}
-.vcard{position:relative;width:300px;min-height:430px;display:grid;transform-style:preserve-3d;transition:transform .5s cubic-bezier(.2,.8,.25,1)}
-.vface{position:relative;grid-area:1/1;border-radius:16px;padding:24px;backface-visibility:hidden;background:linear-gradient(165deg,#1a1428,#0f0b1a 42%,#191024);background-image:radial-gradient(1px 1px at 82% 12%,#ffe9ad26,transparent),radial-gradient(1px 1px at 14% 30%,#7fd4ff1f,transparent),radial-gradient(1.5px 1.5px at 70% 78%,#b48cff22,transparent),radial-gradient(1px 1px at 30% 88%,#ffe9ad1f,transparent),linear-gradient(165deg,#1a1428,#0f0b1a 42%,#191024);box-shadow:inset 0 0 0 1px rgba(245,217,139,.42),inset 0 0 0 7px rgba(15,11,26,1),inset 0 0 0 8px rgba(245,217,139,.16),0 26px 54px rgba(0,0,0,.68);display:flex;flex-direction:column;text-align:center;overflow:hidden}
+/* v109: grid 행에 상한이 없으면 뒷면 문서 길이가 그대로 카드 높이가 된다(실측 1681px) —
+   앞면 판결 아래가 텅 비는 회귀. minmax(0,1fr)+max-height 로 행을 묶고 스크롤은 .vscroll 이 맡는다 */
+.vcard{position:relative;width:300px;min-height:430px;display:grid;grid-template-rows:minmax(0,1fr);transform-style:preserve-3d;transition:transform .5s cubic-bezier(.2,.8,.25,1)}
+.vface{position:relative;grid-area:1/1;border-radius:16px;padding:24px;backface-visibility:hidden;background:linear-gradient(165deg,#1a1428,#0f0b1a 42%,#191024);background-image:radial-gradient(1px 1px at 82% 12%,#ffe9ad26,transparent),radial-gradient(1px 1px at 14% 30%,#7fd4ff1f,transparent),radial-gradient(1.5px 1.5px at 70% 78%,#b48cff22,transparent),radial-gradient(1px 1px at 30% 88%,#ffe9ad1f,transparent),linear-gradient(165deg,#1a1428,#0f0b1a 42%,#191024);box-shadow:inset 0 0 0 1px rgba(245,217,139,.42),inset 0 0 0 7px rgba(15,11,26,1),inset 0 0 0 8px rgba(245,217,139,.16),0 26px 54px rgba(0,0,0,.68);display:flex;flex-direction:column;min-height:0;text-align:center;overflow:hidden}
 .vcard::after{content:"";position:absolute;inset:-3px;border-radius:20px;background:conic-gradient(from 210deg,#c98f3d40,#7fd4ff26,#b48cff3a,#e04d2a26,#c98f3d40);z-index:-1;filter:blur(7px)}
 .corner{position:absolute;font-size:9px;color:#c9b98f88;font-style:normal}
 .corner.tl{top:12px;left:12px}.corner.tr{top:12px;right:12px}.corner.bl{bottom:12px;left:12px}.corner.br{bottom:12px;right:12px}
 .vside{position:absolute;left:13px;top:50%;transform:translateY(-50%);writing-mode:vertical-rl;font-size:8.5px;letter-spacing:.6em;color:#c9b98f55;font-family:'Noto Serif KR',serif;pointer-events:none}
 .vseal{position:absolute;right:16px;bottom:46px;width:28px;height:28px;background:linear-gradient(180deg,#c03434,#8e1f1f);color:#ffe9ad;font-size:14px;display:flex;align-items:center;justify-content:center;border-radius:4px;box-shadow:0 0 14px rgba(192,52,52,.45),inset 0 0 0 1px rgba(255,233,173,.3);font-family:'Noto Serif KR',serif;pointer-events:none;transition:opacity .5s}
 .vseal.faded{opacity:.1}
-.vface.back{transform:rotateY(180deg);text-align:left}
+/* v109: 뒷면을 absolute 로 빼서 카드 높이 산정에서 제외한다 — 카드 크기는 앞면(판결)이 정하고,
+   길어진 리포트는 .vscroll 안에서 스크롤한다. 이걸 안 하면 문서 길이가 그대로 카드 높이가 되어
+   앞면 판결문 아래가 텅 빈다(실측 1681px). */
+.vface.back{position:absolute;inset:0;transform:rotateY(180deg);text-align:left}
 .vtop,.vbot{display:flex;justify-content:space-between;font-family:sans-serif;font-size:10px;letter-spacing:.2em;color:#c9b98f}
+/* v109: 뒷면이 한 문서로 스크롤되면서 본문이 고정 헤더 아래로 비쳐 보였다 — 헤더를 불투명하게 */
+.vface.back .vtop{position:relative;z-index:2;background:#150f22;box-shadow:0 0 0 6px #150f22;margin-bottom:6px}
 .vbot{margin-top:auto;color:#8a7f95}
 .vq{font-size:14px;line-height:1.7;margin:22px 0 0;color:#d8cfe6;overflow-wrap:anywhere}
 .vq.s{font-size:12.5px;line-height:1.6}
@@ -3708,12 +3756,19 @@ const CSS = `
 .pips{display:flex;align-items:center;gap:5px;justify-content:center;margin-top:16px;flex-wrap:wrap}
 .pip{width:8px;height:8px;border-radius:50%;border:1px solid #c98f3d88}.pip.on{background:linear-gradient(180deg,#ffe9ad,#c98f3d);box-shadow:0 0 8px rgba(245,217,139,.6)}
 .pips em{font-family:sans-serif;font-style:normal;font-size:11px;color:#c9b98f;margin-left:4px}
-.vr{list-style:none;padding:0 2px 8px 0;margin:14px 0 0;display:flex;flex-direction:column;gap:10px;flex:1;min-height:0;max-height:340px;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.vscroll{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column}
+.vr{list-style:none;padding:0 2px 8px 0;margin:14px 0 0;display:flex;flex-direction:column;gap:10px}
 .vr li{border-left:2px solid #c98f3d;padding-left:10px}.vr li.fun{border-left-color:#6f6580;opacity:.7}
 .vr b{color:#f0e2b8;font-size:12.5px}.vr em.vote{font-style:normal;font-family:sans-serif;font-size:9.5px;color:#c9b98f;margin-left:6px;letter-spacing:.08em}.vr p{margin:2px 0 0;color:#b5aac6;font-size:12px;line-height:1.55;font-family:sans-serif}
 .msr{margin-top:6px;font-family:sans-serif}
 .msrbtn{background:none;border:1px solid #c9b98f33;border-radius:8px;color:#c9b98f;font-size:11px;padding:5px 10px;width:100%;cursor:pointer}
-.msrbody{max-height:170px;overflow-y:auto;margin-top:6px;padding:2px 2px 6px}
+/* v109 알 권리: 170px 스크롤 상자는 그 자체가 은닉이었다 — 리포트가 한 번에 6줄만 보였다 */
+.msrbody{margin-top:6px;padding:2px 2px 6px}
+.msrp{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin:6px 0 8px}
+.msrpi{display:flex;flex-direction:column;align-items:center;gap:2px;padding:5px 2px;border:1px solid #c9b98f22;border-radius:7px;background:#0f0b1a66}
+.msrpi i{font-style:normal;font-size:9px;color:#9d8fb5;letter-spacing:.06em}
+.msrpi b{font-size:14px;color:#e6dff2;letter-spacing:.02em}
+.msrpi.me{border-color:#c9b98f77;background:#c9b98f12}.msrpi.me b{color:#f0d9a0}
 .msrbody p{font-size:11px;color:#bfb6cc;line-height:1.55;margin:3px 0}
 .msrbody b{color:#e6dff2;font-weight:700}
 .msrsub{opacity:.72;font-size:12.5px}
