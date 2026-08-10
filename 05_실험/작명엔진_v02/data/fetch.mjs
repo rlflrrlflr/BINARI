@@ -14,6 +14,12 @@ export const SOURCES = [
     url: "https://raw.githubusercontent.com/skishore/makemeahanzi/master/dictionary.txt" },
   { file: "graphics.txt",   why: "필획(획 하나하나의 좌표 → 개수로 환산)",
     url: "https://raw.githubusercontent.com/skishore/makemeahanzi/master/graphics.txt" },
+  /* 실사용 통계 — 대법원 전자가족관계등록시스템 '선호하는 출생자 이름 현황' 미러.
+     freqAccList 는 누적합이므로 반드시 차분해야 실제 인원이 나온다(그냥 쓰면 전원 200만명대가 된다). */
+  { file: "name-m.js", why: "남아 이름별 출생신고 인원 (대법원, 2008~2019 누계)",
+    url: "https://raw.githubusercontent.com/randkid/name/master/m.js" },
+  { file: "name-f.js", why: "여아 이름별 출생신고 인원 (동일)",
+    url: "https://raw.githubusercontent.com/randkid/name/master/f.js" },
 ];
 
 export async function ensureData(dir = join(HERE, "raw")) {

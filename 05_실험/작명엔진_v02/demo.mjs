@@ -2,6 +2,7 @@
    실행: node data/fetch.mjs && node demo.mjs */
 import { ensureData } from "./data/fetch.mjs";
 import { loadHanja } from "./lib/hanja.mjs";
+import { loadUsage } from "./lib/usage.mjs";
 import { sagyeok, eumyang, baleum, yongsinFit } from "./lib/score.mjs";
 import { HARD, FLAG, duEumSubstitute, makeSurnameCompoundCheck, verdict, meaningOK } from "./lib/filter.mjs";
 
@@ -11,19 +12,27 @@ const CFG = {
   lacking:     ["금"],         // 개수 0인 오행
   compoundBan: [],             // 성+음절이 단어가 되는 음절 (성마다 다름)
   familyGiven: [],             // 부모·형제 함자 음절
-  candidates:  [["태","윤"], ["하","준"], ["지","호"]],   // 실사용이 확인된 이름만 넣는다
-  usage:       { "태윤": 11539, "하준": 9800, "지호": null },  // 사람이 채우는 값(통계 미연동)
+  minUsage:    300,            // 남아 최소 인원 — 이 아래는 "들어본 적 없는 이름"
+  minMaleShare: 0.7,           // 남아 비율 하한
+  topN:        40,             // 실사용 상위 N 에서 출발한다 (순서를 뒤집는 원칙)
 };
 
 const raw = await ensureData();
 const H = loadHanja(raw);
-console.log(`\n인명용 한자 ${H.size.toLocaleString()}자 적재\n`);
+const U = loadUsage(raw);
+console.log(`\n인명용 한자 ${H.size.toLocaleString()}자 · 실사용 ${U.period}\n`);
 const isCompound = makeSurnameCompoundCheck(CFG.compoundBan);
 
-for (const [s1, s2] of CFG.candidates) {
-  const name = s1 + s2;
+/* 순서를 뒤집는다 — 성명학 조건으로 이름을 만들지 않고, 실제로 쓰이는 이름에서 출발한다 */
+const roster = U.topMale(CFG.topN)
+  .map(x => ({ ...x, u: U.lookup(x.name) }))
+  .filter(x => x.name.length === 2);
+
+for (const { name, u } of roster) {
+  const [s1, s2] = [...name];
   const hard = [];
-  if (CFG.usage[name] == null) hard.push(HARD.noRealUsage);
+  if (!u.exists || u.male < CFG.minUsage) hard.push(HARD.noRealUsage);
+  if (u.maleShare != null && u.maleShare < CFG.minMaleShare) hard.push(`${HARD.noRealUsage} — 여아 우세(남 ${(u.maleShare*100).toFixed(0)}%)`);
   if (isCompound(s1)) hard.push(HARD.surnameCompound);
   for (const s of [s1, s2]) if (CFG.familyGiven.includes(s)) hard.push(HARD.familyClash);
   for (const s of [s1, s2]) { const sub = duEumSubstitute(s); if (sub) hard.push(`${HARD.wordClash} (${s}→${sub} 확인)`); }
@@ -40,15 +49,16 @@ for (const [s1, s2] of CFG.candidates) {
     const rank = ys.fillsLack * 100 + ys.hit * 50 + sg.gil * 10 - (i1.pilhoek + i2.pilhoek) * 0.5;
     if (!best || rank > best.rank) best = { rank, i1, i2, sg, ey, ys };
   }
-  if (!best) { console.log(`${CFG.surname.kor}${name} — 조건 맞는 한자 조합 없음\n`); continue; }
+  if (!best) continue;
+  if (hard.length) continue;                       // HARD 탈락은 조용히 버린다
 
   const ph = baleum([CFG.surname.kor, s1, s2]);
   const v = verdict({ hardHits: hard });
   // 이름은 반드시 한자와 함께 — 한글 단독 노출 금지
-  console.log(`${CFG.surname.kor}${name}  ${CFG.surname.han}${best.i1.char}${best.i2.char}   ${v.pass ? "통과" : "탈락"}`);
+  // 이름은 반드시 한자와 함께 — 한글 단독 노출 금지
+  console.log(`${CFG.surname.kor}${name}  ${CFG.surname.han}${best.i1.char}${best.i2.char}   남 ${u.male.toLocaleString()}명 · ${(u.maleShare*100).toFixed(0)}% · ${u.maleRank}위`);
   console.log(`  뜻    ${best.i1.meaning} · ${best.i2.meaning}`);
   console.log(`  사격  ${Object.values(best.sg.four).join("·")}   음양 ${best.ey.pattern}   용신 ${best.ys.hit}/2 (0개 오행 ${best.ys.fillsLack}자)`);
-  if (v.hardHits.length) console.log(`  탈락  ${v.hardHits.join(" / ")}`);
   console.log(`  참고  발음오행 해례 ${ph.haerye.chain}/${ph.haerye.total} · 운해 ${ph.unhae.chain}/${ph.unhae.total}${ph.agree ? " (일치)" : " (갈림 — 단독 판정 불가)"}`);
   console.log(`  참고  사격 ${best.sg.gil}/4 · 원획 ${best.i1.wonhoek}·${best.i2.wonhoek} / 필획 ${best.i1.pilhoek}·${best.i2.pilhoek}\n`);
 }
