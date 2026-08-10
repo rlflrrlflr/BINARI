@@ -3,6 +3,7 @@
 import { writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isMain } from "../lib/ismain.mjs";
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 export const SOURCES = [
@@ -35,4 +36,4 @@ export async function ensureData(dir = join(HERE, "raw")) {
   }
   return dir;
 }
-if (import.meta.url === `file://${process.argv[1]}`) await ensureData();
+if (isMain(import.meta.url)) await ensureData();
