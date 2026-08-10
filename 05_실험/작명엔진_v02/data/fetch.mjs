@@ -1,0 +1,32 @@
+/* 원천 데이터 수집 — 공개 URL에서만 받는다. 저장소에는 코드만 두고 데이터는 받아 쓴다.
+   (대법원·네임차트 계열 도메인은 사내/에이전트 환경에서 막히는 경우가 많아, GitHub 미러를 쓴다) */
+import { writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+const HERE = dirname(fileURLToPath(import.meta.url));
+
+export const SOURCES = [
+  { file: "data-gov.csv",  why: "대법원 인명용 한자 (독음·유니코드·한자)",
+    url: "https://raw.githubusercontent.com/rutopio/Korean-Name-Hanja-Charset/main/data-gov.csv" },
+  { file: "data-naver.csv", why: "훈음(뜻과 음)",
+    url: "https://raw.githubusercontent.com/rutopio/Korean-Name-Hanja-Charset/main/data-naver.csv" },
+  { file: "mmah.txt",       why: "부수·구성(IDS)",
+    url: "https://raw.githubusercontent.com/skishore/makemeahanzi/master/dictionary.txt" },
+  { file: "graphics.txt",   why: "필획(획 하나하나의 좌표 → 개수로 환산)",
+    url: "https://raw.githubusercontent.com/skishore/makemeahanzi/master/graphics.txt" },
+];
+
+export async function ensureData(dir = join(HERE, "raw")) {
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  for (const s of SOURCES) {
+    const path = join(dir, s.file);
+    if (existsSync(path)) { console.log(`· 있음 ${s.file}`); continue; }
+    process.stdout.write(`· 받는 중 ${s.file} … `);
+    const r = await fetch(s.url);
+    if (!r.ok) throw new Error(`${s.file} 실패 ${r.status} — ${s.url}`);
+    writeFileSync(path, Buffer.from(await r.arrayBuffer()));
+    console.log("완료");
+  }
+  return dir;
+}
+if (import.meta.url === `file://${process.argv[1]}`) await ensureData();
