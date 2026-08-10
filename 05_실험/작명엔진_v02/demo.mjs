@@ -3,6 +3,7 @@
 import { ensureData } from "./data/fetch.mjs";
 import { loadHanja } from "./lib/hanja.mjs";
 import { loadUsage } from "./lib/usage.mjs";
+import { loadTrend } from "./lib/trend.mjs";
 import { sagyeok, eumyang, baleum, yongsinFit } from "./lib/score.mjs";
 import { HARD, FLAG, duEumSubstitute, makeSurnameCompoundCheck, verdict, meaningOK } from "./lib/filter.mjs";
 
@@ -20,7 +21,9 @@ const CFG = {
 const raw = await ensureData();
 const H = loadHanja(raw);
 const U = loadUsage(raw);
-console.log(`\n인명용 한자 ${H.size.toLocaleString()}자 · 실사용 ${U.period}\n`);
+const T = loadTrend(new URL('./data/trend', import.meta.url).pathname);
+console.log(`\n인명용 한자 ${H.size.toLocaleString()}자 · 실사용 ${U.period}`);
+console.log(`추세: ${T.summary()}\n`);
 const isCompound = makeSurnameCompoundCheck(CFG.compoundBan);
 
 /* 순서를 뒤집는다 — 성명학 조건으로 이름을 만들지 않고, 실제로 쓰이는 이름에서 출발한다 */
@@ -56,7 +59,9 @@ for (const { name, u } of roster) {
   const v = verdict({ hardHits: hard });
   // 이름은 반드시 한자와 함께 — 한글 단독 노출 금지
   // 이름은 반드시 한자와 함께 — 한글 단독 노출 금지
-  console.log(`${CFG.surname.kor}${name}  ${CFG.surname.han}${best.i1.char}${best.i2.char}   남 ${u.male.toLocaleString()}명 · ${(u.maleShare*100).toFixed(0)}% · ${u.maleRank}위`);
+  const tr = T.direction(name, "m");
+  const trTxt = tr ? `${tr.label}(${tr.from}→${tr.to})` : "추세 모름";   // 없으면 추정하지 않는다
+  console.log(`${CFG.surname.kor}${name}  ${CFG.surname.han}${best.i1.char}${best.i2.char}   남 ${u.male.toLocaleString()}명 · ${(u.maleShare*100).toFixed(0)}% · ${u.maleRank}위 · ${trTxt}`);
   console.log(`  뜻    ${best.i1.meaning} · ${best.i2.meaning}`);
   console.log(`  사격  ${Object.values(best.sg.four).join("·")}   음양 ${best.ey.pattern}   용신 ${best.ys.hit}/2 (0개 오행 ${best.ys.fillsLack}자)`);
   console.log(`  참고  발음오행 해례 ${ph.haerye.chain}/${ph.haerye.total} · 운해 ${ph.unhae.chain}/${ph.unhae.total}${ph.agree ? " (일치)" : " (갈림 — 단독 판정 불가)"}`);
