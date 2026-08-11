@@ -64,6 +64,17 @@ const MEANING_GOOD = [
   "상서","기릴","다스릴","이로울","슬기","지혜","총명","재주","기록","믿을","참","곧을","바를","이룰","윤택",
   "불을","나루","화할","즐거","자랄","무성","은혜","법","본받","나라","물가","별","해 돋","빛날","이을","봄",
 ];
+/* 이름 전용자 — 훈이 '사람 이름 X' 하나뿐인 글자.
+   화이트리스트에 걸리는 뜻이 없다고 자르면 **작명용으로 만들어진 글자가 통째로 사라진다**
+   (실측: 瑥(사람 이름 온)이 탈락했다). 인명용에 이 훈으로 등재됐다는 것 자체가 적합 근거다. */
+const NAME_GLOSS = /사람\s*이름|^이름\s/;
+
+/* 사전이 훈을 하나만 싣는 바람에 오탐이 나는 글자 — 근거를 적고 명시적으로 통과시킨다.
+   이 목록은 "예쁜 글자 봐주기"가 아니라 **사전 결손 보정**이다. 늘릴 때 반드시 이유를 남길 것.
+   利 — 표준 훈은 '이로울/날카로울' 둘인데 수집 사전엔 '날카로울'만 실려 있다.
+        국내 남아 이름에 가장 많이 쓰이는 글자 축에 들고, 이 리포의 대조군 姜利翰도 이 글자다. */
+const MEANING_ALLOW = new Map([["利", "표준 훈 '이로울'이 사전에 누락 — 날카로울만 수록"]]);
+
 /* 훈음에서 '훈'(뜻) 부분만 떼낸다. "복어 태" → "복어" / "다스릴 리(이)" → "다스릴" */
 function hunOf(meaning) {
   return meaning.split(/[\/,]/).map(seg => seg.trim().replace(/\([^)]*\)/g, "").trim())
@@ -72,9 +83,11 @@ function hunOf(meaning) {
 /** 이름자로 쓸 만한 뜻인가.
     ⚠️ 부분문자열로 보면 오탐한다 — "복어"가 "복"에, "물미"가 "물"에 걸린다(실제로 鮐(복어 태)·鐏(창 물미 준)이 통과했다).
     그래서 훈을 토큰으로 끊고 **토큰 단위로** 대조한다. */
-export function meaningOK(meaning, mode = "strict") {
+export function meaningOK(meaning, mode = "strict", char = null) {
   if (!meaning) return false;
+  if (char && MEANING_ALLOW.has(char)) return true;          // 사전 결손 보정 — 블랙리스트보다 앞선다
   if (MEANING_BAD.some(w => meaning.includes(w))) return false;
+  if (NAME_GLOSS.test(meaning)) return true;                 // 이름 전용자
   if (mode === "loose") return true;
   const huns = hunOf(meaning);
   const PREFIX_OK = ["옥","구슬","보배","빛","물","강","해","별","하늘","바다"];   // 명사 접두 결합 허용
