@@ -180,6 +180,8 @@ _initSuperProps();
    v16(B7): 스트릭 최소형 — "수호신과 연결된 지 N일째" 방문일 카운터만(게임화 없음)
    v18: ①듀얼 모드 API — /api/judge(배포) 없으면 직접 호출로 자동 폴백(아티팩트 호환 복구) ②저장 안전 셈(localStorage 차단 시 메모리 강등)
         ③모를 권리 — 질문 범위만 답하는 프롬프트 규칙 / 토정비결 옵트인 접기 / 아침 문안 노크형(청해야 펼친다)
+   v110(정직성): 리포트에 확신도 3단 꼬리표(계산값/통설 해석/곁가지)·'읽지 못한 것' 절 신설(빠짐없으면 그렇다고 말한다)
+        ·십성 해설 3단화(용어→쉬운 말→실제로 나타나는 모습)+그늘 병기·배우자궁(일지 십성) 공개·서신 프롬프트에 정직성 4규칙
    v19(모바일): 질문칸 박스화(파티클에 안 묻힘·iOS 줌 방지 16px)·좌우 풀폭(모바일 여백 축소)
    v31(B단계): WebGL 수호신 — GPU 입자 2만+(셰이더 위치계산, 메인스레드 해방)·무구심점 흐름(화 리본기둥/수 물결층/목 가지흐름/금 궤도빛줄기/토 난류융기)·촐킨=가닥·꼬임 재배선·3패스 잔상·판결 연기/요동/어셈블 보존·Canvas2D 자동 폴백(?r=2d 강제 가능)
    v30(체감): 카드 뜨면 수호신 사실상 정지(restRef 3단계 0/46/300ms — 판결 정독 중 스크롤·클릭 회복)·회상 나레이션→문항 순차('응,기억나' 탭)·캔버스 가장자리 radial 마스크(네모 경계 제거)·모델 Sonnet5+thinking off·재설정 앱내 확인(window.confirm 폐지)·동전 CTA 밀림 해소(hexlines 88px 예약)·CTA 인식도(고스트 버튼 강화·hover/press)
@@ -382,7 +384,21 @@ function yongsin(idx, counts, strength) {
   const agree = johu.length > 0 && eokbu.length > 0 && johu.some((e) => eokbu.includes(e));
   return { eokbu, johu, season, agree, me };
 }
-const SS_TIP = { 정재: "꾸준히 들어와 쌓이는 재물", 편재: "크게 들어오고 크게 나가는 재물 — 사업 쪽 돈", 식신: "먹고사는 복과 표현하는 재능", 상관: "틀을 깨는 말·창작의 재능", 정관: "명예와 조직 — 자리가 따르는 힘", 편관: "승부수와 버티는 힘", 정인: "배움·문서·귀인의 복", 편인: "남다른 발상 — 한 우물 파는 힘", 비견: "같이 갈 동료의 복", 겁재: "경쟁 속에서 크는 힘 — 돈은 관리가 필요" };
+/* v110 정직성: 십성 해설을 **용어 → 쉬운 말(e) → 실제로 나타나는 모습(r) → 그늘(s)** 로 편다.
+   근거: 작명 구상 §3-8 차용 ③④ — 용어를 홑으로 던지면 아무 말도 안 한 것과 같고,
+   밝은 면만 쓰면 아무에게나 맞는 덕담이 된다. 그늘은 겁주기가 아니라 **같은 성질의 뒷면**이다. */
+const SS_TIP = {
+  정재: { e: "꾸준히 들어와 쌓이는 재물", r: "월급·계약처럼 예측되는 수입이 붙고, 살림을 직접 쥐고 굴린다", s: "확실한 것만 좇다 판이 큰 기회를 놓친다" },
+  편재: { e: "크게 들어오고 크게 나가는 재물 — 사업 쪽 돈", r: "판을 벌여 한 번에 크게 만지고, 사람·정보로 돈을 만든다", s: "들어온 만큼 나간다. 지키는 장치가 없으면 남는 게 없다" },
+  식신: { e: "먹고사는 복과 표현하는 재능", r: "손에 익은 걸로 오래 벌어먹고, 주변을 편하게 만든다", s: "편한 자리에 머물러 승부를 미룬다" },
+  상관: { e: "틀을 깨는 말·창작의 재능", r: "남이 못 보는 걸 짚어내고 말·글·손으로 티가 난다", s: "윗사람·규칙과 부딪힌다. 옳은 말이 손해로 돌아온다" },
+  정관: { e: "명예와 조직 — 자리가 따르는 힘", r: "맡기면 끝까지 하고, 조직 안에서 이름이 선다", s: "남의 눈이 먼저 보여 제 결정을 늦춘다" },
+  편관: { e: "승부수와 버티는 힘", r: "몰릴수록 힘이 나고, 남들이 못 견디는 자리를 견딘다", s: "긴장을 스스로 만든다. 쉴 줄 몰라 몸이 먼저 꺾인다" },
+  정인: { e: "배움·문서·귀인의 복", r: "배워서 푸는 일이 맞고, 어른·문서가 도와준다", s: "준비만 길어진다. 시작 전에 지친다" },
+  편인: { e: "남다른 발상 — 한 우물 파는 힘", r: "관심 간 데를 끝까지 파고 남과 다른 길을 낸다", s: "혼자 깊어지다 사람과 멀어진다" },
+  비견: { e: "같이 갈 동료의 복", r: "제 힘으로 밀고, 뜻 맞는 사람이 옆에 붙는다", s: "묻지 않고 밀어붙인다. 나눌 때 몫이 준다" },
+  겁재: { e: "경쟁 속에서 크는 힘", r: "라이벌이 있어야 실력이 오르고, 판이 셀수록 살아난다", s: "돈과 사람이 새기 쉽다. 보증·동업은 특히" },
+};
 /* 신살 — 정적 조회. 암록·역마·도화·화개는 산출 근거가 검산 가능(암록=건록의 육합, 나머지=삼합 그룹).
    천을귀인·문창귀인은 연해자평 계열 표준 표('갑무경우양')를 따른다. 이설 존재 — 바꾸려면 출처와 함께. */
 const AMROK = [11, 10, 8, 7, 8, 7, 5, 4, 2, 1];              // 건록(갑인 을묘 병사 정오 무사 기오 경신 신유 임해 계자)의 육합
@@ -455,6 +471,30 @@ function myeongsikText(saju, sex, now) {
    값을 치르고 문서를 여는 유저는 이미 깊이를 당긴 상태라, 여기서 정보를 클릭 뒤에 숨기는 건
    권리 존중이 아니라 값어치 은닉이다. 실측 근거 2건: "4,900원 답변이 중복됨"(줄 게 더 있는데 안 줌)·
    "카드 뒷면 근거를 안 알려줘서 몰랐다"(있는데 숨김). → 기본 펼침, 접기는 선택. */
+/* v110 정직성 — 판단마다 확신도(작명 구상 §3-8 차용 ①).
+   만세력에서 그대로 나온 값과, 유파가 갈리는 통설 해석과, 예로부터 곁가지로 보는 것을
+   같은 목소리로 말하면 **전부가 헐거워진다.** 리포트에서 가장 값싼 정직성이 이것이다. */
+const CF = {
+  h: ["계산값", "만세력·절기 계산에서 그대로 나온 값 — 유파가 갈리지 않아"],
+  m: ["통설 해석", "널리 쓰이는 방식을 따랐지만 유파에 따라 답이 달라질 수 있어"],
+  l: ["곁가지", "예로부터 참고로만 보던 것 — 사주의 뼈대가 아니야"],
+};
+const Cf = ({ k }) => <i className={"cf cf" + k} title={CF[k][1]}>{CF[k][0]}</i>;
+/* v110: 배우자 자리(일지)의 십성 읽기. 명리에서 일지는 배우자궁이고, 거기 앉은 십성이
+   '어떤 짝과 어떤 형태로 사는가'를 가리킨다. 좋은 쪽만 쓰지 않는다 — 그늘을 같이 적는다. */
+const SPOUSE = {
+  비견: "대등한 짝. 친구처럼 지내는 대신 서로 안 굽혀서 부딪히기도 해",
+  겁재: "자기 일과 벌이가 있는 짝. 기대오는 사람과는 오래 못 가고, 돈 문제는 처음부터 갈라두는 게 좋아",
+  식신: "편안한 짝. 먹고사는 걱정이 덜한 대신 긴장이 없어 늘어지기도 해",
+  상관: "재주 있고 말 잘하는 짝. 자극이 되는 만큼 말로 상처도 주고받아",
+  정재: "알뜰하고 성실한 짝. 안정적인 대신 답답하게 느껴지는 순간이 와",
+  편재: "활달하고 씀씀이 큰 짝. 함께 벌이는 재미가 있지만 씀씀이는 맞춰야 해",
+  정관: "반듯하고 책임감 있는 짝. 기댈 만한 대신 원칙에서 서로 안 물러서",
+  편관: "강단 있는 짝. 위기에 든든한데 평소엔 팽팽해",
+  정인: "품어주는 짝. 보살핌을 받는 대신 어리광이 늘 수 있어",
+  편인: "생각이 깊은 짝. 통하면 크게 통하는데 혼자 있는 시간을 많이 필요로 해",
+};
+
 function MyeongsikReport({ saju, sex, birth }) {
   /* 훅 순서를 지키려고 널 가드를 겉껍질로 뺀다 — 본체는 idx가 있을 때만 마운트된다 */
   if (!saju || !saju.idx) return null;
@@ -503,6 +543,15 @@ function MyeongsikReportBody({ saju, sex, birth }) {
      열 개 전부를 기준으로 채워 넣는다 — 없는 것이 있는 것만큼 말해주는 자리다 */
   const SS10 = ["비견", "겁재", "식신", "상관", "정재", "편재", "정관", "편관", "정인", "편인"];
   const restSS = SS10.filter((k) => !top.some(([tk2]) => tk2 === k)).map((k) => [k, dist.find(([d]) => d === k)?.[1] || 0]);
+  /* v110 정직성 — **읽은 것과 못 읽은 것을 먼저 가른다**(작명 구상 §3-8 차용 ②).
+     지금까지 이 사실들은 각자 다른 문장 끄트머리에 흩어져 있었다. 시가 없으면 시(時)기둥이 빈다는 말은
+     계산 근거 줄 꼬리에, 성별이 없으면 대운을 못 편다는 말은 흐름 절 안에 있었다.
+     빠진 게 무엇이고 그래서 무엇이 덜 잡혔는지는 **한자리에서, 묻기 전에** 말해야 한다. */
+  const unread = [];
+  if (idx.hG == null) unread.push(["태어난 시", "시(時)기둥이 비어 — 십성 둘과 시에 걸린 신살을 못 잡았어"]);
+  if (!sex) unread.push(["성별", "대운의 방향(순행·역행)이 안 서서 10년 흐름을 못 펼쳤어"]);
+  if (!birth?.city) unread.push(["태어난 도시", "서울 경도로 계산했어 — 다른 지역이면 시(時)가 한 칸 옮겨갈 수 있어"]);
+  if (!bornYet) unread.push(["아직 오지 않은 날", "태어나기 전이라 '좋은 날 고르기'는 뺐어"]);
   /* 계측은 클릭이 아니라 노출 시점에 — 기본 펼침이 되면서 onClick 계측이 영영 안 찍히게 됐다 */
   useEffect(() => { track("report_shown", { sinsal: sins.length, top_ss: dist[0] ? dist[0][0] : null, strength, lack_el: lackEl.join("") || null, yong: ys.eokbu.join("") || null, yong_agree: ys.agree }); }, []);
   return (
@@ -513,7 +562,9 @@ function MyeongsikReportBody({ saju, sex, birth }) {
           {/* v109: 명식 원판 — 지금까지 사주 여덟 글자와 오행 개수는 '온보딩 연출'에만 있었다.
               재방문하면 온보딩을 건너뛰므로 유저는 자기 사주를 두 번 다시 볼 수 없었다.
               모든 판단의 뿌리인데 리포트에 없던 것 — 알 권리의 첫 항목으로 올린다. */}
-          <p className="msrh">명식 — 태어난 순간의 여덟 글자</p>
+          {/* v110: 확신도 범례를 맨 앞에. 아래 모든 절의 꼬리표가 무슨 뜻인지 먼저 알려주고 시작한다 */}
+          <p className="cfleg"><Cf k="h" />만세력에서 그대로 나온 값 <Cf k="m" />유파가 갈릴 수 있는 해석 <Cf k="l" />참고로만 보는 곁가지</p>
+          <p className="msrh">명식 — 태어난 순간의 여덟 글자 <Cf k="h" /></p>
           <div className="msrp">
             {["년", "월", "일", "시"].map((k) => (
               <span key={k} className={k === "일" ? "msrpi me" : "msrpi"}><i>{k}</i><b>{saju.pillars[k]}</b></span>
@@ -526,22 +577,32 @@ function MyeongsikReportBody({ saju, sex, birth }) {
           ))}</div>
           <p className="dim">
             절기는 태양황경을 직접 계산해서 가르고, 일주는 율리우스일로 뽑아. 만세력 대조 28건 자동검증을 통과한 값이야
-            {saju.tstAdj != null ? <> · 시(時)는 <b>진태양시로 {saju.tstAdj >= 0 ? "+" : "−"}{Math.abs(saju.tstAdj)}분</b> 보정했어{birth && birth.city ? ` (${birth.city} 경도 + 균시차)` : " (서울 경도 + 균시차)"}</> : " · 태어난 시를 몰라서 시(時)기둥은 비워뒀어 — 십성·신살이 그만큼 덜 잡혀"}
+            {saju.tstAdj != null ? <> · 시(時)는 <b>진태양시로 {saju.tstAdj >= 0 ? "+" : "−"}{Math.abs(saju.tstAdj)}분</b> 보정했어{birth && birth.city ? ` (${birth.city} 경도 + 균시차)` : " (서울 경도 + 균시차)"}</> : ""}
           </p>
-          <p className="msrh">타고난 것</p>
-          {top.map(([k, v]) => <p key={k}><b>{k} {v}</b> — {SS_TIP[k]}</p>)}
+          {/* v110 정직성: 못 읽은 것을 묻기 전에 먼저 말한다. 빠진 게 없으면 없다고 말한다 —
+              '아무 말 없음'과 '전부 읽혔음'은 유저에게 전혀 다른 정보다. */}
+          <p className="msrh">읽지 못한 것 <Cf k="h" /></p>
+          {unread.length > 0
+            ? unread.map(([k, why]) => <p key={k}><b>{k}</b> — {why}</p>)
+            : <p>없어. 여덟 글자와 대운까지 <b>전부 읽혔어</b> — 아래는 빠진 것 없이 계산된 값이야</p>}
+          <p className="msrh">타고난 것 <Cf k="h" /></p>
+          {top.map(([k, v]) => (
+            <p key={k}><b>{k} {v}</b> — {SS_TIP[k].e}
+              <span className="msr3"><i>실제로는</i> {SS_TIP[k].r}<br /><i>그늘</i> {SS_TIP[k].s}</span></p>
+          ))}
           {restSS.length > 0 && <p className="msrsub"><b>그 밖의 십성</b> — {restSS.map(([k, v]) => `${k} ${v}`).join(" · ")} <span className="dim">개수가 적을수록 그 영역은 이번 생에 덜 쥐고 태어났다는 뜻이야</span></p>}
           {jael >= 2 && <p><b>재물 자리 {jael}</b> — 재물이 명식에 실려 있어. 흐름이 열릴 때 크게 받는 그릇이야</p>}
           {child != null && child >= 1 && <p><b>자식 인연</b> — 명식에 자식 복이 들어 있어</p>}
-          {sins.map((x) => <p key={x.name}><b>{x.name}</b> — {x.tip}</p>)}
+          {sins.map((x) => <p key={x.name}><b>{x.name}</b> <Cf k="l" /> — {x.tip}</p>)}
           {(lackSS.length > 0 || lackEl.length > 0) && (
             <p><b>비어 있는 자리</b> — {[...lackEl.map((e) => `${e} 기운`), ...lackSS].join(" · ")}. 없는 건 흠이 아니라 채우는 자리야{lackEl.length ? " — 그 기운이 대운으로 들어오는 때를 아래 흐름에서 봐" : ""}</p>
           )}
-          <p><b>힘의 저울</b> — {strength} · 나를 받치는 글자 {support}개 <span className="dim">(간이 판정: 비겁+인성 4개 이상 신강 · 2개 이하 신약)</span>{strength === "신약" ? " — 그릇보다 팔 힘이 늦게 붙는 몸이야. 받쳐주는 운이 올 때 크게 받아" : strength === "신강" ? " — 제 힘으로 미는 몸이야. 쓸 곳(일·표현)이 열릴 때 풀려" : ""}</p>
+          <p><b>힘의 저울</b> <Cf k="m" /> — {strength} · 나를 받치는 글자 {support}개 <span className="dim">(간이 판정: 비겁+인성 4개 이상 신강 · 2개 이하 신약)</span>{strength === "신약" ? " — 그릇보다 팔 힘이 늦게 붙는 몸이야. 받쳐주는 운이 올 때 크게 받아" : strength === "신강" ? " — 제 힘으로 미는 몸이야. 쓸 곳(일·표현)이 열릴 때 풀려" : ""}</p>
           {ys.eokbu.length > 0 && (
-            <p><b>채울 기운</b> — {ys.eokbu.join("·")}{ys.agree ? <> <span className="dim">(힘의 저울과 계절({ys.season}) 두 방법이 같은 답)</span></> : ys.johu.length ? <> · 계절({ys.season})로 보면 {ys.johu.join("·")} <span className="dim">— 두 방법이 갈려. 유파에 따라 답이 달라지는 자리야</span></> : ""}. 이 기운이 들어오는 때가 네 계절이야</p>
+            <p><b>채울 기운</b> <Cf k="m" /> — {ys.eokbu.join("·")}{ys.agree ? <> <span className="dim">(힘의 저울과 계절({ys.season}) 두 방법이 같은 답)</span></> : ys.johu.length ? <> · 계절({ys.season})로 보면 {ys.johu.join("·")} <span className="dim">— 두 방법이 갈려. 유파에 따라 답이 달라지는 자리야</span></> : ""}. 이 기운이 들어오는 때가 네 계절이야</p>
           )}
-          <p className="msrh">흐름</p>
+          <p className="msrh">흐름 <Cf k="h" /></p>
+          <p className="dim">칸의 간지는 계산값이고, 그게 <b>어떤 기운인지</b>를 읽는 부분은 통설 해석이야</p>
           {ladder.length > 0 && ladder.map((du) => {
             const ss = sipseong(idx.dG, GAN.indexOf(du.ganji[0]));
             const isNow = nowAge != null && nowAge >= du.startAge && nowAge <= du.endAge;
@@ -551,11 +612,15 @@ function MyeongsikReportBody({ saju, sex, birth }) {
           })}
           {ladder.length === 0 && <p className="dim">대운(10년 단위 큰 흐름)은 성별이 있어야 방향이 서 — 프로필에 성별을 더하면 여든까지 펼쳐줄게</p>}
           {se.map((x) => <p key={x.year} className="msrsub"><b>{x.year} {x.ganji}</b> — {x.ss}의 해{x.ss === "정재" || x.ss === "편재" ? " · 재물이 움직여" : x.ss === "정관" || x.ss === "편관" ? " · 자리·명예가 걸려" : x.ss === "비견" || x.ss === "겁재" ? " · 경쟁·구설 조심" : ""}</p>)}
-          <p className="msrh">사람</p>
-          <p><b>충 {TTI[(idx.yJ + 6) % 12]}띠 · 원진 {TTI[WONJIN[idx.yJ]]}띠</b> — 미워하란 게 아니라, 큰돈·보증만 조심하란 뜻이야</p>
-          {bornYet && <p className="msrh">날</p>}
+          <p className="msrh">사람 <Cf k="m" /></p>
+          {/* v110: 배우자궁(일지) 십성 — 이미 계산해 두고 화면에 안 쓰던 값이다.
+              '일=나·배우자'라고 위에서 말해놓고 정작 배우자 자리를 안 읽어주는 건 알 권리에 어긋난다.
+              사람들이 사주에서 가장 먼저 묻는 것도 이 자리다. */}
+          <p><b>짝의 자리(일지 {JI[idx.dJ]}) — {SPOUSE[sipseong(idx.dG, JI_BONGI[idx.dJ])]}</b> <Cf k="m" /></p>
+          <p><b>충 {TTI[(idx.yJ + 6) % 12]}띠 · 원진 {TTI[WONJIN[idx.yJ]]}띠</b> <Cf k="l" /> — 미워하란 게 아니라, 큰돈·보증만 조심하란 뜻이야</p>
+          {bornYet && <p className="msrh">날 <Cf k="l" /></p>}
           {bornYet && (tk.good.length ? <p><b>좋은 날</b> — {tk.good.map((d) => d.label).join(" · ")}{tk.bad.length ? <> / <b>피할 날</b> — {tk.bad.map((d) => d.label).join(" · ")}</> : null}</p> : <p>이번 달엔 특별히 가리는 날 없음</p>)}
-          <p className="msrh">일</p>
+          <p className="msrh">일 <Cf k="m" /></p>
           <p><b>{GAN_EL[idx.dG]} 기운</b> — {JOB_EL[GAN_EL[idx.dG]]}</p>
           {ys.eokbu.length > 0 && EL_USE[ys.eokbu[0]] && (
             <p><b>곁에 두면 좋은 것</b> — {ys.eokbu.map((e) => `${e}: ${EL_USE[e].color}·${EL_USE[e].dir}`).join(" / ")} <span className="dim">· 이름 소리로는 {ys.eokbu.map((e) => EL_USE[e].sound).join(", ")}</span></p>
@@ -1648,7 +1713,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v109 · 알 권리";
+const APP_VER = "v110 · 정직성";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -1754,11 +1819,22 @@ direction=${dir} / verdict="${res?.verdict || ""}" / category=${res?.category ||
 4) "누구와 — 도울 사람, 피할 자리" — 프로필의 신살·합충으로 이번 일에서 **힘이 되는 띠·사람 유형**과 **부딪히는 띠·자리**를 짚는다. 방위·직업 오행이 이 질문에 걸리면 함께. 프로필에 없는 것은 지어내지 않는다 — 있는 것만 쓴다.
 5) "무엇을 걸고" — 두 가지를 반드시 담는다. ①${cost}을 하나, 정직하게 명시한다(좋은 말만 하지 않는다). ②마지막 줄에 **반증 조건**: "이런 일이 벌어지면 이 판결을 뒤집어라". 조건은 감정이 아니라 **눈으로 확인되는 사건**이어야 한다.
 
+[정직성 — 이 넷은 형식이 아니라 상품의 본체다]
+① **근거의 급을 말투로 구분한다.** 사주 여덟 글자·오행 개수·대운 간지는 **계산값**이니 단정한다.
+   신강신약·용신처럼 유파가 갈리는 것은 "통설로는"을 붙인다. 신살·띠는 "참고로"를 붙이고 그 위에 결론을 세우지 않는다.
+   — 계산값과 곁가지를 같은 목소리로 말하면 서신 전체가 헐거워진다.
+② **없는 정보는 없다고 쓴다.** 프로필에 태어난 시가 없으면 시(時)에 걸린 것은 말하지 않고 "시를 몰라 이 부분은 비워둔다"고 적는다.
+   성별이 없으면 대운 방향을 말하지 않는다. 추정으로 메우지 않는다 — 메우는 순간 전부가 의심받는다.
+③ **용어는 3단으로 편다: 용어 → 쉬운 말 → 실제로 어떤 모습으로 나타나는지.**
+   (예) "상관 — 틀을 깨는 재능 — 회의에서 남이 못 짚는 걸 짚어 옳은 말을 하고도 미움을 산다."
+   앞 두 단만 쓰면 사전을 베낀 것이고, 세 번째 단이 있어야 이 사람 얘기가 된다.
+④ **좋은 면을 말한 자리에는 그늘도 같이 쓴다.** 강점이 어떻게 손해로 돌아오는지 한 줄. 희망고문 금지, 겁주기도 금지.
+
 [금지 — 하나라도 어기면 서신 전체가 무효다]
 - 지어낸 숫자·통계·확률("100명 중 셋", "70%", "역대 몇 번째")
 - 겁을 준 뒤 해결책을 파는 구조(부적·기도·굿·추가 결제 유도)
 - 카드 앞면/뒷면에 이미 있는 문장을 그대로 다시 쓰기
-- 용어를 홑으로 던지기 — 명리 용어는 **"용어 — 쉬운 풀이"** 형식으로만
+- 프로필에 없는 값을 그럴듯하게 지어내기(정직성 ②) · 신살·띠 위에 결론을 세우기(정직성 ①)
 - 평생 총운·전반적 성격 분석. 이건 **이 질문 하나에 대한** 서신이다
 - 판결 방향과 어긋나는 결론, 그리고 "네 마음에 달렸어" 류의 되돌리기
 - 몸·병·수명의 의학적 판정(진단명·투약·수술 여부·수명)
@@ -3774,6 +3850,13 @@ const CSS = `
 .msrsub{opacity:.72;font-size:12.5px}
 .msrkey b{color:#f0d9a0}
 .msrh{margin-top:7px !important;color:#c9b98f !important;letter-spacing:.14em;font-size:10px !important}
+/* v110 정직성 — 확신도 꼬리표. 세 급이 한눈에 갈려야 하므로 색으로도 가른다(계산값=금 · 해석=중간 · 곁가지=흐림) */
+.cf{font-style:normal;font-size:8.5px;letter-spacing:.1em;border:1px solid;border-radius:4px;padding:1px 4px;margin:0 4px 0 0;white-space:nowrap;vertical-align:1px}
+.cfh{color:#d9c48d;border-color:#c9b98f55}.cfm{color:#9d8fb5;border-color:#9d8fb544}.cfl{color:#6f6580;border-color:#6f658055}
+.cfleg{font-size:9.5px !important;color:#6f6580 !important;line-height:1.9 !important;margin:2px 0 8px !important}
+/* 십성 3단 — 쉬운 말 아래에 '실제로는'과 '그늘'을 들여쓴다. 밝은 면만 쓰면 아무에게나 맞는 덕담이 된다 */
+.msr3{display:block;margin-top:4px;padding-left:8px;border-left:1px solid #c9b98f26;color:#9d8fb5;font-size:10.5px;line-height:1.6}
+.msr3 i{font-style:normal;color:#c9b98f;letter-spacing:.1em;margin-right:5px}
 .disc{margin-top:auto;font-family:sans-serif;font-size:10px;color:#8a7f95;line-height:1.5}
 .split{font-family:sans-serif;font-size:10.5px;letter-spacing:.22em;color:#e5b96b;margin:0 0 6px;animation:formPulse 1.8s ease-in-out infinite}
 .retrybtn{background:transparent;border:1px solid #c98f3d66;color:#e6d6a8;font-size:11px;padding:3px 12px;border-radius:14px;cursor:pointer;font-family:sans-serif;margin-left:8px}
