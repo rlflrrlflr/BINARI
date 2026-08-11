@@ -64,9 +64,36 @@ const MEANING_GOOD = [
   "상서","기릴","다스릴","이로울","슬기","지혜","총명","재주","기록","믿을","참","곧을","바를","이룰","윤택",
   "불을","나루","화할","즐거","자랄","무성","은혜","법","본받","나라","물가","별","해 돋","빛날","이을","봄",
 ];
-/** 이름자로 쓸 만한 뜻인가. mode: "strict"(화이트리스트 통과 필수) | "loose"(블랙리스트만) */
+/* 훈음에서 '훈'(뜻) 부분만 떼낸다. "복어 태" → "복어" / "다스릴 리(이)" → "다스릴" */
+function hunOf(meaning) {
+  return meaning.split(/[\/,]/).map(seg => seg.trim().replace(/\([^)]*\)/g, "").trim())
+    .map(seg => { const t = seg.split(/\s+/); return t.length > 1 ? t.slice(0, -1).join(" ") : seg; });
+}
+/** 이름자로 쓸 만한 뜻인가.
+    ⚠️ 부분문자열로 보면 오탐한다 — "복어"가 "복"에, "물미"가 "물"에 걸린다(실제로 鮐(복어 태)·鐏(창 물미 준)이 통과했다).
+    그래서 훈을 토큰으로 끊고 **토큰 단위로** 대조한다. */
 export function meaningOK(meaning, mode = "strict") {
   if (!meaning) return false;
   if (MEANING_BAD.some(w => meaning.includes(w))) return false;
-  return mode === "loose" ? true : MEANING_GOOD.some(w => meaning.includes(w));
+  if (mode === "loose") return true;
+  const huns = hunOf(meaning);
+  const PREFIX_OK = ["옥","구슬","보배","빛","물","강","해","별","하늘","바다"];   // 명사 접두 결합 허용
+  return huns.some(h => MEANING_GOOD.some(w =>
+    h === w || h.startsWith(w + " ") || h.endsWith(" " + w) || h === w + "할" || h === w + "을" ||
+    (PREFIX_OK.includes(w) && h.startsWith(w) && h.length <= w.length + 2)));
+}
+
+/* ── 훈음의 독음이 실제로 그 음인가 ──────────────────────────
+   대법원 목록은 한 글자를 여러 독음 아래 중복 수록한다. 그래서 '태'로 검색하면
+   珆(옥돌 이)처럼 **주 독음이 다른 글자**가 딸려 온다. 그런 글자를 이름에 쓰면
+   사람들은 그 음으로 읽지 않는다. 훈음 끝의 독음과 대조해 거른다.
+   예) "다스릴 리(이)" → 리·이 둘 다 인정 / "옥돌 이" → '태'로는 불인정 */
+export function readingMatches(meaning, reading) {
+  if (!meaning) return false;
+  const found = new Set();
+  for (const m of meaning.matchAll(/([가-힣])(?=\s*(?:\/|\(|$|,))/g)) found.add(m[1]);
+  for (const m of meaning.matchAll(/\(([가-힣])\)/g)) found.add(m[1]);
+  const tail = meaning.trim().split(/[\s/]+/).pop().replace(/[()]/g, "");
+  for (const ch of tail) if (/[가-힣]/.test(ch)) found.add(ch);
+  return found.has(reading);
 }

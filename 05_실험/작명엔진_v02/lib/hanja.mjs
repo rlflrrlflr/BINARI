@@ -28,9 +28,35 @@ export function loadHanja(rawDir) {
     const d = JSON.parse(line);
     strokes.set(d.character, d.strokes.length);
   }
-  const csv = (t) => { const [h, ...rows] = t.trim().split("\n"); const cols = h.split(",");
-    return rows.map(r => { const v = r.split(","); return Object.fromEntries(cols.map((c,i)=>[c, v[i]])); }); };
+  /* 따옴표를 다루는 CSV 파서.
+     data-gov.csv 는 두음법칙 글자의 독음을 `"리,이"` 처럼 **따옴표로 묶어** 저장한다.
+     naive split(",") 로 읽으면 열이 밀려 利·理 같은 글자가 통째로 유실된다(실제로 그랬다). */
+  const csvLine = (line) => {
+    const out = []; let cur = "", q = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (q) {
+        if (ch === '"') { if (line[i+1] === '"') { cur += '"'; i++; } else q = false; }
+        else cur += ch;
+      } else if (ch === '"') q = true;
+      else if (ch === ",") { out.push(cur); cur = ""; }
+      else cur += ch;
+    }
+    out.push(cur); return out;
+  };
+  const csv = (t) => { const [h, ...rows] = t.trim().split(/\r?\n/); const cols = csvLine(h);
+    return rows.map(r => { const v = csvLine(r); return Object.fromEntries(cols.map((c,i)=>[c, v[i]])); }); };
   for (const r of csv(rd("data-naver.csv"))) if (!meaning.has(r.hanja)) meaning.set(r.hanja, r.meaning);
+  /* IDS 보강 — makemeahanzi 에 없는 글자(珸 등)의 구성요소를 채운다 */
+  try {
+    for (const line of rd("ids.txt").split("\n")) {
+      if (!line || line[0] === "#") continue;
+      const [, ch, ...ids] = line.split("\t");
+      if (!ch || decomp.has(ch)) continue;
+      const first = (ids[0] || "").replace(/\[[^\]]*\]/g, "").trim();
+      if (first) decomp.set(ch, first);
+    }
+  } catch { /* 없으면 보강 없이 진행 */ }
 
   const byReading = new Map(), all = new Map();
   for (const r of csv(rd("data-gov.csv"))) {
@@ -42,13 +68,41 @@ export function loadHanja(rawDir) {
     }
     if (!all.has(r.hanja)) all.set(r.hanja, String(r.hangul).split(",").map(s=>s.trim()));
   }
-  const pil = (c) => strokes.get(c) ?? null;
-  const won = (c) => { const s = strokes.get(c); return s == null ? null : s + (WON_CORR[radical.get(c)] ?? 0); };
+  /* makemeahanzi 는 9,574자만 담고 있어 인명용 일부(珸 등)가 빠진다.
+     빠진 글자는 IDS 구성요소의 획수를 더해 보완한다 — 없다고 후보에서 지워버리면
+     실제로 珸(옥돌 오)가 통째로 사라진다(실측). 보완값은 estimated 로 표시한다. */
+  const IDS_OP = /[\u2FF0-\u2FFB]/g;
+  function pilFallback(c, depth = 0) {
+    if (strokes.has(c)) return { n: strokes.get(c), est: false };
+    if (depth > 2) return { n: null, est: true };
+    const d = decomp.get(c);
+    if (!d) return { n: null, est: true };
+    let sum = 0;
+    for (const ch of d.replace(IDS_OP, "")) {
+      if (ch === "？" || ch === c) return { n: null, est: true };
+      const r = pilFallback(ch, depth + 1);
+      if (r.n == null) return { n: null, est: true };
+      sum += r.n;
+    }
+    return { n: sum || null, est: true };
+  }
+  /* 부수도 IDS 로 보완한다. 부수가 없으면 원획 보정도 자원오행도 못 하므로
+     珸(王+吾) 같은 글자가 조건에서 조용히 빠진다. 좌변이 알려진 부수면 그걸 쓴다. */
+  const KNOWN_RAD = new Set([...Object.keys(EL_BY_RADICAL), ...Object.keys(WON_CORR)]);
+  function radFallback(c) {
+    const r = radical.get(c); if (r) return r;
+    const d = decomp.get(c); if (!d) return null;
+    for (const ch of d.replace(IDS_OP, "")) if (KNOWN_RAD.has(ch)) return ch;
+    return null;
+  }
+  const pil = (c) => pilFallback(c).n;
+  const won = (c) => { const s = pil(c); return s == null ? null : s + (WON_CORR[radFallback(c)] ?? 0); };
   return {
     byReading, size: all.size,
     isRegistered: (c) => all.has(c),
     info: (c) => ({ char:c, readings: all.get(c) ?? [], meaning: meaning.get(c) ?? null,
-      radical: radical.get(c) ?? null, decomposition: decomp.get(c) ?? "",
-      pilhoek: pil(c), wonhoek: won(c), jawon: EL_BY_RADICAL[radical.get(c)] ?? null }),
+      radical: radFallback(c), decomposition: decomp.get(c) ?? "",
+      pilhoek: pil(c), wonhoek: won(c), jawon: EL_BY_RADICAL[radFallback(c)] ?? null,
+      strokesEstimated: !strokes.has(c) }),
   };
 }
