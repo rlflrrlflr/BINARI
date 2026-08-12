@@ -480,11 +480,36 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
     backAbs && rowCap ? ".vface.back absolute + .vcard grid-template-rows 고정" : `back-absolute=${backAbs} row-cap=${rowCap}`,
     "뒷면이 카드 크기 산정에 끼면 리포트가 길어질수록 카드가 자라고, 앞면 판결문 아래가 텅 빕니다(실측 1681px).");
 
-  /* 명식 원판이 리포트에 있는지 — 온보딩 연출에만 있으면 재방문 유저는 영영 못 본다 */
-  const hasWonpan = /명식 — 태어난 순간의 여덟 글자/.test(src) && /나\(일간\)/.test(src);
-  add(hasWonpan ? "정상" : "심각", hasWonpan ? "리포트에 명식 원판(여덟 글자·일간·오행)" : "리포트에 명식 원판 없음",
-    hasWonpan ? "있음" : "사주 여덟 글자가 온보딩 연출에만 있으면 재방문 유저는 다시 못 봅니다",
+  /* 여덟 글자 원판이 리포트에 있는지 — 온보딩 연출에만 있으면 재방문 유저는 영영 못 본다 */
+  const hasWonpan = /각인 — 태어난 순간에 박힌 여덟 자리/.test(src) && /너 자신 \{saju\.dayGan\}/.test(src);
+  add(hasWonpan ? "정상" : "심각", hasWonpan ? "리포트에 여덟 자리 원판(글자·너 자신·기운 개수)" : "리포트에 여덟 자리 원판 없음",
+    hasWonpan ? "있음" : "태어난 여덟 글자가 온보딩 연출에만 있으면 재방문 유저는 다시 못 봅니다",
     "모든 판단의 뿌리입니다. 리포트 첫 절에 있어야 합니다.");
+}
+
+/* ── 검사 5-c. 용어 은닉 (창업자 지시 2026-08-12: "어떤 분석 기법이 들어갔는지 안 나왔으면 좋겠어") ─
+   용어 자체는 공개 지식이지만, 그대로 쓰면 **어떤 기법을 어떤 표에 매핑했는지**가 한 화면에 통째로 읽힌다.
+   화면 쪽은 report-check 이 실물로 잡는다. 여기서는 **모델에게 보내는 지시서**를 지킨다 —
+   프로필에는 용어가 그대로 실려 있어서(모델의 추론 품질을 위해), 출력 금지 규칙이 빠지면 서신이 그걸 받아쓴다. */
+{
+  const hasBan = /\[용어 금지 —/.test(src);
+  const hasMap = /비견=나란히 서는 힘/.test(src) && /신강=제 힘으로 미는 쪽/.test(src);
+  const hasNote = /용어를 본문에 그대로 쓰지 마라/.test(src);
+  const ok = hasBan && hasMap && hasNote;
+  add(ok ? "정상" : "심각", ok ? "용어 은닉 — 서신 지시서에 출력 금지 규칙" : "용어 은닉 규칙이 빠짐",
+    ok ? "[용어 금지] 절 + 바꿔 쓰는 말 표 + 프로필 주의문" : `금지절=${hasBan} 대응표=${hasMap} 프로필주의=${hasNote}`,
+    "프로필에는 명리 용어가 그대로 실려 갑니다(모델이 추론해야 하니까). 출력 금지 규칙이 없으면 서신이 그 용어를 그대로 받아써서, 우리가 무슨 기법을 어떻게 조합했는지가 유료 문서에 통째로 실립니다.");
+
+  /* 화면 쪽 최후 방어 — 리포트 렌더 구간에 용어가 상수로 박혀 있으면 잡는다 */
+  const bodyStart = src.indexOf("function MyeongsikReportBody");
+  const bodyEnd = src.indexOf("const ganjiIdx");
+  /* 주석은 걷어내고 본다 — 주석에 적힌 '명식에서'는 유저가 볼 수 없는 글인데, 안 걷으면 이 검사가 헛울음을 운다(실측) */
+  const view = (bodyStart > 0 && bodyEnd > bodyStart ? src.slice(bodyStart, bodyEnd) : "")
+    .replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  const leak = ["\"십성", "일간)", "명식에", "(비겁)", "(인성)", "진태양시로", "태양황경"].filter((w) => view.includes(w));
+  add(leak.length ? "심각" : "정상", leak.length ? "리포트 화면에 기법 용어가 되돌아옴" : "리포트 화면 — 기법 용어 없음",
+    leak.length ? leak.join(", ") : "렌더 구간 깨끗",
+    "화면에 나가는 이름은 평범한 말이어야 합니다(SS_KO·EL_KO·GRP_KO·SIN_KO·STR_KO). 실물 검사는 e2e/report-check.mjs 가 합니다.");
 }
 
 /* ── 검사 6. 의존성 취약점 (npm audit) ───────────────────────────────────
