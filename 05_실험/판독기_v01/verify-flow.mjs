@@ -20,7 +20,7 @@ const w = wolun(8, 2, 2026);             // 일간 壬 · 년간 丙(2)
 ck("월운 — 열두 달", w.length === 12);
 ck("월운 — 인월(첫 달)의 지지가 寅", w[0].ganji[1] === "寅", w[0].ganji);
 ck("월운 — 미월(6번째)의 지지가 未", w[5].ganji[1] === "未", w[5].ganji);
-/* 2026-08-06 은 미월이어야 한다(입추 8/7 전) */
+/* 8월 상순은 아직 미월이어야 한다(입추가 8/7 이므로) */
 const mi = w.find(x => x.mn === 6);
 ck("월운 — 미월이 7월 상순에 시작해 8월 초에 끝난다", mi.start.startsWith("2026-07"), mi.start);
 ck("월운 — 신월(7번째)은 8월에 시작", w[6].start.startsWith("2026-08"), w[6].start);
@@ -34,7 +34,7 @@ ck("순역 — 지지 가중이 두 배", favor(["화","수"], ["금","수"], ["
 ck("순역 — 항상 -3~+3", [...Array(100)].every((_, i) => { const e = [["금","수","화","토","목"][i%5], ["금","수","화","토","목"][(i*3)%5]];
   const v = favor(e, ["금","수"], ["화","토"]); return v >= -3 && v <= 3; }));
 
-console.log("\n── 강리온(일간 壬 · 용신 금수) 앞으로 여섯 해 ──");
+console.log("\n── 예시 명식(일간 壬 · 용신 금수) 앞으로 여섯 해 ──");
 for (const x of s26) console.log(`  ${x.year} ${x.ganji}  ${x.ganSS}/${x.jiSS}  순역 ${favor(x.el,["금","수"],["화","토"]) >= 0 ? "+" : ""}${favor(x.el,["금","수"],["화","토"])}`);
 console.log("\n── 2026년 열두 달 ──");
 for (const m of w) console.log(`  ${m.start} ${m.ganji} ${m.ganSS}/${m.jiSS} 순역 ${favor(m.el,["금","수"],["화","토"]) >= 0 ? "+" : ""}${favor(m.el,["금","수"],["화","토"])}`);

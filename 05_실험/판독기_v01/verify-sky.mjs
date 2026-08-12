@@ -2,13 +2,18 @@
    ★ 상승궁은 알려진 대조표가 없어도 **자체 검증이 가능하다** —
      해가 뜨는 순간에는 해가 동쪽 지평선에 있으므로 **상승궁 ≈ 태양 황경**이어야 한다.
      이 성질로 검사하면 외부 자료 없이 공식의 옳고 그름이 갈린다. */
-import { jdn, jdFromKST, sunLongitude, moonLongitude } from "./lib/decoders.mjs";
+import { jdn, jdFromKST, sunLongitude, moonLongitude, nakshatra } from "./lib/decoders.mjs";
 import { ascendant, midheaven, wholeSignHouse, signOf, profection, partOfFortune,
          isDayBirth, vimshottari, ashtakuta, DASHA, DASHA_TOTAL, gmst, obliquity } from "./lib/sky.mjs";
 
 const R = []; const ck = (n, p, g = "") => { R.push(p); console.log(`${p ? "PASS" : "FAIL"} — ${n}${g ? " · " + g : ""}`); };
 const SEOUL = { lat: 37.5665, lon: 126.978 };
 const angDiff = (a, b) => { let d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d; };
+/* 검사용 가상 명식 두 개. **실제 인물의 생년월일시를 쓰지 않는다** —
+   이 파일은 공개 리포에 남으므로, 한 사람을 특정할 수 있는 값(생일+생시+지역)이 들어가면 그 자체가 유출이다.
+   검증에 필요한 건 "고정된 입력"이지 "진짜 입력"이 아니다. */
+const FIX_A = jdFromKST(2000, 1, 1, 9, 0);      // 가상 A
+const FIX_B = jdFromKST(1995, 6, 15, 21, 30);   // 가상 B — 궁합 검사의 상대
 
 /* ── 기초 ── */
 ck("황도 경사각 — 2000년경 23.44도", Math.abs(obliquity(2451545) - 23.4393) < 0.001, obliquity(2451545).toFixed(4));
@@ -35,16 +40,16 @@ ck("중천 — 남중 무렵에 태양과 거의 겹친다(오차 <8도)", worst
 
 /* 상승궁은 하루에 열두 자리를 모두 지나야 한다 */
 const seen = new Set();
-for (let i = 0; i < 48; i++) seen.add(signOf(ascendant(jdFromKST(2026, 8, 6, 0, 0) + i / 48, SEOUL.lat, SEOUL.lon)));
+for (let i = 0; i < 48; i++) seen.add(signOf(ascendant(FIX_A + i / 48, SEOUL.lat, SEOUL.lon)));
 ck("상승궁 — 하루에 열두 자리를 모두 지난다", seen.size === 12, `${seen.size}자리`);
 
 /* ── 하우스 ── */
-const jdB = jdFromKST(2026, 8, 6, 10, 51);
+const jdB = FIX_A;
 const asc = ascendant(jdB, SEOUL.lat, SEOUL.lon);
 ck("홀사인 — 상승궁 자신은 1하우스", wholeSignHouse(asc, asc) === 1);
 ck("홀사인 — 값이 항상 1~12", [...Array(360)].every((_, i) => { const h = wholeSignHouse(i, asc); return h >= 1 && h <= 12; }));
-ck("낮/밤 — 정오 출생은 낮", isDayBirth(jdFromKST(2026, 8, 6, 12, 0), SEOUL.lat, SEOUL.lon) === true);
-ck("낮/밤 — 자정 출생은 밤", isDayBirth(jdFromKST(2026, 8, 6, 0, 0), SEOUL.lat, SEOUL.lon) === false);
+ck("낮/밤 — 정오 출생은 낮", isDayBirth(jdFromKST(2000, 6, 1, 12, 0), SEOUL.lat, SEOUL.lon) === true);
+ck("낮/밤 — 자정 출생은 밤", isDayBirth(jdFromKST(2000, 6, 1, 0, 0), SEOUL.lat, SEOUL.lon) === false);
 
 /* ── 프로펙션 ── */
 ck("프로펙션 — 0세는 1하우스", profection(asc, 0).house === 1);
@@ -63,34 +68,40 @@ ck("파트 — 낮 공식과 밤 공식이 상승궁 대칭",
 
 /* ── 비민쇼타리 다샤 ── */
 ck("다샤 — 아홉 시기의 합이 정확히 120년", DASHA_TOTAL === 120, String(DASHA_TOTAL));
-const vd = vimshottari(jdB, 2026, 9);
+const vd = vimshottari(jdB, 2000, 9);
 ck("다샤 — 첫 시기는 남은 만큼만", vd.balance > 0 && vd.balance <= DASHA.find(([l]) => l === vd.startLord)[1],
    `${vd.startLord} ${vd.balance}년 남음`);
 ck("다샤 — 아홉 시기를 돌면 시작 주인으로 돌아온다",
-   vimshottari(jdB, 2026, 10).periods[9].lord === vd.startLord);
+   vimshottari(jdB, 2000, 10).periods[9].lord === vd.startLord);
 ck("다샤 — 구간이 끊기지 않는다", vd.periods.every((p, i) => i === 0 || Math.abs(p.from - vd.periods[i-1].to) < 0.05));
-ck("다샤 — 달자리가 판독기 v01 과 일치", vd.nakshatra === "바라니", vd.nakshatra);
+/* 값을 못 박지 않고 **두 모듈을 맞대어** 검사한다. 그래야 입력을 바꿔도 검사가 살아 있고,
+   원래 이 검사가 잡으려던 것(sky.mjs 의 다샤가 decoders.mjs 의 달자리와 어긋나는가)도 그대로 잡힌다. */
+ck("다샤 — 달자리가 판독기 v01 과 일치", vd.nakshatra === nakshatra(jdB, 2000),
+   `${vd.nakshatra} / ${nakshatra(jdB, 2000)}`);
+ck("다샤 — 입력을 바꿔도 두 모듈이 계속 일치", [...Array(24)].every((_, i) => {
+  const j = jdFromKST(1990 + i, 1 + i % 12, 1 + i % 28, 3 + i % 20, 0);
+  return vimshottari(j, 1990 + i, 1).nakshatra === nakshatra(j, 1990 + i); }));
 
 /* ── 아쉬타쿠타 ── */
-const jdH = jdFromKST(2023, 5, 30, 20, 46);
-const ak = ashtakuta(jdB, 2026, jdH, 2023);
+const jdH = FIX_B;
+const ak = ashtakuta(jdB, 2000, jdH, 1995);
 ck("궁합 — 총점이 0~36", ak.total >= 0 && ak.total <= 36, `${ak.total}/36`);
 ck("궁합 — 여덟 항목이 다 채점됨", Object.keys(ak.detail).length === 8, Object.keys(ak.detail).join(","));
-ck("궁합 — 자기 자신과는 나디가 0점(같은 체질)", ashtakuta(jdB, 2026, jdB, 2026).detail.나디 === 0);
-ck("궁합 — 자기 자신과는 요니·가나가 만점", (() => { const x = ashtakuta(jdB,2026,jdB,2026).detail; return x.요니 === 4 && x.가나 === 6; })());
+ck("궁합 — 자기 자신과는 나디가 0점(같은 체질)", ashtakuta(jdB, 2000, jdB, 2000).detail.나디 === 0);
+ck("궁합 — 자기 자신과는 요니·가나가 만점", (() => { const x = ashtakuta(jdB,2000,jdB,2000).detail; return x.요니 === 4 && x.가나 === 6; })());
 ck("궁합 — 어떤 짝이든 상한을 넘지 않는다", [...Array(120)].every((_, i) => {
   const j1 = jdFromKST(2000, 1 + i % 12, 1 + i % 28, 12, 0), j2 = jdFromKST(1995, 1 + (i * 7) % 12, 1 + (i * 3) % 28, 9, 0);
   const t = ashtakuta(j1, 2000, j2, 1995).total; return t >= 0 && t <= 36; }));
 
-console.log("\n── 두 아이 실제 값 ──");
-for (const [lab, jd, yr] of [["동생 강리온", jdB, 2026], ["형 강리한", jdH, 2023]]) {
+console.log("\n── 가상 명식 두 개(A·B) 판독 결과 ──");
+for (const [lab, jd, yr] of [["A", jdB, 2000], ["B", jdH, 1995]]) {
   const a = ascendant(jd, SEOUL.lat, SEOUL.lon), day = isDayBirth(jd, SEOUL.lat, SEOUL.lon);
   const v = vimshottari(jd, yr, 4);
   console.log(`  ${lab}: 상승궁 ${signOf(a)} · 중천 ${signOf(midheaven(jd, SEOUL.lon))} · ${day ? "낮" : "밤"} 출생`);
   console.log(`      해는 ${wholeSignHouse(sunLongitude(jd), a)}하우스 · 달은 ${wholeSignHouse(moonLongitude(jd), a)}하우스 · 재물의 자리 ${signOf(partOfFortune(jd, a, day))}`);
   console.log(`      다샤: ${v.periods.map(p => `${p.lord}(${p.from}~${p.to}세)`).join(" → ")}`);
 }
-console.log(`  형제 궁합: ${ak.total}/36 —`, Object.entries(ak.detail).map(([k, v]) => `${k} ${v}`).join(" · "));
+console.log(`  A·B 궁합: ${ak.total}/36 —`, Object.entries(ak.detail).map(([k, v]) => `${k} ${v}`).join(" · "));
 
 const pass = R.filter(Boolean).length;
 console.log(`\n=== 좌표 판독기 검증: ${pass}/${R.length} PASS ===`);
