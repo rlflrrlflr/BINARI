@@ -108,6 +108,32 @@ const three = await page.locator(".msrbody .msr3").count();
 ck("십성 해설이 3단(실제로는·그늘)", three >= 1 && /실제로는/.test(body) && /그늘/.test(body), `${three}개`);
 // 알 권리 — 일지는 배우자궁인데 지금까지 계산만 하고 화면에 안 썼다
 ck("짝의 자리(일지 배우자궁) 공개", /짝의 자리\(일지 [가-힣]\)/.test(body), (body.match(/짝의 자리\(일지 [가-힣]\) — .{0,18}/) || [])[0] || "");
+// ── v111 항목별 4단 (창업자 지시 2026-08-11): 리포트의 본체는 '사주 항목'이 아니라 '삶의 자리'다.
+// "태어날 때 이랬어 → 자라며 이렇게 나타났어 → 지금 어디야 → 앞으로 이렇게 돼"
+const nDom = await page.locator(".msrbody .dom").count();
+ck("삶의 자리가 아홉(성별 있을 때)", nDom === 9, `${nDom}개`);
+const nStep = await page.locator(".msrbody .dstep").count();
+ck("자리마다 네 단", nStep === nDom * 4, `${nStep}단`);
+const labs = [...new Set(await page.locator(".msrbody .dstep i").allTextContents())];
+ck("4단 이름이 넷뿐", labs.length === 4 && ["새겨질 때", "자라면서", "지금", "앞으로"].every((t) => labs.includes(t)), labs.join("/"));
+// .dstep 은 flex 다. 본문을 한 겹으로 안 싸면 강조 조각마다 열이 갈려 글이 세로로 찢어진다(v111 실측)
+const wrapped = await page.evaluate(() => [...document.querySelectorAll(".dstep")]
+  .every((p) => p.children.length === 2 && p.children[1].classList.contains("dt")));
+ck("4단 본문이 한 열로 묶인다(세로 찢김 방지)", wrapped);
+const dom = (await page.locator(".msrbody .dom").allTextContents()).join("\n");
+ck("「지금」이 실제 대운 구간을 짚는다", /지금[\s\S]{0,90}\d+~\d+세 [가-힣]{2}/.test(dom));
+// "어떤 류다"로 끝내지 말고 예를 들라는 지시 — 사건 예시가 실제로 나가는지 본다
+ck("「앞으로」가 예를 들어 말한다(선을 넘는다)",
+   /(월급이 오르거나|목돈이 오가는|직함이 생기거나|이직·발령|학교·자격|동업·팀|경쟁자가 생기고|먹는 일·가르치는|말·글·영상|혼자 파는 일)/.test(dom));
+ck("몸 자리가 어디가 약한지 말한다", /(콩팥·방광|폐·대장|비장·위|심장·혈관|간·쓸개)/.test(dom),
+   (dom.match(/그 자리는 [^.]{0,24}/) || [])[0] || "");
+ck("아홉 자리 제목이 다 있다",
+   ["몸 —", "마음 —", "배움 —", "일 —", "돈 —", "연애 —", "결혼 —", "자녀 —", "사람 —"].every((t) => dom.includes(t)));
+// 표에서 조립한 문장이라 받침 처리를 빠뜨리면 바로 티가 난다(v111 실측: "식신로 결이", "귀이야")
+ck("조사 — 받침 있는 십성 뒤엔 '으로'",
+   !/(비견|식신|상관|정관|편관|정인|편인)로 결이/.test(dom) && !/(겁재|정재|편재)으로 결이/.test(dom));
+ck("조사 — 받침 없는 말 뒤엔 '야'", !/(귀|코)이야/.test(dom));
+ck("성별이 있으면 '못 편다' 안내가 안 뜬다", !/연애·자녀 두 자리는/.test(body));
 ck("화면 오류 없음", errs.length === 0, errs.join(" / "));
 
 await b.close();

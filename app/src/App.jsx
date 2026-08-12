@@ -495,6 +495,209 @@ const SPOUSE = {
   편인: "생각이 깊은 짝. 통하면 크게 통하는데 혼자 있는 시간을 많이 필요로 해",
 };
 
+/* ── v111 항목별 4단 — 리포트의 본체를 '사주 항목'에서 '삶의 자리'로 바꾼다 ────────────
+   창업자 지시(2026-08-11): "리포트는 사주베이스가 아니고 **각 항목별 설명이 들어가는 형태** —
+   태어날 때 정해진 운명이 이랬어, 그래서 자라며 이런 느낌이 들었을 거야, 넌 지금 어느 단계야,
+   앞으로 이렇게 될 거야. 항목도 여러가지겠지 — 학업 건강 연애 결혼 자녀 직장 궁합."
+   그리고 "**선을 좀 넘어**라 — '어떤 류다' 말고 어떤 일이 생기는지 예를 들어라."
+   ⚠ 전부 클라이언트 계산이다. 표를 조회할 뿐 지어내지 않는다. 근거가 없으면 그 칸을 비운다. */
+const EL_ORGAN = {   // 오행 → 몸의 자리. 병명이 아니라 '어디가 약한가'까지만 말한다(창업자 지시 2026-08-10)
+  목: { organ: "간·쓸개, 눈, 힘줄", lack: "눈이 빨리 피로해지고, 화를 삼키면 옆구리와 어깨가 결려", over: "성질이 먼저 솟고 참으면 두통이 와. 술이 오래 남아" },
+  화: { organ: "심장·혈관, 소장", lack: "손발이 차고 가슴이 자주 두근거려. 겨울마다 기운이 확 꺼져", over: "열이 잘 오르고 잠이 얕아. 입안이 자주 헐고 눈이 충혈돼" },
+  토: { organ: "비장·위, 소화, 살", lack: "잘 체하고, 찬 걸 먹으면 바로 탈이 나", over: "몸이 잘 붓고 무거워져. 생각이 많아 잠을 뒤척여" },
+  금: { organ: "폐·대장, 피부, 코", lack: "코가 자주 막히고 살갗이 메말라. 환절기마다 기침이 오래가", over: "숨이 얕고 잔기침이 길어. 피부가 예민해 잘 뒤집혀" },
+  수: { organ: "콩팥·방광, 뼈, 귀", lack: "허리가 쉽게 시고 저녁이면 힘이 뚝 떨어져. 몸이 잘 말라", over: "아랫배가 차고 잘 부어. 겁이 많아지고 밤에 자주 깨" },
+};
+/* 대운이 데려오는 **사건**. "어떤 류다"로 끝내지 않고 예를 든다 — 그래야 나중에 맞았는지 틀렸는지 셀 수 있다 */
+const SS_EVENT = {
+  정재: "월급이 오르거나, 계약이 하나 길게 붙거나, 집·차처럼 네 이름이 올라가는 물건이 생겨",
+  편재: "부업·투자·중개처럼 목돈이 오가는 판이 열려. 크게 들어오고 크게 나가",
+  식신: "손에 익은 걸로 벌어먹는 자리가 생겨 — 먹는 일·가르치는 일·만드는 일",
+  상관: "말·글·영상·기획처럼 티 나는 걸 내놓게 돼. 대신 윗사람과 한 번은 부딪혀",
+  정관: "직함이 생기거나 승진하거나, 자격증·시험처럼 이름이 서는 일이 와",
+  편관: "책임이 갑자기 얹혀 — 이직·발령·수술·소송처럼 몰아치는 일이야",
+  정인: "배움이 붙어. 학교·자격·문서·계약, 그리고 도와주는 어른이 나타나",
+  편인: "혼자 파는 일이 열려 — 자격·연구·기술·상담 쪽이야",
+  비견: "동업·팀·같은 처지의 사람이 붙어. 독립을 생각하게 돼",
+  겁재: "경쟁자가 생기고 돈이 새 — 보증·동업·빌려주기 셋이 특히 그래",
+};
+const JOB_SHAPE = {
+  관성: { born: "조직 안에서 자리를 받는 쪽", grew: "규칙이 분명한 데서 오히려 편했고, 맡기면 끝까지 했을 거야", ex: "회사·공공·전문직처럼 직함이 있는 일" },
+  식상: { born: "만들어서 내놓는 쪽", grew: "시키는 대로 하는 건 답답했고, 네 방식으로 바꿔야 손이 움직였을 거야", ex: "기획·창작·교육·요식처럼 결과물이 네 이름으로 나가는 일" },
+  재성: { born: "굴려서 남기는 쪽", grew: "값과 이익이 먼저 보였고, 숫자로 말할 때 설득력이 붙었을 거야", ex: "영업·유통·중개·자영업처럼 거래가 곧 실력인 일" },
+  비겁: { born: "제 힘으로 미는 쪽", grew: "누구 밑보다 혼자가 빨랐고, 그래서 부딪히기도 했을 거야", ex: "1인 사업·프리랜서·기술직처럼 실력이 곧 간판인 일" },
+};
+const LV = (v) => (v === 0 ? "비어 있어" : v === 1 ? "얇아" : v === 2 ? "보통이야" : v === 3 ? "두꺼워" : "넘쳐");
+/* 받침에 따라 조사를 고른다 — 실측에서 "식신로 결이 바뀌어"·"귀이야"가 나왔다. ㄹ 받침(종성 8)은 '로'를 쓴다 */
+const JONG = (w) => { const c = String(w).charCodeAt(String(w).length - 1) - 0xac00; return c >= 0 && c < 11172 ? c % 28 : 0; };
+const RO = (w) => w + (JONG(w) === 0 || JONG(w) === 8 ? "로" : "으로");
+const IYA = (w) => w + (JONG(w) ? "이야" : "야");
+/** 삶의 자리 아홉 개를 각각 4단으로 편다. 순수 함수 — 화면과 분리해 두어야 검사할 수 있다. */
+function lifeDomains(ctx) {
+  const { idx, ssn, counts, strength, ys, sins, lackEl, ladder, nowAge, sex, hasHour } = ctx;
+  const n = (k) => ssn[k] || 0;
+  const G = { 비겁: n("비견") + n("겁재"), 식상: n("식신") + n("상관"), 재성: n("정재") + n("편재"), 관성: n("정관") + n("편관"), 인성: n("정인") + n("편인") };
+  const KS = { 비겁: ["비견", "겁재"], 식상: ["식신", "상관"], 재성: ["정재", "편재"], 관성: ["정관", "편관"], 인성: ["정인", "편인"] };
+  const me = GAN_EL[idx.dG];
+  const ssOf = (d) => sipseong(idx.dG, GAN.indexOf(d.ganji[0]));
+  const at = (d) => `${d.startAge}~${d.endAge}세`;
+  const cur = nowAge != null ? ladder.find((d) => nowAge >= d.startAge && nowAge <= d.endAge) || null : null;
+  const nextOf = (ks) => ladder.find((d) => d.startAge > (nowAge || 0) && ks.includes(ssOf(d))) || null;
+  const nextEl = (els) => ladder.find((d) => d.startAge > (nowAge || 0) && els.includes(d.el)) || null;
+  /* 「지금」과 「앞으로」는 아홉 자리 모두 같은 규칙으로 낸다 —
+     이 자리를 맡은 십성 무리가 지금 대운에 있나, 없으면 언제 오나. 대운이 없으면 지어내지 않고 못 짚는다고 말한다. */
+  const nowBy = (g, on, off) =>
+    !ladder.length ? "성별이 없어서 지금이 어느 십 년인지 못 짚어 — 프로필에 성별을 더하면 이 칸이 채워져"
+      : !cur ? `아직 첫 대운 전이야. ${ladder[0].startAge}세부터 십 년 단위 흐름이 시작돼`
+        : KS[g].includes(ssOf(cur)) ? `*${at(cur)} ${cur.ganji} — 지금이 바로 그 십 년이야.* ${on}`
+          : `지금 십 년(${at(cur)} ${cur.ganji})은 ${ssOf(cur)} 쪽에 쏠려 있어. ${off}`;
+  const nextBy = (g, none) => {
+    if (!ladder.length) return "대운의 방향이 안 서서 못 펼쳤어";
+    const d = nextOf(KS[g]);
+    return d ? `*${at(d)} ${d.ganji}* — ${ssOf(d)} 십 년이 와. ${SS_EVENT[ssOf(d)]}` : none;
+  };
+  const D = [];
+  const put = (k, t, cf, a, b, c, d) => D.push({ k, t, cf, s: [["새겨질 때", a], ["자라면서", b], ["지금", c], ["앞으로", d]] });
+
+  /* 1. 몸 — 오행으로 움직이는 자리라 십성 규칙을 쓰지 않는다 */
+  {
+    const sorted = Object.entries(counts).sort((a, b) => a[1] - b[1]);
+    const weak = lackEl.length ? lackEl : [sorted[0][0]];
+    const [maxEl, maxN] = sorted[sorted.length - 1];
+    const beaten = weak.filter((w) => GEUK[maxEl] === w);
+    const born = weak.map((w) => `*${w} 기운이 ${lackEl.includes(w) ? "비어 있어" : "가장 얇아"}* — 그 자리는 ${IYA(EL_ORGAN[w].organ)}`).join(". ")
+      + (maxN >= 3 ? `. 반대로 *${maxEl}이 ${maxN}개*로 몰려 있어` : "")
+      + (beaten.length ? `. 그리고 ${maxEl}은 ${beaten[0]}을 치는 기운이라, *가장 얇은 자리를 가장 센 힘이 때리는 배치*야` : "");
+    const grew = weak.map((w) => EL_ORGAN[w].lack).join(" 그리고 ") + (maxN >= 4 ? `. 여기에 ${EL_ORGAN[maxEl].over}` : "");
+    const helps = cur && (weak.includes(cur.el) || SAENG[cur.el] === weak[0]);
+    const hurts = cur && GEUK[cur.el] === weak[0];
+    const now = !ladder.length ? "성별이 없어서 지금 십 년을 못 짚어"
+      : !cur ? "아직 첫 대운 전이야"
+        : helps ? `*${at(cur)} ${cur.ganji} — 지금 십 년이 그 자리를 채워줘.* 이 구간이 몸으로는 가장 수월해`
+          : hurts ? `*${at(cur)} ${cur.ganji} — 지금 십 년이 그 얇은 자리를 더 때려.* 무리하면 거기부터 신호가 와`
+            : `지금 십 년(${at(cur)} ${cur.ganji})은 ${cur.el} 기운이라 이 자리와 직접 상관은 없어`;
+    const f = nextEl(weak.concat(ys.eokbu));
+    put("몸", "몸 — 어디가 약하게 새겨졌나", "m", born, `어릴 때부터 ${grew}.`, now,
+      f ? `*${at(f)} ${f.ganji}부터* ${f.el} 기운이 들어와 — ${weak.includes(f.el) ? "비어 있던 바로 그 자리야" : "네게 필요한 기운이야"}. 그 십 년에 몸이 한 단계 편해져`
+        : `여든까지 ${weak.join("·")} 대운은 오지 않아. *운을 기다릴 자리가 아니라 평생 관리할 자리*라는 뜻이야 — ${EL_USE[weak[0]] ? EL_USE[weak[0]].color + "·" + EL_USE[weak[0]].dir : ""}`);
+  }
+  /* 2. 마음 — 동률 처리(실사고 2026-08-02): 전부 1개인 명식에서 '가장 두꺼운 게 겁재 1개'가 나왔다.
+     삽입 순서로 대표를 뽑는 건 실력이 아니라 우연이다. 동률이면 동률이라고 말한다. */
+  {
+    const ent = Object.entries(ssn).sort((a, b) => b[1] - a[1]);
+    const topV = ent.length ? ent[0][1] : 0;
+    const tops = ent.filter(([, v]) => v === topV);
+    put("마음", "마음 — 어떤 사람으로 발급됐나", "m",
+      `*나(일간)는 ${GAN[idx.dG]}, ${me} 기운*이야. ${EL_READ[me]} 그리고 나를 받치는 글자가 ${G.비겁 + G.인성}개라 *${strength}*으로 나와`,
+      topV <= 1 || tops.length >= 4
+        ? "십성이 *고르게 흩어져 있어* — 한쪽으로 쏠린 성격이 아니야. \"이런 사람\"이라고 한 단어로 안 묶이는 대신, 어느 판에 놓여도 그럭저럭 굴러가"
+        : tops.length > 1
+          ? `가장 두꺼운 게 *${tops.map(([k]) => k).join("·")} ${topV}개씩*이야 — 동률이라 어느 쪽이 앞이라고 못 잘라. ${tops.map(([k]) => SS_TIP[k].r).join(" 그리고 ")}`
+          : `가장 두꺼운 게 *${tops[0][0]} ${topV}개*야 — ${SS_TIP[tops[0][0]].r}. 그늘도 같이 왔어: ${SS_TIP[tops[0][0]].s}`,
+      !cur ? (ladder.length ? "아직 첫 대운 전이야" : "성별이 없어서 지금 십 년을 못 짚어")
+        : `*${at(cur)} ${cur.ganji}* — ${ssOf(cur)} 십 년이야. ${SS_TIP[ssOf(cur)].r}`,
+      (() => { const d = ladder.find((x) => x.startAge > (nowAge || 0)); return d ? `*${at(d)} ${d.ganji}부터* ${RO(ssOf(d))} 결이 바뀌어. ${SS_EVENT[ssOf(d)]}` : "여든까지의 대운은 위 흐름 절에 전부 펼쳐 뒀어"; })());
+  }
+  /* 3. 배움 */
+  {
+    const mc = sins.some((x) => x.name === "문창귀인");
+    put("배움", "배움 — 공부가 붙는 방식", "m",
+      `배움의 자리(인성)가 *${G.인성}개, ${LV(G.인성)}*${mc ? ". 그리고 *문창귀인*이 앉아 있어 — 글과 시험으로 푸는 복이야" : ""}`,
+      G.인성 >= 3 ? "설명해 주면 잘 받아들였고, 시작 전에 자료부터 모으는 아이였을 거야. 대신 준비가 길어져 시작이 늦었어"
+        : G.인성 === 0 ? `앉아서 외우는 건 오래 못 갔을 거야. *손으로 해보면 한 번에 붙는 쪽*이야${G.식상 >= 2 ? " — 만들면서 배우는 게 네 방식이야" : ""}`
+          : "배우는 것도 하고 몸으로 익히는 것도 하는, 치우치지 않은 쪽이야",
+      nowBy("인성", "배움이 붙는 십 년이야 — 학교·자격·문서가 유독 잘 풀려", "이 십 년엔 배움보다 그쪽이 먼저야. 공부는 짧게 끊어 가는 게 맞아"),
+      nextBy("인성", "*여든까지 인성 대운은 오지 않아.* 배움은 운이 데려다주지 않는다는 뜻이야 — 필요하면 지금 사둬야 해"));
+  }
+  /* 4. 일 — 여기도 동률이 실제로 난다(재성 2 · 비겁 2). 순서로 몰래 고르지 않고 둘 다 말한다 */
+  {
+    const order = ["관성", "식상", "재성", "비겁"];
+    const best = Math.max(...order.map((k) => G[k]));
+    const tied = best === 0 ? ["비겁"] : order.filter((k) => G[k] === best);
+    const key = tied[0], sh = JOB_SHAPE[key];
+    put("일", "일 — 어디서 밥을 버나", "m",
+      `*${sh.born}*으로 새겨졌어 (관성 ${G.관성} · 식상 ${G.식상} · 재성 ${G.재성} · 비겁 ${G.비겁})`
+      + (tied.length > 1 ? `. 다만 *${tied.join("·")}이 ${best}개로 동률*이라 한쪽으로 못 잘라 — ${tied.map((k) => JOB_SHAPE[k].born).join("과 ")}이 둘 다 네 결이야` : "")
+      + `. 그리고 네 기운은 ${me} — ${JOB_EL[me]}`,
+      `${sh.grew}. 맞는 판은 *${sh.ex}*이야`,
+      nowBy(key, "네 방식이 그대로 먹히는 십 년이야. 판을 바꾸려면 지금이야", "네 결이 아닌 쪽이 힘을 쓰는 십 년이라, 억지로 밀기보다 배우는 데 쓰는 게 남아"),
+      nextBy(key, "여든까지 그 결의 대운은 다시 오지 않아 — *지금 잡은 자리를 오래 끌고 가는 게 맞아*"));
+  }
+  /* 5. 돈 */
+  {
+    const jd = G.재성, weakRich = jd >= 3 && strength === "신약";
+    put("돈", "돈 — 얼마나 쥐는 그릇인가", "m",
+      weakRich ? `재물 자리가 *${jd}개로 두꺼운데 나를 받치는 힘은 ${G.비겁 + G.인성}개*야. 명리에서 *재다신약*이라고 부르는 배치 — **돈은 보이는데 쥘 팔 힘이 모자라는** 그릇이야`
+        : jd === 0 ? "재물 자리가 *비어 있어*. 없다는 건 못 번다는 게 아니라, *정해진 돈(월급·고정 계약)이 맞고 굴리는 돈은 새기 쉽다*는 뜻이야"
+          : jd >= 3 ? `재물 자리가 *${jd}개로 두꺼워*. 흐름이 열릴 때 *크게 받는 그릇*이야`
+            : `재물 자리가 *${jd}개, ${LV(jd)}*. 크게 터지진 않아도 끊기지도 않는 쪽이야`,
+      weakRich ? "큰돈이 눈앞을 지나가는 걸 여러 번 봤을 거야. 잡으려다 몸이나 사람을 잃은 적도 있고 — 그릇이 아니라 *체력과 사람의 문제*였어"
+        : jd === 0 ? "통장에 남는 게 실력보다 늘 적었을 거야. 큰 판보다 *꼬박꼬박이 네 방식*이야"
+          : "쓸 만큼은 들어왔고, 필요할 때 어디선가 생기는 편이었을 거야",
+      nowBy("재성", "돈이 실제로 움직이는 십 년이야 — 계약·거래·목돈이 이 구간에 몰려", "이 십 년은 돈보다 다른 게 먼저야. 무리해서 굴리면 새는 쪽이야"),
+      nextBy("재성", "여든까지 재성 대운은 오지 않아 — *한 방을 기다리지 말고 고정 수입을 두껍게 하는 게 네 정답*이야"));
+  }
+  /* 6. 연애 — 성별이 있어야 어느 십성이 인연인지 갈린다 */
+  if (sex) {
+    const g = sex === "M" ? "재성" : "관성";
+    const c = G[g], dh = sins.some((x) => x.name === "도화");
+    put("연애", "연애 — 인연이 오는 방식", "m",
+      `${sex === "M" ? "남자에게 인연은 재성" : "여자에게 인연은 관성"} 자리야. 네 건 *${c}개, ${LV(c)}*${dh ? ". 그리고 *도화*가 앉아 있어 — 사람을 끄는 자리야" : ""}`,
+      c === 0 ? "가만히 있으면 안 왔을 거야. *네가 움직인 자리에서만* 생겼어"
+        : c >= 3 ? "없어서 문제였던 적은 없고, *고르는 게 문제*였을 거야. 여럿이 겹쳐 곤란해진 적도 있고"
+          : "때 되면 오고 때 되면 정리되는, 요란하지 않은 쪽이었어",
+      nowBy(g, "인연이 실제로 움직이는 십 년이야 — 만나고 정하는 일이 이 구간에 몰려", "이 십 년엔 저절로 오지 않아. 오면 네가 만든 자리에서 와"),
+      nextBy(g, "여든까지 그 대운은 오지 않아 — *때를 기다리는 자리가 아니야.* 네가 판을 만드는 쪽이 맞아"));
+  }
+  /* 7. 결혼 — 일지가 배우자궁. 대운 지지가 일지를 충하는 구간이 흔들리는 때다 */
+  {
+    const sp = SPOUSE[sipseong(idx.dG, JI_BONGI[idx.dJ])];
+    const chung = (idx.dJ + 6) % 12;
+    const inNatal = [idx.yJ, idx.mJ, ...(idx.hJ != null ? [idx.hJ] : [])].includes(chung);
+    const hitAt = ladder.filter((d) => JI.indexOf(d.ganji[1]) === chung);
+    const future = hitAt.find((d) => d.startAge > (nowAge || 0));
+    const nowHit = cur && JI.indexOf(cur.ganji[1]) === chung;
+    put("결혼", "결혼 — 어떤 짝과 사는가", "m",
+      `짝의 자리(일지 ${JI[idx.dJ]})에 앉은 건 *${IYA(sipseong(idx.dG, JI_BONGI[idx.dJ]))}* — ${sp}`
+      + (inNatal ? `. 그리고 그 자리를 *정면으로 치는 글자가 원래 명식 안에 있어* — 사는 동안 그 자리가 한 번씩 흔들린다는 뜻이야` : ""),
+      inNatal ? "가까운 사이일수록 부딪혔을 거야. 남한테는 잘하면서 집 안에서 날이 섰다는 말을 들었을 수도 있어"
+        : "관계에서 크게 흔들린 적은 드물었을 거야. 대신 참고 넘어간 게 쌓여 있어",
+      !ladder.length ? "성별이 없어서 지금 십 년을 못 짚어"
+        : nowHit ? `*${at(cur)} ${cur.ganji} — 지금 십 년이 배우자 자리를 정면으로 쳐.* 이 구간에 관계가 한 번 크게 흔들려. 끝이 아니라 *재계약*이라고 보면 돼`
+          : cur ? `지금 십 년(${at(cur)} ${cur.ganji})은 그 자리를 건드리지 않아 — 관계로는 조용한 구간이야` : "아직 첫 대운 전이야",
+      future ? `*${at(future)} ${future.ganji}* 에 그 자리가 흔들려. 미리 알고 맞는 것과 모르고 맞는 건 결과가 달라`
+        : ladder.length ? "여든까지 배우자 자리를 정면으로 치는 대운은 없어 — *관계는 흐름이 아니라 네 태도가 정하는 자리*야" : "대운의 방향이 안 서서 못 펼쳤어");
+  }
+  /* 8. 자녀 — 남=관성 / 여=식상. 시(時)기둥이 자녀궁이라 시가 없으면 절반만 읽힌다 */
+  if (sex) {
+    const g = sex === "M" ? "관성" : "식상";
+    const c = G[g];
+    put("자녀", "자녀 — 아이 자리", "m",
+      `${sex === "M" ? "남자에게 자식은 관성" : "여자에게 자식은 식상"} 자리야. 네 건 *${c}개, ${LV(c)}*`
+      + (hasHour ? "" : ". 다만 *태어난 시를 몰라 시(時)기둥이 비었어* — 자녀궁의 절반은 못 읽었다고 봐야 해"),
+      c === 0 ? "이 자리가 비었다고 자식이 없다는 뜻이 아니야. *늦게 오거나, 애쓴 만큼 와 준다*는 쪽이야"
+        : c >= 3 ? "아이 인연이 두껍게 실려 있어. 대신 그만큼 *네 시간과 돈이 그쪽으로 간다*는 뜻이기도 해"
+          : "무리 없이 오는 자리야",
+      nowBy(g, "아이 일이 실제로 움직이는 십 년이야", "이 십 년은 그쪽보다 다른 자리가 먼저야"),
+      nextBy(g, "여든까지 그 대운은 오지 않아 — 흐름을 기다리는 자리가 아니라는 뜻이야"));
+  }
+  /* 9. 사람 */
+  {
+    const gw = sins.filter((x) => ["천을귀인", "암록"].includes(x.name));
+    put("사람", "사람 — 곁에 누가 서는가", "m",
+      `같이 가는 자리(비겁)가 *${G.비겁}개, ${LV(G.비겁)}*`
+      + (gw.length ? `. 그리고 *${gw.map((x) => x.name).join("·")}* 이 있어 — 막힐 때 사람이 나타나 뚫리는 자리야` : ""),
+      G.비겁 === 0 ? "무리에 섞이기보다 혼자 하는 게 빨랐을 거야. 도와줄 사람을 못 찾은 게 아니라 *안 부른 쪽*이야"
+        : G.비겁 >= 3 ? "사람은 늘 있었을 거야. 대신 *나눌 때 네 몫이 줄고, 빌려준 돈이 안 돌아온* 적이 있어"
+          : "필요할 때 옆에 서 주는 사람이 한둘은 있었어",
+      nowBy("비겁", "사람이 몰리는 십 년이야 — 동업·팀·독립 이야기가 이 구간에 나와", "이 십 년은 사람보다 네 일이 먼저야"),
+      nextBy("비겁", "여든까지 비겁 대운은 오지 않아 — *혼자 가는 게 기본값*인 삶이야. 나쁜 게 아니라 계산에 넣으라는 말이야"));
+  }
+  return D;
+}
+/** `*강조*` 만 굵게. 표에서 나온 문장을 화면에 그대로 얹기 위한 최소 표시기다 */
+const Em = ({ t }) => <>{String(t).split("*").map((s, i) => (i % 2 ? <b key={i}>{s}</b> : <span key={i}>{s}</span>))}</>;
+
 function MyeongsikReport({ saju, sex, birth }) {
   /* 훅 순서를 지키려고 널 가드를 겉껍질로 뺀다 — 본체는 idx가 있을 때만 마운트된다 */
   if (!saju || !saju.idx) return null;
@@ -552,6 +755,13 @@ function MyeongsikReportBody({ saju, sex, birth }) {
   if (!sex) unread.push(["성별", "대운의 방향(순행·역행)이 안 서서 10년 흐름을 못 펼쳤어"]);
   if (!birth?.city) unread.push(["태어난 도시", "서울 경도로 계산했어 — 다른 지역이면 시(時)가 한 칸 옮겨갈 수 있어"]);
   if (!bornYet) unread.push(["아직 오지 않은 날", "태어나기 전이라 '좋은 날 고르기'는 뺐어"]);
+  /* v111 항목별 4단 — 리포트의 본체. 위 절들(명식·읽지 못한 것)은 머리말이고,
+     아래 「셈의 근거」는 꼬리말이다. 유저가 실제로 사려는 건 '내 삶의 자리가 어떻게 되나'이지
+     '내 십성 분포가 얼마인가'가 아니다(창업자 지시 2026-08-11). */
+  const doms = lifeDomains({
+    idx, ssn: sipseongDist(idx), counts: saju.counts, strength, ys, sins, lackEl,
+    ladder, nowAge, sex, hasHour: idx.hG != null,
+  });
   /* 계측은 클릭이 아니라 노출 시점에 — 기본 펼침이 되면서 onClick 계측이 영영 안 찍히게 됐다 */
   useEffect(() => { track("report_shown", { sinsal: sins.length, top_ss: dist[0] ? dist[0][0] : null, strength, lack_el: lackEl.join("") || null, yong: ys.eokbu.join("") || null, yong_agree: ys.agree }); }, []);
   return (
@@ -585,6 +795,21 @@ function MyeongsikReportBody({ saju, sex, birth }) {
           {unread.length > 0
             ? unread.map(([k, why]) => <p key={k}><b>{k}</b> — {why}</p>)
             : <p>없어. 여덟 글자와 대운까지 <b>전부 읽혔어</b> — 아래는 빠진 것 없이 계산된 값이야</p>}
+          {/* ── v111 본체: 삶의 자리 아홉 개 × 4단 ── */}
+          <p className="msrh">네 삶의 자리 — 아홉 곳 <Cf k="m" /></p>
+          <p className="dim">자리마다 넷으로 나눠 적었어 — <b>처음에 어떻게 새겨졌는지, 그래서 자라며 어떻게 나타났는지, 지금 네가 어디에 있는지, 앞으로 어떻게 되는지.</b></p>
+          {doms.map((d) => (
+            <div key={d.k} className="dom">
+              <p className="domh">{d.t} <Cf k={d.cf} /></p>
+              {d.s.map(([lab, txt]) => (
+                /* Em 이 만드는 조각들을 반드시 한 겹으로 싸야 한다 —
+                   .dstep 이 flex 라, 안 싸면 조각 하나하나가 열이 되어 글이 세로로 찢어진다(실측) */
+                <p key={lab} className="dstep"><i>{lab}</i><span className="dt"><Em t={txt} /></span></p>
+              ))}
+            </div>
+          ))}
+          {!sex && <p className="msrsub">연애·자녀 두 자리는 <b>성별이 있어야</b> 어느 글자가 그 인연인지 갈려 — 프로필에 더하면 열한 자리로 늘어나</p>}
+          <p className="msrh">셈의 근거 — 위 아홉 자리가 어디서 나왔나 <Cf k="h" /></p>
           <p className="msrh">타고난 것 <Cf k="h" /></p>
           {top.map(([k, v]) => (
             <p key={k}><b>{k} {v}</b> — {SS_TIP[k].e}
@@ -1713,7 +1938,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v110 · 정직성";
+const APP_VER = "v111 · 항목별 4단";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -3857,6 +4082,13 @@ const CSS = `
 /* 십성 3단 — 쉬운 말 아래에 '실제로는'과 '그늘'을 들여쓴다. 밝은 면만 쓰면 아무에게나 맞는 덕담이 된다 */
 .msr3{display:block;margin-top:4px;padding-left:8px;border-left:1px solid #c9b98f26;color:#9d8fb5;font-size:10.5px;line-height:1.6}
 .msr3 i{font-style:normal;color:#c9b98f;letter-spacing:.1em;margin-right:5px}
+/* v111 항목별 4단 — 한 자리가 한 덩어리로 읽혀야 한다. 4단 사이 여백보다 자리 사이 여백을 크게 준다 */
+.dom{margin:10px 0 0;padding:9px 10px;border:1px solid #c9b98f1f;border-radius:9px;background:#0f0b1a4d}
+.domh{margin:0 0 5px !important;color:#e6dff2 !important;font-size:12px !important;font-weight:700;letter-spacing:.01em}
+.dstep{display:flex;gap:8px;margin:5px 0 !important;font-size:10.8px !important;line-height:1.62 !important}
+.dstep i{flex:0 0 46px;font-style:normal;color:#c9b98f;font-size:9px;letter-spacing:.04em;text-align:right;padding-top:2.5px;white-space:nowrap}
+.dstep .dt{flex:1 1 auto;min-width:0}   /* 본문은 열 하나로 묶는다 — 안 그러면 강조 조각마다 열이 갈린다 */
+.dstep b{color:#f0d9a0}
 .disc{margin-top:auto;font-family:sans-serif;font-size:10px;color:#8a7f95;line-height:1.5}
 .split{font-family:sans-serif;font-size:10.5px;letter-spacing:.22em;color:#e5b96b;margin:0 0 6px;animation:formPulse 1.8s ease-in-out infinite}
 .retrybtn{background:transparent;border:1px solid #c98f3d66;color:#e6d6a8;font-size:11px;padding:3px 12px;border-radius:14px;cursor:pointer;font-family:sans-serif;margin-left:8px}
