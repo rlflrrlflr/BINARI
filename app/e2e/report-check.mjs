@@ -59,12 +59,22 @@ await onboard(page);
   ck("각인이 실제로 발행된다(결제 없이)", (await page.locator(".imp").count()) === 1);
   const it = (await page.locator(".imp").textContent()) || "";
   ck("각인 — 겉과 속을 갈라 말한다", /너는 .{4,}(이야|야)/.test(it) && /네 속은 다르다/.test(it));
-  ck("각인 — 몸이 다섯 항목 이상", (await page.locator(".imp .impr").count()) >= 5, `${await page.locator(".imp .impr").count()}행`);
+  ck("각인 — 생김새·짝 표가 채워진다", (await page.locator(".imp .impr").count()) >= 5, `${await page.locator(".imp .impr").count()}행`);
+  /* v118 여러 하늘의 증언 — 창업자 지적("글로벌 방법들은 적용이 된 거야 만 거야?")의 답이 되는 절이다.
+     감사 결과 열한 개 판독기 중 본문에 영향을 준 건 셋뿐이었다. 이 검사가 그 절의 실재를 지킨다. */
+  ck("각인 — 아홉 하늘이 화면에 증언한다", (await page.locator(".impwrow").count()) === 9, `${await page.locator(".impwrow").count()}줄`);
+  ck("각인 — 아홉 문명 이름이 다 나온다",
+    ["동아시아", "일본", "자바", "서양", "마야", "인도", "서아프리카", "수비학"].every((k) => it.includes(k)),
+    ["동아시아", "일본", "자바", "서양", "마야", "인도", "서아프리카", "수비학"].filter((k) => !it.includes(k)).join(",") || "전부");
+  ck("각인 — 사주가 아홉 중 하나라고 말한다", /사주는 그중 하나|아홉 하늘 중|아홉이 갈려/.test(it));
+  ck("각인 — 겹치거나 갈리거나 둘 중 하나로 판정한다", /같은 말을 해|갈려/.test(it));
+  ck("각인 — 겉모습과 건강을 두 번 쓰지 않는다", !/생김새와 몸/.test(it) && (it.match(/평생 약한 곳/g) || []).length <= 1);
+  ck("각인 — 비문이 없다", !/(사람|문|손|틀)이 얇/.test(it), (it.match(/.{6}(사람|문|손|틀)이 얇.{6}/) || [""])[0]);
   ck("각인 — 뒤집히는 조건 셋", (await page.locator(".imptrig").count()) === 3);
   ck("각인 — 여든 해가 갈린다", (await page.locator(".impband").count()) >= 6, `${await page.locator(".impband").count()}구간`);
   ck("각인 — 지금 구간 표식", /◂ 지금/.test(it));
   // 짝은 이 상품의 값어치 대부분이다. 열 항목이 다 나와야 한다
-  ck("각인 — 짝이 열 항목", ["키·체형", "생김새", "성격", "집안", "벌이", "어떻게 만나나", "언제 만나나", "그전에 오는 인연", "결혼 후", "갈라설 위험"]
+  ck("각인 — 짝이 열 항목", ["인상", "분위기", "성격", "집안", "벌이", "어떻게 만나나", "언제 만나나", "그전에 오는 인연", "결혼 후", "갈라설 위험"]
     .filter((k) => it.includes(k)).length >= 8, "");
   // 어린 나이를 인연 구간으로 세면 "세 살에 만나는 사람" 같은 말이 나온다(실측으로 잡았다)
   const m = it.match(/(\d+)~(\d+)세에 만나는 사람/);

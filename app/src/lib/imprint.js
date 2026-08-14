@@ -21,6 +21,7 @@ import {
   jdFromKST, sunLongitude, moonLongitude, jdn, sunSign, moonSign, nakshatra, tzolkin,
   ascendant, signOf, wholeSignHouse, profection, isDayBirth, vimshottari,
   seun, wolun, favor, sipseong as ssOf, GAN as GANK, JI as JIK, GANH, JIH, JI_BONGI as JB,
+  nayin, honmeisei, weton, akan, lifePath, moonPhase,
 } from "./sky.js";
 
 /* 간지가 한글로도 한자로도 들어온다 — 앱의 대운은 한글("임오"), 흐름 엔진은 한자("壬午").
@@ -54,17 +55,32 @@ const INNER = {
   물: { w: "감정이 깊고 오래 가는 사람", d: "겉으로는 잘 안 보여. 혼자 오래 담아 둬" },
   흙: { w: "실속부터 따지는 사람", d: "뜬 얘기를 못 견뎌. 손에 잡히는 것만 믿어" },
 };
-/* 비어 있는 자리 — 이 사람 인생의 축이 된다. 없는 것이 있는 것보다 많은 걸 정한다 */
+/* 가장 약한 자리 — 이 사람 인생의 축이 된다. 없는 것이 있는 것보다 많은 걸 정한다.
+   ⚠ **이름을 은유로 짓지 않는다.**(2026-08-14) v117 까지 t 가 "같이 갈 사람"·"말이 나갈 문"·"쥐는 손"
+   같은 명사구였고, 본문에서 "네게는 같이 갈 사람이 얇아"로 조립됐다.
+   창업자 판정: "뭔 말이야? 은유 같지도 않고 비유 같지도 않다."
+   맞다 — 사람이 얇을 수 없고 문이 얇을 수 없다. 뜻은 안 전해지고 폼만 잡은 문장이다.
+   → t 는 **제목용 한 낱말**, plain 은 **뜻이 바로 서는 완결 문장**으로 나눈다. 본문은 plain 을 쓴다. */
 const BLOCK = {
-  식상: { t: "말이 나갈 문", s: "하고 싶은 말이 안에서만 돌아", w: "참다가 한 번에 터져. 그리고 그게 제일 가까운 사람한테 가",
+  식상: { t: "말", plain: "하고 싶은 말을 제때 못 꺼내",
+    s: "할 말이 안에서만 돌아", w: "참다가 한 번에 터져. 그리고 그게 제일 가까운 사람한테 가",
+    trig: "하고 싶은 말을 오래 참았을 때",
     fix: "말을 대신할 손을 일찍 쥐는 것 — 만들고 그리고 고치는 일이 입을 대신해" },
-  재성: { t: "쥐는 손", s: "돈이 지나가는 건 보이는데 손에 안 남아", w: "크게 벌어도 남는 게 적어. 버는 재주보다 지키는 장치가 먼저야",
+  재성: { t: "돈 쥐기", plain: "돈이 손에 안 남아",
+    s: "지나가는 건 보이는데 남는 게 없어", w: "크게 벌어도 남는 게 적어. 버는 재주보다 지키는 장치가 먼저야",
+    trig: "돈이 계속 새 나갈 때",
     fix: "정해진 돈으로 받고 굴리는 건 남에게 맡기는 것 — 월급이나 고정 계약이 네 편이야" },
-  관성: { t: "버티는 틀", s: "규칙이 없으면 흐트러져", w: "남이 정한 틀을 못 견디는데, 틀이 없으면 또 무너져. 스스로 만든 규칙만 지켜",
+  관성: { t: "규칙", plain: "네 생활을 잡아 줄 틀이 없어",
+    s: "정해진 게 없으면 흐트러져", w: "남이 정한 틀을 못 견디는데, 틀이 없으면 또 무너져. 스스로 만든 규칙만 지켜",
+    trig: "생활이 흐트러졌을 때",
     fix: "네가 직접 만든 규칙을 종이에 적어 두는 것 — 남의 규칙은 안 먹혀" },
-  인성: { t: "받는 손", s: "도움을 못 받아", w: "부탁을 못 해서 혼자 다 져. 도와줄 사람이 없어서가 아니라 안 불러서야",
+  인성: { t: "도움받기", plain: "남한테 부탁을 못 해",
+    s: "혼자 다 지고 가", w: "도와줄 사람이 없어서가 아니라 안 불러서야. 그래서 늘 네가 제일 지쳐",
+    trig: "혼자 다 지려고 할 때",
     fix: "도와달라고 말하는 법 — 네가 평생 배워야 할 기술은 이거 하나야" },
-  비겁: { t: "같이 갈 사람", s: "혼자 하는 게 빨라", w: "무리에 섞이는 게 힘들어. 그래서 짐도 혼자 져",
+  비겁: { t: "사람", plain: "무리에 잘 못 섞여",
+    s: "혼자 하는 게 빨라", w: "여럿이 하면 속이 터져서 결국 네가 다 해. 그래서 짐도 혼자 져",
+    trig: "곁에 아무도 없을 때",
     fix: "혼자 가는 걸 기본값으로 놓고 계획하는 것 — 나쁜 게 아니라 계산에 넣으라는 말이야" },
 };
 /* 두꺼운 자리 — 이 사람이 어디서 밥을 버나 */
@@ -182,6 +198,53 @@ const DASHA_KO = {
 const DASHA_ADULT = { 달: "집과 안쪽 사람이 중심이 되는 시기", 라후: "낯선 것에 끌리고 한 번 흔들리는 시기" };
 const dashaWord = (lord, from) => (from >= 18 && DASHA_ADULT[lord]) || DASHA_KO[lord];
 
+/* ── 여러 하늘의 증언 ─────────────────────────────────────────────────────
+   창업자 지적(2026-08-14): "그냥 사주 내용이랑 꼭 같은데, 저번에 글로벌로 찾은
+   생년월일로 운명을 점치는 방법들은 적용이 된 거야 만 거야?"
+
+   **거의 안 됐다.** 감사해 보니 열한 개 판독기 중 본문에 영향을 준 건 셋뿐이었다 —
+   서양 해·달자리(속), 상승궁(미혼일 때 짝의 인상), 인도 다샤(여든 해 곁말).
+   마야·나크샤트라는 **각주 한 줄 장식**이었고, 자바 웨톤·아칸·태국 요일·구성기학·
+   납음오행·라이프패스·달 위상은 sky.js 에 계산만 있고 **한 번도 호출되지 않았다.**
+   그러니 읽으면 사주로 읽힐 수밖에 없었다. 사주가 아홉 중 하나가 아니라 전부였으니까.
+
+   ⚠ 여기서 지어내지 않기 위한 장치:
+   ① 다섯 낱말은 **오행 그대로**다(목·화·토·금·수를 행동으로 옮긴 것). 새 어휘를 만들지 않았다.
+   ② 각 문명을 다섯 낱말에 붙일 때 **그 전통이 스스로 말하는 것**을 따랐다.
+      납음·구성기학은 이름에 오행이 들어 있어 변환이 아예 없고,
+      자바 파사란은 전통이 이미 다섯 방위(동·남·서·북·중앙)에 배당해 두었다.
+      마야·나크샤트라·라이프패스·아칸은 각 전통의 documented 성격 서술을 옮긴 것이라 **해석이 섞인다** — 각주에 그렇게 적는다.
+   ③ 그래서 **합의와 갈림을 둘 다 보여준다.** 겹치면 확정, 갈리면 그게 이 사람의 급소다.
+      갈림을 감추고 하나로 몰면 아홉 셈을 돌린 의미가 없다. */
+const TAG = {
+  목: { w: "먼저 움직이는 사람", d: "생각이 서기 전에 몸이 먼저 나가. 시작은 쉬운데 끝맺는 게 어려워" },
+  화: { w: "드러내고 말하는 사람", d: "속에 담아 두질 못해. 그래서 오해도 덜 받고 상처도 빨리 받아" },
+  토: { w: "버티고 기다리는 사람", d: "빨리 안 움직여. 대신 한번 자리를 잡으면 안 밀려" },
+  금: { w: "자르고 정리하는 사람", d: "아닌 건 아니라고 해. 그래서 편한데 그래서 외로워" },
+  수: { w: "맞추고 스며드는 사람", d: "상황에 맞춰 모양이 바뀌어. 어디든 들어가는데 자기 모양이 흐려져" },
+};
+const ZO_TAG = { 불: "화", 흙: "토", 공기: "목", 물: "수" };
+/* 마야 촐킨 스무 날개 — 각 날개의 전통적 뜻을 다섯으로 옮겼다 */
+const TZ_TAG = { "이믹스(악어)": "토", "이크(바람)": "화", "아크발(밤)": "수", "칸(씨앗)": "목",
+  "치칸(뱀)": "목", "키미(전환)": "금", "마니크(사슴)": "토", "라마트(별)": "화", "물루크(물)": "수",
+  "오크(개)": "토", "추엔(원숭이)": "화", "에브(길)": "수", "벤(갈대)": "목", "이시(재규어)": "금",
+  "멘(독수리)": "목", "키브(지혜)": "토", "카반(대지)": "수", "에츠납(부싯돌)": "금",
+  "카우악(폭풍)": "금", "아하우(태양)": "화" };
+/* 인도 스물일곱 달자리 — 각 자리의 전통적 성질을 다섯으로 옮겼다 */
+const NAK_TAG = { 아슈위니: "목", 바라니: "토", 크리티카: "금", 로히니: "토", 므리가시라: "수",
+  아르드라: "금", 푸나르바수: "토", 푸쉬야: "토", 아슐레샤: "수", 마가: "화", 푸르바팔구니: "화",
+  우타라팔구니: "토", 하스타: "목", 치트라: "화", 스와티: "수", 비샤카: "목", 아누라다: "토",
+  제슈타: "금", 물라: "금", 푸르바샤다: "목", 우타라샤다: "토", 슈라바나: "수", 다니슈타: "화",
+  샤타비샤: "수", 푸르바바드라: "금", 우타라바드라: "수", 레바티: "토" };
+/* 자바 다섯 장날 — 전통이 이미 동·남·서·북·중앙에 배당해 둔 것을 그대로 쓴다(변환 아님) */
+const PAS_TAG = { 레기: "목", 파힝: "화", 폰: "금", 와게: "수", 클리원: "토" };
+const PAS_DIR = { 레기: "동쪽·흰빛", 파힝: "남쪽·붉은빛", 폰: "서쪽·노란빛", 와게: "북쪽·검은빛", 클리원: "가운데·여러 빛" };
+/* 서아프리카 아칸 요일이름 — sky.js AKAN 의 trait 순서와 같다(일~토) */
+const AKAN_TAG = ["목", "수", "화", "화", "토", "토", "금"];
+/* 수비학 — 1~9 및 마스터수 */
+const LP_TAG = { 1: "목", 2: "수", 3: "화", 4: "토", 5: "수", 6: "토", 7: "금", 8: "금", 9: "화", 11: "화", 22: "토", 33: "토" };
+const EL_OF_NAYIN = (t) => ["목", "화", "토", "금", "수"].find((e) => t.includes(e)) || null;
+
 const SEOUL = { lat: 37.5665, lon: 126.978 };
 const HANGUL_AGE = (y, now) => now.getFullYear() - y + 1;
 /* 조사 — "힘줄야"가 화면에 나왔다. 받침을 보고 고른다 */
@@ -189,6 +252,8 @@ const jong = (s) => { const c = (s || "").trim().slice(-1).charCodeAt(0); return
 const IYA = (s) => s + (jong(s) ? "이야" : "야");
 const EUN = (s) => s + (jong(s) ? "은" : "는");
 const IGA = (s) => s + (jong(s) ? "이" : "가");
+const NUM_KO = ["", "하나", "둘", "셋", "넷", "다섯", "여섯", "일곱", "여덟", "아홉"];
+const nk = (n) => NUM_KO[n] || String(n);
 /* 문장 끝에 마침표가 없으면 붙인다 — 표의 조각을 이어 붙일 때 "…온다 사람이"가 된다 */
 const dot = (s) => { const t = String(s).trim(); return /[.!?…]$/.test(t) ? t : t + "."; };
 
@@ -321,6 +386,9 @@ export function readImprint({ saju, ladder, birth, sex, now = new Date(), lat = 
   const axGrp = uniq.map((e) => ({ el: e, short: ORGAN[e].part.split(",")[0], ks: axes.filter((x) => x.el === e).map((x) => x.k) }));
   const axSent = axGrp.map((g) => `<b>${EUN(g.short)}</b> ${g.ks.join("·")}`).join(", ") + " 약해";
 
+  /* ⚠ 이 자리는 **겉모습만** 다룬다. 건강은 아래 「몸 — 어디가 약하게 왔나」 4단이 맡는다.
+     v117 은 둘 다에서 '평생 약한 곳'을 썼고, 창업자가 "생김새와 몸은 왜 두 번 써줘"라고 지적했다.
+     같은 내용을 두 번 쓰면 두 번째가 첫 번째를 무효로 만든다 — 자리를 하나로 정한다. */
   const body = [];
   body.push(
     ["몸", `<b>${BUILD[me]}</b>${jong(BUILD[me]) ? "이야" : "야"}.${(maxEl[1] >= 3 && (maxEl[0] === "토" || maxEl[0] === "수")) ? " 살이 잘 붙어. 평생 관리해야 할 몸이야." : ""}`,
@@ -328,14 +396,8 @@ export function readImprint({ saju, ladder, birth, sex, now = new Date(), lat = 
     ["얼굴", FACE[me], fn(`일간 오행 ${me} 의 상(相).`)],
     ["목소리", `${VOICE[me]}.${G.식상 === 0 ? " 말수가 적어서 더 그렇게 들려." : ""}`,
       fn(`일간 오행 ${me} + 표현을 맡은 자리 ${G.식상}개.`)],
-    ["평생 약한 곳",
-      healthAgree || uniq.length === 1
-        ? `<b>${ORGAN[weakEl[0]].part}.</b> ${dot(ORGAN[weakEl[0]].sym)}`
-        : `<b>한 곳이 아니야 — ${axGrp.map((g) => g.short).join(" · ")}.</b> ${axSent}. ` +
-          `${dot(ORGAN[weakEl[0]].sym)} <b>다 맞는 사람은 드물어.</b> 안 맞는 건 접어 둬.`,
-      fn(`축 ${axes.length}개 — ${axes.map((a) => a.why).join(" / ")}. ${healthAgree ? `${weakEl[0]}이 ${ranked[0][1]}표로 겹쳐 <b>한 곳으로 못 박았다</b>` : "겹치는 자리가 없어 <b>전부 적었다</b>"}. 어느 쪽이 실제인지는 유저가 안다 — 확인 문항으로 되묻는다.`)],
   );
-  if (maxEl[1] >= 3 && !uniq.includes(maxEl[0])) body.push(["과한 곳", `<b>${ORGAN[maxEl[0]].part}</b> 쪽이 과열된다. ${ORGAN[maxEl[0]].over}`, fn(`${maxEl[0]} ${maxEl[1]}개 — 넘치는 쪽도 병이 된다.`)]);
+
 
   /* ── 짝 ─────────────────────────────────────────────────────────────
      **기혼과 미혼에 같은 문서를 주면 안 된다.** 미혼에게 배우자 외모·집안·벌이는 예언이지만,
@@ -409,7 +471,7 @@ export function readImprint({ saju, ladder, birth, sex, now = new Date(), lat = 
   /* ── 뒤집히는 조건 ── */
   const dark = bands.filter((b) => ["편관", "정관", "겁재"].includes(b.ss));
   const trig = [
-    { t: `${BLOCK[blockKey].t}이 막혔을 때`, w: `${dot(BLOCK[blockKey].w)} 신호는 이래 — 말수가 줄고, 대답이 짧아지고, 혼자 있으려 해. 그 다음이 폭발이야.`,
+    { t: BLOCK[blockKey].trig, w: `${dot(BLOCK[blockKey].w)} 신호는 이래 — 말수가 줄고, 대답이 짧아지고, 혼자 있으려 해. 그 다음이 폭발이야.`,
       n: fn(`가장 빈 자리가 ${blockKey} ${G[blockKey]}개. 없는 자리가 압력이 쌓이는 자리가 된다.`) },
     { t: "여럿이 네 자리를 정할 때", w: "누가 시키는 건 참아. 여럿이 네 몫을 대신 정하는 건 못 참아. 가만있다가 갑자기 판을 엎고, 그러고 나서 자기를 더 미워해.",
       n: fn(`나를 누르는 자리(관성) ${G.관성}개${dark.length ? ` + ${dark[0].from}~${dark[0].to}세 구간이 그 성질` : ""}.`) },
@@ -479,9 +541,9 @@ export function readImprint({ saju, ladder, birth, sex, now = new Date(), lat = 
     (() => { const d = bands.find((b) => b.from > age); return d ? `<b>${d.from}~${d.to}세</b>부터 결이 바뀌어 — ${d.title}. ${d.event}` : "여든까지의 흐름은 아래 지도에 다 펼쳐 뒀어"; })(),
     fn(`일간 ${GANK[idx.dG]}(${me}) + 서양 해자리 ${sun}·달자리 ${moon}${split ? " — 원소가 갈린다" : ""}.`));
 
-  putD("말", `${BLOCK[blockKey].t} — 네게 가장 얇은 자리`,
-    `<b>${BLOCK[blockKey].t}이 얇게 왔어.</b> ${BLOCK[blockKey].s}.`,
-    `${BLOCK[blockKey].w}`,
+  putD("말", `${BLOCK[blockKey].t} — 네게 가장 약한 자리`,
+    `<b>${dot(BLOCK[blockKey].plain)}</b> ${dot(BLOCK[blockKey].s)} 태어날 때부터 그랬어.`,
+    `${dot(BLOCK[blockKey].w)}`,
     nowLine(blockKey, "이 열 해에 그 자리가 열려 있어. 지금 쓰지 않으면 다시 닫혀", `지금은 <b>${cur ? cur.title : ""}</b>라 그 문이 더 답답할 거야. 억지로 뚫지 말고 딴 길로 돌아가`),
     nextLine(blockKey, `여든까지 그 자리가 열리는 열 해는 오지 않아. <b>흐름이 데려다주지 않는다는 뜻이야</b> — ${BLOCK[blockKey].fix}`),
     fn(`가장 빈 자리 ${blockKey} ${G[blockKey]}개. 없는 것이 있는 것보다 많은 걸 정한다.`));
@@ -552,10 +614,74 @@ export function readImprint({ saju, ladder, birth, sex, now = new Date(), lat = 
         : kids === true ? "아이가 오기까지의 과정이 순탄했든 아니든, 그 곡절이 전부 이 자리에 적혀 있어."
         : "아이 문제로 크게 흔들린 적이 있다면 그게 이 자리야.",
       kids === true ? "<b>이미 왔어.</b> 지금 이 자리는 '올까'가 아니라 '어떻게 키우나'의 자리야" : nowLine(g3, "아이 일이 실제로 움직이는 열 해야", "그쪽보다 다른 자리가 먼저 움직이는 때야"),
-      kids === true ? `아이와의 관계는 <b>${BLOCK[blockKey].t}</b>에서 갈려. 네게 얇은 그 자리가 아이에게도 그대로 간다 — 미리 알면 반은 막혀`
+      kids === true ? `아이와의 관계도 <b>같은 데서 갈려 — ${dot(BLOCK[blockKey].plain)}</b> 네게 약한 그 자리가 아이한테도 그대로 가. 미리 알면 반은 막혀`
         : nextLine(g3, "여든까지 그 열 해는 안 와 — 흐름을 기다리는 자리가 아니라는 뜻이야"),
       fn(`${sex === "F" ? "여자에게 식상" : "남자에게 관성"}이 자식의 자리. ${G[g3]}개.${kids != null ? ` 자녀 유무 입력(${kids ? "있음" : "없음"})을 반영했다.` : ""}`));
   }
+
+  /* ── 아홉 하늘이 각각 뭐라고 하는가 ──────────────────────────────────
+     같은 사람을 아홉 문명이 따로 읽는다. 겹치면 확정, 갈리면 그게 급소다.
+     사주는 아홉 중 하나다 — 이게 이 절의 요점이고, 그러라고 만든 절이다. */
+  const wit = [];
+  const putW = (from, val, tag, why) => { if (tag && TAG[tag]) wit.push({ from, val, tag, why }); };
+  putW("동아시아 · 여덟 글자", GANK[idx.dG], me, `일간 ${GANK[idx.dG]} = ${me}. 오행을 행동으로 옮긴 것이라 변환이 없다.`);
+  {
+    const ny = nayin(+birth.y), e = EL_OF_NAYIN(ny);
+    putW("동아시아 · 소리의 오행", ny, e, `납음 ${ny} — 이름에 오행이 들어 있어 변환이 없다.`);
+  }
+  {
+    const hm = honmeisei(+birth.y, +birth.m <= 2).name || "", e = EL_OF_NAYIN(hm);
+    putW("일본 · 아홉 별", hm, e, `구성기학 본명성 ${hm} — 별 이름에 오행이 들어 있어 변환이 없다.`);
+  }
+  {
+    const w = weton(+birth.y, +birth.m, +birth.d);
+    putW("자바 · 다섯 장날", `${w.day}·${w.pasaran}`, PAS_TAG[w.pasaran],
+      `웨톤 ${w.pasaran}(${PAS_DIR[w.pasaran]}) — 자바 전통이 이미 다섯 방위에 배당해 둔 것이라 변환이 없다. 신붕 ${w.neptu}.`);
+  }
+  putW("서양 · 해의 자리", sun, ZO_TAG[ZO_EL[sun]], `${sun}(${ZO_EL[sun]}) — 사원소를 오행으로 옮겼다. 공기는 오행에 없어 <b>뻗는 쪽(목)</b>으로 놓았다(해석이 섞인다).`);
+  {
+    const tz = tzolkin(jdn(+birth.y, +birth.m, +birth.d));
+    putW("마야 · 스무 날개", `${tz.tone}·${tz.sign}`, TZ_TAG[tz.sign], `촐킨 ${tz.sign} — 이 날개의 전통적 뜻을 다섯으로 옮겼다(<b>해석이 섞인다</b>).`);
+  }
+  {
+    const nk = nakshatra(jd, +birth.y);
+    putW("인도 · 달의 자리", nk, NAK_TAG[nk], `나크샤트라 ${nk} — 이 자리의 전통적 성질을 다섯으로 옮겼다(<b>해석이 섞인다</b>).`);
+  }
+  {
+    const ak = akan(+birth.y, +birth.m, +birth.d, sex !== "F");
+    putW("서아프리카 · 요일 이름", `${ak.name}(${ak.day}요일)`, AKAN_TAG[["일", "월", "화", "수", "목", "금", "토"].indexOf(ak.day)],
+      `아칸 ${ak.name} — "${ak.trait}". 이 뜻을 다섯으로 옮겼다(<b>해석이 섞인다</b>).`);
+  }
+  {
+    const lp = lifePath(+birth.y, +birth.m, +birth.d);
+    putW("수비학 · 삶의 길", `${lp}번`, LP_TAG[lp], `라이프패스 ${lp} — 이 수의 통설 성격을 다섯으로 옮겼다(<b>해석이 섞인다</b>).`);
+  }
+  const wTally = {};
+  for (const x of wit) wTally[x.tag] = (wTally[x.tag] || 0) + 1;
+  const wRank = Object.entries(wTally).sort((a, b) => b[1] - a[1]);
+  const wTop = wRank[0], wSecond = wRank[1] || null;
+  /* 합의 판정 — 아홉 중 넷 이상이 같은 말을 하고, 2위와 두 표 넘게 벌어질 때만 "겹친다"고 쓴다.
+     3:3:3 을 1위라고 부르면 그건 합의가 아니라 반올림이다(짝의 시기에서 배운 것과 같다). */
+  const wAgree = wTop[1] >= 4 && (!wSecond || wTop[1] - wSecond[1] >= 2);
+  const witness = {
+    rows: wit.map((x) => ({ ...x, w: TAG[x.tag].w, n: fn(`${x.from} — ${x.why}`) })),
+    tally: wRank.map(([t, n]) => ({ tag: t, n, w: TAG[t].w })),
+    agree: wAgree, top: TAG[wTop[0]], topN: wTop[1], total: wit.length,
+    head: wAgree
+      ? `${nk(wit.length)} 하늘 중 <b>${nk(wTop[1])}이 같은 말을 해.</b> 너는 <b>${TAG[wTop[0]].w}</b>${jong(TAG[wTop[0]].w) ? "이야" : "야"}. ${dot(TAG[wTop[0]].d)}`
+      : `${nk(wit.length)}이 갈려. <b>${TAG[wTop[0]].w}</b>이 ${nk(wTop[1])}, <b>${TAG[wSecond[0]].w}</b>이 ${nk(wSecond[1])}${wRank[2] ? `, <b>${TAG[wRank[2][0]].w}</b>이 ${nk(wRank[2][1])}` : ""}.`,
+    tail: wAgree
+      ? "한 자리에서 아홉이 겹치는 건 흔하지 않아. 이건 네가 스스로도 아는 네 모습일 거야."
+      : `<b>이게 네 급소야.</b> ${dot(TAG[wTop[0]].d)} 그런데 동시에 ${dot(TAG[wSecond[0]].d)} 둘이 같이 있으니까 남들이 널 자꾸 오해하고, 너도 네가 어느 쪽인지 헷갈려.`,
+    sajuLine: wit[0].tag !== wTop[0]
+      ? `그리고 하나 더 — <b>동아시아 여덟 글자만 다른 말을 해.</b> 그건 너를 <b>${TAG[wit[0].tag].w}</b>${jong(TAG[wit[0].tag].w) ? "이" : ""}라고 하는데 나머지는 아니라고 해. 사주만 보고 판단한 너와 진짜 너가 다를 수 있다는 뜻이야.`
+      : null,
+    second: wSecond ? TAG[wSecond[0]] : null, secondN: wSecond ? wSecond[1] : 0,
+    /* 여덟 글자가 다수와 갈리는가 — 갈리면 그 자체가 이 문서에서 가장 값진 한 줄이다 */
+    sajuAlone: wit[0].tag !== wTop[0],
+    n: fn(`아홉 셈 집계 ${wRank.map(([t, n]) => `${TAG[t].w.slice(0, 4)} ${n}`).join(" · ")}. ` +
+      `${wAgree ? `<b>${wTop[1]}/${wit.length} 합의</b>로 봤다(넷 이상 + 2위와 두 표 이상 차)` : "<b>갈린다고 표시했다</b> — 합의 조건(넷 이상 + 2위와 두 표 차)을 못 넘었다"}.`),
+  };
 
   /* ── 지금 확인해 보아라 — 근거를 안 대는 대신 확인할 방법을 준다 ── */
   const checks = [
@@ -578,7 +704,7 @@ export function readImprint({ saju, ladder, birth, sex, now = new Date(), lat = 
 
   return {
     age, ageFull, noHour: !!noH, sex: sex || null,
-    domains: D, checks, mateMode,
+    domains: D, checks, mateMode, witness,
     health: { axes, agree: healthAgree, els: uniq },
     given: { married, kids, timeAcc, metAge: metAge ?? null, city: birth.city || null },
     core: {
@@ -595,6 +721,6 @@ export function readImprint({ saju, ladder, birth, sex, now = new Date(), lat = 
     bands, cur,
     dasha: dasha.periods.map((p) => ({ ...p, ko: DASHA_KO[p.lord] })),
     notes,
-    _raw: { me, G, ss, counts, ascSign, sun, moon, sunH, h7Sign, spouseSS, yong, gi, day },
+    _raw: { me, G, ss, counts, ascSign, ascDeg: asc, sun, moon, sunH, h7Sign, spouseSS, yong, gi, day },
   };
 }

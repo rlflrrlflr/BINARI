@@ -19,8 +19,8 @@ ck("각인이 나온다", !!a && !!b);
 
 /* ── ① 자리가 빠짐없이 찬다 ── */
 ck("겉·속·막힌 자리 셋이 다 있다", !!(a.core.surface?.w && a.core.inner?.w && a.core.block?.t));
-/* 키를 안 받으면 그 줄이 통째로 빠진다(§⑤) — 그래서 기본은 넷, 키를 주면 다섯이다 */
-ck("몸이 네 항목 이상", a.body.length >= 4, `${a.body.length}개`);
+/* 「생김새」는 겉모습만 — 몸·얼굴·목소리 셋. 건강은 아래 4단이 맡는다(중복 제거) */
+ck("생김새가 세 항목", a.body.length === 3, a.body.map((x) => x[0]).join("/"));
 ck("짝이 열 항목", a.mate?.length === 10, `${a.mate?.length}개`);
 ck("뒤집히는 조건 셋", a.trig.length === 3);
 ck("여든 해가 여덟 구간", a.bands.length === 8, `${a.bands.length}개`);
@@ -107,7 +107,7 @@ ck("태과가 3개 이상이면 축에 잡힌다", (() => {
 })(), "토 4개 → 태과 축");
 ck("축이 갈리면 한 곳으로 못 박지 않는다", (() => {
   const r = readImprint({ ...A, saju: { ...A.saju, counts: { 목: 0, 화: 1, 토: 4, 금: 2, 수: 1 } } });
-  const line = r.body.find((x) => x[0] === "평생 약한 곳")[1];
+  const line = r.domains.find((d) => d.k === "몸").steps[0][1];
   return r.health.agree ? true : /한 곳이 아니야/.test(line);
 })());
 ck("약한 자리를 되묻는 문항이 축마다 있다",
@@ -185,6 +185,78 @@ ck("확인 문항에 HTML 태그가 없다", a.checks.every(([q, w]) => !/[<>]/.
 ck("확인 문항 개수와 실제 축 개수가 맞는다",
    a.checks.filter((c) => /말썽인가/.test(c[0])).length === a.health.els.length);
 
+
+/* ── ⑯ 여러 하늘이 실제로 물려 있는가 ──
+   창업자 지적(2026-08-14): "그냥 사주 내용이랑 꼭 같은데, 글로벌 방법들은 적용이 된 거야 만 거야?"
+   감사 결과 열한 개 판독기 중 본문에 영향을 준 건 셋뿐이었고 나머지는 각주 장식이거나 미사용이었다.
+   이 검사는 **아홉 문명이 각각 자기 값을 내고, 사주가 그중 하나로만 세어지는지**를 지킨다. */
+{
+  const w = a.witness;
+  ck("아홉 하늘이 전부 증언한다", w.total >= 9, `${w.total}개 — ${w.rows.map((x) => x.from.split(" · ")[0]).join(",")}`);
+  ck("사주는 아홉 중 하나다(첫 줄일 뿐 가중치 없음)", w.rows[0].from.includes("여덟 글자") && w.tally.reduce((t, x) => t + x.n, 0) === w.total);
+  ck("증언마다 근거 각주가 붙는다", w.rows.every((x) => Number.isInteger(x.n) && x.n >= 1 && x.n <= a.notes.length));
+  ck("해석이 섞인 문명은 그렇다고 밝힌다",
+    ["마야", "인도", "서아프리카", "수비학"].every((k) => {
+      const row = w.rows.find((x) => x.from.includes(k));
+      return row && a.notes[row.n - 1].includes("해석이 섞인다");
+    }));
+  ck("변환 없는 문명은 그렇다고 밝힌다",
+    ["소리의 오행", "아홉 별", "다섯 장날"].every((k) => {
+      const row = w.rows.find((x) => x.from.includes(k));
+      return row && a.notes[row.n - 1].includes("변환이 없다");
+    }));
+  /* 합의라고 말할 때만 실제로 합의여야 한다 — 3:3:3 을 1위라 부르면 반올림이지 합의가 아니다 */
+  for (const [nm, r] of [["A", a], ["B", b]]) {
+    const v = r.witness;
+    ck(`${nm} — 겹친다고 말할 때만 실제로 겹친다`,
+      v.agree ? (v.topN >= 4 && v.topN - v.secondN >= 2) : true, `${v.topN}:${v.secondN} agree=${v.agree}`);
+    ck(`${nm} — 갈리면 급소라고 쓴다`, v.agree ? /흔하지 않아/.test(v.tail) : /급소/.test(v.tail));
+  }
+  /* 사람이 바뀌면 증언도 바뀌어야 한다 — 안 바뀌면 아홉을 돌린 의미가 없다 */
+  const LAD = (s2) => [...Array(8)].map((_, i) => ({ startAge: s2 + i * 10, endAge: s2 + 9 + i * 10,
+    ganji: ["병진", "을묘", "갑인", "계축", "임자", "신해", "경술", "기유"][i], el: ["토", "목", "목", "토", "수", "수", "토", "금"][i] }));
+  const seen = new Set(), splits = [];
+  for (let i = 0; i < 60; i++) {
+    const r = readImprint({ saju: { idx: { yG: i % 10, yJ: i % 12, mG: (i * 3) % 10, mJ: (i * 5) % 12, dG: (i * 7) % 10, dJ: (i * 11) % 12, hG: (i * 2) % 10, hJ: (i * 4) % 12 },
+      counts: { 목: i % 4, 화: (i + 1) % 4, 토: (i + 2) % 4, 금: (i + 3) % 4, 수: (i + 1) % 3 } },
+      ladder: LAD(3 + i % 7), birth: { y: 1970 + i % 40, m: 1 + i % 12, d: 1 + i % 28, h: i % 24, min: 0 },
+      sex: i % 2 ? "M" : "F", now: new Date(2026, 7, 14) });
+    seen.add(r.witness.rows.map((x) => x.tag).join(""));
+    splits.push(r.witness.agree);
+  }
+  ck("사람이 바뀌면 증언 조합도 바뀐다", seen.size >= 40, `60명 중 ${seen.size}종`);
+  const agreeRate = splits.filter(Boolean).length / splits.length;
+  ck("합의가 늘 나오지도, 아예 안 나오지도 않는다", agreeRate > 0.05 && agreeRate < 0.8, `합의율 ${(agreeRate * 100).toFixed(0)}%`);
+}
+
+/* ── ⑰ 은유가 비문이 되지 않는가 ──
+   "네게는 같이 갈 사람이 얇아" — 사람은 얇을 수 없다. 제목용 낱말을 본문 문장에 그대로 끼워
+   조립했기 때문이다. 본문은 **뜻이 바로 서는 완결 문장(plain)** 을 쓴다. */
+{
+  const line = a.domains.find((d) => d.k === "말").steps[0][1].replace(/<[^>]+>/g, "");
+  ck("가장 약한 자리를 비문 없이 말한다", !/사람이 얇|문이 얇|손이 얇|틀이 얇/.test(line), line.slice(0, 40));
+  /* 제목은 짧은 낱말(비유 아님), 본문은 서술어로 끝나는 완결 문장이어야 한다 */
+  ck("제목은 한 낱말, 본문은 완결 문장", a.core.block.t.length <= 5 && /[내아어해여져]$/.test(a.core.block.plain),
+    `${a.core.block.t} / ${a.core.block.plain}`);
+}
+
+/* ── ⑱ 겉모습과 건강을 두 번 쓰지 않는가 ── */
+ck("「생김새」에 건강 항목이 없다(4단이 맡는다)", !a.body.some((x) => /약한 곳|과한 곳/.test(x[0])),
+   a.body.map((x) => x[0]).join("/"));
+
+/* ── ⑲ 태어난 곳이 실제로 답을 바꾸는가 ──
+   v117 까지 App.jsx 가 **경도만 넘기고 위도는 서울로 고정**이었다. 상승궁은 위도로 갈리므로
+   제주에서 태어난 사람과 서울에서 태어난 사람이 같은 값을 받고 있었다 —
+   태어난 곳을 물어 놓고 절반만 쓴 셈이다.
+   ⚠ 자리 이름(사수자리 등)으로 검사하면 안 된다. 위도 차 4도는 상승궁을 2~3도 움직이는데
+      자리 폭은 30도라 대개 같은 자리에 머문다. **각도가 실제로 달라지는지**를 봐야 한다. */
+{
+  const asc = (lat, lon, h) => readImprint({ ...A, lat, lon, birth: { ...A.birth, h } })._raw.ascDeg;
+  const gaps = [...Array(24)].map((_, h) => Math.abs(asc(37.566, 126.978, h) - asc(33.499, 126.53, h)));
+  const moved = gaps.filter((g) => g > 0.5).length;
+  ck("태어난 곳(위도)이 상승궁을 실제로 움직인다", moved >= 20, `24시각 중 ${moved}개에서 이동 · 최대 ${Math.max(...gaps).toFixed(1)}도`);
+  ck("같은 곳이면 값도 같다", Math.abs(asc(37.566, 126.978, 9) - asc(37.566, 126.978, 9)) < 1e-9);
+}
 
 const pass = R.filter(Boolean).length;
 console.log(`\n=== 각인 엔진: ${pass}/${R.length} PASS ===`);

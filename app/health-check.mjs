@@ -544,11 +544,32 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
   const imp = readFileSync("src/lib/imprint.js", "utf8");
   const ruleKept = /표는 전부 '-야\/-어'체로 쓴다/.test(imp);
   const childTable = /const SS_CHILD = \{/.test(imp);   // 유년 구간에 어른의 사건을 안 쓴다
-  const ok = ruleKept && childTable;
+  const noMeta = /이름을 은유로 짓지 않는다/.test(imp);  // "같이 갈 사람이 얇아" 류 비문 방지
+  const ok = ruleKept && childTable && noMeta;
   add(ok ? "정상" : "주의",
-    ok ? "각인 말투 — 표 작성 규칙과 유년 구간 표가 살아 있음" : "각인 말투 규칙이 사라짐",
-    ok ? "'-야/-어'체 규칙 주석 + SS_CHILD 표" : `말투규칙=${ruleKept} 유년표=${childTable}`,
-    "표에 새 문구를 넣을 때 '-다'로 끝내면 신의 목소리가 사전 낭독으로 바뀝니다. 유년 구간(18세 미만)에 어른의 사건을 쓰면 '5~14세에 월급이 오른다' 같은 문장이 나갑니다.");
+    ok ? "각인 말투 — 세 규칙이 살아 있음" : "각인 말투 규칙이 사라짐",
+    ok ? "'-야/-어'체 + 유년 구간 표 + 은유 금지" : `말투규칙=${ruleKept} 유년표=${childTable} 은유금지=${noMeta}`,
+    "표에 '-다'로 끝나는 문구를 넣으면 신의 목소리가 사전 낭독이 됩니다. 유년 구간에 어른의 사건을 쓰면 '5~14세에 월급이 오른다'가 나갑니다. 제목용 낱말을 본문에 그대로 끼우면 '같이 갈 사람이 얇아' 같은 비문이 됩니다.");
+}
+
+/* ── 검사 5-f. 여러 문명 판독기가 실제로 물려 있는가 ───────────────────────
+   창업자 지적(2026-08-14): "그냥 사주 내용이랑 꼭 같은데, 저번에 글로벌로 찾은
+   생년월일로 운명을 점치는 방법들은 적용이 된 거야 만 거야?"
+   감사해 보니 sky.js 에 열한 개가 계산돼 있는데 각인 본문에 영향을 준 건 셋뿐이었다.
+   나머지는 각주 장식이거나 **한 번도 호출되지 않았다.** 계산해 두고 안 쓰면 없는 것과 같다.
+   이 검사는 아홉이 계속 물려 있는지, 그리고 태어난 곳이 절반만 쓰이지 않는지를 지킨다. */
+{
+  const imp = readFileSync("src/lib/imprint.js", "utf8");
+  const app = readFileSync(APP, "utf8");
+  const wired = ["nayin", "honmeisei", "weton", "akan", "lifePath", "tzolkin", "nakshatra", "sunSign"]
+    .filter((f) => new RegExp(`${f}\\(`).test(imp));
+  const hasWitness = /const witness = \{/.test(imp) && /putW\(/.test(imp);
+  const latWired = /cityLat\(/.test(app) && /lat: cityLat/.test(app);
+  const ok = wired.length >= 8 && hasWitness && latWired;
+  add(ok ? "정상" : "심각",
+    ok ? `여러 하늘 — 판독기 ${wired.length}종이 본문에 물려 있음` : "여러 문명 판독기가 다시 장식이 됨",
+    ok ? `${wired.join("·")} + 증언 절 + 위도 연결` : `물린 판독기 ${wired.length}종(${wired.join("·")}) 증언절=${hasWitness} 위도=${latWired}`,
+    "판독기를 계산만 해 두고 본문에 안 쓰면 '사주 앱'으로 읽힙니다. 그리고 태어난 곳은 경도·위도를 모두 써야 합니다 — 위도를 안 넘기면 제주에서 태어난 사람이 서울 값을 받습니다.");
 }
 
 /* ── 검사 6. 의존성 취약점 (npm audit) ───────────────────────────────────

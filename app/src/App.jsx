@@ -290,6 +290,12 @@ const CITY_LON = { 서울: 126.978, 인천: 126.71, 수원: 127.03, 성남: 127.
   부산: 129.08, 대구: 128.6, 대전: 127.38, 광주: 126.85, 울산: 129.31, 세종: 127.29, 창원: 128.68, 김해: 128.88, 포항: 129.36,
   전주: 127.15, 청주: 127.49, 천안: 127.15, 춘천: 127.73, 원주: 127.95, 강릉: 128.9, 제주: 126.53, 서귀포: 126.56 };
 function cityLon(city) { if (!city) return 126.978; for (const k in CITY_LON) if (city.includes(k)) return CITY_LON[k]; return 126.978; }
+/* 위도 — v117 까지 **경도만 넘기고 위도는 서울로 고정**이었다. 상승궁은 위도에 따라 갈리므로
+   제주(33.5)와 서울(37.6)이 같은 값을 받고 있었다. 태어난 곳을 물어 놓고 절반만 쓴 셈이다. */
+const CITY_LAT = { 서울: 37.566, 인천: 37.456, 수원: 37.263, 성남: 37.42, 고양: 37.658, 부천: 37.503, 안양: 37.394, 용인: 37.241,
+  부산: 35.18, 대구: 35.872, 대전: 36.35, 광주: 35.16, 울산: 35.539, 세종: 36.48, 창원: 35.228, 김해: 35.229, 포항: 36.019,
+  전주: 35.824, 청주: 36.642, 천안: 36.815, 춘천: 37.881, 원주: 37.342, 강릉: 37.752, 제주: 33.499, 서귀포: 33.254 };
+function cityLat(city) { if (!city) return 37.5665; for (const k in CITY_LAT) if (city.includes(k)) return CITY_LAT[k]; return 37.5665; }
 const jdFromKST = (y, m, d, h, mi) => jdn(y, m, d) - 0.5 + ((h + mi / 60) - 9) / 24; // KST → JD(UT)
 function calcSaju(y, m, d, h, mi, hourUnknown, lon = 126.978) {
   const jdBirth = jdFromKST(y, m, d, hourUnknown ? 12 : h, hourUnknown ? 0 : (mi || 0));
@@ -760,7 +766,7 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
           if (du && !du.pre && !ladder.some((x) => x.startAge === du.startAge)) ladder.push(du);
         }
       }
-      return readImprint({ saju, ladder, birth, sex, lon: cityLon(birth?.city),
+      return readImprint({ saju, ladder, birth, sex, lon: cityLon(birth?.city), lat: cityLat(birth?.city),
         married: extra.married ?? null, kids: extra.kids ?? null, timeAcc: extra.timeAcc ?? null,
         metAge: extra.metAge ?? null });
     } catch (e) { return null; }
@@ -810,6 +816,24 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
           </g>;
         })}
         <line x1="10" y1="50" x2={W - 10} y2="50" stroke="#c9b98f44" />
+      </svg>
+    );
+  };
+  const WitnessBar = () => {
+    const t = r.witness.tally, tot = r.witness.total;
+    const C = ["#5b8fd4", "#c98f3d", "#8a7f95", "#6f6580", "#4a4256"];
+    let x = 10;
+    return (
+      <svg viewBox={`0 0 ${W} 54`} width="100%" height="54" className="impsvg" role="img" aria-label="아홉 하늘의 집계">
+        {t.map((v, i) => {
+          const w = ((W - 20) * v.n) / tot, cur = x; x += w;
+          return <g key={i}>
+            <rect x={cur} y="10" width={Math.max(w - 2, 1)} height="18" rx="2" fill={C[i] || "#4a4256"} />
+            {w > 30 && <text x={cur + w / 2} y="23" fontSize="9" fill="#0f0b18" textAnchor="middle">{v.n}</text>}
+          </g>;
+        })}
+        <text x="10" y="44" fontSize="8" fill="#c9b98f">{t[0].w} {t[0].n}</text>
+        {t[1] && <text x={W - 10} y="44" fontSize="8" fill="#8a7f95" textAnchor="end">{t[1].w} {t[1].n}</text>}
       </svg>
     );
   };
@@ -877,7 +901,26 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
       <p className="impp"><b>그리고 네게는 {r.core.block.t}이 얇아.</b><Ref n={r.core.n3} /> {r.core.block.s}. {r.core.block.w}</p>
       <p className="impfix"><b>그래서 필요한 건 하나야</b> — {r.core.block.fix}.</p>
 
-      <p className="imph">생김새와 몸 <i>지금 확인할 수 있다</i></p>
+      <p className="imph">아홉 하늘이 뭐라고 하는가 <i>사주는 그중 하나야</i></p>
+      <p className="impp">한 사람을 <b>아홉 문명이 따로 읽었어.</b> 동아시아 · 일본 · 자바 · 서양 · 마야 · 인도 · 서아프리카 · 수비학.
+        서로 아는 사이도 아니고 같은 걸 보지도 않아. 그런데 <b>겹치면 그건 진짜고, 갈리면 그게 네 급소야.</b></p>
+      <div className={"impwv" + (r.witness.agree ? " agree" : "")}>
+        <p className="impwh"><H t={r.witness.head} /><Ref n={r.witness.n} /></p>
+        <p className="impwt"><H t={r.witness.tail} /></p>
+        {r.witness.sajuLine && <p className="impws"><H t={r.witness.sajuLine} /></p>}
+      </div>
+      <WitnessBar />
+      <div className="impwrows">
+        {r.witness.rows.map((x, i) => (
+          <div className={"impwrow" + (x.tag === r.witness.tally[0].tag ? " on" : "")} key={i}>
+            <div className="impwfrom">{x.from}</div>
+            <div className="impwval">{x.val}</div>
+            <div className="impwsay">{x.w}<Ref n={x.n} /></div>
+          </div>
+        ))}
+      </div>
+
+      <p className="imph">생김새 <i>거울 앞에서 바로 확인돼</i></p>
       {r.body.map(Row)}
 
       <p className="imph">언제 네가 너 같지 않은가</p>
@@ -2196,7 +2239,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v117 · 각인 말투";
+const APP_VER = "v118 · 아홉 하늘";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -4363,6 +4406,18 @@ const CSS = `
 .impaskrow span{font-size:11.5px;color:#9d8fb5;flex:0 0 72px}
 .impchip{background:none;border:1px solid #c9b98f3d;border-radius:14px;color:#bfb6cc;font-size:11.5px;padding:4px 13px;cursor:pointer}
 .impchip.on{border-color:#f5d98b;color:#f5d98b;background:#c98f3d1f}
+.impwv{margin:12px 0 10px;padding:13px 14px;border-radius:9px;border:1px solid #6f658055;background:#1a152488}
+.impwv.agree{border-color:#c98f3d66;background:#c98f3d10}
+.impwh{font-size:14px;line-height:1.75;color:#e6dff2;margin:0}
+.impwh b{color:#f0e2b8}
+.impwt{font-size:12.5px;line-height:1.8;color:#b3a8c6;margin:9px 0 0}
+.impws{font-size:12px;line-height:1.8;color:#e8a06a;margin:9px 0 0;padding-top:9px;border-top:1px solid #6f658044}
+.impwrows{margin:2px 0 4px}
+.impwrow{display:grid;grid-template-columns:1fr 88px;gap:2px 8px;padding:8px 2px;border-bottom:1px solid #6f658022}
+.impwrow.on .impwsay{color:#f0e2b8}
+.impwfrom{font-size:10.5px;color:#8a7f95;letter-spacing:.02em}
+.impwval{grid-row:1/3;align-self:center;font-size:11.5px;color:#9d8fb5;text-align:right}
+.impwsay{font-size:12.5px;color:#c8bcd8}
 .impnum{width:74px;background:#1a1524;border:1px solid #6f658055;border-radius:7px;color:#e6dff2;font-size:12px;padding:5px 8px;font-family:inherit}
 .impnum:focus{outline:none;border-color:#c98f3d99}
 .impaskhint{font-style:normal;font-size:9.5px;color:#6f6580}
