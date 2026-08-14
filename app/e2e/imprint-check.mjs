@@ -3,6 +3,7 @@
    ① 자리가 빠짐없이 차는가 ② 기법 용어가 새지 않는가 ③ 근거 없는 문장이 없는가
    ④ 입력이 달라지면 답도 달라지는가(모두에게 같은 말을 하면 그건 운세가 아니라 덕담이다)
    실행: node app/e2e/imprint-check.mjs */
+import { readFileSync } from "node:fs";
 import { readImprint } from "../src/lib/imprint.js";
 
 const R = []; const ck = (n, p, g = "") => { R.push(p); console.log(`${p ? "PASS" : "FAIL"} — ${n}${g ? " · " + g : ""}`); };
@@ -266,6 +267,50 @@ ck("「생김새」에 건강 항목이 없다(4단이 맡는다)", !a.body.some
   const moved = gaps.filter((g) => g > 0.5).length;
   ck("태어난 곳(위도)이 상승궁을 실제로 움직인다", moved >= 20, `24시각 중 ${moved}개에서 이동 · 최대 ${Math.max(...gaps).toFixed(1)}도`);
   ck("같은 곳이면 값도 같다", Math.abs(asc(37.566, 126.978, 9) - asc(37.566, 126.978, 9)) < 1e-9);
+}
+
+/* ── ⑳ 빙빙 돌리지 않는가 ──
+   창업자 판정(2026-08-14): "직관적인 말도 빙빙 둘러서 무슨 그릇이 어떻니 저떻니 그래?
+   신의 컨셉은 말을 모호하게 하란 게 아니고 **말투나 비주얼**을 말한 거야."
+   맞다. 모호한 건 신비가 아니라 회피다. 상담실도 철학관도 단정적으로 말한다.
+   이 검사는 은유가 서술어 자리로 돌아오는 걸 잡는다. */
+{
+  const SHOWN = (r) => [
+    r.core.surface.d, r.core.inner.d, r.core.block.s, r.core.block.w, r.core.block.plain, r.core.block.fix,
+    ...r.body.map((x) => x[1]), ...(r.mate || []).map((x) => x[1]), ...r.trig.map((t) => t.w),
+    ...r.domains.flatMap((d) => [d.t, ...d.steps.map((st) => st[1])]),
+    ...r.bands.map((x) => `${x.title} ${x.event}`), ...r.sky9.map((x) => `${x.ask} ${x.say}`),
+    ...r.clash.map((c) => c.w), r.job.job, r.job.ex,
+  ].map((t) => String(t).replace(/<[^>]+>/g, ""));
+  /* 화면 문장에서 금지 — 뜻이 안 서는 은유와 내부 셈 노출 */
+  const VAGUE = [
+    [/그릇이(야|다)|그릇이라|큰 그릇|받는 그릇/, "그릇"],
+    [/쥘 팔 힘|팔 힘/, "팔 힘"],
+    [/자리가 \d+개|\d+개로 두꺼|맡은 자리가/, "자리가 N개(유저는 많고 적음을 모른다)"],
+    [/네 결이|결이 바뀌어|그 결의/, "결"],
+    [/그 문이|문이 열리|문이 닫혀/, "문"],
+    [/기운이 흐르|기운이 도는/, "기운이 흐른다"],
+  ];
+  const hits = [];
+  for (const r of [readImprint(A), readImprint(B), readImprint({ ...A, married: true, kids: true, metAge: 27 }),
+    readImprint({ ...A, saju: { ...A.saju, counts: { 목: 0, 화: 1, 토: 4, 금: 2, 수: 1 } } })])
+    for (const t of SHOWN(r)) for (const [re, label] of VAGUE) if (re.test(t)) hits.push(`${label}: ${t.slice(0, 34)}`);
+  ck("화면 문장이 은유로 도망가지 않는다", hits.length === 0, [...new Set(hits)].slice(0, 3).join(" | ") || "깨끗");
+
+  /* 단정적으로 말하는가 — 아홉 자리의 「새겨질 때」가 전부 진술문이어야 한다 */
+  const first = readImprint({ ...A, married: true, kids: true }).domains.map((d) => d.steps[0][1].replace(/<[^>]+>/g, ""));
+  ck("아홉 자리가 전부 단정으로 시작한다", first.every((t) => t.length >= 25 && !/일 수도|아마|~듯|것 같아/.test(t)),
+    first.filter((t) => t.length < 25 || /일 수도|아마|~듯|것 같아/.test(t)).join(" | ") || "전부 단정");
+  /* 그리고 실제로 뭘 하라고 말하는가 — 상담은 진단만 하지 않는다 */
+  ck("가장 약한 자리에는 할 일이 붙는다", /해|써|만들어|적어|받아|짜/.test(readImprint(A).core.block.fix));
+}
+
+/* ── ㉑ 각인은 LLM 을 쓰지 않는다 ──
+   창업자 물음: "도대체 어떤 프롬프트가 들어갔길래…" → 프롬프트가 아니다. 전부 이 파일의 표다.
+   그래서 문장이 이상하면 프롬프트를 고칠 게 아니라 **표를 고쳐야 한다.** 이 검사가 그 사실을 못 박는다. */
+{
+  const src = readFileSync(new URL("../src/lib/imprint.js", import.meta.url), "utf8");
+  ck("각인 엔진에 API 호출이 없다(문장은 전부 표다)", !/fetch\(|\/api\//.test(src));
 }
 
 const pass = R.filter(Boolean).length;
