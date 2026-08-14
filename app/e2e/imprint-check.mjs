@@ -22,7 +22,8 @@ ck("각인이 나온다", !!a && !!b);
 ck("겉·속·막힌 자리 셋이 다 있다", !!(a.core.surface?.w && a.core.inner?.w && a.core.block?.t));
 /* 「생김새」는 겉모습만 — 몸·얼굴·목소리 셋. 건강은 아래 4단이 맡는다(중복 제거) */
 ck("생김새가 세 항목", a.body.length === 3, a.body.map((x) => x[0]).join("/"));
-ck("짝이 열 항목", a.mate?.length === 10, `${a.mate?.length}개`);
+/* v122: 방향·직업·취향·섞이는 결이 더해져 열넷이 됐다(창업자 요청 뎁스) */
+ck("짝이 열넷 이상", a.mate?.length >= 14, `${a.mate?.length}개`);
 ck("뒤집히는 조건 셋", a.trig.length === 3);
 ck("여든 해가 여덟 구간", a.bands.length === 8, `${a.bands.length}개`);
 ck("열두 달이 갈린다", a.when.hardMonths.length + a.when.softMonths.length > 0,
@@ -311,6 +312,80 @@ ck("「생김새」에 건강 항목이 없다(4단이 맡는다)", !a.body.some
 {
   const src = readFileSync(new URL("../src/lib/imprint.js", import.meta.url), "utf8");
   ck("각인 엔진에 API 호출이 없다(문장은 전부 표다)", !/fetch\(|\/api\//.test(src));
+}
+
+/* ── ㉒ 어긋남이 문서 전체로 퍼지는가 ──
+   창업자 지적(2026-08-14): "처음에 사주에서 못 읽는 부분을 말해주는 건 신기한데,
+   그게 밑에까지는 영향이 안 가는 거 같네." 맞다 — 어긋남을 한 절에 모아 두기만 했다.
+   자리마다 그 영역을 서양이 어떻게 보는지 붙어야 한다. */
+{
+  ck("아홉 자리 전부에 서양의 시선이 붙는다", a.domains.every((d) => d.west && d.west.w && d.west.n),
+    `${a.domains.filter((d) => d.west).length}/${a.domains.length}`);
+  ck("서양 시선에도 근거 각주가 붙는다", a.domains.every((d) => d.west.n >= 1 && d.west.n <= a.notes.length));
+  /* 전부 같은 말이면 붙인 의미가 없다 — 겹치는 자리와 조용한 자리가 갈려야 한다 */
+  const kinds = new Set(a.domains.map((d) => d.west.w));
+  ck("자리마다 같은 말만 하지 않는다", kinds.size >= 2, `${kinds.size}종`);
+  const LAD2 = (s2) => [...Array(8)].map((_, i) => ({ startAge: s2 + i * 10, endAge: s2 + 9 + i * 10,
+    ganji: ["병진", "을묘", "갑인", "계축", "임자", "신해", "경술", "기유"][i], el: ["토", "목", "목", "토", "수", "수", "토", "금"][i] }));
+  let overlap = 0;
+  for (let i = 0; i < 40; i++) {
+    const r = readImprint({ saju: A.saju, ladder: LAD2(3 + i % 7),
+      birth: { y: 1980 + i, m: 1 + i % 12, d: 1 + i % 28, h: i % 24, min: 0 }, sex: "M", now: new Date(2026, 7, 14) });
+    if (r.domains.some((d) => /두 셈이 겹쳐/.test(d.west.w))) overlap++;
+  }
+  ck("겹치는 자리가 사람마다 옮겨 다닌다", overlap >= 5 && overlap <= 38, `40명 중 ${overlap}명에게 겹침`);
+}
+
+/* ── ㉓ 돈의 여정 — 언제·얼마나·뭘 해서 ──
+   창업자 요청: "돈을 벌면 언제 얼마나 뭘 해서, 그걸 벌기까지의 여정 그래프."
+   ⚠ **금액은 안 쓴다.** 명리에 원 단위 표준이 없다 — 키(cm)를 뺀 것과 같은 이유다.
+      "얼마나"는 남과의 비교가 아니라 네 여든 해 안에서의 높낮이로 답한다. */
+{
+  ck("돈의 여정이 구간마다 나온다", a.money.path.length === a.bands.length && a.money.path.every((x) => typeof x.v === "number"));
+  ck("구간마다 '뭘 해서 버나'가 붙는다", a.money.path.every((x) => x.how && x.how.length >= 6));
+  ck("유년 구간은 버는 구간으로 안 센다", a.money.path.filter((x) => x.young).every((x) => /버는 나이가 아니야/.test(x.how)));
+  ck("절정·바닥이 성인 구간에서만 잡힌다", (!a.money.peak || !a.money.peak.young) && (!a.money.trough || !a.money.trough.young),
+    a.money.peak ? `절정 ${a.money.peak.from}~${a.money.peak.to}` : "절정 없음");
+  /* "원"은 "월급"·"고정"에 안 걸리지만 "원 단위"(각주의 설명)에는 걸린다 — 본문만 본다 */
+  const moneyBody = JSON.stringify(a.money.path);
+  ck("금액을 지어내지 않는다", !/\d+\s*(원|만원|억|천만)/.test(moneyBody), moneyBody.slice(0, 40));
+  /* 사람이 바뀌면 곡선도 바뀌어야 한다 */
+  const shapes = new Set();
+  for (let i = 0; i < 40; i++) {
+    const r = readImprint({ ...A, ladder: [...Array(8)].map((_, k) => ({ startAge: 3 + i % 7 + k * 10, endAge: 12 + i % 7 + k * 10,
+      ganji: ["병진", "을묘", "갑인", "계축", "임자", "신해", "경술", "기유"][(k + i) % 8], el: "토" })) });
+    shapes.add(r.money.path.map((x) => x.v).join(","));
+  }
+  ck("돈 곡선이 사람마다 다르다", shapes.size >= 6, `40명 중 ${shapes.size}종`);
+}
+
+/* ── ㉔ 짝의 뎁스 — 요청한 항목이 실제로 있는가 ──
+   "연인을 만나면 언제 어느 방향 뭐하는 사람 생김새 성격 취향 연봉 집안 궁합 자녀 결혼" */
+{
+  const pre = readImprint({ ...A, married: false }), keys = pre.mate.map((x) => x[0]);
+  for (const need of ["인상", "어느 쪽에서 오나", "뭐하는 사람", "취향", "성격", "집안", "벌이", "언제 만나나", "둘이 섞이는 결"])
+    ck(`짝 — ${need}`, keys.includes(need), keys.includes(need) ? "" : keys.join("/"));
+  ck("방위는 십이지 배당 그대로다(변환 없음)",
+    /변환이 없다/.test(pre.notes[pre.mate.find((x) => x[0] === "어느 쪽에서 오나")[2] - 1]));
+  ck("연봉을 숫자로 지어내지 않는다", !/\d+\s*(만원|억|천만)/.test(JSON.stringify(pre.mate)));
+  /* 기혼자에게는 외모·집안·벌이 대신 관계 해석 — 단 '섞이는 결'은 양쪽 다 준다 */
+  const wed = readImprint({ ...A, married: true });
+  ck("기혼에게도 둘이 섞이는 결은 준다", wed.mate.some((x) => x[0] === "둘이 섞이는 결"));
+  ck("기혼에게 여전히 외모·직업 예언은 안 한다", !wed.mate.some((x) => ["인상", "뭐하는 사람", "취향"].includes(x[0])));
+  ck("나침반이 두 방향을 낸다", !!(a.compass.self && a.compass.mate), `${a.compass.self?.dir} / ${a.compass.mate?.dir}`);
+}
+
+/* ── ㉕ 생김새의 근거를 밝히는가 ──
+   창업자 물음: "생김새는 어디 근거가 있는 거야?" → 오행 체상론이다. 다만 축소판이고 검증된 적이 없다.
+   그걸 각주에 **그대로 적어야** 한다. 안 적으면 계산값과 같은 급으로 읽힌다. */
+{
+  const face = a.body.find((x) => x[0] === "얼굴");
+  const note = a.notes[face[2] - 1];
+  ck("생김새 각주가 유파 이름을 밝힌다", /오행 체상론/.test(note));
+  ck("생김새 각주가 축소판임을 밝힌다", /축소판|일간과 최다 오행 둘만/.test(note));
+  ck("생김새 각주가 미검증임을 밝힌다", /검증한 적이 없|검증되지 않은/.test(note));
+  ck("몸·목소리 각주도 미검증을 밝힌다",
+    [a.body.find((x) => x[0] === "몸"), a.body.find((x) => x[0] === "목소리")].every((x) => /검증되지 않은/.test(a.notes[x[2] - 1])));
 }
 
 const pass = R.filter(Boolean).length;

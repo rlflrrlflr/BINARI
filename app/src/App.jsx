@@ -837,6 +837,64 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
       </svg>
     );
   };
+  /* 돈의 여정 — 창업자 요청("벌기까지의 여정 그래프"). 금액은 안 쓴다(명리에 원 단위 표준이 없다).
+     대신 **네 여든 해 안에서의 높낮이**를 그린다. 절정·바닥·지금을 찍어 준다. */
+  const MoneyJourney = () => {
+    const p = r.money.path; if (!p.length) return null;
+    const H = 150, PAD = 26, gw = (W - PAD * 2) / (p.length - 1 || 1);
+    const yOf = (v) => 118 - ((v + 4) / 8) * 92;
+    const pts = p.map((x, i) => [PAD + i * gw, yOf(x.v)]);
+    const line = pts.map((q, i) => (i ? `L${q[0]},${q[1]}` : `M${q[0]},${q[1]}`)).join(" ");
+    const area = `${line} L${pts[pts.length - 1][0]},118 L${pts[0][0]},118 Z`;
+    const pk = r.money.peak ? p.indexOf(r.money.peak) : -1;
+    return (
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} className="impsvg drawin" role="img" aria-label="돈의 여정">
+        <defs><linearGradient id="mg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#c98f3d" stopOpacity="0.42" /><stop offset="100%" stopColor="#c98f3d" stopOpacity="0" />
+        </linearGradient></defs>
+        <line x1={PAD - 8} y1={yOf(0)} x2={W - PAD + 8} y2={yOf(0)} stroke="#6f658055" strokeDasharray="2 3" />
+        <path d={area} fill="url(#mg)" className="mfill" />
+        <path d={line} fill="none" stroke="#e0b063" strokeWidth="2" strokeLinejoin="round" className="mline" />
+        {pts.map((q, i) => (
+          <g key={i}>
+            <circle cx={q[0]} cy={q[1]} r={p[i].now ? 5 : i === pk ? 4.5 : 2.6}
+              fill={p[i].now ? "#f5d98b" : i === pk ? "#e0b063" : "#8a7f95"} />
+            <text x={q[0]} y={136} fontSize="7.5" fill={p[i].now ? "#f5d98b" : "#8a7f95"} textAnchor="middle">{p[i].from}</text>
+          </g>
+        ))}
+        {pk >= 0 && <text x={Math.min(Math.max(pts[pk][0], 44), W - 44)} y={pts[pk][1] - 9} fontSize="8.5" fill="#f0e2b8" textAnchor="middle">가장 두꺼운 때</text>}
+        {p.some((x) => x.now) && <text x={Math.min(Math.max(pts[p.findIndex((x) => x.now)][0], 26), W - 26)} y={pts[p.findIndex((x) => x.now)][1] + 15} fontSize="8" fill="#f5d98b" textAnchor="middle">지금</text>}
+        <text x={PAD - 8} y={12} fontSize="7" fill="#6f6580">↑ 두꺼움</text>
+        <text x={W - PAD + 8} y={148} fontSize="7" fill="#6f6580" textAnchor="end">세(歲)</text>
+      </svg>
+    );
+  };
+  /* 나침반 — 방위는 사주에 거의 없는 축이라 그림으로 보여줄 값어치가 있다 */
+  const Compass = () => {
+    const c = r.compass; if (!c.self && !c.mate) return null;
+    const DIRS = [["북", 0], ["북동", 45], ["동", 90], ["남동", 135], ["남", 180], ["남서", 225], ["서", 270], ["북서", 315]];
+    const cx = 160, cy = 82, R0 = 56;
+    const at = (deg, rr) => [cx + rr * Math.sin((deg * Math.PI) / 180), cy - rr * Math.cos((deg * Math.PI) / 180)];
+    return (
+      <svg viewBox="0 0 320 168" width="100%" height="168" className="impsvg drawin" role="img" aria-label="방위">
+        <circle cx={cx} cy={cy} r={R0} fill="none" stroke="#6f658055" />
+        <circle cx={cx} cy={cy} r={R0 - 16} fill="none" stroke="#6f658033" />
+        {DIRS.map(([nm, d]) => {
+          const [x, y] = at(d, R0 + 12);
+          const isSelf = c.self && c.self.dir === nm, isMate = c.mate && c.mate.dir === nm;
+          return <g key={nm}>
+            {(isSelf || isMate) && <line x1={cx} y1={cy} x2={at(d, R0)[0]} y2={at(d, R0)[1]}
+              stroke={isSelf ? "#e0b063" : "#5b8fd4"} strokeWidth="2.4" />}
+            <text x={x} y={y + 3} fontSize={isSelf || isMate ? "10" : "8.5"} textAnchor="middle"
+              fill={isSelf ? "#f0e2b8" : isMate ? "#9dc0ee" : "#6f6580"}>{nm}</text>
+          </g>;
+        })}
+        <circle cx={cx} cy={cy} r="3.4" fill="#c9b98f" />
+        {c.self && <text x="14" y="150" fontSize="9" fill="#e0b063">● 막힐 때 움직일 쪽 — {c.self.dir}</text>}
+        {c.mate && <text x="306" y="150" fontSize="9" fill="#5b8fd4" textAnchor="end">● 짝이 오는 쪽 — {c.mate.dir}</text>}
+      </svg>
+    );
+  };
   const CoreFig = () => (
     <svg viewBox="0 0 320 116" width="100%" height="116" className="impsvg" role="img" aria-label="겉과 속">
       <rect x="8" y="20" width="118" height="66" rx="4" fill="none" stroke="#8a7f95" strokeWidth="1.4" />
@@ -937,9 +995,19 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
           {d.steps.map(([lab, txt], k) => (
             <div className="impstep" key={k}><i>{lab}</i><span><H t={txt} /></span></div>
           ))}
+          {d.west && <p className="impwest"><H t={d.west.w} /><Ref n={d.west.n} /></p>}
+          {d.k === "돈" && <><MoneyJourney />
+            <p className="impcap">네 여든 해 안에서의 높낮이야. <b>금액이 아니라 순서</b>야 —
+              {r.money.peak ? <> 가장 두꺼운 때는 <b>{r.money.peak.from}~{r.money.peak.to}세</b>, {r.money.peak.how}.</> : null}
+              {r.money.trough ? <> 가장 얇은 때는 <b>{r.money.trough.from}~{r.money.trough.to}세</b>야.</> : null}
+              <Ref n={r.money.n} /></p>
+            <div className="impmrows">{r.money.path.filter((x) => !x.young).map((x, i) => (
+              <div className={"impmrow" + (x.now ? " on" : "")} key={i}>
+                <b>{x.from}~{x.to}</b><span>{x.how}</span></div>))}</div></>}
         </div>
       ))}
 
+      {r.compass && (r.compass.self || r.compass.mate) && <Compass />}
       {r.mate && <>
         <p className="imph">{r.mateMode === "wed" ? "짝 — 이미 곁에 있는 사람" : "짝 — 누구를 만나나"}
           {r.mateMode === "wed" ? <i>생김새는 네가 더 잘 알아</i> : null}</p>
@@ -2241,7 +2309,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v121 · 판결도 안 돌린다";
+const APP_VER = "v122 · 그림과 뎁스";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -4414,6 +4482,24 @@ const CSS = `
 .impaskrow span{font-size:11.5px;color:#9d8fb5;flex:0 0 72px}
 .impchip{background:none;border:1px solid #c9b98f3d;border-radius:14px;color:#bfb6cc;font-size:11.5px;padding:4px 13px;cursor:pointer}
 .impchip.on{border-color:#f5d98b;color:#f5d98b;background:#c98f3d1f}
+@keyframes impRise{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:none}}
+@keyframes impDraw{from{stroke-dashoffset:1400}to{stroke-dashoffset:0}}
+@keyframes impFill{from{opacity:0}to{opacity:1}}
+.imp .impdom,.imp .impsky,.imp .impclash,.imp .impband,.imp .impck{animation:impRise .5s cubic-bezier(.22,.8,.28,1) both}
+.imp .impsvg{animation:impRise .55s cubic-bezier(.22,.8,.28,1) both}
+.drawin .mline{stroke-dasharray:1400;animation:impDraw 1.5s cubic-bezier(.3,.7,.3,1) .15s both}
+.drawin .mfill{animation:impFill 1s ease .9s both}
+.drawin line,.drawin circle,.drawin text{animation:impFill .7s ease .5s both}
+@media (prefers-reduced-motion:reduce){.imp .impdom,.imp .impsky,.imp .impclash,.imp .impband,.imp .impck,.imp .impsvg,.drawin .mline,.drawin .mfill,.drawin line,.drawin circle,.drawin text{animation:none}}
+.impwest{margin:9px 0 0;padding:8px 10px;border-left:2px solid #5b8fd455;background:#5b8fd40d;border-radius:0 6px 6px 0;font-size:11.5px;line-height:1.75;color:#9dc0ee}
+.impwest b{color:#c5dcf7}
+.impcap{font-size:11px;line-height:1.75;color:#8a7f95;margin:2px 0 8px}
+.impcap b{color:#c9b98f}
+.impmrows{margin:0 0 4px}
+.impmrow{display:flex;gap:10px;align-items:baseline;padding:6px 2px;border-bottom:1px solid #6f658022;font-size:12px}
+.impmrow b{flex:0 0 58px;color:#8a7f95;font-weight:500;font-variant-numeric:tabular-nums}
+.impmrow span{color:#c8bcd8}
+.impmrow.on b,.impmrow.on span{color:#f0e2b8}
 .impsky{margin:0 0 4px;padding:11px 12px;border-left:2px solid #6f658055;background:#1a152455;border-radius:0 7px 7px 0}
 .impskh{font-size:11px;color:#8a7f95;margin:0;letter-spacing:.02em}
 .impskh i{font-style:normal;display:block;font-size:9.5px;color:#c98f3daa;letter-spacing:.12em;margin-bottom:3px}

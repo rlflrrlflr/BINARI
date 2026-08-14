@@ -21,7 +21,7 @@ import {
   jdFromKST, sunLongitude, moonLongitude, jdn, sunSign, moonSign, nakshatra, tzolkin,
   ascendant, signOf, wholeSignHouse, profection, isDayBirth, vimshottari,
   seun, wolun, favor, sipseong as ssOf, GAN as GANK, JI as JIK, GANH, JIH, JI_BONGI as JB,
-  nayin, honmeisei, weton, akan, lifePath, moonPhase, partOfFortune, HOUSE_KO,
+  nayin, honmeisei, weton, akan, lifePath, moonPhase, partOfFortune, HOUSE_KO, JI_EL,
 } from "./sky.js";
 
 /* 간지가 한글로도 한자로도 들어온다 — 앱의 대운은 한글("임오"), 흐름 엔진은 한자("壬午").
@@ -225,6 +225,36 @@ const LP_TASK = { 1: "혼자 서는 법", 2: "둘 사이를 잇는 법", 3: "밖
   8: "돈과 힘을 다루는 법", 9: "놓아주는 법", 11: "남을 비추는 법", 22: "크게 짓는 법", 33: "가르치는 법" };
 const EL_OF_NAYIN = (t) => ["목", "화", "토", "금", "수"].find((e) => t.includes(e)) || null;
 const EL_KO2 = { 목: "나무", 화: "불", 토: "흙", 금: "쇠", 수: "물" };
+/* 아홉 자리 ↔ 서양 열두 하우스 대응. 창업자 지적(2026-08-14):
+   "사주에서 못 읽는 부분을 말해주는 건 신기한데, 그게 밑에까지는 영향이 안 가는 거 같네."
+   맞다 — 어긋남을 한 절에 모아 두기만 하고 아홉 자리는 여전히 사주 단독이었다.
+   자리마다 **그 영역을 서양이 어떻게 보는지** 한 줄을 붙여, 어긋남이 문서 전체로 퍼지게 한다. */
+const DOM_HOUSE = { 몸: 1, 마음: 4, 말: 3, 공부: 9, 일: 10, 돈: 2, 사람: 11, 연애: 7, 자식: 5 };
+/* 배우자 자리(일지)의 방위 — 십이지 방위 배당 그대로다(자=북, 묘=동, 오=남, 유=서) */
+const JI_DIR = ["북", "북동", "북동", "동", "남동", "남동", "남", "남서", "남서", "서", "북서", "북서"];
+/* 배우자가 무엇으로 먹고사나 — 일지 십성의 직업 결 */
+const SP_JOB = {
+  정관: "조직 안에서 직함을 받는 일 — 공공·대기업·관리직",
+  편관: "위기를 다루는 일 — 군경·의료·현장·감사",
+  정재: "숫자와 실무를 다루는 일 — 회계·금융·관리",
+  편재: "판을 벌이는 일 — 사업·영업·유통·중개",
+  식신: "만들고 먹이는 일 — 요식·교육·돌봄·제작",
+  상관: "말과 표현으로 먹는 일 — 기획·창작·미디어·강의",
+  정인: "배워서 가르치는 일 — 교육·연구·자격직",
+  편인: "혼자 파고드는 일 — 기술·상담·전문직",
+  비견: "제 이름으로 하는 일 — 프리랜서·자영업",
+  겁재: "겨루는 자리 — 영업·경쟁이 심한 현장",
+};
+/* 취향 — 짝의 자리에 앉은 별자리 원소 */
+const SP_TASTE = {
+  불: "가만히 못 있어. 여행·운동·새로 생긴 데. 주말에 집에만 있자고 하면 답답해해",
+  흙: "실속을 챙겨. 맛집·물건·눈에 보이는 것. 계획 세우고 그대로 가는 걸 좋아해",
+  공기: "얘기하는 걸 좋아해. 사람 많은 자리, 새 정보, 대화가 끊기면 지루해해",
+  물: "분위기를 봐. 영화·음악·둘만 있는 시간. 시끄러운 데를 오래 못 견뎌",
+};
+/* 나와 짝의 결합 — 일간 오행과 일지 오행의 관계. 오행 생극 그대로다 */
+const SANG = { 목: "화", 화: "토", 토: "금", 금: "수", 수: "목" };   // 내가 낳는 것
+const GEUK = { 목: "토", 화: "금", 토: "수", 금: "목", 수: "화" };   // 내가 이기는 것
 
 const SEOUL = { lat: 37.5665, lon: 126.978 };const HANGUL_AGE = (y, now) => now.getFullYear() - y + 1;
 /* 조사 — "힘줄야"가 화면에 나왔다. 받침을 보고 고른다 */
@@ -374,10 +404,12 @@ export function readImprint({ saju, ladder, birth, sex, now = new Date(), lat = 
   const body = [];
   body.push(
     ["몸", `<b>${BUILD[me]}</b>${jong(BUILD[me]) ? "이야" : "야"}.${(maxEl[1] >= 3 && (maxEl[0] === "토" || maxEl[0] === "수")) ? " 살이 잘 붙어. 평생 관리해야 할 몸이야." : ""}`,
-      fn(`일간 오행 ${me} 의 체상. 가장 많은 기운은 ${maxEl[0]} ${maxEl[1]}개 — ${maxEl[0] === "토" || maxEl[0] === "수" ? "부기·살집으로 본다" : "체형에 큰 영향은 없다"}.`)],
-    ["얼굴", FACE[me], fn(`일간 오행 ${me} 의 상(相).`)],
+      fn(`오행 체상론의 골격 — 일간 ${me}형. 가장 많은 기운 ${maxEl[0]} ${maxEl[1]}개 — ${maxEl[0] === "토" || maxEl[0] === "수" ? "부기·살집으로 본다" : "체형에 큰 영향은 없다"}. <b>검증되지 않은 전통 서술이다</b> — 확인 문항으로 되묻는다.`)],
+    ["얼굴", `${dot(FACE[me])}${maxEl[0] !== me && maxEl[1] >= 3 ? ` 다만 ${EL_KO2[maxEl[0]]} 기운이 ${maxEl[1]}개로 세서 ${FACE[maxEl[0]].split(".")[0]}는 인상이 섞여 있어.` : ""}`,
+      fn(`<b>오행 체상론(五行體相)</b> — 사람을 목·화·토·금·수 다섯 형(形)으로 나눠 보는 관상 계열 전통이다(『신상전편』 등). 일간 ${GANK[idx.dG]}(${me})형을 기본으로 하고, 가장 센 기운 ${maxEl[0]} ${maxEl[1]}개를 보정으로 얹었다.
+      <b>한계를 밝힌다</b>: 정통 체상론은 일간·월령·격국을 함께 보는데 우리는 <b>일간과 최다 오행 둘만</b> 쓴다. 축소판이고, <b>맞았는지 검증한 적이 없다</b>. 그래서 아래 「지금 확인해 보아라」에서 되묻는다 — 틀리면 접으면 된다. 키(cm)를 아예 뺀 것과 같은 이유로, 여기도 숫자는 쓰지 않는다.`)],
     ["목소리", `${VOICE[me]}.${G.식상 === 0 ? " 말수가 적어서 더 그렇게 들려." : ""}`,
-      fn(`일간 오행 ${me} + 표현을 맡은 자리 ${G.식상}개.`)],
+      fn(`오행 체상론의 성음(聲音) — 일간 ${me}형 + 표현을 맡은 자리 ${G.식상}개. <b>검증되지 않은 전통 서술이다.</b>`)],
   );
 
 
@@ -398,6 +430,15 @@ export function readImprint({ saju, ladder, birth, sex, now = new Date(), lat = 
         fn(`${spouseSS}의 순기능.`)],
       ["부딪히는 지점", `<b>${sp.b}</b> 반복되는 싸움이 있다면 대개 이 한 가지가 옷을 갈아입고 나오는 거야. <b>매번 다른 일로 싸우는 것 같아도 원인은 하나야.</b>`,
         fn(`${spouseSS}의 역기능. 부부 갈등은 새 원인이 아니라 같은 축의 재발로 본다.`)],
+      ["둘이 섞이는 결", (() => {
+        const spEl = JI_EL[idx.dJ];
+        return spEl === me ? "<b>비슷한 사람끼리야.</b> 말은 잘 통하는데 한번 부딪히면 둘 다 안 물러서"
+          : SANG[spEl] === me ? "<b>그 사람이 너를 받쳐 주는 결이야.</b> 옆에 있으면 네가 편해져 — 그래서 고마운 줄 모르기 쉬워"
+            : SANG[me] === spEl ? "<b>네가 주는 쪽이야.</b> 챙기다 지치는 날이 와. 받는 것도 연습해야 오래 가"
+              : GEUK[me] === spEl ? "<b>네가 주도하는 결이야.</b> 결정을 네가 내려 왔을 거야. 물어보는 습관 하나가 관계를 바꿔"
+                : "<b>그 사람이 너를 잡아 주는 결이야.</b> 긴장이 있지만 그게 너를 무너지지 않게 해";
+      })(),
+        fn(`일간 ${me} vs 짝의 자리 오행 ${JI_EL[idx.dJ]} — 오행 생극 그대로다(변환 없음).`)],
       ["네가 조심할 것", G.식상 === 0
         ? "<b>밖에서 참은 걸 집에서 풀어.</b> 네게 말이 나갈 문이 얇아서, 눌린 압력이 가장 가까운 사람한테 가. 미리 알면 반은 막혀."
         : `<b>${["정재", "정관", "정인"].includes(spouseSS) ? "붙어 있으려다 숨 쉴 틈을 안 남긴다" : "각자 몫을 나누다 어느 순간 남처럼 산다"}.</b> 네 구조가 기울면 그쪽으로 기울어.`,
@@ -418,6 +459,12 @@ export function readImprint({ saju, ladder, birth, sex, now = new Date(), lat = 
       ["인상", `<b>${h7.h >= 2 ? "키가 큰 편" : h7.h <= -1 ? "아담한 편" : "평균 근처"}.</b> ${h7.look}`,
         fn(`짝의 자리가 ${h7Sign} — 상승궁 ${ascSign}의 맞은편이다. 서양 전통에서 이 자리가 배우자의 겉모습을 다룬다. <b>다만 키·체형은 추정이다</b> — 사인별 체상은 유파 편차가 크고 cm 로 환산할 표준은 없다. 기혼자에게는 이 줄을 아예 내지 않는다(이미 아는 값이라 맞혀도 소득이 없고 틀리면 문서가 죽는다).`)],
       ["분위기", h7.air, fn(`${h7Sign}의 성질.${sunH === 7 ? " 게다가 태양이 그 자리에 든다 — 배우자가 사회적으로 드러나는 사람이 된다." : ""}`)],
+      ["어느 쪽에서 오나", `<b>${JI_DIR[idx.dJ]}쪽</b>이야. 네가 사는 데서 그 방향에 있는 동네·학교·직장·모임에서 만나. 여행지에서 만나는 그림보다 <b>생활 반경 안 ${JI_DIR[idx.dJ]}쪽</b>일 확률이 높아.`,
+        fn(`짝의 자리에 앉은 지지 ${JIK[idx.dJ]} → 십이지 방위 배당 ${JI_DIR[idx.dJ]}. 방위 배당은 전통 그대로라 <b>변환이 없다</b>. 다만 "그 방향에서 만난다"로 읽는 건 <b>해석이 섞인다</b>.`)],
+      ["뭐하는 사람", `<b>${SP_JOB[spouseSS]}</b> 쪽이야.`,
+        fn(`짝의 자리에 앉은 것이 ${spouseSS} — 이 십성이 가리키는 직업군.`)],
+      ["취향", SP_TASTE[ZO_EL[h7Sign]] || "특별히 치우친 취향은 안 잡혀",
+        fn(`짝의 자리 ${h7Sign}의 원소 ${ZO_EL[h7Sign]}. 취향으로 옮기는 데 <b>해석이 섞인다</b>.`)],
       ["성격", `<b>${sp.w}</b>${jong(sp.w) ? "이야" : "야"}. ${dot(sp.d)}`, fn(`일지(배우자 자리)에 앉은 것이 ${spouseSS}.`)],
       ["집안", spouseSS === "정재" || spouseSS === "정관" ? "<b>반듯해.</b> 크게 부자는 아닌데 부족하지도 않아. 결혼하고 나서 그 집에서 실질적인 도움을 받아"
         : spouseSS === "편재" || spouseSS === "편관" ? "<b>기복이 있어.</b> 좋을 땐 크게 좋고 아닐 땐 아니야. 처음부터 셈을 분명히 해 두는 게 나아"
@@ -445,6 +492,15 @@ export function readImprint({ saju, ladder, birth, sex, now = new Date(), lat = 
       ["결혼 후", `<b>${["정재", "정관", "정인"].includes(spouseSS) ? "붙어 사는 부부가 돼" : "각자 몫이 분명한 부부가 돼"}.</b> ` +
         (G.식상 === 0 ? "위험은 하나야 — <b>밖에서 참은 걸 집에서 풀어.</b> 미리 알면 반은 막혀" : "크게 부딪히는 구조는 아니야"),
         fn(`${spouseSS} + 표현을 맡은 자리 ${G.식상}개. 표현이 막히면 압력이 가장 가까운 자리로 향한다.`)],
+      ["둘이 섞이는 결", (() => {
+        const spEl = JI_EL[idx.dJ];
+        return spEl === me ? "<b>비슷한 사람끼리야.</b> 말이 잘 통하는데 부딪히면 크게 부딪혀 — 둘 다 안 물러서거든"
+          : SANG[spEl] === me ? "<b>상대가 너를 받쳐 주는 결이야.</b> 같이 있으면 네가 편해져. 대신 네가 받기만 하게 되기 쉬워"
+            : SANG[me] === spEl ? "<b>네가 주는 쪽이야.</b> 챙기고 끌어 주다가 어느 날 지쳐. 받는 법을 같이 배워야 오래 가"
+              : GEUK[me] === spEl ? "<b>네가 주도하는 결이야.</b> 결정은 네가 내리게 돼. 상대가 눌리지 않게 물어보는 습관이 필요해"
+                : "<b>상대가 너를 잡아 주는 결이야.</b> 긴장이 있는데 그 긴장이 너를 무너지지 않게 해";
+      })(),
+        fn(`일간 ${me} vs 짝의 자리 오행 ${JI_EL[idx.dJ]} — 오행 생극 관계 그대로다(변환 없음).`)],
       ["갈라설 위험", shakeAfter.length ? `<b>${shakeAfter[0].from}~${shakeAfter[0].to}세에 한 번 크게 흔들려.</b> 그때 원인은 사람이 아니라 일과 돈이야` : "<b>낮아.</b> 결혼한 뒤로 그 자리를 정면으로 치는 구간이 없어",
         fn(shakeAfter.length ? `${shakeAfter[0].from}~${shakeAfter[0].to}세 구간이 배우자 자리를 다시 친다.` : "짝을 만난 뒤로 배우자 자리를 치는 구간이 여든까지 없다.")],
     ];
@@ -489,8 +545,18 @@ export function readImprint({ saju, ladder, birth, sex, now = new Date(), lat = 
     return d ? `<b>${d.from}~${d.to}세</b> — ${d.title}가 와. ${d.event}` : none;
   };
   const young = age < 14;
+  /* 자리마다 서양이 그 영역을 어떻게 보는지 한 줄. 겹치면 무겁게, 비면 "사주가 더 무겁게 보는 영역" */
+  const moonH0 = wholeSignHouse(moonLongitude(jd), asc);
+  const pofH0 = wholeSignHouse(partOfFortune(jd, asc, day), asc);
+  const westLine = (k) => {
+    const h = DOM_HOUSE[k]; if (!h) return null;
+    if (sunH === h) return { w: `<b>서양 셈도 여기를 네 인생의 중심으로 봐.</b> 두 셈이 겹쳐 — 이 자리는 무겁게 읽어야 해.`, n: fn(`태양이 ${h}하우스(${HOUSE_KO[h]}). 동아시아·서양 두 축이 같은 영역을 가리킨다.`) };
+    if (moonH0 === h) return { w: `<b>서양 셈은 여기를 네 마음이 쉬는 곳으로 봐.</b> 잘하는 자리가 아니라 <b>돌아오는 자리</b>라는 뜻이야.`, n: fn(`달이 ${h}하우스(${HOUSE_KO[h]}).`) };
+    if (pofH0 === h) return { w: `<b>서양 셈은 여기를 복이 도는 자리로 봐.</b> 애쓴 것보다 더 돌아오는 영역이야.`, n: fn(`파트오브포춘이 ${h}하우스(${HOUSE_KO[h]}).`) };
+    return { w: `서양 셈으로는 이 자리가 조용해. <b>사주가 더 무겁게 보는 영역</b>이라는 뜻이야 — 여기 적힌 건 동아시아 쪽 판단이 주도한 거야.`, n: fn(`${h}하우스(${HOUSE_KO[h]})에 해·달·파트 어느 것도 없다. 두 축이 갈리는 자리라 그렇게 표시했다.`) };
+  };
   const D = [];
-  const putD = (k, t, a, b2, c, d, n) => D.push({ k, t, steps: [["새겨질 때", a], ["자라면서", b2], ["지금", c], ["앞으로", d]], n });
+  const putD = (k, t, a, b2, c, d, n) => D.push({ k, t, steps: [["새겨질 때", a], ["자라면서", b2], ["지금", c], ["앞으로", d]], n, west: westLine(k) });
 
   /* 몸 — **한 자리로 못 박지 않는다.** 축이 셋(비어서·넘쳐서·눌려서)이고, 겹칠 때만 한 곳이라고 쓴다.
      보충의 방향도 축마다 반대다: 비어서 약한 자리는 채워 주는 열 해가 도움이지만,
@@ -616,10 +682,35 @@ export function readImprint({ saju, ladder, birth, sex, now = new Date(), lat = 
       fn(`${sex === "F" ? "여자에게 식상" : "남자에게 관성"}이 자식의 자리. ${G[g3]}개.${kids != null ? ` 자녀 유무 입력(${kids ? "있음" : "없음"})을 반영했다.` : ""}`));
   }
 
+  /* ── 돈의 여정 ──────────────────────────────────────────────────────
+     창업자 요청: "돈을 벌면 언제 얼마나 뭘 해서, 그걸 벌기까지의 여정 그래프도 있으면 좋고."
+     ⚠ **금액은 쓰지 않는다.** 명리 어디에도 원 단위 표준이 없다 — 키(cm)를 뺀 것과 같은 이유다.
+     대신 **네 인생 안에서의 상대 높낮이**를 그린다. "얼마나"는 남과의 비교가 아니라
+     **네 여든 해 중 언제가 제일 두꺼운가**로 답한다. 그건 계산에서 실제로 나온다. */
+  const MONEY_V = { 정재: 3, 편재: 4, 식신: 2, 상관: 1, 정관: 1, 편관: -1, 정인: 0, 편인: 0, 비견: -1, 겁재: -3 };
+  const MONEY_HOW = {
+    정재: "월급·고정 계약처럼 끊기지 않는 돈", 편재: "사업·투자·중개처럼 크게 오가는 돈",
+    식신: "손에 익은 기술로 버는 돈", 상관: "네 이름 걸고 내놓아서 버는 돈",
+    정관: "직함이 오르면서 따라오는 돈", 편관: "책임이 얹히면서 억지로 버는 돈",
+    정인: "자격·문서가 만들어 주는 돈", 편인: "혼자 파고든 기술로 버는 돈",
+    비견: "동업·팀으로 벌지만 나눠 갖는 돈", 겁재: "벌어도 새는 돈 — 보증·동업·빌려주기",
+  };
+  const journey = bands.map((b) => ({
+    from: b.from, to: b.to, v: (MONEY_V[b.ss] ?? 0) + (G.재성 >= 3 && G.비겁 + G.인성 <= 2 ? -1 : 0),
+    how: b.young ? "아직 버는 나이가 아니야" : MONEY_HOW[b.ss], young: b.young,
+    now: !!(cur && b.from === cur.from),
+  }));
+  const adult = journey.filter((x) => !x.young);
+  const peak = adult.length ? adult.reduce((x, y) => (y.v > x.v ? y : x)) : null;
+  const trough = adult.length ? adult.reduce((x, y) => (y.v < x.v ? y : x)) : null;
+  const money = { path: journey, peak, trough,
+    n: fn(`여든 해를 재물 관점 −3~+4 로 매겼다(정재3·편재4·식신2·상관1·정관1·편인0·정인0·비견−1·편관−1·겁재−3, 재다신약이면 −1). <b>금액은 쓰지 않는다</b> — 명리에 원 단위 표준이 없다. 이 곡선은 <b>남과의 비교가 아니라 네 여든 해 안에서의 높낮이</b>다.`) };
+
   /* ── 아홉 하늘의 분업 ────────────────────────────────────────────────
      각 하늘이 **사주가 못 하는 일 하나씩**을 맡는다. 같은 질문에 투표시키지 않는다 —
      투표를 시키면 오행 어휘로 환원돼 결국 사주로 읽힌다(v118 에서 실제로 그랬다). */
   const sky9 = [];
+  const compass = { self: null, mate: sex ? { dir: JI_DIR[idx.dJ], why: "짝이 오는 쪽" } : null };
   const putS = (from, ask, val, say, why) => sky9.push({ from, ask, val, say, n: fn(`${from} — ${why}`) });
 
   /* ① 서양 — 삶을 열두 자리로 쪼갠다. **사주에 없는 축이다.** */
@@ -655,6 +746,7 @@ export function readImprint({ saju, ladder, birth, sex, now = new Date(), lat = 
   /* ④ 일본 구성기학 — 방위. 사주에는 방위 축이 거의 없다 */
   {
     const hm = honmeisei(+birth.y, +birth.m <= 2).name, g = GU_DIR[hm];
+    if (g) compass.self = { dir: g[0], why: g[1] };
     if (g) putS("일본 구성기학", "어느 쪽으로 움직여야 풀리나", hm,
       `네 별의 자리는 <b>${g[0]}쪽</b>, ${g[1]}야. 막혔다 싶을 때 <b>${g[0]}쪽으로 움직여</b> — 책상 방향, 이사, 출장, 오래 머물 자리. 이건 성격이 아니라 <b>쓰는 법</b>이야.`,
       `본명성 ${hm} — 팔괘 정위 배당 그대로라 <b>변환이 없다</b>. 방위를 실용 지침으로 쓰는 축은 사주에 거의 없다.`);
@@ -745,7 +837,7 @@ export function readImprint({ saju, ladder, birth, sex, now = new Date(), lat = 
 
   return {
     age, ageFull, noHour: !!noH, sex: sex || null,
-    domains: D, checks, mateMode, sky9, clash,
+    domains: D, checks, mateMode, sky9, clash, money, compass,
     health: { axes, agree: healthAgree, els: uniq },
     given: { married, kids, timeAcc, metAge: metAge ?? null, city: birth.city || null },
     core: {

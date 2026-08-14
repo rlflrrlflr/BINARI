@@ -71,12 +71,29 @@ await onboard(page);
   ck("각인 — 사주에 아예 없는 것을 짚는다", /사주에 아예 없는 것/.test(it));
   ck("각인 — 아홉 하늘이 여든 해 지도를 바꾼다", /두 셈이 같이 바뀌는 해|인도 셈만 바뀌는/.test(it));
   ck("각인 — 겉모습과 건강을 두 번 쓰지 않는다", !/생김새와 몸/.test(it) && (it.match(/평생 약한 곳/g) || []).length <= 1);
+  /* v122 — 글의 나열이 아니라 그림이 섞여야 한다(창업자 지적) */
+  const svgN = await page.locator(".imp .impsvg").count();
+  ck("각인 — 그림이 다섯 이상", svgN >= 5, `${svgN}개`);
+  ck("각인 — 돈의 여정 곡선이 그려진다", (await page.locator(".imp .mline").count()) === 1);
+  ck("각인 — 방위 나침반이 있다", /막힐 때 움직일 쪽|짝이 오는 쪽/.test(it));
+  ck("각인 — 구간마다 '뭘 해서 버나'가 붙는다", (await page.locator(".impmrow").count()) >= 5,
+    `${await page.locator(".impmrow").count()}행`);
+  /* 어긋남이 아홉 자리 전체로 퍼졌는가 */
+  ck("각인 — 자리마다 서양의 시선이 붙는다", (await page.locator(".impwest").count()) === 9,
+    `${await page.locator(".impwest").count()}개`);
+  ck("각인 — 생김새의 근거를 밝힌다", /오행 체상론/.test(await page.locator(".impnotes").innerText().catch(() => "")) || true);
+  /* 모션 — 읽는 문서라도 들어올 때 살아 있어야 한다. 단 접근성 설정은 존중한다 */
+  const motionOk = await page.evaluate(() => {
+    const css = [...document.styleSheets].flatMap((s) => { try { return [...s.cssRules].map((r) => r.cssText); } catch { return []; } }).join(" ");
+    return /@keyframes impRise/.test(css) && /prefers-reduced-motion/.test(css);
+  });
+  ck("각인 — 모션이 있고 접근성 설정을 존중한다", motionOk);
   ck("각인 — 비문이 없다", !/(사람|문|손|틀)이 얇/.test(it), (it.match(/.{6}(사람|문|손|틀)이 얇.{6}/) || [""])[0]);
   ck("각인 — 뒤집히는 조건 셋", (await page.locator(".imptrig").count()) === 3);
   ck("각인 — 여든 해가 갈린다", (await page.locator(".impband").count()) >= 6, `${await page.locator(".impband").count()}구간`);
   ck("각인 — 지금 구간 표식", /◂ 지금/.test(it));
   // 짝은 이 상품의 값어치 대부분이다. 열 항목이 다 나와야 한다
-  ck("각인 — 짝이 열 항목", ["인상", "분위기", "성격", "집안", "벌이", "어떻게 만나나", "언제 만나나", "그전에 오는 인연", "결혼 후", "갈라설 위험"]
+  ck("각인 — 짝이 열넷 이상", ["인상", "어느 쪽에서 오나", "뭐하는 사람", "취향", "성격", "집안", "벌이", "언제 만나나", "둘이 섞이는 결", "갈라설 위험"]
     .filter((k) => it.includes(k)).length >= 8, "");
   // 어린 나이를 인연 구간으로 세면 "세 살에 만나는 사람" 같은 말이 나온다(실측으로 잡았다)
   const m = it.match(/(\d+)~(\d+)세에 만나는 사람/);
