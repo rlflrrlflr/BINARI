@@ -102,6 +102,8 @@ SELECT
     countIf(event = 'imprint_clicked' AND {EXT})                        AS imprint,
     countIf(event = 'imprint_opened' AND {EXT})                         AS imprint_open,
     countIf(event = 'verdict_shared' AND {EXT})                         AS shared,
+    -- 공유는 '보낸 것'과 '그래서 들어온 것'이 다르다. 분자가 없으면 바이럴 계수를 못 낸다.
+    countIf(event = 'shared_verdict_view' AND {EXT})                    AS share_in,
     -- 원가: 유료 상품을 파는 이상 마진을 매일 봐야 한다
     sumIf(toInt(coalesce(properties.tok_in, 0)) + toInt(coalesce(properties.tok_out, 0)),
           event IN ('verdict_shown','detail_shown','letter_written') AND {EXT})  AS tokens,
@@ -180,7 +182,8 @@ MSG = {
     "숫자_방향":    "GO {GO} · HOLD {HOLD}({HOLD비율}) · STOP {STOP}",
     "숫자_반응":    "평가 {평가}건 {평가율}",
     "숫자_받을게":  " → 받을게 {받을게}건",
-    "숫자_공유":    " · 공유 {공유}건",
+    "숫자_공유유입": "공유 {보냄}건 → 그걸로 들어온 사람 {들어옴}명{계수}",
+    "숫자_공유계수": " · 1건당 {계수}명",
     "숫자_서신":    "서신 {클릭}건 클릭 → {확인}건 받을게 → {발행}건 발행",
     "숫자_서신실패": " · 실패 {실패}건",
     "숫자_각인":    "각인 {클릭}건 클릭 → {열람}건 열람",
@@ -298,7 +301,7 @@ def build_report(cfg):
 
     keys = ["d", "people", "visits", "ob_start", "ob_done", "asked", "verdicts",
             "failed", "rated", "letter", "letter_yes", "letter_made", "letter_err",
-            "imprint", "imprint_open", "shared", "tokens", "in_people", "in_verdicts"]
+            "imprint", "imprint_open", "shared", "share_in", "tokens", "in_people", "in_verdicts"]
     t = dict(zip(keys, rows[0]))
     p = dict(zip(keys, rows[1])) if len(rows) > 1 else {}
 
@@ -331,8 +334,12 @@ def build_report(cfg):
              + (say("숫자_실패", 실패=t["failed"]) if t["failed"] else ""))
     if t["verdicts"]:
         D.append(say("숫자_방향", GO=go, HOLD=hold, HOLD비율=pct(hold, tv), STOP=stop))
-        D.append(say("숫자_반응", 평가=t["rated"], 평가율=pct(t["rated"], t["verdicts"]))
-                 + (say("숫자_공유", 공유=t["shared"]) if t["shared"] else ""))
+        D.append(say("숫자_반응", 평가=t["rated"], 평가율=pct(t["rated"], t["verdicts"])))
+    # 공유는 보낸 수가 아니라 '그걸로 들어온 사람'이 성장 축이다 — G3 게이트(공유발 유입)의 분자
+    if t["shared"] or t["share_in"]:
+        k = (say("숫자_공유계수", 계수=round(t["share_in"] / t["shared"], 1))
+             if t["shared"] and t["share_in"] else "")
+        D.append(say("숫자_공유유입", 보냄=t["shared"], 들어옴=t["share_in"], 계수=k))
     # 유료 상품 두 개는 각자 한 줄을 갖는다 — 돈이 오가는 자리라 클릭만 세면 안 된다
     if t["letter"] or t["letter_made"]:
         D.append(say("숫자_서신", 클릭=t["letter"], 확인=t["letter_yes"], 발행=t["letter_made"])
