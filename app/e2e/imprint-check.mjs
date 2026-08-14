@@ -434,6 +434,47 @@ ck("「생김새」에 건강 항목이 없다(4단이 맡는다)", !a.body.some
   ck("사람이 바뀌면 장 제목도 바뀐다", titles2.size >= 8, `30명 중 ${titles2.size}종`);
 }
 
+/* ── ㉗ 직장생활 — 직업 선택과 다른 축인가 ──
+   창업자 요청(2026-08-14): "직장생활도 봐주면 어때. 일 스타일, 잘하는 것, 잘 맞는 사람,
+   어느 위치, 얼마나 오래 다니고, 언제 이직하고 등등."
+   ⚠ 「일 — 어떤 일이 맞나」와 **겹치면 안 된다.** 그건 직업 선택이고 이건 조직 적응이다.
+     맞는 직업을 골라도 조직에서 못 버티는 사람이 있다 — 그래서 축을 따로 둔다. */
+{
+  const w = a.work;
+  ck("직장생활 절이 나온다", !!w && w.rows.length >= 9, `${w?.rows.length}항목`);
+  for (const need of ["일 스타일", "잘하는 것", "안 되는 것", "어느 위치까지", "잘 맞는 상사",
+    "같이 일하면 좋은 사람", "한 곳에 얼마나", "번아웃 신호"])
+    ck(`직장 — ${need}`, w.rows.some((x) => x[0] === need), w.rows.map((x) => x[0]).join("/"));
+  ck("직장 항목마다 근거 각주가 붙는다", w.rows.every((x) => Number.isInteger(x[2]) && x[2] >= 1 && x[2] <= a.notes.length));
+  /* 「일」 자리와 문장이 겹치면 두 절 중 하나가 죽는다 */
+  const jobText = a.domains.find((d) => d.k === "일").steps.map((x) => x[1]).join(" ").replace(/<[^>]+>/g, "");
+  const workText = w.rows.map((x) => x[1]).join(" ").replace(/<[^>]+>/g, "");
+  const shared = workText.split(/[.!?]\s+/).filter((t) => t.length > 12 && jobText.includes(t));
+  ck("「일」 자리와 문장이 안 겹친다", shared.length === 0, shared[0]?.slice(0, 34) || "안 겹침");
+  /* 이직 시기는 두 층 — 십 년 판(대운)과 해마다(세운) */
+  ck("여섯 해를 해마다 짚는다", w.years.length === 6 && w.years.every((y) => y.year && y.w));
+  ck("올해가 첫 해다", w.years[0].year === 2026, String(w.years[0].year));
+  ck("좋은 해가 없으면 없다고 둔다(지어내지 않는다)", w.goYear === null || /옮기기 좋은/.test(w.goYear.w));
+  ck("번아웃은 직장 맥락 문장이다(돈·말 증상을 갖다 쓰지 않는다)",
+    !w.rows.find((x) => x[0] === "번아웃 신호")[1].includes(a.core.block.s),
+    w.rows.find((x) => x[0] === "번아웃 신호")[1].replace(/<[^>]+>/g, "").slice(0, 40));
+  /* 모호함 금칙을 직장 절에도 그대로 건다 */
+  ck("직장 절도 모호하지 않다", !/(그릇이|쥘\s*팔|일\s*수도|두고\s*봐야|자리가\s*\d+개)/.test(workText));
+  /* 사람이 바뀌면 위치·재직 성향도 바뀐다 */
+  const posSet = new Set(), tenSet = new Set();
+  for (let i = 0; i < 40; i++) {
+    const r = readImprint({ saju: { idx: { yG: i % 10, yJ: i % 12, mG: (i * 3) % 10, mJ: (i * 5) % 12, dG: (i * 7) % 10, dJ: (i * 11) % 12, hG: (i * 2) % 10, hJ: (i * 4) % 12 },
+      counts: { 목: i % 4, 화: (i + 1) % 4, 토: (i + 2) % 4, 금: (i + 3) % 4, 수: (i + 1) % 3 } },
+      ladder: LADDER(3 + i % 7), birth: { y: 1975 + i, m: 1 + i % 12, d: 1 + i % 28, h: i % 24, min: 0 },
+      sex: "M", now: new Date(2026, 7, 14) });
+    if (!r.work) continue;
+    posSet.add(r.work.rows.find((x) => x[0] === "어느 위치까지")[1]);
+    tenSet.add(r.work.rows.find((x) => x[0] === "한 곳에 얼마나")[1]);
+  }
+  ck("사람마다 도달 위치가 갈린다", posSet.size >= 3, `${posSet.size}종`);
+  ck("사람마다 재직 주기가 갈린다", tenSet.size >= 2, `${tenSet.size}종`);
+}
+
 const pass = R.filter(Boolean).length;
 console.log(`\n=== 각인 엔진: ${pass}/${R.length} PASS ===`);
 process.exit(pass === R.length ? 0 : 1);
