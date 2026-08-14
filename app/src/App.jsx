@@ -728,6 +728,20 @@ const Em = ({ t }) => <>{String(t).split("*").map((s, i) => (i % 2 ? <b key={i}>
 const IMPRINT_PRICE = 9900;
 /* 받침에 따라 조사를 고른다 — 표에서 조립한 문장이라 안 고르면 "…일야" 가 그대로 나간다(실측) */
 const josa = (w, a, b) => { const c = String(w).charCodeAt(String(w).length - 1) - 0xac00; return (c >= 0 && c < 11172 && c % 28) ? a : b; };
+/* 그림 안 글자 줄바꿈 — slice 로 자르면 "감정이 먼저 보이"처럼 말이 끊긴다(실제로 화면에 나왔다).
+   자르지 말고 어절 단위로 두 줄에 나눈다. */
+function wrap2(t, max = 9) {
+  const s = String(t);
+  if (s.length <= max) return [s];
+  const words = s.split(" ");
+  let a = "", b = "";
+  for (const w of words) {
+    if (!b && (a ? a.length + 1 + w.length : w.length) <= max) a = a ? a + " " + w : w;
+    else b = b ? b + " " + w : w;
+  }
+  return b ? [a, b] : [a];
+}
+
 function ImprintDoc({ saju, birth, sex, onClose }) {
   const [notesOn, setNotesOn] = useState(false);
   /* v115 선택 입력 — **각인을 열 때만** 묻는다. 무료 온보딩은 건드리지 않는다.
@@ -748,9 +762,9 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
       }
       return readImprint({ saju, ladder, birth, sex, lon: cityLon(birth?.city),
         married: extra.married ?? null, kids: extra.kids ?? null, timeAcc: extra.timeAcc ?? null,
-        heightCm: extra.heightCm ?? null, metAge: extra.metAge ?? null });
+        metAge: extra.metAge ?? null });
     } catch (e) { return null; }
-  }, [saju, birth, sex, extra.married, extra.kids, extra.timeAcc, extra.heightCm, extra.metAge]);
+  }, [saju, birth, sex, extra.married, extra.kids, extra.timeAcc, extra.metAge]);
   useEffect(() => { track("imprint_opened", { has_sex: !!sex, has_hour: !!(saju?.idx && saju.idx.hG != null), has_extra: extra.married != null }); }, []);
   if (!r) return (<div className="imp"><p className="impmsg">각인을 읽지 못했어. 생년월일을 다시 확인해 줄래?</p>
     <button className="btn ghost mt" onClick={onClose}>닫을게</button></div>);
@@ -803,10 +817,12 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
     <svg viewBox="0 0 320 116" width="100%" height="116" className="impsvg" role="img" aria-label="겉과 속">
       <rect x="8" y="20" width="118" height="66" rx="4" fill="none" stroke="#8a7f95" strokeWidth="1.4" />
       <text x="67" y="14" fontSize="8" fill="#8a7f95" textAnchor="middle" letterSpacing="2">겉</text>
-      <text x="67" y="52" fontSize="12" fill="#e6dff2" textAnchor="middle">{r.core.surface.w.slice(0, 9)}</text>
+      {wrap2(r.core.surface.w).map((ln, i) => (
+        <text key={i} x="67" y={46 + i * 15} fontSize="11" fill="#e6dff2" textAnchor="middle">{ln}</text>))}
       <rect x="194" y="20" width="118" height="66" rx="4" fill="none" stroke="#a83229" strokeWidth="1.4" />
       <text x="253" y="14" fontSize="8" fill="#e8a06a" textAnchor="middle" letterSpacing="2">속</text>
-      <text x="253" y="52" fontSize="12" fill="#f0b6ab" textAnchor="middle">{r.core.inner.w}</text>
+      {wrap2(r.core.inner.w).map((ln, i) => (
+        <text key={i} x="253" y={46 + i * 15} fontSize="11" fill="#f0b6ab" textAnchor="middle">{ln}</text>))}
       <path d="M188 53 L146 53" stroke="#e8a06a" strokeWidth="1.6" />
       <path d="M152 48 L144 53 L152 58" fill="none" stroke="#e8a06a" strokeWidth="1.6" />
       <line x1="160" y1="34" x2="160" y2="72" stroke="#a83229" strokeWidth="3" />
@@ -826,7 +842,7 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
 
       {askOpen && (
         <div className="impask fade">
-          <p className="impaskh">몇 가지만 알려주면 훨씬 정확해져 <i>전부 선택이야</i></p>
+          <p className="impaskh">두어 가지만 알려주면 훨씬 정확해져 <i>전부 선택이야</i></p>
           <div className="impaskrow"><span>결혼했어?</span>
             <button className={"impchip" + (extra.married === true ? " on" : "")} onClick={() => setEx("married", true)}>했어</button>
             <button className={"impchip" + (extra.married === false ? " on" : "")} onClick={() => setEx("married", false)}>아직</button>
@@ -843,11 +859,6 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
           <div className="impaskrow"><span>아이가 있어?</span>
             <button className={"impchip" + (extra.kids === true ? " on" : "")} onClick={() => setEx("kids", true)}>있어</button>
             <button className={"impchip" + (extra.kids === false ? " on" : "")} onClick={() => setEx("kids", false)}>없어</button>
-          </div>
-          <div className="impaskrow"><span>키가 어떻게 돼?</span>
-            <input className="impnum" type="number" inputMode="numeric" min="120" max="220" placeholder="cm"
-              value={extra.heightCm ?? ""} onChange={(e) => setEx("heightCm", e.target.value ? +e.target.value : null)} />
-            <em className="impaskhint">안 적으면 키 얘기는 아예 안 해</em>
           </div>
           <p className="impaskw">이걸 모르면 <b>이미 지난 일을 앞일처럼</b> 적게 돼. 안 알려줘도 문서는 나오지만, 그 부분이 헐거워져.</p>
           <button className="btn ghost sm" onClick={() => setAskOpen(false)}>{extra.married != null || extra.kids != null ? "이대로 읽을게" : "안 알려줄래"}</button>
@@ -2185,7 +2196,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v116 · 각인 정직성";
+const APP_VER = "v117 · 각인 말투";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.

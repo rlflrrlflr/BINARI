@@ -21,7 +21,6 @@ ck("각인이 나온다", !!a && !!b);
 ck("겉·속·막힌 자리 셋이 다 있다", !!(a.core.surface?.w && a.core.inner?.w && a.core.block?.t));
 /* 키를 안 받으면 그 줄이 통째로 빠진다(§⑤) — 그래서 기본은 넷, 키를 주면 다섯이다 */
 ck("몸이 네 항목 이상", a.body.length >= 4, `${a.body.length}개`);
-ck("키를 주면 한 줄 늘어난다", readImprint({ ...A, heightCm: 178 }).body.length === a.body.length + 1);
 ck("짝이 열 항목", a.mate?.length === 10, `${a.mate?.length}개`);
 ck("뒤집히는 조건 셋", a.trig.length === 3);
 ck("여든 해가 여덟 구간", a.bands.length === 8, `${a.bands.length}개`);
@@ -114,13 +113,12 @@ ck("축이 갈리면 한 곳으로 못 박지 않는다", (() => {
 ck("약한 자리를 되묻는 문항이 축마다 있다",
   a.checks.filter((c) => /말썽인가/.test(c[0])).length === a.health.els.length);
 
-/* ── ⑩ 키 — 맞히지 않는다. 받으면 해석하고, 없으면 아예 안 쓴다 ── */
+/* ── ⑩ 키 — 예측도 안 하고 입력도 안 받는다 ──
+   v115 는 명식에서 cm 를 뽑았고(지어낸 표), v116 은 받아서 되읊었다("179는 7cm 큰 쪽이라 눈에 띈다").
+   둘 다 틀렸다. 뺄셈은 해석이 아니다. 키는 이 문서가 다루는 값이 아니다. */
 {
-  const noH2 = readImprint(A), withH = readImprint({ ...A, heightCm: 178 });
-  ck("키를 안 주면 키 얘기를 안 한다", !noH2.body.some((x) => x[0] === "키") && !JSON.stringify(noH2.body).includes("cm"));
-  ck("키를 주면 그 값을 그대로 쓴다", withH.body.some((x) => x[0] === "키" && x[1].includes("178cm")));
-  ck("키를 명식에서 뽑지 않는다(각주가 그렇게 밝힌다)",
-    withH.notes.some((t) => t.includes("키를 명식에서 뽑지 않았다")));
+  const all = JSON.stringify([readImprint(A), readImprint({ ...A, married: true, metAge: 27 })]);
+  ck("키를 아예 다루지 않는다", !/\d+\s*cm/.test(all) && !readImprint(A).body.some((x) => x[0] === "키"));
 }
 
 /* ── ⑪ 기혼자에게 배우자 외모·집안·벌이를 예언하지 않는다 ── */
@@ -133,6 +131,60 @@ ck("약한 자리를 되묻는 문항이 축마다 있다",
   ck("만난 나이를 주면 그 시기를 해석한다", keys.includes("만난 때") && wed.mate.find((x) => x[0] === "만난 때")[1].includes("27세"));
   ck("미혼이면 예측 모드 그대로", readImprint({ ...A, married: false }).mateMode === "pre");
 }
+
+/* ── ⑫ 톤 — 신은 사전을 읽지 않는다 ──
+   창업자 판정(2026-08-14): "너무 전문성 없어 보이고 바보 같아. 신도 아닌 거 같아."
+   원인 하나는 **한 문단 안에서 말투가 두 번 바뀌는 것**이었다 —
+   감싸는 문장은 "-야"체인데 표에서 꺼낸 문장이 "-다"체(사전체)였다.
+   이 검사는 화면에 나가는 문장이 사전체로 끝나는 걸 잡는다. */
+{
+  const SENT = (r) => [
+    r.core.surface.d, r.core.inner.d, r.core.block.s, r.core.block.w, r.core.block.fix,
+    ...r.body.map((x) => x[1]), ...(r.mate || []).map((x) => x[1]),
+    ...r.trig.map((t) => t.w), ...r.domains.flatMap((d) => d.steps.map((st) => st[1])),
+    ...r.bands.map((x) => x.event), ...r.checks.map((c) => c[1]), r.job.grew, r.job.ex,
+  ].map((t) => String(t).replace(/<[^>]+>/g, "").trim());
+  /* 사전체 종결 — "-ㄴ다/-는다/-이다/-한다/-된다" 로 끝나는 문장 */
+  const DRY = /(?:[는ㄴ]다|이다|았다|었다|린다|난다|긴다|온다|간다|본다|한다|된다|든다|넣다|없다|있다|같다|많다|낫다|크다|넓다|깊다)[.!?]?$/;
+  const bad = [];
+  for (const r of [readImprint(A), readImprint(B), readImprint({ ...A, married: true, kids: true, metAge: 27 })])
+    for (const t of SENT(r)) for (const one of t.split(/(?<=[.!?])\s+/)) if (one && DRY.test(one.trim())) bad.push(one.trim());
+  ck("화면 문장이 사전체로 끝나지 않는다", bad.length === 0, bad.slice(0, 4).join(" / ") || "전부 신의 말투");
+}
+
+/* ── ⑬ 유년 구간에 어른의 사건을 쓰지 않는다 ──
+   실제 판결문에 "5~14세: 월급이 오르거나 집·차처럼 이름이 올라가는 물건이 생긴다"가 나왔고,
+   같은 뿌리로 스물다섯 살 유저에게 "돈이 도는 구간은 5~14세로 이미 지나갔어"라고 적었다. */
+{
+  const early = readImprint({ ...A, ladder: [...Array(8)].map((_, i) => ({ startAge: 5 + i * 10, endAge: 14 + i * 10,
+    ganji: ["병진", "을묘", "갑인", "계축", "임자", "신해", "경술", "기유"][i], el: ["토", "목", "목", "토", "수", "수", "토", "금"][i] })),
+    birth: { y: 2001, m: 5, d: 30, h: 20, min: 46 } });
+  const kid = early.bands.filter((b) => b.to < 18);
+  ck("유년 구간에 어른의 사건이 안 붙는다", kid.every((b) => !/월급|승진|계약|이직|투자|부업|동업/.test(b.event)),
+    kid.map((b) => `${b.from}~${b.to}: ${b.event.slice(0, 14)}`).join(" | ") || "유년 구간 없음");
+  const money = early.domains.find((d) => d.k === "돈").steps[3][1];
+  ck("돈의 앞날을 유년 구간으로 결론짓지 않는다", !/1[0-7]세로 이미 지나갔|~1[0-7]세</.test(money), money.replace(/<[^>]+>/g, "").slice(0, 46));
+  ck("서른다섯 칸에 '어머니와 집이 세상의 전부' 를 안 붙인다",
+    early.bands.filter((b) => b.from >= 18).every((b) => !/어머니와 집이 세상의 전부/.test(b.dashaKo || "")));
+}
+
+/* ── ⑭ 같은 문장이 여러 자리에서 반복되지 않는다 ──
+   판결문에서 "지금 열 해(25~34세)는 다른 쪽에 쏠려 있어."가 다섯 자리에 그대로 나왔다.
+   같은 문장이 다섯 번 나오면 읽는 사람은 이게 조립품이라는 걸 즉시 안다. */
+{
+  const now = readImprint({ ...A, married: true, kids: true }).domains.map((d) => d.steps[2][1].replace(/<[^>]+>/g, "").trim());
+  const cnt = {};
+  for (const t of now) cnt[t] = (cnt[t] || 0) + 1;
+  const worst = Object.entries(cnt).sort((x, y) => y[1] - x[1])[0];
+  ck("「지금」 칸이 자리마다 다른 말을 한다", worst[1] <= 2, `최다 반복 ${worst[1]}회 — "${worst[0].slice(0, 30)}"`);
+}
+
+/* ── ⑮ 확인 문항이 순수 텍스트로 그려진다 — 태그를 넣으면 화면에 <b> 가 찍힌다 ── */
+ck("확인 문항에 HTML 태그가 없다", a.checks.every(([q, w]) => !/[<>]/.test(q + w)),
+   a.checks.filter(([q, w]) => /[<>]/.test(q + w)).map((c) => c[1]).join(" / ") || "깨끗");
+ck("확인 문항 개수와 실제 축 개수가 맞는다",
+   a.checks.filter((c) => /말썽인가/.test(c[0])).length === a.health.els.length);
+
 
 const pass = R.filter(Boolean).length;
 console.log(`\n=== 각인 엔진: ${pass}/${R.length} PASS ===`);
