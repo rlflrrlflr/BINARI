@@ -625,6 +625,52 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
     "\"87점, 잘 맞아요\"는 어디서든 살 수 있습니다. 우리가 파는 건 어디가 갈리는가입니다. 그리고 상대의 이름·연락처는 받지 않습니다 — 남의 개인정보를 우리가 들고 있을 이유가 없습니다.");
 }
 
+/* ── 검사 5-i. 개인정보·법정고지 A항 다섯 (전략 세션 작업지시 2026-08-14) ──
+   이 다섯은 **여섯 판(v119~v124) 동안 고쳐지지 않은 채 라이브에 있었다.** 각인이 여섯 판 연속
+   넓어지는 동안 고지 줄 수는 0에서 한 번도 안 올라갔다 — 개별 실수가 아니라 **추세**였다.
+   그래서 검사를 붙인다. 사람이 기억하는 것으로는 여섯 판을 못 버틴다. */
+{
+  const app = readFileSync(APP, "utf8");
+  const imp = readFileSync("src/lib/imprint.js", "utf8");
+  const bad = [];
+
+  /* A-1 처리방침이 안내한 거부 수단이 실제로 있는가 — 속성 제거가 아니라 **전송 중단**이어야 한다 */
+  if (!/const OPTOUT_KEY =/.test(app) || !/if \(_optout\) return;/.test(app)) bad.push("A-1 분석거부수단없음");
+  if (!/사용 통계 수집을 끌래/.test(app)) bad.push("A-1 거부UI없음");
+
+  /* A-2 공유 링크에 실명이 안 실리는가 — payload 필드와 **본문 호칭** 둘 다 */
+  if (/n: \(birth\.name/.test(app)) bad.push("A-2 payload에 실명");
+  if (!/const stripName =/.test(app)) bad.push("A-2 본문 호칭 미제거");
+  if (/sharedIn\.n \?/.test(app)) bad.push("A-2 수신화면 실명 폴백");
+  if (!/delete o\.n;/.test(app)) bad.push("A-2 구링크 실명 미폐기");
+
+  /* A-3 계측에 판결·근거 원문이 안 나가는가.
+     ⚠ **track() 안만 본다.** setRecords 는 로컬 판결록이라 원문을 들고 있어야 정상이다 —
+        파일 전체를 보면 그걸 잡아서 헛울음이 난다(실제로 그랬다). 나가는 것과 남는 것은 다르다. */
+  const trkSeg = [...app.matchAll(/track\("(verdict_shown|detail_shown)"[\s\S]{0,1600}?\}\)*;/g)].map((m) => m[0]).join("\n");
+  if (!trkSeg) bad.push("A-3 계측 호출을 못 찾음(검사가 낡음)");
+  if (/verdict: r1\.verdict/.test(trkSeg)) bad.push("A-3 verdict 원문 전송");
+  if (/subline: r2\?\.subline/.test(trkSeg) || /funline: r2\?\.funLine/.test(trkSeg)) bad.push("A-3 뒷면 원문 전송");
+  if (/axisMap\(reasons, \(r\) => r\.text\)/.test(app)) bad.push("A-3 근거 전문 전송");
+
+  /* A-4 각인·궁합에 고지가 있는가 — **문서 하단 고정 블록**이어야 한다(절마다 붙이면 다음 판에서 또 빠진다) */
+  const impNotes = (app.match(/className="ainote docnote"/g) || []).length;
+  if (impNotes < 2) bad.push(`A-4 각인·궁합 고지 ${impNotes}/2`);
+  if (!/의료·법률·재무 조언이 아니야/.test(app)) bad.push("A-4 의료조언 아님 고지 없음");
+  if (/크게 앓을 수 있어/.test(imp)) bad.push("A-4 발병 단정 문장 부활");
+
+  /* A-5 공유 수신 화면·부적 이미지에 AI 표시가 있는가 */
+  if (!/AI가 생성한 내용 · 재미로 보는 참고용/.test(app)) bad.push("A-5 부적 이미지 AI표시 없음");
+  const shareSeg = app.slice(app.indexOf("sharedcta"), app.indexOf("sharedcta") + 700);
+  if (!/ainote/.test(shareSeg)) bad.push("A-5 공유 수신화면 AI표시 없음");
+
+  add(bad.length ? "심각" : "정상",
+    bad.length ? "개인정보·법정고지 A항이 되돌아옴" : "개인정보·법정고지 A항 다섯 — 전부 살아 있음",
+    bad.length ? bad.join(" · ")
+      : "거부수단(전송중단) · 공유 실명제거(필드+본문) · 계측 원문제거 · 각인·궁합 고정 고지 · 공유화면·부적 AI표시",
+    "이 다섯은 여섯 판 동안 고쳐지지 않은 채 라이브에 있었습니다. 문서가 커질수록 고지의 필요는 줄지 않고 늘어납니다 — 절마다 붙이지 말고 하단 고정 블록 하나로 두세요.");
+}
+
 /* ── 검사 6. 의존성 취약점 (npm audit) ───────────────────────────────────
    남이 만든 부품에서 보안 구멍이 발견되는 일은 우리가 코드를 안 건드려도 일어난다.
    중요한 구분: **사용자에게 배달되는 부품(prod)** 과 **내 컴퓨터에서만 쓰는 부품(dev)** 은
