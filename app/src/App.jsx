@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
+import { readImprint } from "./lib/imprint.js";
 
 /* ───── 계측(PostHog) — 휴면-준비: VITE_POSTHOG_KEY 없으면 완전 무동작 ───── */
 const AKEY = import.meta.env.VITE_POSTHOG_KEY;
@@ -714,6 +715,110 @@ function lifeDomains(ctx) {
 }
 /** `*강조*` 만 굵게. 표에서 나온 문장을 화면에 그대로 얹기 위한 최소 표시기다 */
 const Em = ({ t }) => <>{String(t).split("*").map((s, i) => (i % 2 ? <b key={i}>{s}</b> : <span key={i}>{s}</span>))}</>;
+
+
+/* ── v113 각인 — 판결 밖에 있는 두 번째 상품 ─────────────────────────────────
+   창업자 판정(2026-08-12): 서신은 **질문 하나**에 딸린 문서고, 각인은 **사람 자체**에 딸린 문서다.
+   재구매 구조가 반대다 — 서신은 판결마다, 각인은 평생 한 번. 그래서 같은 자리에 두지 않는다.
+   진입점은 수호신 화면이다. "나는 너를 오래 지켜봤다"는 판결 끝보다 수호신 앞에서 나와야 한다.
+
+   ⚠ 결제는 아직 없다. **그래도 발행은 된다** — 실물이 나와야 값을 매길 수 있다(창업자 지시).
+     지금은 무료로 열리고, 연 시점을 계측한다. 결제가 붙는 날 이 자리에 문만 세우면 된다.
+   ⚠ 각주는 기본으로 숨긴다. 검증용이라 화면에 늘 떠 있으면 기법이 그대로 노출된다. */
+const IMPRINT_PRICE = 9900;
+/* 받침에 따라 조사를 고른다 — 표에서 조립한 문장이라 안 고르면 "…일야" 가 그대로 나간다(실측) */
+const josa = (w, a, b) => { const c = String(w).charCodeAt(String(w).length - 1) - 0xac00; return (c >= 0 && c < 11172 && c % 28) ? a : b; };
+function ImprintDoc({ saju, birth, sex, onClose }) {
+  const [notesOn, setNotesOn] = useState(false);
+  const r = useMemo(() => {
+    try {
+      /* 열 해 사다리는 여기서 직접 뽑는다 — 밖에서 받아 오면 계산이 두 군데로 갈린다.
+         성별이 없으면 방향이 안 서므로 빈 배열이 되고, 그러면 각인이 그 자리를 비운다. */
+      const ladder = [];
+      if (sex && birth && birth.y) {
+        for (let a = 1; a <= 71; a += 10) {
+          const du = daeun(+birth.y, +birth.m, +birth.d, birth.noHour ? 12 : +birth.h,
+            birth.noHour || birth.min === "" ? 0 : +birth.min, !!birth.noHour, cityLon(birth.city), sex === "M", +birth.y + a - 1);
+          if (du && !du.pre && !ladder.some((x) => x.startAge === du.startAge)) ladder.push(du);
+        }
+      }
+      return readImprint({ saju, ladder, birth, sex, lon: cityLon(birth?.city) });
+    } catch (e) { return null; }
+  }, [saju, birth, sex]);
+  useEffect(() => { track("imprint_opened", { has_sex: !!sex, has_hour: !!(saju?.idx && saju.idx.hG != null), notes: r ? r.notes.length : 0 }); }, []);
+  if (!r) return (
+    <div className="imp"><p className="impmsg">각인을 읽지 못했어. 생년월일을 다시 확인해 줄래?</p>
+      <button className="btn ghost mt" onClick={onClose}>닫을게</button></div>
+  );
+  const Ref = ({ n }) => (notesOn && n ? <sup className="impfx">{n}</sup> : null);
+  const Row = ([k, v, n], i) => (
+    <div className="impr" key={i}><div className="impk">{k}</div>
+      <div className="impv"><span dangerouslySetInnerHTML={{ __html: v }} /><Ref n={n} /></div></div>
+  );
+  return (
+    <div className="imp fade">
+      <div className="imphead">
+        <p className="impeyebrow">비 나 리 · 각 인</p>
+        <p className="imptitle">네가 어떻게 만들어졌는지</p>
+        <p className="impsub">이건 한 질문에 대한 답이 아니야. <b>너라는 사람 전체</b>에 대한 문서야.</p>
+      </div>
+
+      <p className="imph">너는 어떤 사람인가</p>
+      <p className="impdcl">너는 <b>{r.core.surface.w}</b>{josa(r.core.surface.w, "이야", "야")}.<Ref n={r.core.n1} /></p>
+      <p className="impp">{r.core.surface.d}.</p>
+      <div className="impcore">
+        <p className="impk2">그 런 데</p>
+        <p className="impcv">네 속은 다르다. <b>{r.core.inner.w}.</b><Ref n={r.core.n2} /></p>
+        <p className="impcw">{r.core.inner.d}. {r.core.split ? "겉으로 보이는 모습과 속이 다른 사람이야." : "겉과 속이 같은 방향이라 오해는 덜 받아."}</p>
+      </div>
+      <p className="impp"><b>그리고 네게는 {r.core.block.t}이 얇아.</b><Ref n={r.core.n3} /> {r.core.block.s}. {r.core.block.w}</p>
+      <p className="impfix"><b>그래서 필요한 건 하나야</b> — {r.core.block.fix}.</p>
+
+      <p className="imph">생김새와 몸 <i>지금 확인할 수 있다</i></p>
+      {r.body.map(Row)}
+
+      <p className="imph">언제 네가 너 같지 않은가</p>
+      <p className="impp">사람은 늘 같지 않아. <b>차분한 사람도 무너질 때가 있고, 순한 사람도 사나워질 때가 있어.</b> 네 곁에 있을 사람들이 알아야 할 건 네가 어떤 사람인지가 아니라 <b>언제 네가 달라지는지</b>야.</p>
+      {r.trig.map((t, i) => (
+        <div className="imptrig" key={i}><b>{t.t}</b><Ref n={t.n} /><p>{t.w}</p></div>
+      ))}
+      <p className="impwhen"><b>해마다</b> {r.when.hardMonths.length ? `${r.when.hardMonths.join("·")}월이 무겁다` : "특별히 무거운 달은 없다"}
+        {r.when.softMonths.length ? ` · ${r.when.softMonths.join("·")}월이 순하다` : ""}.<Ref n={r.when.n} /> 무거운 달엔 새로 시작하지 말고 하던 걸 지켜.</p>
+
+      <p className="imph">일 — 어디서 밥을 버나</p>
+      <p className="impdcl2"><b>{r.job.job}</b>{josa(r.job.job, "이야", "야")}.<Ref n={r.job.n} /></p>
+      <p className="impp">{r.job.grew}. 맞는 판은 <b>{r.job.ex}</b>{josa(r.job.ex, "이야", "야")}.</p>
+
+      {r.mate && <>
+        <p className="imph">짝 — 누구를 만나나</p>
+        {r.mate.map(Row)}
+      </>}
+      {!r.mate && <p className="impmsg">짝 자리는 <b>성별이 있어야</b> 어느 글자가 그 인연인지 갈려 — 프로필에 더하면 열려.</p>}
+
+      <p className="imph">여든 해 — 네 인생 지도</p>
+      {r.bands.length === 0 && <p className="impmsg">열 해 단위 큰 흐름은 <b>성별이 있어야</b> 방향이 서.</p>}
+      {r.bands.map((b, i) => (
+        <div className={"impband" + (r.cur && b.from === r.cur.from ? " now" : "")} key={i}>
+          <div className="impage">{b.from}~{b.to}<i>세</i></div>
+          <div><b>{b.title}</b>{r.cur && b.from === r.cur.from ? <em> ◂ 지금</em> : null}
+            <p>{b.event}{b.dashaKo ? ` · ${b.dashaKo}` : ""}</p></div>
+        </div>
+      ))}
+      {r.noHour && <p className="impmsg">태어난 <b>시(時)를 몰라</b> 네 자리 중 하나가 비었어. 시에 걸린 건 못 읽었다고 봐야 해.</p>}
+
+      <div className="impfoot">
+        <button className="btn ghost sm" onClick={() => { setNotesOn(v => !v); track("imprint_notes_toggled", { on: !notesOn }); }}>
+          {notesOn ? "▴ 근거 접기" : `▾ 근거 보기 — ${r.notes.length}개`}</button>
+        {notesOn && (
+          <ol className="impnotes">
+            {r.notes.map((t, i) => <li key={i}><span>{i + 1}</span><span dangerouslySetInnerHTML={{ __html: t }} /></li>)}
+          </ol>
+        )}
+        <button className="btn ghost mt" onClick={onClose}>닫을게</button>
+      </div>
+    </div>
+  );
+}
 
 function MyeongsikReport({ saju, sex, birth }) {
   /* 훅 순서를 지키려고 널 가드를 겉껍질로 뺀다 — 본체는 idx가 있을 때만 마운트된다 */
@@ -1956,7 +2061,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v112 · 용어 은닉";
+const APP_VER = "v113 · 각인";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -2731,6 +2836,7 @@ export default function App() {
   const [askNote, setAskNote] = useState("");                 // v16(B3): '거슬렀어' 한마디
   const [noting, setNoting] = useState(false);
   const [logOpen, setLogOpen] = useState(false);              // v16(B6): 판결록 펼침
+  const [imprintOpen, setImprintOpen] = useState(false);      // v113: 각인 전문 — 판결 밖의 문서
   const [openRec, setOpenRec] = useState(-1);                 // 판결록 행 클릭 → 다시 읽기
   const [streak, setStreak] = useState(mem?.streak || null);  // v16(B7): 연속 방문 {last, count}
   const [dailyOpen, setDailyOpen] = useState(false);          // v18: 아침 문안 노크형 — 청해야 펼친다
@@ -3593,6 +3699,13 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                   <p className="fine">서신은 이 기기에 보관돼. 기기를 바꾸거나 지워졌다면 <b>번호를 대고 다시 받으면</b> 돼 — 값은 다시 안 받아.</p>
                 </div>
               )}
+              {/* v113 각인 진입점 — 판결 흐름 밖이다. 서신은 질문 하나에 딸리고, 각인은 사람 자체에 딸린다.
+                  결제 전이라 지금은 무료로 열린다(실물이 나와야 값을 매길 수 있다). 연 시점만 계측한다. */}
+              {!ritual && !res && saju && (
+                <button className="btn ghost mt w100" onClick={() => { track("imprint_clicked", { price: IMPRINT_PRICE, nth_verdict: records.length }); setImprintOpen(true); }}>
+                  각인 — 네가 어떻게 만들어졌는지 <span className="impbadge">시험 발행</span>
+                </button>
+              )}
               {!ritual && !res && records.length > 0 && (
                 <button className="resetlink" onClick={() => { setLogOpen(o => !o); setOpenRec(-1); }}>{logOpen ? "판결록 접기" : `판결록 — ${records.length}번의 판결`}</button>
               )}
@@ -3795,6 +3908,15 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
       )}
 
       {/* v105: 서신 전문. 판결 카드 위가 아니라 별도 화면인 건, 이건 '읽는 것'이지 '보는 것'이 아니어서다. */}
+      {/* v113 각인 전문 — 서신과 같은 전체 화면 자리에 건다. 다만 상품은 별개다 */}
+      {imprintOpen && (
+        <div className="readwrap">
+          <button className="escx" onClick={() => setImprintOpen(false)} aria-label="닫기">✕</button>
+          <div className="readbody">
+            <ImprintDoc saju={saju} birth={birth} sex={birth?.sex} onClose={() => setImprintOpen(false)} />
+          </div>
+        </div>
+      )}
       {letterOpen && letterDoc && !letterDoc._err && (
         <div className="readwrap">
           <button className="escx" onClick={() => setLetterOpen(false)} aria-label="닫기">✕</button>
@@ -4120,6 +4242,54 @@ const CSS = `
 .dstep i{flex:0 0 46px;font-style:normal;color:#c9b98f;font-size:9px;letter-spacing:.04em;text-align:right;padding-top:2.5px;white-space:nowrap}
 .dstep .dt{flex:1 1 auto;min-width:0}   /* 본문은 열 하나로 묶는다 — 안 그러면 강조 조각마다 열이 갈린다 */
 .dstep b{color:#f0d9a0}
+
+/* ── v113 각인 — 판결 카드와 다른 결이어야 한다. 카드는 짧고 각인은 문서다 ── */
+.impbadge{font-size:9px;letter-spacing:.14em;border:1px solid #c9b98f55;border-radius:3px;padding:1px 5px;margin-left:6px;color:#c9b98f;vertical-align:1px}
+.imp{font-family:sans-serif;padding:6px 2px 30px}
+.imphead{padding:6px 0 20px;border-bottom:1px solid #c9b98f2e;margin-bottom:8px}
+.impeyebrow{font-size:10px;letter-spacing:.4em;color:#c9b98f;margin:0}
+.imptitle{font-size:25px;color:#f0e2b8;margin:12px 0 0;line-height:1.4;letter-spacing:-.01em}
+.impsub{font-size:12px;color:#9d8fb5;line-height:1.7;margin:10px 0 0}
+.impsub b{color:#e6dff2}
+.imph{margin:26px 0 10px !important;color:#c9b98f !important;letter-spacing:.16em;font-size:10.5px !important;border-top:1px solid #c9b98f22;padding-top:14px}
+.imph i{font-style:normal;float:right;letter-spacing:.04em;color:#6f6580;font-size:9.5px}
+.impdcl{font-size:19px;line-height:1.62;color:#f0e2b8;margin:4px 0 0}
+.impdcl b{color:#f5d98b}
+.impdcl2{font-size:17px;line-height:1.6;color:#f0e2b8;margin:4px 0 0}
+.impdcl2 b{color:#f5d98b}
+.impp{font-size:12.5px;line-height:1.85;color:#bfb6cc;margin:10px 0 0}
+.impp b{color:#e6dff2;font-weight:700}
+.impcore{margin:16px 0 0;padding:16px 16px;background:#0f0b1a99;border-left:2px solid #c98f3d}
+.impk2{font-size:9.5px;letter-spacing:.34em;color:#c9b98f;margin:0}
+.impcv{font-size:17px;line-height:1.55;color:#f4ead2;margin:10px 0 0}
+.impcv b{color:#f5d98b}
+.impcw{font-size:12px;line-height:1.8;color:#9d8fb5;margin:10px 0 0}
+.impfix{font-size:12.5px;line-height:1.8;color:#e6dff2;margin:12px 0 0;padding:11px 13px;background:#c98f3d14;border-radius:7px}
+.impr{display:grid;grid-template-columns:76px 1fr;gap:0 12px;padding:11px 2px;border-bottom:1px solid #c9b98f1a;align-items:start}
+.impk{font-size:10.5px;color:#8a7f95;letter-spacing:.04em;padding-top:2px}
+.impv{font-size:12.5px;line-height:1.8;color:#bfb6cc}
+.impv b{color:#f0e2b8;font-weight:700}
+.impv em{font-style:normal;display:block;color:#8a7f95;font-size:11.5px;line-height:1.75;margin-top:5px}
+.imptrig{margin-top:12px;padding:12px 13px;border:1px solid #c9b98f1f;border-radius:8px;background:#0f0b1a4d}
+.imptrig b{font-size:13.5px;color:#f0e2b8}
+.imptrig p{font-size:12px;line-height:1.8;color:#a99fb8;margin:7px 0 0}
+.impwhen{margin-top:14px;padding:12px 13px;background:#a8322914;border-left:2px solid #a83229;font-size:12px;line-height:1.8;color:#bfb6cc}
+.impwhen b{color:#f0e2b8}
+.impband{display:grid;grid-template-columns:78px 1fr;gap:0 12px;padding:12px 2px;border-bottom:1px solid #c9b98f1a}
+.impband.now{background:#c98f3d12;margin:0 -8px;padding-left:10px;padding-right:8px}
+.impage{font-size:13px;color:#c9b98f;letter-spacing:.02em}
+.impage i{display:block;font-style:normal;font-size:9px;color:#6f6580;margin-top:3px;letter-spacing:.14em}
+.impband b{font-size:13.5px;color:#f0e2b8}
+.impband em{font-style:normal;font-size:10px;color:#f5d98b;margin-left:6px}
+.impband p{font-size:11.5px;line-height:1.75;color:#9d8fb5;margin:6px 0 0}
+.impmsg{font-size:11.5px;line-height:1.8;color:#8a7f95;margin:14px 0 0;padding:10px 12px;border:1px dashed #c9b98f33;border-radius:7px}
+.impmsg b{color:#c9b98f}
+.impfoot{margin-top:30px;padding-top:16px;border-top:1px solid #c9b98f22}
+sup.impfx{font-size:9px;color:#c98f3d;vertical-align:super;margin-left:2px}
+.impnotes{list-style:none;padding:0;margin:12px 0 0}
+.impnotes li{display:grid;grid-template-columns:22px 1fr;gap:0 8px;font-size:10.5px;line-height:1.7;color:#8a7f95;padding:7px 0;border-bottom:1px solid #c9b98f14}
+.impnotes li span:first-child{color:#c98f3d}
+.impnotes li b{color:#bfb6cc}
 .disc{margin-top:auto;font-family:sans-serif;font-size:10px;color:#8a7f95;line-height:1.5}
 .split{font-family:sans-serif;font-size:10.5px;letter-spacing:.22em;color:#e5b96b;margin:0 0 6px;animation:formPulse 1.8s ease-in-out infinite}
 .retrybtn{background:transparent;border:1px solid #c98f3d66;color:#e6d6a8;font-size:11px;padding:3px 12px;border-radius:14px;cursor:pointer;font-family:sans-serif;margin-left:8px}

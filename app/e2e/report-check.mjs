@@ -52,6 +52,36 @@ await page.addInitScript(({ c1, c2 }) => {
 }, { c1: CALL1, c2: CALL2 });
 
 await onboard(page);
+// ── v113 각인 — 판결 흐름 밖의 두 번째 상품. 로비에서 열린다(결제 전이라 지금은 무료 발행)
+{
+  const ib = page.getByRole("button", { name: /각인 — 네가 어떻게/ });
+  ck("각인 진입점이 로비에 있다", (await ib.count()) === 1);
+  await ib.click(); await page.waitForTimeout(900);
+  ck("각인이 실제로 발행된다(결제 없이)", (await page.locator(".imp").count()) === 1);
+  const it = (await page.locator(".imp").textContent()) || "";
+  ck("각인 — 겉과 속을 갈라 말한다", /너는 .{4,}(이야|야)/.test(it) && /네 속은 다르다/.test(it));
+  ck("각인 — 몸이 다섯 항목 이상", (await page.locator(".imp .impr").count()) >= 5, `${await page.locator(".imp .impr").count()}행`);
+  ck("각인 — 뒤집히는 조건 셋", (await page.locator(".imptrig").count()) === 3);
+  ck("각인 — 여든 해가 갈린다", (await page.locator(".impband").count()) >= 6, `${await page.locator(".impband").count()}구간`);
+  ck("각인 — 지금 구간 표식", /◂ 지금/.test(it));
+  // 짝은 이 상품의 값어치 대부분이다. 열 항목이 다 나와야 한다
+  ck("각인 — 짝이 열 항목", ["키·체형", "생김새", "성격", "집안", "벌이", "어떻게 만나나", "언제 만나나", "그전에 오는 인연", "결혼 후", "갈라설 위험"]
+    .filter((k) => it.includes(k)).length >= 8, "");
+  // 어린 나이를 인연 구간으로 세면 "세 살에 만나는 사람" 같은 말이 나온다(실측으로 잡았다)
+  const m = it.match(/(\d+)~(\d+)세에 만나는 사람/);
+  ck("각인 — 인연 구간이 열여덟 이상", !m || +m[2] >= 18, m ? m[0] : "해당 없음");
+  // 표에서 조립한 문장이라 받침 처리를 빼먹으면 "…일야" 가 그대로 나간다
+  ck("각인 — 조사 오류 없음", !/[가-힣]일야|것야|일이이야/.test(it));
+  // 기법 용어는 본문에 안 나오고 각주에만 있다
+  const IB = ["십성", "일간", "일지", "대운", "용신", "신강", "신약", "명식", "하우스", "프로펙션", "다샤"];
+  ck("각인 본문에 기법 용어 없음", IB.filter((w) => it.includes(w)).length === 0, IB.filter((w) => it.includes(w)).join(",") || "깨끗");
+  await page.getByRole("button", { name: /근거 보기/ }).click(); await page.waitForTimeout(400);
+  const nn = await page.locator(".impnotes li").count();
+  ck("각인 — 각주가 스무 개 이상(검증용)", nn >= 20, `${nn}개`);
+  ck("각주에는 기법 이름이 적힌다", /일간|하우스/.test((await page.locator(".impnotes").textContent()) || ""));
+  await page.getByRole("button", { name: "닫을게" }).click(); await page.waitForTimeout(500);
+  ck("각인을 닫으면 로비로 돌아온다", (await page.locator(".imp").count()) === 0);
+}
 await page.locator("textarea.qbox").fill("전남친에게 연락할까?"); await page.waitForTimeout(300);
 await page.getByRole("button", { name: "판결을 청한다" }).click();
 await page.waitForSelector("text=동전 셋", { timeout: 5000 });

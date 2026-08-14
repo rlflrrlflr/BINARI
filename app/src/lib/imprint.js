@@ -220,9 +220,13 @@ export function readImprint({ saju, ladder, birth, sex, now = new Date(), lat = 
     return { age, agree: hi - lo <= 8, spread: hi - lo, lo, hi, cands: c };
   })();
   const mateAge = mateWhen.age;
-  /* 배우자 자리를 정면으로 치는 구간 = 관계가 흔들리는 때 */
+  /* 배우자 자리를 정면으로 치는 구간 = 관계가 흔들리는 때.
+     **어린 나이는 뺀다** — "세 살에 만나는 사람은 오래 못 간다"가 화면에 실제로 나왔다.
+     그리고 짝을 만나기 전인지 뒤인지로 갈라야 뜻이 달라진다(전=지나갈 인연, 후=흔들리는 결혼). */
   const chung = (idx.dJ + 6) % 12, hyeong = [(idx.dJ + 3) % 12, (idx.dJ + 9) % 12];
-  const shake = bands.filter((b) => { const j = jIdx(b.ganji[1]); return j === chung || hyeong.includes(j); });
+  const shakeAll = bands.filter((b) => { const j = jIdx(b.ganji[1]); return (j === chung || hyeong.includes(j)) && b.to >= 18; });
+  const shakeBefore = shakeAll.filter((b) => mateAge == null || b.from < mateAge);
+  const shakeAfter = shakeAll.filter((b) => mateAge != null && b.from >= mateAge);
 
   /* ── 키 추정 ── */
   const base = sex === "F" ? 160 : 172;
@@ -272,13 +276,13 @@ export function readImprint({ saju, ladder, birth, sex, now = new Date(), lat = 
             : `<b>${mateWhen.lo}세에서 ${mateWhen.hi}세 사이다.</b> 세 셈이 갈려서 한 해로 못 좁힌다 — 그중 <b>${mateAge}세</b>가 가장 유력하다`,
         fn(!mateAge ? `후보가 둘 미만이라 못 짚음 — 22~45세에 걸치는 값이 ${mateWhen.cands.length}개.`
           : `${mateWhen.cands.map((x) => `${x.k} ${x.a}세(${x.why})`).join(" · ")} → 폭 ${mateWhen.spread}년. ${mateWhen.agree ? "8년 이내라 <b>합의</b>로 봤다" : "8년을 넘어 <b>갈린다고 표시</b>했다"}.`)],
-      ["그전에 오는 인연", shake.length ? `<b>${shake[0].from}~${shake[0].to}세에 만나는 사람은 오래 못 간다.</b> 그 사람이 나빠서가 아니라 그 자리가 흔들리게 되어 있다` : "크게 흔들리는 구간은 없다",
-        fn(shake.length ? `${shake[0].from}~${shake[0].to}세 구간의 글자가 배우자 자리를 정면으로 친다.` : "배우자 자리를 치는 구간이 여든까지 없다.")],
+      ["그전에 오는 인연", shakeBefore.length ? `<b>${shakeBefore[0].from}~${shakeBefore[0].to}세에 만나는 사람은 오래 못 간다.</b> 그 사람이 나빠서가 아니라 그 자리가 흔들리게 되어 있다` : "짝을 만나기 전에 크게 흔들리는 구간은 없다",
+        fn(shakeBefore.length ? `${shakeBefore[0].from}~${shakeBefore[0].to}세 구간의 글자가 배우자 자리를 충 또는 형한다. 열여덟 미만 구간은 인연으로 세지 않는다.` : "짝을 만나기 전(18세~) 구간에는 배우자 자리를 치는 글자가 없다.")],
       ["결혼 후", `<b>${["정재", "정관", "정인"].includes(spouseSS) ? "붙어 사는 부부가 된다" : "각자 몫이 분명한 부부가 된다"}.</b> ` +
         (G.식상 === 0 ? "위험은 하나다 — <b>밖에서 참은 걸 집에서 푼다.</b> 미리 알면 반은 막힌다" : "크게 부딪히는 구조는 아니다"),
         fn(`${spouseSS} + 표현을 맡은 자리 ${G.식상}개. 표현이 막히면 압력이 가장 가까운 자리로 향한다.`)],
-      ["갈라설 위험", shake.length > 1 ? `<b>${shake[1].from}~${shake[1].to}세에 한 번 크게 흔들린다.</b> 그때 원인은 사람이 아니라 일과 돈이다` : "<b>낮다.</b> 한번 정하면 안 바꾸는 사람이라 그렇다",
-        fn(shake.length > 1 ? `${shake[1].from}~${shake[1].to}세 구간이 배우자 자리를 다시 친다.` : "흔드는 구간이 하나뿐이거나 없다.")],
+      ["갈라설 위험", shakeAfter.length ? `<b>${shakeAfter[0].from}~${shakeAfter[0].to}세에 한 번 크게 흔들린다.</b> 그때 원인은 사람이 아니라 일과 돈이다` : "<b>낮다.</b> 결혼한 뒤로 그 자리를 정면으로 치는 구간이 없다",
+        fn(shakeAfter.length ? `${shakeAfter[0].from}~${shakeAfter[0].to}세 구간이 배우자 자리를 다시 친다.` : "짝을 만난 뒤로 배우자 자리를 치는 구간이 여든까지 없다.")],
     ];
   }
 
