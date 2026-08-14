@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { readImprint } from "./lib/imprint.js";
+import { readMatch } from "./lib/match.js";
 
 /* ───── 계측(PostHog) — 휴면-준비: VITE_POSTHOG_KEY 없으면 완전 무동작 ───── */
 const AKEY = import.meta.env.VITE_POSTHOG_KEY;
@@ -1138,6 +1139,129 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
         {notesOn && (<ol className="impnotes">
           {r.notes.map((t, i) => <li key={i}><span>{i + 1}</span><span dangerouslySetInnerHTML={{ __html: t }} /></li>)}
         </ol>)}
+        <button className="btn ghost mt" onClick={onClose}>닫을게</button>
+      </div>
+    </div>
+  );
+}
+
+/* ── 궁합 ──────────────────────────────────────────────────────────────────
+   각인의 애드온이다 — **내 명식이 이미 있어야** 열린다. 그래서 각인의 자연스러운 2차 구매가 되고,
+   각인의 최대 약점(평생 1회)을 메운다: 궁합은 **사람 수만큼 다시 산다.**
+   상대 생년월일만 받는다. 이름·연락처는 안 받는다 — 남의 개인정보를 우리가 들고 있을 이유가 없다. */
+const MATCH_PRICE = 4900;
+function MatchDoc({ saju, birth, onClose }) {
+  const [notesOn, setNotesOn] = useState(false);
+  const [f, setF] = useState(() => { try { return JSON.parse(localStorage.getItem("binari_match_last") || "{}"); } catch { return {}; } });
+  const [done, setDone] = useState(false);
+  const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  const ok = /^\d{4}$/.test(String(f.y || "")) && +f.y >= 1900 && +f.y <= 2030
+    && +f.m >= 1 && +f.m <= 12 && +f.d >= 1 && +f.d <= 31;
+  const r = useMemo(() => {
+    if (!done || !ok || !saju?.idx) return null;
+    try {
+      const noH = !f.h && f.h !== 0;
+      const bs = calcSaju(+f.y, +f.m, +f.d, noH ? 12 : +f.h, 0, noH, 126.978);
+      if (!bs?.idx) return null;
+      return readMatch({ a: { saju, birth, sex: birth?.sex },
+        b: { saju: bs, birth: { y: +f.y, m: +f.m, d: +f.d, h: noH ? 12 : +f.h, min: 0 }, sex: f.sex || null } });
+    } catch (e) { return null; }
+  }, [done, f.y, f.m, f.d, f.h, f.sex, saju, birth]);
+  useEffect(() => { track("match_opened", { has_saju: !!saju?.idx }); }, []);
+  const Ref = ({ n }) => (notesOn && n ? <sup className="impfx">{n}</sup> : null);
+  const H = ({ t }) => <span dangerouslySetInnerHTML={{ __html: t }} />;
+
+  if (!done || !r) return (
+    <div className="imp fade">
+      <div className="imphead">
+        <p className="impeyebrow">비 나 리 · 궁 합</p>
+        <p className="imptitle">그 사람과 너</p>
+        <p className="impsub">아홉 하늘이 <b>각각 다른 걸</b> 봐. 총점 하나로 뭉개지 않아 —
+          <b>어디가 맞고 어디가 갈리는지</b>를 따로 적어. "잘 맞아요"는 어디서든 살 수 있지만,
+          <b>어디서 갈리는지는 여기서만 나와.</b></p>
+      </div>
+      <div className="impask fade">
+        <p className="impaskh">상대의 생년월일만 알려줘 <i>이름은 안 받아</i></p>
+        <div className="impaskrow"><span>태어난 날</span>
+          <input className="impnum w70" type="number" placeholder="1997" value={f.y ?? ""} onChange={(e) => set("y", e.target.value)} />
+          <input className="impnum w48" type="number" placeholder="4" min="1" max="12" value={f.m ?? ""} onChange={(e) => set("m", e.target.value)} />
+          <input className="impnum w48" type="number" placeholder="22" min="1" max="31" value={f.d ?? ""} onChange={(e) => set("d", e.target.value)} />
+        </div>
+        <div className="impaskrow"><span>태어난 시</span>
+          <input className="impnum w48" type="number" placeholder="시" min="0" max="23" value={f.h ?? ""} onChange={(e) => set("h", e.target.value === "" ? null : +e.target.value)} />
+          <em className="impaskhint">모르면 비워 둬 — 그만큼만 얕게 읽어</em>
+        </div>
+        <div className="impaskrow"><span>성별</span>
+          <button className={"impchip" + (f.sex === "M" ? " on" : "")} onClick={() => set("sex", "M")}>남</button>
+          <button className={"impchip" + (f.sex === "F" ? " on" : "")} onClick={() => set("sex", "F")}>여</button>
+        </div>
+        <p className="impaskw">상대의 <b>이름도 연락처도 안 받아.</b> 생년월일은 이 기기에만 남고 서버로 안 보내.
+          궁합은 <b>연인만이 아니야</b> — 같이 일하는 사람, 가족, 동업자에게도 그대로 써.</p>
+        <button className="btn mt" disabled={!ok} onClick={() => { try { localStorage.setItem("binari_match_last", JSON.stringify(f)); } catch {} track("match_run", { has_hour: f.h != null }); setDone(true); }}>
+          {ok ? "둘을 맞대 볼게" : "생년월일을 채워 줘"}
+        </button>
+        <button className="btn ghost mt" onClick={onClose}>닫을게</button>
+      </div>
+    </div>
+  );
+
+  const AkBar = () => (
+    <svg viewBox="0 0 320 152" width="100%" height="152" className="impsvg drawin" role="img" aria-label="여덟 항목">
+      {r.akRows.map((x, i) => {
+        const y = 10 + i * 17, w = 168 * x.ratio;
+        return <g key={i}>
+          <text x="96" y={y + 8} fontSize="9" fill="#8a7f95" textAnchor="end">{x.label}</text>
+          <rect x="102" y={y} width="168" height="10" rx="2" fill="#6f658022" />
+          <rect x="102" y={y} width={Math.max(w, 1.5)} height="10" rx="2"
+            fill={x.ratio >= 0.8 ? "#5b8fd4" : x.ratio <= 0.34 ? "#a83229" : "#6f6580"} />
+          <text x="276" y={y + 8} fontSize="8" fill="#6f6580">{x.sc}/{x.max}</text>
+        </g>;
+      })}
+      <text x="102" y="150" fontSize="7" fill="#6f6580">칸이 길수록 그 항목이 맞는다는 뜻이야</text>
+    </svg>
+  );
+
+  return (
+    <div className="imp fade">
+      <div className="imphead">
+        <p className="impeyebrow">비 나 리 · 궁 합</p>
+        <p className="imptitle">그 사람과 너</p>
+        <p className="impsub">{f.y}년 {f.m}월 {f.d}일생과 맞대 봤어. {f.h == null ? "태어난 시를 몰라 그만큼 얕게 읽었어." : ""}</p>
+      </div>
+
+      <p className="imph">아홉 하늘이 각각 뭐라고 하는가</p>
+      {r.rows.map((x, i) => (
+        <div className={"impsky" + (x.v >= 1 ? " up" : x.v <= -1 ? " dn" : "")} key={i}>
+          <p className="impskh"><i>{x.from}</i>{x.ask}<Ref n={x.n} /></p>
+          <p className="impskv">{x.val}</p>
+          <p className="impskw"><H t={x.w} /></p>
+        </div>
+      ))}
+
+      <p className="imph2">인도가 보는 여덟 자리</p>
+      <AkBar />
+      <div className="impmrows">
+        {r.akRows.map((x, i) => (
+          <div className={"impmrow" + (x.ratio <= 0.34 ? " dn" : x.ratio >= 0.8 ? " on" : "")} key={i}>
+            <b>{x.label}</b><span><H t={x.w} /></span></div>
+        ))}
+      </div>
+
+      <p className="imph">{r.clash.t}</p>
+      <div className="impclash"><p><H t={r.clash.w} /><Ref n={r.clash.n} /></p></div>
+
+      <p className="imph">조심할 것 <i>헤어지라는 말은 안 해</i></p>
+      {r.care.map((c, i) => (<div className="imptrig" key={i}><p><H t={c} /></p></div>))}
+
+      <p className="imph2">굳이 한 줄로 하면</p>
+      <p className="impepi">아홉 축 중 <b>{r.band}</b>. <b>다만 이 숫자를 먼저 보지 마</b> —
+        궁합은 총점이 아니라 <b>어느 축이 어긋나는가</b>로 읽는 거야. 위를 다 읽고 나서 이 줄을 봐.<Ref n={r.n} /></p>
+
+      <div className="impfoot">
+        <button className="btn ghost sm" onClick={() => setNotesOn((v) => !v)}>
+          {notesOn ? "▴ 근거 접기" : `▾ 근거 보기 — ${r.notes.length}개`}</button>
+        {notesOn && (<ol className="impnotes">{r.notes.map((t, i) => <li key={i}><span>{i + 1}</span><span dangerouslySetInnerHTML={{ __html: t }} /></li>)}</ol>)}
+        <button className="btn ghost mt" onClick={() => setDone(false)}>다른 사람과도 봐볼게</button>
         <button className="btn ghost mt" onClick={onClose}>닫을게</button>
       </div>
     </div>
@@ -2403,7 +2527,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v124 · 직장생활";
+const APP_VER = "v125 · 궁합";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -3190,6 +3314,7 @@ export default function App() {
   const [noting, setNoting] = useState(false);
   const [logOpen, setLogOpen] = useState(false);              // v16(B6): 판결록 펼침
   const [imprintOpen, setImprintOpen] = useState(false);      // v113: 각인 전문 — 판결 밖의 문서
+  const [matchOpen, setMatchOpen] = useState(false);          // v125: 궁합 — 각인의 애드온
   const [openRec, setOpenRec] = useState(-1);                 // 판결록 행 클릭 → 다시 읽기
   const [streak, setStreak] = useState(mem?.streak || null);  // v16(B7): 연속 방문 {last, count}
   const [dailyOpen, setDailyOpen] = useState(false);          // v18: 아침 문안 노크형 — 청해야 펼친다
@@ -4033,11 +4158,14 @@ export default function App() {
               )}
               {/* v113 각인 진입점 — 판결 흐름 밖이다. 서신은 질문 하나에 딸리고, 각인은 사람 자체에 딸린다.
                   결제 전이라 지금은 무료로 열린다(실물이 나와야 값을 매길 수 있다). 연 시점만 계측한다. */}
-              {!ritual && !res && saju && (
+              {!ritual && !res && saju && (<>
                 <button className="btn ghost mt w100" onClick={() => { track("imprint_clicked", { price: IMPRINT_PRICE, nth_verdict: records.length }); setImprintOpen(true); }}>
                   각인 — 네가 어떻게 만들어졌는지 <span className="impbadge">시험 발행</span>
                 </button>
-              )}
+                <button className="btn ghost mt w100" onClick={() => { track("match_clicked", { price: MATCH_PRICE, nth_verdict: records.length }); setMatchOpen(true); }}>
+                  궁합 — 그 사람과 너 <span className="impbadge">시험 발행</span>
+                </button>
+              </>)}
               {!ritual && !res && records.length > 0 && (
                 <button className="resetlink" onClick={() => { setLogOpen(o => !o); setOpenRec(-1); }}>{logOpen ? "판결록 접기" : `판결록 — ${records.length}번의 판결`}</button>
               )}
@@ -4246,6 +4374,14 @@ export default function App() {
           <button className="escx" onClick={() => setImprintOpen(false)} aria-label="닫기">✕</button>
           <div className="readbody">
             <ImprintDoc saju={saju} birth={birth} sex={birth?.sex} onClose={() => setImprintOpen(false)} />
+          </div>
+        </div>
+      )}
+      {matchOpen && (
+        <div className="readwrap">
+          <button className="escx" onClick={() => setMatchOpen(false)} aria-label="닫기">✕</button>
+          <div className="readbody">
+            <MatchDoc saju={saju} birth={birth} onClose={() => setMatchOpen(false)} />
           </div>
         </div>
       )}
@@ -4658,6 +4794,10 @@ const CSS = `
 .impwfrom{font-size:10.5px;color:#8a7f95;letter-spacing:.02em}
 .impwval{grid-row:1/3;align-self:center;font-size:11.5px;color:#9d8fb5;text-align:right}
 .impwsay{font-size:12.5px;color:#c8bcd8}
+.impnum.w70{width:70px}.impnum.w48{width:48px}
+.impsky.up{border-left-color:#5b8fd4aa}
+.impsky.dn{border-left-color:#a83229aa}
+.impmrow.dn b,.impmrow.dn span{color:#e0a094}
 .impnum{width:74px;background:#1a1524;border:1px solid #6f658055;border-radius:7px;color:#e6dff2;font-size:12px;padding:5px 8px;font-family:inherit}
 .impnum:focus{outline:none;border-color:#c98f3d99}
 .impaskhint{font-style:normal;font-size:9.5px;color:#6f6580}
