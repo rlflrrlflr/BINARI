@@ -747,9 +747,10 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
         }
       }
       return readImprint({ saju, ladder, birth, sex, lon: cityLon(birth?.city),
-        married: extra.married ?? null, kids: extra.kids ?? null, timeAcc: extra.timeAcc ?? null });
+        married: extra.married ?? null, kids: extra.kids ?? null, timeAcc: extra.timeAcc ?? null,
+        heightCm: extra.heightCm ?? null, metAge: extra.metAge ?? null });
     } catch (e) { return null; }
-  }, [saju, birth, sex, extra.married, extra.kids, extra.timeAcc]);
+  }, [saju, birth, sex, extra.married, extra.kids, extra.timeAcc, extra.heightCm, extra.metAge]);
   useEffect(() => { track("imprint_opened", { has_sex: !!sex, has_hour: !!(saju?.idx && saju.idx.hG != null), has_extra: extra.married != null }); }, []);
   if (!r) return (<div className="imp"><p className="impmsg">각인을 읽지 못했어. 생년월일을 다시 확인해 줄래?</p>
     <button className="btn ghost mt" onClick={onClose}>닫을게</button></div>);
@@ -825,14 +826,28 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
 
       {askOpen && (
         <div className="impask fade">
-          <p className="impaskh">두 가지만 더 알려주면 훨씬 정확해져 <i>선택이야</i></p>
+          <p className="impaskh">몇 가지만 알려주면 훨씬 정확해져 <i>전부 선택이야</i></p>
           <div className="impaskrow"><span>결혼했어?</span>
             <button className={"impchip" + (extra.married === true ? " on" : "")} onClick={() => setEx("married", true)}>했어</button>
             <button className={"impchip" + (extra.married === false ? " on" : "")} onClick={() => setEx("married", false)}>아직</button>
           </div>
+          {/* v116 — 기혼일 때만 뜬다. 만난 나이는 **맞히지 않고 받아서 해석한다**(§⑤).
+              유저가 이미 아는 값을 맞히려 들면 맞혀도 소득이 없고 틀리면 문서 전체가 죽는다. */}
+          {extra.married === true && (
+            <div className="impaskrow"><span>언제 만났어?</span>
+              {[["20대 초", 23], ["20대 후", 27], ["30대 초", 32], ["30대 후", 37], ["그 뒤", 42]].map(([l, v]) => (
+                <button key={v} className={"impchip" + (extra.metAge === v ? " on" : "")} onClick={() => setEx("metAge", v)}>{l}</button>
+              ))}
+            </div>
+          )}
           <div className="impaskrow"><span>아이가 있어?</span>
             <button className={"impchip" + (extra.kids === true ? " on" : "")} onClick={() => setEx("kids", true)}>있어</button>
             <button className={"impchip" + (extra.kids === false ? " on" : "")} onClick={() => setEx("kids", false)}>없어</button>
+          </div>
+          <div className="impaskrow"><span>키가 어떻게 돼?</span>
+            <input className="impnum" type="number" inputMode="numeric" min="120" max="220" placeholder="cm"
+              value={extra.heightCm ?? ""} onChange={(e) => setEx("heightCm", e.target.value ? +e.target.value : null)} />
+            <em className="impaskhint">안 적으면 키 얘기는 아예 안 해</em>
           </div>
           <p className="impaskw">이걸 모르면 <b>이미 지난 일을 앞일처럼</b> 적게 돼. 안 알려줘도 문서는 나오지만, 그 부분이 헐거워져.</p>
           <button className="btn ghost sm" onClick={() => setAskOpen(false)}>{extra.married != null || extra.kids != null ? "이대로 읽을게" : "안 알려줄래"}</button>
@@ -872,7 +887,8 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
       ))}
 
       {r.mate && <>
-        <p className="imph">짝 — 누구를 만나나</p>
+        <p className="imph">{r.mateMode === "wed" ? "짝 — 이미 곁에 있는 사람" : "짝 — 누구를 만나나"}
+          {r.mateMode === "wed" ? <i>생김새는 네가 더 잘 알아</i> : null}</p>
         {r.mate.map(Row)}
       </>}
       {!r.mate && <p className="impmsg">짝 자리는 <b>성별이 있어야</b> 어느 글자가 그 인연인지 갈려 — 프로필에 더하면 열려.</p>}
@@ -2169,7 +2185,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v115 · 각인 심화";
+const APP_VER = "v116 · 각인 정직성";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -4336,6 +4352,9 @@ const CSS = `
 .impaskrow span{font-size:11.5px;color:#9d8fb5;flex:0 0 72px}
 .impchip{background:none;border:1px solid #c9b98f3d;border-radius:14px;color:#bfb6cc;font-size:11.5px;padding:4px 13px;cursor:pointer}
 .impchip.on{border-color:#f5d98b;color:#f5d98b;background:#c98f3d1f}
+.impnum{width:74px;background:#1a1524;border:1px solid #6f658055;border-radius:7px;color:#e6dff2;font-size:12px;padding:5px 8px;font-family:inherit}
+.impnum:focus{outline:none;border-color:#c98f3d99}
+.impaskhint{font-style:normal;font-size:9.5px;color:#6f6580}
 .impaskw{font-size:10.5px;line-height:1.7;color:#8a7f95;margin:11px 0 9px}
 .impaskw b{color:#c9b98f}
 .impsvg{display:block;margin:12px 0 2px;background:#0f0b1a4d;border-radius:8px;padding:6px 0}

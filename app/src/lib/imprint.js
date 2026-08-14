@@ -9,7 +9,13 @@
    ④ **각주.** 모든 문장은 note 를 함께 낸다. 화면에서 숨기든 말든, 근거 없는 문장은 만들지 않는다.
 
    ⚠ 지어내지 않는다. 아래 표에 없는 조합은 문장을 내지 않고 자리를 비운다.
-   ⚠ 성별이 없으면 짝·자식 자리를 비운다. 시(時)가 없으면 그렇다고 적는다. */
+   ⚠ 성별이 없으면 짝·자식 자리를 비운다. 시(時)가 없으면 그렇다고 적는다.
+
+   ⑤ **아는 값은 맞히지 않는다 — 받아서 해석한다.** (창업자 실사용 제보 2026-08-14로 추가)
+      키·배우자 생김새·언제 만났나는 전부 **유저가 정답을 이미 아는 값**이다.
+      맞혀도 "그래서?"이고 틀리면 나머지 서른 칸까지 같이 죽는다. 비대칭이 너무 크다.
+      → 아는 값은 **입력으로 받아 해석**하고, 모르는 값(앞일·왜 그런지)만 단언한다.
+      → 기혼자에게 배우자 외모·집안·벌이를 예언하지 않는다. 그건 예언이 아니라 오답 노출이다. */
 
 import {
   jdFromKST, sunLongitude, moonLongitude, jdn, sunSign, moonSign, nakshatra, tzolkin,
@@ -77,24 +83,38 @@ const FACE = {
   금: "윤곽이 분명하다. 코가 오뚝하고 턱선이 살아 있다. 차가워 보인다는 말을 듣는다",
   수: "부드럽고 둥근 편이다. 피부가 희고 눈에 물기가 있다",
 };
-const BUILD = { 목: "마르고 키가 큰 쪽", 화: "날렵하고 잘 안 찌는 쪽", 토: "뼈대가 굵고 어깨가 넓은 쪽", 금: "단단하고 균형 잡힌 쪽", 수: "살이 잘 붙는 쪽" };
+const BUILD = { 목: "마르고 세로로 긴 쪽", 화: "날렵하고 잘 안 찌는 쪽", 토: "뼈대가 굵고 어깨가 넓은 쪽", 금: "단단하고 균형 잡힌 쪽", 수: "살이 잘 붙는 쪽" };
 const VOICE = { 목: "맑고 또렷하다", 화: "빠르고 높다", 토: "낮고 울림이 있다", 금: "또박또박 끊어진다", 수: "낮고 부드럽다" };
-/* 키 — 일간 오행과 상승궁이 각각 밀어 올리거나 내린다. 추정임을 각주에 명시한다 */
-const H_EL = { 목: 3, 화: 0, 토: 3, 금: 1, 수: -2 };
-const H_ASC = { 사수자리: 3, 물병자리: 2, 천칭자리: 2, 양자리: 1, 사자자리: 1, 쌍둥이자리: 1,
-  황소자리: -1, 게자리: -2, 처녀자리: -1, 전갈자리: 0, 염소자리: -1, 물고기자리: -1 };
-/* 짝의 자리에 앉은 성질 */
+/* 키(cm) — ⚠ **여기서 만들지 않는다.** v115 까지는 일간·상승궁을 cm 로 환산한 표가 있었는데,
+   그 표는 어느 유파에도 없고 내가 지어낸 것이었다. 게다가 키는 **유저가 이미 정답을 아는 값**이라
+   맞혀도 소득이 없고 틀리면 문서 전체가 죽는다(창업자 실사용 제보 2026-08-14: "나 키 178인데").
+   그래서 규칙을 뒤집었다 — **아는 값은 맞히지 않고 받아서 해석한다.**
+   기준선은 지어낸 게 아니라 통계다(질병관리청 국민건강영양조사 성인 평균: 남 172 · 여 159). */
+const H_BASE = { M: 172, F: 159 };
+/* 짝의 자리에 앉은 성질.
+   w·d 는 **미혼**에게 쓰는 예측 문구, g·b 는 **기혼**에게 쓰는 관계 해석 문구다(§⑤).
+   d 를 마침표로 잘라 재활용하면 "안정적이다." 세 글자가 한 항목이 된다 — 실제로 그랬다. 따로 쓴다. */
 const SPOUSE = {
-  비견: { w: "대등한 사람", d: "친구처럼 지낸다. 대신 서로 안 굽혀서 부딪힌다" },
-  겁재: { w: "자기 일과 벌이가 확실한 사람", d: "기대오는 사람과는 오래 못 간다. 돈은 처음부터 갈라 두는 게 낫다" },
-  식신: { w: "편안한 사람", d: "먹고사는 걱정이 덜하다. 대신 긴장이 없어 늘어지기도 한다" },
-  상관: { w: "재주 있고 말 잘하는 사람", d: "자극이 되는 만큼 말로 상처도 주고받는다" },
-  정재: { w: "알뜰하고 성실한 사람", d: "안정적이다. 대신 답답하게 느껴지는 순간이 온다" },
-  편재: { w: "활달하고 씀씀이 큰 사람", d: "함께 벌이는 재미가 있다. 씀씀이는 맞춰야 한다" },
-  정관: { w: "반듯하고 책임감 있는 사람", d: "기댈 만하다. 대신 원칙에서 서로 안 물러선다" },
-  편관: { w: "강단 있는 사람", d: "위기에 든든하다. 평소엔 팽팽하다" },
-  정인: { w: "품어 주는 사람", d: "보살핌을 받는다. 대신 어리광이 늘 수 있다" },
-  편인: { w: "생각이 깊은 사람", d: "통하면 크게 통한다. 혼자 있는 시간을 많이 필요로 한다" },
+  비견: { w: "대등한 사람", d: "친구처럼 지낸다. 대신 서로 안 굽혀서 부딪힌다",
+    g: "서로를 동료로 봐. 존댓말이 사라져도 예의는 남아 있는 사이야.", b: "둘 다 안 굽혀. 사과가 늦어서 작은 일이 사흘을 가." },
+  겁재: { w: "자기 일과 벌이가 확실한 사람", d: "기대오는 사람과는 오래 못 간다. 돈은 처음부터 갈라 두는 게 낫다",
+    g: "각자 제 몫을 해. 서로에게 기대지 않아서 부담이 없어.", b: "돈이 얽히면 급격히 나빠져. 보증·공동명의·빌려주기 셋이 특히 그래." },
+  식신: { w: "편안한 사람", d: "먹고사는 걱정이 덜하다. 대신 긴장이 없어 늘어지기도 한다",
+    g: "같이 있으면 긴장이 풀려. 먹고사는 걱정을 덜 하는 집이야.", b: "긴장이 없어서 늘어져. 서로에게 무심해지는 게 가장 큰 위험이야." },
+  상관: { w: "재주 있고 말 잘하는 사람", d: "자극이 되는 만큼 말로 상처도 주고받는다",
+    g: "대화가 재밌어. 서로를 자극해서 각자 한 단계씩 자라.", b: "말로 이기려 들어. 이긴 쪽도 남는 게 없는 싸움이 반복돼." },
+  정재: { w: "알뜰하고 성실한 사람", d: "안정적이다. 대신 답답하게 느껴지는 순간이 온다",
+    g: "생활이 안 흔들려. 돈과 살림에서 이미 신뢰가 쌓여 있어.", b: "다 예측돼서 답답해져. '설렘이 없다'는 말이 어느 시점에 나와." },
+  편재: { w: "활달하고 씀씀이 큰 사람", d: "함께 벌이는 재미가 있다. 씀씀이는 맞춰야 한다",
+    g: "같이 벌이고 같이 쓰는 재미가 있어. 사람도 잘 불러.", b: "씀씀이가 안 맞으면 그게 모든 싸움의 진짜 원인이 돼. 미루면 커져." },
+  정관: { w: "반듯하고 책임감 있는 사람", d: "기댈 만하다. 대신 원칙에서 서로 안 물러선다",
+    g: "약속을 지켜. 밖에서 부끄러울 일이 없는 사람이야.", b: "원칙에서 둘 다 안 물러서. 옳고 그름을 따지다 마음이 상해." },
+  편관: { w: "강단 있는 사람", d: "위기에 든든하다. 평소엔 팽팽하다",
+    g: "위기에 진짜 든든해. 큰일일수록 이 사람이라는 걸 겪어서 알아.", b: "평소가 팽팽해. 별일 아닌데 목소리가 먼저 올라가." },
+  정인: { w: "품어 주는 사람", d: "보살핌을 받는다. 대신 어리광이 늘 수 있다",
+    g: "받아 줘. 밖에서 지쳐 들어와도 집에서 회복이 돼.", b: "받는 게 익숙해져. 어느 순간 네가 어린 쪽이 되어 있어." },
+  편인: { w: "생각이 깊은 사람", d: "통하면 크게 통한다. 혼자 있는 시간을 많이 필요로 한다",
+    g: "통하면 크게 통해. 말 안 해도 아는 순간들이 있어.", b: "혼자 있는 시간을 많이 필요로 해. 그게 거리로 느껴지는 때가 와." },
 };
 /* 7하우스 사인 → 배우자의 겉모습. 서양 전통에서 짝의 외형을 직접 다루는 자리다 */
 const H7 = {
@@ -137,13 +157,20 @@ const DASHA_KO = {
 
 const SEOUL = { lat: 37.5665, lon: 126.978 };
 const HANGUL_AGE = (y, now) => now.getFullYear() - y + 1;
+/* 조사 — "힘줄야"가 화면에 나왔다. 받침을 보고 고른다 */
+const jong = (s) => { const c = (s || "").trim().slice(-1).charCodeAt(0); return c >= 0xac00 && c <= 0xd7a3 && (c - 0xac00) % 28 > 0; };
+const IYA = (s) => s + (jong(s) ? "이야" : "야");
+const EUN = (s) => s + (jong(s) ? "은" : "는");
+/* 문장 끝에 마침표가 없으면 붙인다 — 표의 조각을 이어 붙일 때 "…온다 사람이"가 된다 */
+const dot = (s) => { const t = String(s).trim(); return /[.!?…]$/.test(t) ? t : t + "."; };
 
 /** 각인 한 벌을 만든다. saju/idx/counts/ladder 는 App.jsx 가 계산해 넘긴다. */
 export function readImprint({ saju, ladder, birth, sex, now = new Date(), lat = SEOUL.lat, lon = SEOUL.lon,
   /* ── 선택 입력 (각인을 열 때만 묻는다. 무료 온보딩은 그대로 둔다) ──
      ⚠ 이 셋이 없어도 문서는 나온다. 있으면 **틀린 말을 안 하게 된다.**
-     특히 married/kids 가 없으면 마흔 살 기혼자에게 "서른에 짝을 만난다"고 쓰게 된다 — 그 한 줄이 문서 전체를 죽인다. */
-  married = null, kids = null, timeAcc = null } = {}) {
+     특히 married/kids 가 없으면 마흔 살 기혼자에게 "서른에 짝을 만난다"고 쓰게 된다 — 그 한 줄이 문서 전체를 죽인다.
+     heightCm/metAge 는 §⑤ 규칙 — **맞히지 않고 받아서 해석**하는 값이다. */
+  married = null, kids = null, timeAcc = null, heightCm = null, metAge = null } = {}) {
   if (!saju || !saju.idx || !birth || !birth.y) return null;
   const idx = saju.idx, counts = saju.counts;
   const notes = [];
@@ -196,10 +223,15 @@ export function readImprint({ saju, ladder, birth, sex, now = new Date(), lat = 
   const profAges = [...Array(70)].map((_, i) => i).filter((a) => profection(asc, a).house === 7);
   const jupiter = dasha.periods.find((p) => p.lord === "목성");
   const relief = bands.find((b) => b.ss === "정재" || b.ss === "편재");
-  /* 짝의 시기 — 세 셈에서 각각 후보를 뽑되 **혼인 가능 구간(22~45세) 안에 걸치는 것만** 센다.
+  /* 짝의 시기 — 혼인 가능 구간(22~45세) 안에 걸치는 후보만 센다.
      처음엔 그냥 "목성 시기 시작"을 후보로 썼는데, 사람에 따라 그게 예순여섯에 오기도 한다.
      그걸 평균에 넣으니 후보 폭이 36년·53년까지 벌어졌다(검사가 잡았다). 범위 밖은 후보가 아니다.
-     그리고 겹칠 때만 "셋이 같은 때를 가리킨다"고 말한다 — 흩어진 걸 평균 내면 합의가 아니라 눈속임이다. */
+     그리고 겹칠 때만 "같은 때를 가리킨다"고 말한다 — 흩어진 걸 평균 내면 합의가 아니라 눈속임이다.
+
+     ⚠ **서양 축을 뺐다(2026-08-14).** 프로펙션 7하우스는 나이 % 12 == 6, 즉 **누구나 6·18·30·42세**다.
+        상승궁이 무엇이든 값이 같다 — 개인차가 0인 격자를 "세 번째 증언"이라고 세고 있었다.
+        게다가 최종 답을 그 격자에 스냅시켜서, 200명을 돌리면 **148명이 '30세'**로 나왔다(실측).
+        상수를 표로 세면 합의가 아니라 정족수 조작이다. 개인차가 있는 두 축만 센다. */
   const LO = 22, HI = 45;
   const overlaps = (f, t) => t > LO && f < HI;
   const mateWhen = (() => {
@@ -211,19 +243,16 @@ export function readImprint({ saju, ladder, birth, sex, now = new Date(), lat = 
     }
     /* 동아시아 — 남자는 재물의 자리, 여자는 자리·책임의 자리가 짝을 맡는다 */
     const want = sex === "F" ? ["정관", "편관"] : ["정재", "편재"];
-    const band = bands.find((b) => want.includes(b.ss) && overlaps(b.from, b.to));
-    if (band) c.push({ k: "동쪽", a: Math.max(band.from, LO), why: `${band.from}~${band.to}세 구간` });
-    /* 서양 — 짝의 자리가 그해의 주제가 되는 나이 */
-    const p = profAges.filter((x) => x >= 24 && x <= 40);
-    if (p.length) c.push({ k: "서쪽", a: p[0], why: `프로펙션 7하우스 해 ${p.join("·")}세` });
-    if (c.length < 2) return { age: null, agree: false, spread: null, cands: c };
+    for (const band of bands.filter((b) => want.includes(b.ss) && overlaps(b.from, b.to))) {
+      c.push({ k: "동쪽", a: Math.max(band.from, LO), why: `${band.from}~${band.to}세 구간` });
+    }
+    if (!c.length) return { age: null, agree: false, spread: null, cands: c };
     const lo = Math.min(...c.map((x) => x.a)), hi = Math.max(...c.map((x) => x.a));
-    const mid = c.reduce((t, x) => t + x.a, 0) / c.length;
-    const near = profAges.filter((x) => x >= LO && x <= HI);
-    const age = near.length ? near.reduce((x, y) => (Math.abs(x - mid) <= Math.abs(y - mid) ? x : y)) : Math.round(mid);
-    return { age, agree: hi - lo <= 8, spread: hi - lo, lo, hi, cands: c };
+    /* 후보 중 하나를 그대로 쓴다 — 평균을 내면 아무 셈도 가리키지 않은 나이가 답이 된다 */
+    const age = c.length === 1 ? c[0].a : Math.round(c.reduce((t, x) => t + x.a, 0) / c.length);
+    return { age, agree: c.length >= 2 && hi - lo <= 8, spread: hi - lo, lo, hi, cands: c, only: c.length === 1 };
   })();
-  const mateAge = mateWhen.age;
+  const mateAge = metAge != null ? +metAge : mateWhen.age;
   /* 배우자 자리를 정면으로 치는 구간 = 관계가 흔들리는 때.
      **어린 나이는 뺀다** — "세 살에 만나는 사람은 오래 못 간다"가 화면에 실제로 나왔다.
      그리고 짝을 만나기 전인지 뒤인지로 갈라야 뜻이 달라진다(전=지나갈 인연, 후=흔들리는 결혼). */
@@ -232,35 +261,96 @@ export function readImprint({ saju, ladder, birth, sex, now = new Date(), lat = 
   const shakeBefore = shakeAll.filter((b) => mateAge == null || b.from < mateAge);
   const shakeAfter = shakeAll.filter((b) => mateAge != null && b.from >= mateAge);
 
-  /* ── 키 추정 ── */
-  const base = sex === "F" ? 160 : 172;
-  const bump = (H_EL[me] || 0) + (H_ASC[ascSign] || 0);
-  const hLo = base + bump - 3, hHi = base + bump + 3;
-
-  /* ── 몸 ── */
-  const weakEl = lackEl.length ? lackEl : [Object.entries(counts).sort((a, b) => a[1] - b[1])[0][0]];
+  /* ── 몸: 어디가 약한가 ─────────────────────────────────────────────────
+     v115 는 **빈 오행 하나**만 보고 "평생 약한 곳"을 못 박았다. 그게 틀렸다.
+     실사용 제보(창업자, 2026-08-14): 목이 0개라 "간·눈·힘줄"이라고 적었는데 실제 병력은
+     폐렴·충수염·당뇨 — 전부 금·토 계열이었다. **넘치는 쪽을 안 봐서 생긴 오답이다.**
+     명리 건강론에서 병은 태과·불급 **양쪽**에서 오고, 극을 받아 상하는 자리도 따로 본다.
+     세 축을 다 계산하고 표가 겹치는 곳을 먼저 적되, **갈리면 갈린다고 쓴다**(짝의 시기와 같은 원칙). */
   const beaten = { 목: "토", 화: "금", 토: "수", 금: "목", 수: "화" };
+  const minEnt = Object.entries(counts).sort((a, b) => a[1] - b[1])[0];
+  const axes = [];
+  axes.push({ el: lackEl.length ? lackEl[0] : minEnt[0], k: "비어서",
+    why: lackEl.length ? `${lackEl[0]} 0개 — 여덟 글자에 한 자도 없다(불급)` : `${minEnt[0]} ${minEnt[1]}개로 가장 얇다(불급)` });
+  if (maxEl[1] >= 3) axes.push({ el: maxEl[0], k: "넘쳐서", why: `${maxEl[0]} ${maxEl[1]}개(태과) — 넘치는 것도 병이 된다` });
+  if (maxEl[1] >= 3 && (counts[beaten[maxEl[0]]] || 0) <= 1)
+    axes.push({ el: beaten[maxEl[0]], k: "눌려서", why: `가장 센 ${maxEl[0]}(${maxEl[1]}개)이 ${beaten[maxEl[0]]}을 친다(피극)` });
+  /* ⚠ **독립이 아닌 축은 표를 더하지 않는다.** 피극("금이 목을 친다")과 불급("목이 0개")은
+     같은 사실을 두 번 말한 것이지 증거 둘이 아니다. 그냥 세면 목이 2표가 되어 "합의"로 굳고,
+     정작 넘치는 금(폐·기관지)은 본문에서 사라진다 — 실사용 오답이 정확히 이 경로로 났다.
+     짝의 시기에서 상수였던 프로펙션을 증언으로 셌던 것과 같은 종류의 실수다. */
+  const tally = {};
+  for (const a of axes) { if (a.k === "눌려서" && tally[a.el]) continue; tally[a.el] = (tally[a.el] || 0) + 1; }
+  const ranked = Object.entries(tally).sort((a, b) => b[1] - a[1]);
+  const weakEl = [ranked[0][0]];
+  const healthAgree = ranked[0][1] >= 2;
+  const uniq = [...new Set(axes.map((a) => a.el))];
+  /* 같은 자리를 두 축이 가리키면 문장에서도 한 번만 부른다 — "간과 눈은 비어서, 간과 눈은 눌려서"가 실제로 나왔다 */
+  const axGrp = uniq.map((e) => ({ el: e, short: ORGAN[e].part.split(",")[0], ks: axes.filter((x) => x.el === e).map((x) => x.k) }));
+  const axSent = axGrp.map((g) => `<b>${EUN(g.short)}</b> ${g.ks.join("·")}`).join(", ") + " 약해";
 
-  const body = [
-    ["키", `<b>${hLo}~${hHi}cm</b> 사이로 본다. ${bump >= 2 ? "또래보다 큰 쪽이다." : bump <= -1 ? "또래보다 작은 쪽이다." : "또래 평균 근처다."}`,
-      fn(`일간 ${GANK[idx.dG]}(${me}) 보정 ${H_EL[me] >= 0 ? "+" : ""}${H_EL[me]} + 상승궁 ${ascSign} 보정 ${H_ASC[ascSign] >= 0 ? "+" : ""}${H_ASC[ascSign] || 0}. 기준은 한국 ${sex === "F" ? "여성 160" : "남성 172"}cm. <b>이 수치는 추정이다</b> — 두 축을 cm 로 환산한 값이고 유파 표준이 없다.`)],
-    ["몸", `<b>${BUILD[me]}</b>이다.${(maxEl[1] >= 3 && (maxEl[0] === "토" || maxEl[0] === "수")) ? " 살이 잘 붙는다. 평생 관리해야 할 몸이다." : ""}`,
+  const body = [];
+  /* 키 — **맞히지 않는다.** 유저가 적어 주면 해석하고, 없으면 이 줄 자체를 내지 않는다(§⑤) */
+  if (heightCm && +heightCm > 120 && +heightCm < 220) {
+    const bs = H_BASE[sex] || 166, gap = Math.round(+heightCm - bs);
+    body.push(["키", `네가 적은 <b>${heightCm}cm</b>는 또래 평균보다 <b>${Math.abs(gap) < 2 ? "거의 같은 자리" : gap > 0 ? `${gap}cm 큰 쪽` : `${-gap}cm 작은 쪽`}</b>이야. ` +
+      (gap >= 5 ? "서 있기만 해도 먼저 눈에 띄어. 그래서 네가 조용히 있어도 사람들은 네가 판을 정해 주기를 기대해 — <b>원하지 않아도 책임이 먼저 온다.</b>"
+        : gap <= -5 ? "먼저 눈에 띄는 쪽은 아니야. 그래서 처음엔 가볍게 보였다가 겪고 나서 평가가 뒤집히는 일이 반복됐을 거야 — <b>네 무기는 첫인상이 아니라 두 번째 인상이야.</b>"
+          : "체격으로 기억되는 쪽이 아니야. 사람들이 너를 기억하는 건 몸이 아니라 태도야.") +
+      ` 여기에 <b>${BUILD[me]}</b> 골격이 얹혀 있어.`,
+      fn(`유저 입력 ${heightCm}cm. 기준선은 질병관리청 국민건강영양조사 성인 평균(남 172·여 159)이고, <b>키를 명식에서 뽑지 않았다</b> — 어느 유파에도 cm 환산 표준이 없다.`)]);
+  }
+  body.push(
+    ["몸", `<b>${BUILD[me]}</b>${jong(BUILD[me]) ? "이야" : "야"}.${(maxEl[1] >= 3 && (maxEl[0] === "토" || maxEl[0] === "수")) ? " 살이 잘 붙어. 평생 관리해야 할 몸이야." : ""}`,
       fn(`일간 오행 ${me} 의 체상. 가장 많은 기운은 ${maxEl[0]} ${maxEl[1]}개 — ${maxEl[0] === "토" || maxEl[0] === "수" ? "부기·살집으로 본다" : "체형에 큰 영향은 없다"}.`)],
     ["얼굴", FACE[me], fn(`일간 오행 ${me} 의 상(相).`)],
     ["목소리", `${VOICE[me]}.${G.식상 === 0 ? " 말수가 적어서 더 그렇게 들린다." : ""}`,
       fn(`일간 오행 ${me} + 표현을 맡은 자리 ${G.식상}개.`)],
-    ["평생 약한 곳", `<b>${ORGAN[weakEl[0]].part}.</b> ${ORGAN[weakEl[0]].sym}`,
-      fn(`${weakEl[0]} ${lackEl.length ? "0개 — 명식에 한 자도 없다" : "가 가장 얇다"}.${maxEl[1] >= 3 && beaten[maxEl[0]] === weakEl[0] ? ` 게다가 가장 센 ${maxEl[0]}(${maxEl[1]}개)이 바로 그 자리를 친다.` : ""}`)],
-  ];
-  if (maxEl[1] >= 4) body.push(["과한 곳", `<b>${ORGAN[maxEl[0]].part}</b> 쪽이 과열된다. ${ORGAN[maxEl[0]].over}`, fn(`${maxEl[0]} ${maxEl[1]}개 — 넘치는 쪽도 병이 된다.`)]);
+    ["평생 약한 곳",
+      healthAgree || uniq.length === 1
+        ? `<b>${ORGAN[weakEl[0]].part}.</b> ${dot(ORGAN[weakEl[0]].sym)}`
+        : `<b>한 곳이 아니야 — ${axGrp.map((g) => g.short).join(" · ")}.</b> ${axSent}. ` +
+          `${dot(ORGAN[weakEl[0]].sym)} <b>다 맞는 사람은 드물어.</b> 안 맞는 건 접어 둬.`,
+      fn(`축 ${axes.length}개 — ${axes.map((a) => a.why).join(" / ")}. ${healthAgree ? `${weakEl[0]}이 ${ranked[0][1]}표로 겹쳐 <b>한 곳으로 못 박았다</b>` : "겹치는 자리가 없어 <b>전부 적었다</b>"}. 어느 쪽이 실제인지는 유저가 안다 — 확인 문항으로 되묻는다.`)],
+  );
+  if (maxEl[1] >= 3 && !uniq.includes(maxEl[0])) body.push(["과한 곳", `<b>${ORGAN[maxEl[0]].part}</b> 쪽이 과열된다. ${ORGAN[maxEl[0]].over}`, fn(`${maxEl[0]} ${maxEl[1]}개 — 넘치는 쪽도 병이 된다.`)]);
 
-  /* ── 짝 ── */
-  let mate = null;
-  if (sex) {
+  /* ── 짝 ─────────────────────────────────────────────────────────────
+     **기혼과 미혼에 같은 문서를 주면 안 된다.** 미혼에게 배우자 외모·집안·벌이는 예언이지만,
+     기혼에게는 이미 답을 아는 문제다 — 맞혀도 소득 없고 틀리면 문서 전체가 죽는다(§⑤).
+     그래서 기혼이면 **예측을 걷어내고 관계 해석으로 바꾼다**: 무엇을 보고 끌렸나, 어디서 부딪히나,
+     언제 흔들리나. 앞의 둘은 이미 일어난 일의 설명이라 반증되지 않고, 셋째는 아직 안 온 일이다. */
+  let mate = null, mateMode = null;
+  if (sex && married === true) {
     const sp = SPOUSE[spouseSS];
+    mateMode = "wed";
+    const metBand = metAge != null ? bands.find((b) => +metAge >= b.from && +metAge <= b.to) : null;
     mate = [
-      ["키·체형", `<b>${h7.h >= 2 ? "키가 큰 편" : h7.h <= -1 ? "아담한 편" : "평균 근처"}.</b> ${h7.look}`,
-        fn(`짝의 자리가 ${h7Sign} — 상승궁 ${ascSign}의 맞은편이다. 서양 전통에서 이 자리가 배우자의 겉모습을 직접 다룬다.`)],
+      ["네가 끌린 자리", `너는 <b>${sp.w}</b>에게 끌리게 되어 있어. 취향이 아니라 <b>구조야</b> — 몇 번을 다시 골라도 결국 그 결로 가.`,
+        fn(`일지(배우자 자리)에 앉은 것이 ${spouseSS}. 기혼 입력이 있어 외모·집안·벌이 예측은 걷어냈다 — 유저가 이미 아는 값이다.`)],
+      ["잘 되는 지점", `<b>${sp.g}</b> 두 사람이 처음에 서로를 알아본 지점이고, 지금도 그 자리는 남아 있어. 흔들릴 때 돌아갈 곳도 여기야.`,
+        fn(`${spouseSS}의 순기능.`)],
+      ["부딪히는 지점", `<b>${sp.b}</b> 반복되는 싸움이 있다면 대개 이 한 가지가 옷을 갈아입고 나오는 거야. <b>매번 다른 일로 싸우는 것 같아도 원인은 하나야.</b>`,
+        fn(`${spouseSS}의 역기능. 부부 갈등은 새 원인이 아니라 같은 축의 재발로 본다.`)],
+      ["네가 조심할 것", G.식상 === 0
+        ? "<b>밖에서 참은 걸 집에서 푼다.</b> 네게 말이 나갈 문이 얇아서, 눌린 압력이 가장 가까운 사람에게 간다. 미리 알면 반은 막혀."
+        : `<b>${["정재", "정관", "정인"].includes(spouseSS) ? "붙어 있으려다 숨 쉴 틈을 안 남긴다" : "각자 몫을 나누다 어느 순간 남처럼 산다"}.</b> 네 구조가 기울면 그쪽으로 기울어.`,
+        fn(`${spouseSS} + 표현을 맡은 자리 ${G.식상}개. 표현이 막히면 압력이 가장 가까운 자리로 향한다.`)],
+      ...(metBand ? [["만난 때", `<b>${metAge}세 — ${metBand.title}</b>였어. ${dot(metBand.event)} 사람이 먼저 온 게 아니라 <b>그 시기가 사람을 데려온 거야.</b>`,
+        fn(`유저 입력 ${metAge}세 → ${metBand.from}~${metBand.to}세 구간(${metBand.ss}). 시기를 맞히지 않고 <b>받아서 해석했다</b>.`)]] : []),
+      /* 흔들리는 때는 **아직 안 온 것**만 쓴다. 지난 구간을 앞일처럼 적으면 그게 §⑤ 위반이고,
+         일흔여덟에 흔들린다는 말은 맞든 틀리든 오늘의 유저에게 아무 쓸모가 없다. */
+      ...(() => { const s = shakeAfter.find((x) => x.to >= age && x.from <= 70);
+        return [["흔들리는 때", s ? `<b>${Math.max(s.from, age)}~${s.to}세에 한 번 크게 흔들려.</b> 그때 원인은 사람이 아니라 <b>일과 돈</b>이야. 원인을 사람에게서 찾으면 못 풀어.`
+          : "<b>낮아.</b> 앞으로 그 자리를 정면으로 치는 구간이 없어. 흔들린다면 흐름 때문이 아니라 둘 사이의 일이라는 뜻이야.",
+          fn(s ? `${s.from}~${s.to}세 구간이 배우자 자리를 충 또는 형한다. 이미 지난 구간은 뺐다 — 앞일만 적는다.` : `혼인 이후·현재(${age}세) 이후 구간에 배우자 자리를 치는 글자가 없다.`)]]; })(),
+    ];
+  } else if (sex) {
+    const sp = SPOUSE[spouseSS];
+    mateMode = "pre";
+    mate = [
+      ["인상", `<b>${h7.h >= 2 ? "키가 큰 편" : h7.h <= -1 ? "아담한 편" : "평균 근처"}.</b> ${h7.look}`,
+        fn(`짝의 자리가 ${h7Sign} — 상승궁 ${ascSign}의 맞은편이다. 서양 전통에서 이 자리가 배우자의 겉모습을 다룬다. <b>다만 키·체형은 추정이다</b> — 사인별 체상은 유파 편차가 크고 cm 로 환산할 표준은 없다. 기혼자에게는 이 줄을 아예 내지 않는다(이미 아는 값이라 맞혀도 소득이 없고 틀리면 문서가 죽는다).`)],
       ["분위기", h7.air, fn(`${h7Sign}의 성질.${sunH === 7 ? " 게다가 태양이 그 자리에 든다 — 배우자가 사회적으로 드러나는 사람이 된다." : ""}`)],
       ["성격", `<b>${sp.w}</b>이다. ${sp.d}`, fn(`일지(배우자 자리)에 앉은 것이 ${spouseSS}.`)],
       ["집안", spouseSS === "정재" || spouseSS === "정관" ? "<b>반듯하다.</b> 크게 부자는 아닌데 부족하지도 않다. 결혼하고 나서 그 집에서 실질적인 도움을 받는다"
@@ -274,12 +364,16 @@ export function readImprint({ saju, ladder, birth, sex, now = new Date(), lat = 
       ["어떻게 만나나", sunH === 7 ? "<b>사람들 있는 자리에서 만난다.</b> 소개나 일 관계다. 우연히 길에서 만나는 그림이 아니다"
         : "<b>가까운 데서 만난다.</b> 오래 알던 사이거나, 같은 공간에 있던 사람이다",
         fn(`태양이 ${sunH}하우스. 7하우스면 공개된 자리, 아니면 생활 반경 안에서 본다.`)],
+      /* 문구가 셈의 개수를 그대로 말한다 — 하나뿐인데 "여럿이 가리킨다"고 쓰면 그게 거짓말이다 */
       ["언제 만나나",
-        !mateAge ? "짚을 수 있는 값이 부족하다"
-          : mateWhen.agree ? `<b>${mateAge}세 전후다.</b> 세 가지 셈이 전부 이 나이를 가리킨다`
-            : `<b>${mateWhen.lo}세에서 ${mateWhen.hi}세 사이다.</b> 세 셈이 갈려서 한 해로 못 좁힌다 — 그중 <b>${mateAge}세</b>가 가장 유력하다`,
-        fn(!mateAge ? `후보가 둘 미만이라 못 짚음 — 22~45세에 걸치는 값이 ${mateWhen.cands.length}개.`
-          : `${mateWhen.cands.map((x) => `${x.k} ${x.a}세(${x.why})`).join(" · ")} → 폭 ${mateWhen.spread}년. ${mateWhen.agree ? "8년 이내라 <b>합의</b>로 봤다" : "8년을 넘어 <b>갈린다고 표시</b>했다"}.`)],
+        !mateAge ? "혼인 구간(22~45세)에 걸리는 값이 없어 <b>못 짚는다</b>. 없는 걸 지어내기보다 비워 둔다"
+          : mateWhen.only ? `<b>${mateAge}세 전후다.</b> 다만 이걸 가리키는 셈이 <b>하나뿐</b>이라 폭넓게 봐야 한다`
+            : mateWhen.agree ? `<b>${mateAge}세 전후다.</b> 두 셈이 ${mateWhen.spread === 0 ? "같은 해를" : `${mateWhen.spread}년 안에서`} 겹친다`
+              : `<b>${mateWhen.lo}세에서 ${mateWhen.hi}세 사이다.</b> 두 셈이 갈려서 한 해로 못 좁힌다 — 그중 <b>${mateAge}세</b>가 가장 유력하다`,
+        fn(!mateAge ? `22~45세에 걸치는 후보가 0개.`
+          : `${mateWhen.cands.map((x) => `${x.k} ${x.a}세(${x.why})`).join(" · ")} → 폭 ${mateWhen.spread}년. ` +
+            `${mateWhen.only ? "후보가 <b>하나</b>라 합의라고 쓰지 않았다" : mateWhen.agree ? "8년 이내라 <b>합의</b>로 봤다" : "8년을 넘어 <b>갈린다고 표시</b>했다"}. ` +
+            `<b>서양 축은 뺐다</b> — 프로펙션 7하우스는 누구나 6·18·30·42세라 개인차가 0인 격자다(v115 까지 이걸 세 번째 증언으로 세는 바람에 200명 중 148명이 '30세'로 나왔다).`)],
       ["그전에 오는 인연", shakeBefore.length ? `<b>${shakeBefore[0].from}~${shakeBefore[0].to}세에 만나는 사람은 오래 못 간다.</b> 그 사람이 나빠서가 아니라 그 자리가 흔들리게 되어 있다` : "짝을 만나기 전에 크게 흔들리는 구간은 없다",
         fn(shakeBefore.length ? `${shakeBefore[0].from}~${shakeBefore[0].to}세 구간의 글자가 배우자 자리를 충 또는 형한다. 열여덟 미만 구간은 인연으로 세지 않는다.` : "짝을 만나기 전(18세~) 구간에는 배우자 자리를 치는 글자가 없다.")],
       ["결혼 후", `<b>${["정재", "정관", "정인"].includes(spouseSS) ? "붙어 사는 부부가 된다" : "각자 몫이 분명한 부부가 된다"}.</b> ` +
@@ -329,16 +423,29 @@ export function readImprint({ saju, ladder, birth, sex, now = new Date(), lat = 
   const D = [];
   const putD = (k, t, a, b2, c, d, n) => D.push({ k, t, steps: [["새겨질 때", a], ["자라면서", b2], ["지금", c], ["앞으로", d]], n });
 
-  putD("몸", "몸 — 어디가 얇게 왔나",
-    `<b>${ORGAN[weakEl[0]].part}</b>가 평생 가장 얇아. ${lackEl.length ? "있어야 할 것이 아예 안 들어 있다는 뜻이야." : "다른 자리보다 눈에 띄게 얇아."}`,
-    `어릴 때부터 ${ORGAN[weakEl[0]].sym}. 크게 아프진 않은데 잔병이 안 끊기는 쪽이야.`,
+  /* 몸 — **한 자리로 못 박지 않는다.** 축이 셋(비어서·넘쳐서·눌려서)이고, 겹칠 때만 한 곳이라고 쓴다.
+     보충의 방향도 축마다 반대다: 비어서 약한 자리는 채워 주는 열 해가 도움이지만,
+     넘쳐서 약한 자리는 같은 기운이 또 들어오면 **더 나빠진다.** v115 는 둘을 구분 없이 "채워 줘"라고 썼다. */
+  const mainAxis = axes.find((a) => a.el === weakEl[0]) || axes[0];
+  const emptySide = mainAxis.k !== "넘쳐서";
+  putD("몸", "몸 — 어디가 약하게 왔나",
+    healthAgree || uniq.length === 1
+      ? `<b>${ORGAN[weakEl[0]].part}</b>${jong(ORGAN[weakEl[0]].part) ? "이야" : "야"}. ${mainAxis.k === "비어서" ? (lackEl.length ? "있어야 할 것이 아예 안 들어 있어." : "다른 자리보다 눈에 띄게 얇아.") : mainAxis.k === "넘쳐서" ? "모자라서가 아니라 <b>넘쳐서</b> 약해 — 과열되는 쪽이야." : "가장 센 기운에게 <b>눌려서</b> 상하는 자리야."}`
+      : `<b>한 곳이 아니야.</b> ${axSent} — 원인이 반대라 <b>대처도 반대야.</b> 비어서 약한 자리는 채워야 하고, 넘쳐서 약한 자리는 덜어내야 해. 같은 방법을 둘 다에 쓰면 한쪽이 더 나빠져.`,
+    /* 축이 갈리면 증상도 갈린다 — 한쪽 증상만 적으면 나머지 자리는 이름만 부르고 마는 셈이 된다 */
+    `어릴 때부터 ${dot(ORGAN[weakEl[0]].sym)}` +
+      (uniq.length > 1 ? ` 그리고 ${dot(axGrp.find((g) => g.el !== weakEl[0]).ks.includes("넘쳐서") ? ORGAN[axGrp.find((g) => g.el !== weakEl[0]).el].over : ORGAN[axGrp.find((g) => g.el !== weakEl[0]).el].sym)}` : "") +
+      " 크게 아프진 않은데 잔병이 안 끊기는 쪽이야.",
     (() => { const c2 = cur; if (!c2) return "아직 첫 열 해가 시작되기 전이야";
-      if (weakEl.includes(c2.el)) return `<b>${c2.from}~${c2.to}세 — 지금 열 해가 그 자리를 채워 줘.</b> 몸으로는 가장 수월한 구간이야`;
+      if (c2.el === weakEl[0]) return emptySide
+        ? `<b>${c2.from}~${c2.to}세 — 지금 열 해가 그 자리를 채워 줘.</b> 몸으로는 가장 수월한 구간이야`
+        : `<b>${c2.from}~${c2.to}세 — 지금 열 해가 그 자리에 기운을 더 부어.</b> 이미 넘치는 쪽이라 <b>이 구간이 제일 조심할 때야</b>`;
       return `지금 열 해(${c2.from}~${c2.to}세)는 이 자리와 직접 관계는 없어. 관리는 계속 필요해`; })(),
-    (() => { const f = bands.find((b) => b.from > age && weakEl.includes(b.el));
-      return f ? `<b>${f.from}~${f.to}세</b>부터 그 기운이 들어와 — 그 열 해에 몸이 한 단계 편해져`
-        : "여든까지 그 기운이 들어오는 열 해는 없어. <b>흐름을 기다릴 자리가 아니라 평생 관리할 자리</b>라는 뜻이야"; })(),
-    fn(`${weakEl[0]} ${lackEl.length ? "0개" : "최소"}. ${maxEl[1] >= 3 && beaten[maxEl[0]] === weakEl[0] ? `게다가 가장 센 ${maxEl[0]}(${maxEl[1]}개)이 그 자리를 친다.` : ""}`));
+    (() => { const f = bands.find((b) => b.from > age && b.el === weakEl[0]);
+      return f ? (emptySide ? `<b>${f.from}~${f.to}세</b>부터 그 기운이 들어와 — 그 열 해에 몸이 한 단계 편해져`
+        : `<b>${f.from}~${f.to}세</b>에 그 기운이 또 들어와 — 넘치는 쪽이라 <b>그때 한 번 크게 앓을 수 있어</b>. 미리 알면 대비가 돼`)
+        : "여든까지 그 기운이 오가는 열 해는 없어. <b>흐름을 기다릴 자리가 아니라 평생 관리할 자리</b>라는 뜻이야"; })(),
+    fn(`축 ${axes.length}개 — ${axes.map((a) => a.why).join(" / ")}. ${healthAgree ? `${weakEl[0]}이 겹쳐 한 곳으로 봤다` : "겹치는 자리가 없어 전부 적었다"}.`));
 
   putD("마음", "마음 — 어떤 사람으로 자라나",
     `${SURFACE[me].w}으로 왔어. ${SURFACE[me].d}.`,
@@ -421,9 +528,10 @@ export function readImprint({ saju, ladder, birth, sex, now = new Date(), lat = 
 
   /* ── 지금 확인해 보아라 — 근거를 안 대는 대신 확인할 방법을 준다 ── */
   const checks = [
-    [`또래보다 ${bump >= 2 ? "키가 큰" : bump <= -1 ? "키가 작은" : "키가 평범한"} 편인가`, `${hLo}~${hHi}cm 로 봤다`],
     [`${BUILD[me].replace(" 쪽", "")} 체형인가`, "타고난 골격으로 봤다"],
-    [ORGAN[weakEl[0]].part + "가 자주 말썽인가", "평생 가장 얇은 자리로 적었다"],
+    /* 약한 자리는 축이 여럿이라 **어느 쪽이 맞는지 되묻는다.** 못 박고 틀리느니 묻고 맞히는 게 낫다 */
+    ...uniq.map((e) => [`${ORGAN[e].part}가 자주 말썽인가`,
+      `${(axes.find((a) => a.el === e) || {}).k || ""} 약한 자리로 봤다 — 셋 중 <b>안 맞는 게 있으면 그건 접어 둬</b>`]),
     [`${FACE[me].split(".")[0]}는 말을 듣는가`, "얼굴의 결로 적었다"],
     [`${BLOCK[blockKey].s}는 편인가`, "가장 빈 자리에서 나오는 증상이다"],
     [split ? "겉으로 보이는 모습과 속이 다르다는 말을 듣는가" : "겉과 속이 같다는 말을 듣는가", split ? "겉과 속의 원소가 갈린다" : "겉과 속의 원소가 같다"],
@@ -437,8 +545,9 @@ export function readImprint({ saju, ladder, birth, sex, now = new Date(), lat = 
 
   return {
     age, ageFull, noHour: !!noH, sex: sex || null,
-    domains: D, checks,
-    given: { married, kids, timeAcc, city: birth.city || null },
+    domains: D, checks, mateMode,
+    health: { axes, agree: healthAgree, els: uniq },
+    given: { married, kids, timeAcc, heightCm: heightCm || null, metAge: metAge ?? null, city: birth.city || null },
     core: {
       surface: SURFACE[me], inner: INNER[innerEl], split,
       block: BLOCK[blockKey], blockKey, blockN: G[blockKey],
