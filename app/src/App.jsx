@@ -1567,9 +1567,8 @@ async function saveOrShareBujeok(args) {
     track("bujeok_saved", { via: "download", dir });
   } else {                                                     // iOS Safari: download 속성 무시 → 새 탭 이미지(길게 눌러 저장)
     const w = window.open("", "_blank");
-    if (w) w.document.write(`<title>비나리 부적</title><body style="margin:0;background:#050408;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="${dataUrl}" style="max-width:100%" alt="길게 눌러 사진에 저장"></body>`);
-    else location.href = dataUrl;
-    track("bujeok_saved", { via: "newtab", dir });
+    if (w) { w.document.write(`<title>비나리 부적</title><body style="margin:0;background:#050408;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="${dataUrl}" style="max-width:100%" alt="길게 눌러 사진에 저장"></body>`); track("bujeok_viewer_opened", { via: "newtab", dir }); }
+    else { location.href = dataUrl; track("bujeok_failed", { via: "newtab", dir }); }   // v94: 새 탭은 '띄웠다'일 뿐 '저장됐다'가 아니다 — saved로 세면 수치가 부풀어 목적을 못 이룬다
   }
 }
 
@@ -1658,7 +1657,11 @@ function loadMemory() {
   } catch (_) { return null; }
 }
 function saveMemory(m) { try { store.setItem(STORE_KEY, JSON.stringify(m)); } catch (_) {} }
-function clearMemory() { try { store.removeItem(STORE_KEY); } catch (_) {} }
+function clearMemory() {                                       // v94: STORE_KEY 하나만 지우던 것 → "다른 사람이야?"는 사람이 바뀌는 것이므로 전부 지운다
+  // 팀 식별 플래그(INTERNAL_KEY)만 남긴다 — 지우면 팀 유입이 유저 지표에 섞여 D7 게이트가 무의미해진다
+  [STORE_KEY, BELIEF_KEY, DAILY_KEY, FIRSTTOUCH_KEY, CONSENT_KEY].forEach(k => { try { store.removeItem(k); } catch (_) {} });
+  try { if (_ph && typeof _ph.reset === "function") _ph.reset(); } catch (_) {}   // 앞사람과 distinct_id 분리
+}
 
 /* v15: 강건 JSON 파서 (끝 잘림·트레일링 콤마 복구) — 2콜 공용 */
 function repairJSON(txt) {
@@ -1764,7 +1767,7 @@ function demoProps(birth, extra) {
 }
 
 const encodeShare = (o) => { try { return _b64e(JSON.stringify(o)); } catch (_) { return ""; } };
-const decodeShare = (s) => { try { const o = JSON.parse(_b64d(s)); return o && o.v && o.d ? o : null; } catch (_) { return null; } };
+const decodeShare = (s) => { try { const o = JSON.parse(_b64d(s)); if (o) delete o.n; return o && o.v && o.d ? o : null; } catch (_) { return null; } };  // v94: 구링크의 실명 폐기
 
 /* ═══════════════ 앱 ═══════════════ */
 export default function App() {
@@ -1919,11 +1922,24 @@ export default function App() {
   const shareVerdict = async () => {
     if (!res) return;
     track("verdict_shared", { dir: res.direction, mode: hexInfo ? "ritual" : "quick" });
-    const text = `"${q}"\n→ ${res.direction}. ${res.verdict}\n\n— 내 수호신의 판결, 비나리`;
+    // v94: 판결문이 유저를 이름으로 부른다(SYS "결정적 순간에 이름을 부른다"). payload에서 n을 뺐어도
+    //      verdict·subline 문장 안에 이름이 남으므로, 밖으로 나가는 문자열에서 호칭 형태만 걷어낸다.
+    //      뒤에 공백·문장부호가 오는 경우만 지운다 — "지원아끼지"의 '지원아'를 잘못 지우지 않기 위해.
+    const _nm = (birth.name || "").trim();
+    const scrub = (s) => {
+      const t = String(s || "");
+      if (!_nm || _nm.length < 2) return t;
+      try {
+        const esc = _nm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        return t.replace(new RegExp(`${esc}(아|야|님)(?=[\\s,·.!?~…]|$)[\\s,·]*`, "g"), "").replace(/^[\s,·]+/, "");
+      } catch (_) { return t; }
+    };
+    const _v = scrub(res.verdict), _s = scrub((detail && !detail._err ? detail.subline : "") || "");
+    const text = `"${q}"\n→ ${res.direction}. ${_v}\n\n— 내 수호신의 판결, 비나리`;
     // v75: 판결을 링크에 실어 보낸다 — 받은 사람이 홈이 아니라 이 판결을 먼저 보게
     // v94: 실명(n)은 링크에 싣지 않는다 — 공유 문구엔 안 보이는데 URL에만 담겨 나가서 공유자가 모른다.
     //      수신 화면은 이름이 없으면 "어떤 이의 수호신이…"로 자동 대체된다. 질문(q)은 공유 문구에 이미 보이므로 유지.
-    const payload = { q, d: res.direction, v: res.verdict, s: (detail && !detail._err ? detail.subline : "") || "", a: res.against || 0, t: res.total || 0, c: res.category || "", to: res.tone || "", hx: hexInfo ? { n: hexInfo.name, t: (hexInfo.moving && hexInfo.moving.length ? hexInfo.toName : "") } : null };
+    const payload = { q, d: res.direction, v: _v, s: _s, a: res.against || 0, t: res.total || 0, c: res.category || "", to: res.tone || "", hx: hexInfo ? { n: hexInfo.name, t: (hexInfo.moving && hexInfo.moving.length ? hexInfo.toName : "") } : null };
     const enc = encodeShare(payload);
     const url = enc ? `https://binari-sepia.vercel.app/?v=${enc}` : "https://binari-sepia.vercel.app/?ref=share";
     try {
@@ -2007,7 +2023,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
       const { json: r1 } = await callClaude(system, [...priorConvo, concludeMsg], 320);
       // L1 등장 연출(짧게)
       agitateRef.current = true; setRes(r1);
-      track("verdict_shown", demoProps(birth, { dir: r1.direction, cat: r1.category, tone: r1.tone, against: r1.against, total: r1.total, mode: quick ? "quick" : "ritual", lean: lean || "skip", verdict: r1.verdict || null, mbti: mbti || null, element: saju?.main || null }));
+      track("verdict_shown", demoProps(birth, { dir: r1.direction, cat: r1.category, tone: r1.tone, against: r1.against, total: r1.total, mode: quick ? "quick" : "ritual", lean: lean || "skip", vlen: (r1.verdict || "").length, mbti: mbti || null, element: saju?.main || null }));
       reactRef.current = { dir: r1.direction, t0: performance.now() };   // v28: 수호신이 판결을 연기
       setTimeout(() => { agitateRef.current = false; }, 700);
       setTimeout(() => { setCardOn(true); }, 1400);                       // 몸짓을 보여준 뒤 카드
@@ -2072,7 +2088,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
         const vv = sharedIn.v || "";
         return (
           <section className="scene fade sharedwrap">
-            <p className="sharedeyebrow">{sharedIn.n ? `${sharedIn.n}의 수호신이 이렇게 판결했어` : "어떤 이의 수호신이 이렇게 판결했어"}</p>
+            <p className="sharedeyebrow">어떤 이의 수호신이 이렇게 판결했어</p>{/* v94: 구링크에는 n이 들어 있으므로 폴백 분기 자체를 제거 */}
             <div className="persp sharedcard">
               <div className="vcard">
                 <div className="vface">
@@ -2512,6 +2528,8 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
             </div>
           )}
           {res && cardOn && <button className="btn gold mt" onClick={shareVerdict}>{shared ? "복사했어 — 붙여넣으면 돼" : "카톡·라인으로 판결 보내기"}</button>}
+          {/* v94: 인라인 고지 — 처리방침은 아무도 안 읽는다. 무엇이 나가는지 누르기 전에 보여준다. */}
+          {res && cardOn && <p className="fine">네 물음과 판결이 함께 담겨 나가. 보낸 링크는 되돌릴 수 없어.</p>}
           {/* D4: 결제 fake-door — 지불 의사만 잰다. 결제 인프라는 만들지 않는다. */}
           {res && cardOn && (
             letter ? (
