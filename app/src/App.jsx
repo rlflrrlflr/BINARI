@@ -449,7 +449,7 @@ const DIMQ = [   // v24: MBTI 픽션 — 한 기억씩 순차로 묻는다
 /* v14: 지표별 독립 시각축을 위한 색 유틸 — 원소 기본색을 별자리로 hue 회전 */
 const ZO_ORDER = ["양자리","황소자리","쌍둥이자리","게자리","사자자리","처녀자리","천칭자리","전갈자리","사수자리","염소자리","물병자리","물고기자리"];
 const FORM_STEPS = ["사주 여덟 글자를 세는 중", "달의 자리를 맞추는 중", "별자리를 포개는 중", "타고난 결을 읽는 중", "수(數)의 울림을 듣는 중", "흐름을 짚어 매듭짓는 중"];  // v70 형성 로딩 — 실제로 읽는 지표들
-const QHINTS = ["밤 11시, 전남친에게 카톡 보낼까?", "받은 이직 제안, 수락할까?", "이 사업 지금 시작해도 될까?", "3년 사귄 사람이랑 결혼해도 될까?", "지금 이 회사 그만둘까?", "3주째 답 없는 썸, 한 번 더 연락할까?", "오늘 저녁 뭐 먹지?", "무리해서 이 집 계약할까?", "지금 고백해도 될까?", "이 관계, 계속 이어가도 될까?"];  // v71 타겟이 할 법한 질문 롤링
+const QHINTS = ["밤 11시, 전남친에게 카톡 보낼까?", "받은 이직 제안, 수락할까?", "이 사업 지금 시작해도 될까?", "3년 사귄 사람이랑 결혼해도 될까?", "지금 이 회사 그만둘까?", "3주째 답 없는 썸, 한 번 더 연락할까?", "오늘 저녁 뭐 먹지?", "무리해서 이 집 계약할까?", "지금 고백해도 될까?", "이 관계, 계속 이어가도 될까?", "그 사람에게 마음을 더 줘도 될까?", "이 사람과 계속 같이 일해도 될까?", "먼저 연락해서 사과할까?"];  // v71 타겟이 할 법한 질문 롤링 / v94 관계 축 3개 추가(상대 생년월일 없이, 결정 형태 유지)
 const ZODIAC_ANIMAL = ["쥐","소","호랑이","토끼","용","뱀","말","양","원숭이","닭","개","돼지"];  // v64 연지(yJ) → 띠
 const WISP_GAIT = ["종종거리다 다다닥 내달릴","느긋하게 뚜벅뚜벅 걸을","숨죽였다 덮치듯 뛰어오를","깡충깡충 뛰어다닐","길게 굽이치며 헤엄칠","스르르 미끄러질","바람처럼 내달릴","총총 뛰다 폴짝 옆걸음질할","그네 타듯 휙휙 방향을 바꿀","콕콕 쪼다 푸드덕거릴","달려왔다 저만치 갔다 할","뒤뚱뒤뚱 걸을"];  // 셰이더 12 시그니처와 1:1
 function _hexToHsl(hex){const r=parseInt(hex.slice(1,3),16)/255,g=parseInt(hex.slice(3,5),16)/255,b=parseInt(hex.slice(5,7),16)/255;const mx=Math.max(r,g,b),mn=Math.min(r,g,b);let h=0,s=0,l=(mx+mn)/2;if(mx!==mn){const d=mx-mn;s=l>0.5?d/(2-mx-mn):d/(mx+mn);h=mx===r?(g-b)/d+(g<b?6:0):mx===g?(b-r)/d+2:(r-g)/d+4;h/=6;}return[h*360,s,l];}
@@ -1535,6 +1535,8 @@ function buildBujeokPoster({ saju, direction, seed, tosses, hexInfo, category, a
   const d = new Date();
   ctx.font = "400 30px sans-serif"; ctx.fillStyle = "#5f5670";
   ctx.fillText(`${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")} · 수호신의 부적`, W / 2, 1810);
+  ctx.font = "500 32px sans-serif"; ctx.fillStyle = "#8a7f95";   // v94: 받은 사람이 어디로 가야 할지 — 목적지가 없으면 공유가 끊긴다
+  ctx.fillText("binari-sepia.vercel.app", W / 2, 1868);
   return cv;
 }
 function dataUrlToFile(dataUrl, name) {                        // 동기 변환(제스처 보존용)
@@ -1547,20 +1549,27 @@ async function saveOrShareBujeok(args) {
   const cv = buildBujeokPoster(args);
   const dataUrl = cv.toDataURL("image/png");                   // 동기 → iOS 사용자 제스처 유지(share를 await 없이 즉시 호출)
   const iOS = /iP(hone|ad|od)/.test(navigator.userAgent);
+  const dir = args && args.direction;                          // v94: 계측 — 어느 경로로 실제 밖에 나갔나(질문 원문·이름은 싣지 않는다)
   try {
     const file = dataUrlToFile(dataUrl, "binari_bujeok.png");
-    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file] }); return; } // iOS 공유시트(사진에 저장)
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file] });
+      track("bujeok_saved", { via: "share", dir });
+      return;
+    } // iOS 공유시트(사진에 저장)
   } catch (e) {
-    if (e && e.name === "AbortError") return;                  // 공유 취소 → 조용히
+    if (e && e.name === "AbortError") { track("bujeok_cancelled", { via: "share", dir }); return; }  // 공유 취소 → 조용히
     /* 그 외 실패 → 폴백 */
   }
   if (!iOS) {                                                  // 데스크톱: 파일 다운로드
     const a = document.createElement("a"); a.href = dataUrl; a.download = "binari_bujeok.png";
     document.body.appendChild(a); a.click(); a.remove();
+    track("bujeok_saved", { via: "download", dir });
   } else {                                                     // iOS Safari: download 속성 무시 → 새 탭 이미지(길게 눌러 저장)
     const w = window.open("", "_blank");
     if (w) w.document.write(`<title>비나리 부적</title><body style="margin:0;background:#050408;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="${dataUrl}" style="max-width:100%" alt="길게 눌러 사진에 저장"></body>`);
     else location.href = dataUrl;
+    track("bujeok_saved", { via: "newtab", dir });
   }
 }
 
@@ -1586,6 +1595,7 @@ A.큰 결정(이직·이사·결혼·이별·큰 투자) / B.감정 충동(연�
 - 가치여정이 제공된 경우 최소 1축을 reasons에 포함한다.
 - total은 이번 판결에 참여한 지표 수와 일치시키고, against는 그중 반대표 수다.
 - 토정비결 괘상수가 제공되면 당년 전체 흐름의 참고 지표(타이밍 층)로 쓴다. 단, 해당 괘의 원문 풀이를 확실히 알지 못하면 원문 문장을 지어내 인용하지 말고 흐름 참고로만 쓴다.
+- 특정 상대(연인·가족·상사·동료 등)에 관한 물음이어도 **그 사람의 사주·별자리는 절대 지어내지 않는다.** 우리가 가진 건 유저의 지표뿐이다. 상대를 읽는 척하지 말고, "지금 너의 기운이 그 관계를 어떻게 통과하는가"로만 답한다. 상대의 마음·의도를 단정하는 문장을 쓰지 않는다.
 - 열린 질문("몇 시까지 일할까", "뭘 먹을까", "언제 갈까")은 GO/STOP 이분법으로 회피하지 말고, 지표를 근거로 구체값 하나를 찍어 verdict로 답한다. (O)"10시까지만. 그 뒤는 내일의 몫이야." (X)"일하지 마." 질문이 요구한 단위(시각·항목·날짜)로 답하는 게 판결이다.
 - 음식·메뉴 질문: verdict에 **구체적 메뉴명 하나를 콕 찍는다**(김치찌개·냉면·돈까스·제육덮밥·마라탕·파스타·초밥·삼겹살·비빔밥·라멘·쌀국수·부대찌개 등 실제 요리명). "국물 있는 거"·"뜨끈한 거"·"불맛 나는 거" 같은 카테고리로 뭉뚱그리는 것 금지. 오행을 음식에 억지로 '국물/불맛'으로만 환원하지 말 것 — 같은 기운이라도 밥·면·고기·분식·양식·찜·구이·덮밥 등 폭넓게, 매번 다른 메뉴가 나오게 변주한다("국물"·"뜨끈"으로 수렴 금지). 근거(subline)는 가볍고 재치 있게 한 줄.
 - 시기 질문("언제")은 [오늘] 날짜에서 계산한 구체 시기를 찍는다 — 달 위상·절기를 근거로 쓰되 반드시 실제 날짜로 환산해 같이 말한다. (O)"다음 초승달이 뜨는 8월 중순, 그때 열어." (X)"때가 되면" (X)"다시 물어봐". 시계 정합: 수주~수개월짜리 결정에 대운(10년 흐름)을 시계로 쓰지 않는다 — 대운은 인생 방향의 배경으로만.
@@ -1911,7 +1921,9 @@ export default function App() {
     track("verdict_shared", { dir: res.direction, mode: hexInfo ? "ritual" : "quick" });
     const text = `"${q}"\n→ ${res.direction}. ${res.verdict}\n\n— 내 수호신의 판결, 비나리`;
     // v75: 판결을 링크에 실어 보낸다 — 받은 사람이 홈이 아니라 이 판결을 먼저 보게
-    const payload = { q, d: res.direction, v: res.verdict, s: (detail && !detail._err ? detail.subline : "") || "", n: (birth.name || "").trim(), a: res.against || 0, t: res.total || 0, c: res.category || "", to: res.tone || "", hx: hexInfo ? { n: hexInfo.name, t: (hexInfo.moving && hexInfo.moving.length ? hexInfo.toName : "") } : null };
+    // v94: 실명(n)은 링크에 싣지 않는다 — 공유 문구엔 안 보이는데 URL에만 담겨 나가서 공유자가 모른다.
+    //      수신 화면은 이름이 없으면 "어떤 이의 수호신이…"로 자동 대체된다. 질문(q)은 공유 문구에 이미 보이므로 유지.
+    const payload = { q, d: res.direction, v: res.verdict, s: (detail && !detail._err ? detail.subline : "") || "", a: res.against || 0, t: res.total || 0, c: res.category || "", to: res.tone || "", hx: hexInfo ? { n: hexInfo.name, t: (hexInfo.moving && hexInfo.moving.length ? hexInfo.toName : "") } : null };
     const enc = encodeShare(payload);
     const url = enc ? `https://binari-sepia.vercel.app/?v=${enc}` : "https://binari-sepia.vercel.app/?ref=share";
     try {
