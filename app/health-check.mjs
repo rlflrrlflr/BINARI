@@ -671,6 +671,36 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
     "이 다섯은 여섯 판 동안 고쳐지지 않은 채 라이브에 있었습니다. 문서가 커질수록 고지의 필요는 줄지 않고 늘어납니다 — 절마다 붙이지 말고 하단 고정 블록 하나로 두세요.");
 }
 
+/* ── 검사 5-j. 저장 키가 규칙 밖으로 새지 않는가 (작업지시 A-6) ──────────
+   `clearMemory` 도 내보내기 스윕도 **`binari.` 접두만** 본다. 그런데 새 기능은 계속 밑줄로 키를 만들었다 —
+   v115 각인 선택 입력, v125 궁합 **상대방 생년월일**. 그래서 "처음부터 다시"를 눌러도 안 지워지고
+   **다음 사람에게 넘어갔다.** 궁합 쪽이 특히 무겁다 — 상대는 이 앱을 쓴 적도 동의한 적도 없는 제3자다.
+   ⚠ 규칙을 "binari_ 로 시작하면 실패"로 넣으면 안 된다 — `binari_bujeok` 은 다운로드 **파일명**이고
+      `__binari_t` 는 localStorage **가용성 프로브**라 매번 오탐한다. **저장 호출 패턴으로 좁힌다.** */
+{
+  const app = readFileSync(APP, "utf8");
+  const bad = [];
+  const under = [...app.matchAll(/(?:localStorage|store)\.(?:get|set|remove)Item\("(binari_[A-Za-z0-9_]*)"/g)]
+    .map((m) => m[1]);
+  if (under.length) bad.push(`규칙 밖 저장 키 ${[...new Set(under)].join(",")}`);
+  /* clearMemory 가 전량 스윕인가 — 키 하나만 지우면 "처음부터 다시"가 거짓말이 된다 */
+  const cm = (app.match(/function clearMemory\(\)[\s\S]{0,900}?\n\}/) || [""])[0];
+  if (!/localStorage\.key\(i\)/.test(cm) || !/indexOf\("binari\."\) === 0/.test(cm)) bad.push("clearMemory 전량스윕 아님");
+  if (!/k !== INTERNAL_KEY/.test(cm)) bad.push("clearMemory 가 팀 플래그를 날림");
+  if (!/_ph\?\.reset\?\.\(\)/.test(cm)) bad.push("clearMemory 에 분석 reset 없음");
+  /* 구키 마이그레이션이 살아 있는가 — 없으면 이미 쓰던 사람의 값이 영영 규칙 밖에 남는다 */
+  if (!/migrateUnderscoreKeys/.test(app)) bad.push("구키 마이그레이션 없음");
+  /* 처리방침에 제3자 항목이 있는가 */
+  const pv = readFileSync("public/privacy.html", "utf8");
+  if (!/상대방의 생년월일/.test(pv)) bad.push("처리방침에 제3자 항목 없음");
+  if (!/이름·연락처는 받지 않습니다/.test(pv)) bad.push("처리방침에 제3자 미수집 범위 없음");
+
+  add(bad.length ? "심각" : "정상",
+    bad.length ? "저장 키가 규칙 밖으로 샘 — 리셋에도 안 지워짐" : "저장 키 규칙 — 전부 binari. 접두 · 리셋이 전량 스윕",
+    bad.length ? bad.join(" · ") : "밑줄 저장 키 0 · clearMemory 전량스윕(팀 플래그 보존) · 구키 마이그레이션 · 처리방침 제3자 항목",
+    "저장 키는 전부 `binari.` 로 시작해야 리셋·내보내기 스윕에 걸립니다. 밑줄로 만들면 \"처음부터 다시\"를 눌러도 남아서 다음 사람에게 넘어갑니다 — 궁합의 상대방 생년월일은 제3자 정보라 특히 무겁습니다.");
+}
+
 /* ── 검사 6. 의존성 취약점 (npm audit) ───────────────────────────────────
    남이 만든 부품에서 보안 구멍이 발견되는 일은 우리가 코드를 안 건드려도 일어난다.
    중요한 구분: **사용자에게 배달되는 부품(prod)** 과 **내 컴퓨터에서만 쓰는 부품(dev)** 은

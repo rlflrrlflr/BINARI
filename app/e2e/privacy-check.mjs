@@ -115,6 +115,32 @@ ck("부적 이미지에 AI 표시를 그린다", /AI가 생성한 내용 · 재�
   ck("공유 수신 화면에 AI 표시가 있다", /ainote/.test(seg));
 }
 
+/* ── A-6. 남의 생년월일이 리셋에 지워지는가 ──────────────────────────────
+   v125 가 궁합을 붙이면서 **제3자의 생년월일**이 앱에 들어왔다. 지금까지 다룬 값과 등급이 다르다 —
+   **그 사람은 이 앱을 쓴 적도, 동의한 적도 없다.**
+   그런데 저장 키가 밑줄이라 `clearMemory` 에도 내보내기 스윕에도 안 걸렸다.
+   ⚠ 재발 검사는 **저장 호출 패턴으로 좁혀야 한다** — `binari_bujeok` 은 다운로드 파일명,
+      `__binari_t` 는 가용성 프로브라 "binari_ 로 시작하면 실패"로 걸면 매번 오탐한다. */
+{
+  const under = [...src.matchAll(/(?:localStorage|store)\.(?:get|set|remove)Item\("(binari_[A-Za-z0-9_]*)"/g)].map((m) => m[1]);
+  ck("규칙 밖(밑줄) 저장 키가 없다", under.length === 0, [...new Set(under)].join(",") || "0개");
+  ck("파일명·프로브는 오탐하지 않는다(검사가 좁다)",
+     /binari_bujeok/.test(src) && !under.includes("binari_bujeok"), "파일명은 저장 키가 아니다");
+  ck("각인·궁합 키가 binari. 접두다",
+     /const IMPRINT_EXTRA_KEY = "binari\./.test(src) && /const MATCH_LAST_KEY = "binari\./.test(src));
+  ck("구키를 한 번 옮기고 지운다", /migrateUnderscoreKeys/.test(src) && /localStorage\.removeItem\(oldK\)/.test(src));
+  const cm = (src.match(/function clearMemory\(\)[\s\S]{0,900}?\n\}/) || [""])[0];
+  ck("리셋이 binari. 전량을 쓴다", /localStorage\.key\(i\)/.test(cm) && /indexOf\("binari\."\) === 0/.test(cm));
+  ck("리셋이 팀 플래그는 남긴다(계측 오염 방지)", /k !== INTERNAL_KEY/.test(cm));
+  ck("리셋이 분석 신원도 끊는다", /_ph\?\.reset\?\.\(\)/.test(cm));
+  /* 처리방침 — 본인 정보만 적힌 표에 남의 정보가 조용히 추가돼 있었다 */
+  const pv3 = readFileSync(new URL("../public/privacy.html", import.meta.url), "utf8");
+  ck("처리방침 표에 상대방 생년월일이 있다", /상대방의 생년월일/.test(pv3));
+  ck("처리방침이 상대 이름·연락처 미수집을 밝힌다", /이름·연락처는 받지 않습니다/.test(pv3));
+  ck("처리방침이 기기 저장·미전송을 밝힌다", /서버나 분석 도구로 전송되지 않으며/.test(pv3));
+  ck("처리방침이 삭제 방법을 밝힌다", /처음부터 다시」를 누르면\n함께 삭제됩니다|처음부터 다시」를 누르면/.test(pv3));
+}
+
 const pass = R.filter(Boolean).length;
 console.log(`\n=== 개인정보·법정고지: ${pass}/${R.length} PASS ===`);
 process.exit(pass === R.length ? 0 : 1);

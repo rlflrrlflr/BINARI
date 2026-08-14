@@ -770,9 +770,9 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
   /* v115 선택 입력 — **각인을 열 때만** 묻는다. 무료 온보딩은 건드리지 않는다.
      없어도 문서는 나온다. 있으면 **틀린 말을 안 하게 된다** — 마흔 살 기혼자에게
      "서른에 짝을 만난다"고 쓰는 순간 문서 전체가 죽는다. 그 한 줄을 막으려고 받는다. */
-  const [extra, setExtra] = useState(() => { try { return JSON.parse(localStorage.getItem("binari_imprint_extra") || "{}"); } catch { return {}; } });
+  const [extra, setExtra] = useState(() => { try { return JSON.parse(localStorage.getItem(IMPRINT_EXTRA_KEY) || "{}"); } catch { return {}; } });
   const [askOpen, setAskOpen] = useState(extra.married == null && (new Date().getFullYear() - +(birth?.y || 0) + 1) >= 20);
-  const setEx = (k, v) => { const n = { ...extra, [k]: v }; setExtra(n); try { localStorage.setItem("binari_imprint_extra", JSON.stringify(n)); } catch {} };
+  const setEx = (k, v) => { const n = { ...extra, [k]: v }; setExtra(n); try { localStorage.setItem(IMPRINT_EXTRA_KEY, JSON.stringify(n)); } catch {} };
   const r = useMemo(() => {
     try {
       const ladder = [];
@@ -1178,7 +1178,7 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
 const MATCH_PRICE = 4900;
 function MatchDoc({ saju, birth, onClose }) {
   const [notesOn, setNotesOn] = useState(false);
-  const [f, setF] = useState(() => { try { return JSON.parse(localStorage.getItem("binari_match_last") || "{}"); } catch { return {}; } });
+  const [f, setF] = useState(() => { try { return JSON.parse(localStorage.getItem(MATCH_LAST_KEY) || "{}"); } catch { return {}; } });
   const [done, setDone] = useState(false);
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const ok = /^\d{4}$/.test(String(f.y || "")) && +f.y >= 1900 && +f.y <= 2030
@@ -1223,7 +1223,7 @@ function MatchDoc({ saju, birth, onClose }) {
         </div>
         <p className="impaskw">상대의 <b>이름도 연락처도 안 받아.</b> 생년월일은 이 기기에만 남고 서버로 안 보내.
           궁합은 <b>연인만이 아니야</b> — 같이 일하는 사람, 가족, 동업자에게도 그대로 써.</p>
-        <button className="btn mt" disabled={!ok} onClick={() => { try { localStorage.setItem("binari_match_last", JSON.stringify(f)); } catch {} track("match_run", { has_hour: f.h != null }); setDone(true); }}>
+        <button className="btn mt" disabled={!ok} onClick={() => { try { localStorage.setItem(MATCH_LAST_KEY, JSON.stringify(f)); } catch {} track("match_run", { has_hour: f.h != null }); setDone(true); }}>
           {ok ? "둘을 맞대 볼게" : "생년월일을 채워 줘"}
         </button>
         <button className="btn ghost mt" onClick={onClose}>닫을게</button>
@@ -2557,7 +2557,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v126 · 개인정보 A항";
+const APP_VER = "v127 · 저장 키 규칙";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -3123,6 +3123,26 @@ function todayIlju() { const d = new Date(); const g = (jdn(d.getFullYear(), d.g
 
 /* v16(B1): 수호신의 기억 — localStorage 영속화. "수호신은 이미 너를 안다"를 처음으로 사실로 만든다 */
 const STORE_KEY = "binari.v1";
+/* ── A-6 (전략 세션 작업지시 2026-08-14) ─────────────────────────────────────
+   저장 키에 **점(`.`) 접두 = 관리 대상**이라는 암묵 규칙이 있었다.
+   `clearMemory` 도, 내보내기/불러오기 스윕도 `binari.` 만 본다.
+   그런데 새 기능은 계속 **밑줄**로 키를 만들었다 — v115 각인 선택 입력, v125 궁합 상대 생년월일.
+   결과: **"다른 사람이야? — 처음부터 다시"를 눌러도 안 지워지고 다음 사람에게 넘어간다.**
+   궁합 쪽이 특히 무겁다 — **상대는 이 앱을 쓴 적도 동의한 적도 없는 제3자**다.
+   암묵 규칙을 명시 규칙으로 올린다: **저장 키는 전부 `binari.` 로 시작한다.**
+   health-check 가 `localStorage.*Item("binari_` 패턴으로 재발을 잡는다
+   (`binari_bujeok` 은 다운로드 파일명, `__binari_t` 는 가용성 프로브라 오탐하면 안 되므로 패턴을 좁혔다). */
+const IMPRINT_EXTRA_KEY = "binari.imprint_extra.v1";
+const MATCH_LAST_KEY = "binari.match_last.v1";
+/* 구키에서 한 번만 옮겨 오고 지운다. 이미 쓰던 사람의 값을 잃지 않으면서 규칙 밖 키를 없앤다 */
+(function migrateUnderscoreKeys() {
+  try {
+    for (const [oldK, newK] of [["binari_imprint_extra", IMPRINT_EXTRA_KEY], ["binari_match_last", MATCH_LAST_KEY]]) {
+      const v = localStorage.getItem(oldK);
+      if (v != null) { if (localStorage.getItem(newK) == null) localStorage.setItem(newK, v); localStorage.removeItem(oldK); }
+    }
+  } catch (_) {}
+})();
 function loadMemory() {
   try {
     const raw = store.getItem(STORE_KEY);
@@ -3140,7 +3160,23 @@ function loadMemory() {
   } catch (_) { return null; }
 }
 function saveMemory(m) { try { store.setItem(STORE_KEY, JSON.stringify(m)); } catch (_) {} }
-function clearMemory() { try { store.removeItem(STORE_KEY); } catch (_) {} }
+/* A-6 ②: 키 하나만 지우면 "처음부터 다시"가 거짓말이 된다.
+   `binari.` 전량을 쓸되 **팀 플래그(INTERNAL_KEY)는 남긴다** — 그게 날아가면 계측이 팀 유입으로 오염되고,
+   그건 D7 게이트를 무의미하게 만든다(CLAUDE.md §계측 주의). 지운 목록은 개수만 계측한다. */
+function clearMemory() {
+  let n = 0;
+  try { store.removeItem(STORE_KEY); } catch (_) {}
+  try {
+    const ks = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.indexOf("binari.") === 0 && k !== INTERNAL_KEY) ks.push(k);
+    }
+    for (const k of ks) { localStorage.removeItem(k); n++; }
+  } catch (_) {}
+  try { _ph?.reset?.(); } catch (_) {}      // 앞사람의 distinct_id 를 물려주지 않는다
+  return n;
+}
 
 /* v15: 강건 JSON 파서 (끝 잘림·트레일링 콤마 복구) — 2콜 공용 */
 function repairJSON(txt) {
