@@ -895,6 +895,43 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
       </svg>
     );
   };
+  /* 여정 지도 — "동화나 영화처럼"(창업자 요청)의 시각 축.
+     지나온 길은 이어진 선, 앞으로는 점선. 지금 서 있는 자리가 빛난다. 선이 그려지며 나타난다. */
+  const JourneyMap = () => {
+    const c = r.saga?.chapters; if (!c || !c.length) return null;
+    const H = 176, x0 = 24, gw = (W - x0 * 2) / (c.length - 1 || 1);
+    const at = (i) => [x0 + i * gw, 92 + 24 * Math.sin(i * 0.92)];
+    const pts = c.map((_, i) => at(i));
+    const seg = (a2, b2) => `M${a2[0]},${a2[1]} Q${(a2[0] + b2[0]) / 2},${(a2[1] + b2[1]) / 2 - 12} ${b2[0]},${b2[1]}`;
+    const nowI = c.findIndex((x) => x.now);
+    const GLYPH = { 관문: "◆", 보물: "✦", 시련: "▲", 조력자: "◇", "숨은 마디": "◉" };
+    return (
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} className="impsvg drawin" role="img" aria-label="여정 지도">
+        {pts.slice(0, -1).map((q, i) => {
+          const done = nowI < 0 ? false : i < nowI;
+          return <path key={i} d={seg(q, pts[i + 1])} fill="none"
+            stroke={done ? "#6f6580" : "#c98f3d"} strokeWidth={done ? 1.4 : 1.8}
+            strokeDasharray={done ? "" : "4 4"} opacity={done ? 0.75 : 0.9} className="jline" />;
+        })}
+        {c.map((ch, i) => {
+          const [x, y] = pts[i], on = ch.now, up = i % 2 === 0;
+          const g = ch.marks.length ? GLYPH[ch.marks[0].k] : null;
+          return <g key={i}>
+            {on && <circle cx={x} cy={y} r="10" fill="#f5d98b" opacity="0.18" className="pulse" />}
+            <circle cx={x} cy={y} r={on ? 5.5 : ch.past ? 3 : 3.6}
+              fill={on ? "#f5d98b" : ch.past ? "#6f6580" : "#c98f3d"} />
+            {g && <text x={x} y={y + (up ? -13 : 19)} fontSize="9" fill="#e8a06a" textAnchor="middle">{g}</text>}
+            <text x={x} y={y + (up ? -25 : 31)} fontSize="8" fill={on ? "#f5d98b" : "#8a7f95"} textAnchor="middle">{ch.from}세</text>
+            <text x={x} y={y + (up ? -34 : 40)} fontSize="7.5" fill="#6f6580" textAnchor="middle">{ch.i}장</text>
+          </g>;
+        })}
+        {nowI >= 0 && <text x={Math.min(Math.max(pts[nowI][0], 30), W - 30)} y={pts[nowI][1] + (nowI % 2 === 0 ? 17 : -11)}
+          fontSize="8.5" fill="#f5d98b" textAnchor="middle">여기</text>}
+        <text x={x0} y={166} fontSize="7" fill="#6f6580">◆ 관문 ✦ 보물 ▲ 시련 ◇ 조력자 ◉ 숨은 마디</text>
+        <text x={W - x0} y={166} fontSize="7" fill="#6f6580" textAnchor="end">점선 = 아직 안 온 길</text>
+      </svg>
+    );
+  };
   const CoreFig = () => (
     <svg viewBox="0 0 320 116" width="100%" height="116" className="impsvg" role="img" aria-label="겉과 속">
       <rect x="8" y="20" width="118" height="66" rx="4" fill="none" stroke="#8a7f95" strokeWidth="1.4" />
@@ -958,6 +995,23 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
       <CoreFig />
       <p className="impp"><b>그리고 네게는 {r.core.block.t}이 얇아.</b><Ref n={r.core.n3} /> {r.core.block.s}. {r.core.block.w}</p>
       <p className="impfix"><b>그래서 필요한 건 하나야</b> — {r.core.block.fix}.</p>
+
+      {r.saga && <>
+        <p className="imph">너의 이야기 <i>내가 지켜본 대로</i></p>
+        <p className="impsaga"><H t={r.saga.prologue} /><Ref n={r.saga.n} /></p>
+        <JourneyMap />
+        {r.saga.chapters.map((ch, i) => (
+          <div className={"impch" + (ch.now ? " on" : "") + (ch.past ? " past" : "")} key={i}>
+            <p className="impchh"><i>제{ch.i}장</i>{ch.title}<em>{ch.from}~{ch.to}세</em>
+              {ch.now ? <b className="here">여기</b> : null}</p>
+            <p className="impchw">{ch.what}{ch.when ? <span className="impchd"> · {ch.when}</span> : null}</p>
+            {ch.marks.map((m, k) => (
+              <p className="impmark" key={k}><i>{m.k}</i><H t={m.w} /></p>
+            ))}
+          </div>
+        ))}
+        <p className="impepi"><H t={r.saga.epilogue} /></p>
+      </>}
 
       <p className="imph">아홉 하늘 <i>각자 다른 걸 본다</i></p>
       <p className="impp">아홉 문명이 <b>서로 다른 질문</b>을 맡았어. 같은 걸 아홉 번 묻지 않아 —
@@ -2309,7 +2363,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v122 · 그림과 뎁스";
+const APP_VER = "v123 · 너의 이야기";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -4488,9 +4542,33 @@ const CSS = `
 .imp .impdom,.imp .impsky,.imp .impclash,.imp .impband,.imp .impck{animation:impRise .5s cubic-bezier(.22,.8,.28,1) both}
 .imp .impsvg{animation:impRise .55s cubic-bezier(.22,.8,.28,1) both}
 .drawin .mline{stroke-dasharray:1400;animation:impDraw 1.5s cubic-bezier(.3,.7,.3,1) .15s both}
+.drawin .jline{animation:impFill .6s ease both}
+.drawin .jline:nth-of-type(1){animation-delay:.1s}.drawin .jline:nth-of-type(2){animation-delay:.22s}
+.drawin .jline:nth-of-type(3){animation-delay:.34s}.drawin .jline:nth-of-type(4){animation-delay:.46s}
+.drawin .jline:nth-of-type(5){animation-delay:.58s}.drawin .jline:nth-of-type(6){animation-delay:.7s}
+.drawin .jline:nth-of-type(7){animation-delay:.82s}
 .drawin .mfill{animation:impFill 1s ease .9s both}
 .drawin line,.drawin circle,.drawin text{animation:impFill .7s ease .5s both}
-@media (prefers-reduced-motion:reduce){.imp .impdom,.imp .impsky,.imp .impclash,.imp .impband,.imp .impck,.imp .impsvg,.drawin .mline,.drawin .mfill,.drawin line,.drawin circle,.drawin text{animation:none}}
+@media (prefers-reduced-motion:reduce){.imp .impdom,.imp .impsky,.imp .impclash,.imp .impband,.imp .impck,.imp .impsvg,.drawin .mline,.drawin .jline,.drawin .mfill,.drawin line,.drawin circle,.drawin text{animation:none}}
+@keyframes impPulse{0%,100%{opacity:.14;r:9}50%{opacity:.3;r:13}}
+.drawin .pulse{animation:impPulse 2.6s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){.drawin .pulse{animation:none}}
+.impsaga{font-size:14px;line-height:1.95;color:#d8cfe8;margin:0 0 12px;letter-spacing:-.01em}
+.impsaga b{color:#f0e2b8}
+.impch{margin:0 0 2px;padding:11px 12px;border-left:2px solid #6f658044}
+.impch.past{opacity:.62}
+.impch.on{border-left-color:#f5d98b;background:linear-gradient(90deg,#c98f3d14,transparent)}
+.impchh{margin:0;font-size:13px;color:#e6dff2;display:flex;align-items:baseline;gap:7px;flex-wrap:wrap}
+.impchh i{font-style:normal;font-size:9.5px;color:#c98f3daa;letter-spacing:.14em}
+.impchh em{font-style:normal;margin-left:auto;font-size:10px;color:#8a7f95;font-variant-numeric:tabular-nums}
+.impchh .here{font-size:9px;color:#0f0b18;background:#f5d98b;border-radius:8px;padding:1px 7px;letter-spacing:.08em}
+.impchw{margin:6px 0 0;font-size:12.5px;line-height:1.8;color:#b3a8c6}
+.impchd{color:#6f6580;font-size:11px}
+.impmark{margin:7px 0 0;font-size:12px;line-height:1.8;color:#c8bcd8;padding-left:9px;border-left:1px solid #e8a06a44}
+.impmark i{font-style:normal;display:inline-block;font-size:9px;color:#e8a06a;letter-spacing:.1em;margin-right:6px}
+.impmark b{color:#f0d0a8}
+.impepi{margin:14px 0 4px;padding:13px 14px;border-radius:9px;border:1px solid #c98f3d55;background:#c98f3d10;font-size:13.5px;line-height:1.95;color:#d8cfe8}
+.impepi b{color:#f0e2b8}
 .impwest{margin:9px 0 0;padding:8px 10px;border-left:2px solid #5b8fd455;background:#5b8fd40d;border-radius:0 6px 6px 0;font-size:11.5px;line-height:1.75;color:#9dc0ee}
 .impwest b{color:#c5dcf7}
 .impcap{font-size:11px;line-height:1.75;color:#8a7f95;margin:2px 0 8px}

@@ -223,6 +223,31 @@ const GU_DIR = { 일백수성: ["북", "물의 자리"], 이흑토성: ["남서"
 const LP_TASK = { 1: "혼자 서는 법", 2: "둘 사이를 잇는 법", 3: "밖으로 꺼내는 법", 4: "쌓아 올리는 법",
   5: "한 자리에 묶이지 않는 법", 6: "떠맡되 짓눌리지 않는 법", 7: "혼자 깊이 파는 법",
   8: "돈과 힘을 다루는 법", 9: "놓아주는 법", 11: "남을 비추는 법", 22: "크게 짓는 법", 33: "가르치는 법" };
+/* ── 이야기로 읽히게 ─────────────────────────────────────────────────────
+   창업자 요청(2026-08-14): "혹시 동화나 영화처럼 읽히게 할 수 있을까? 신화나."
+   ⚠ 지난 여섯 판이 **모호함을 걷어내는 작업**이었다. 이건 그걸 되돌리는 게 아니다.
+     신화는 모호하지 않다 — "오디세우스는 십 년을 떠돌았다"는 정확한 문장이다.
+     신화가 주는 건 모호함이 아니라 **배열**이다: 결핍에서 시작해, 시련을 지나, 전환점에서 갈리고, 돌아온다.
+   그리고 **바꿀 데이터가 없다.** 대운 여덟 구간이 이미 장(章)이고, 가장 약한 자리가 이미 결핍이고,
+   두 셈이 겹치는 해가 이미 관문이다. 같은 값을 **다르게 배열**할 뿐이다.
+   화자도 이미 있다 — 수호신이 "내가 지켜본 이야기"를 들려주는 형식이면 톤도 안 깨진다. */
+const NAYIN_KO = {
+  해중금: "바다 속에 잠긴 쇠", 노중화: "화로 안의 불", 대림목: "큰 숲의 나무", 노방토: "길가의 흙",
+  검봉금: "칼끝에 서린 쇠", 산두화: "산꼭대기의 불", 간하수: "골짜기를 흐르는 물", 성두토: "성벽 위의 흙",
+  백랍금: "하얗게 굳은 쇠", 양류목: "물가의 버드나무", 천중수: "샘에서 솟는 물", 옥상토: "지붕 위의 흙",
+  벽력화: "벼락의 불", 송백목: "겨울에도 푸른 나무", 장류수: "길게 흐르는 강물", 사중금: "모래에 섞인 쇠",
+  산하화: "산 아래 타는 불", 평지목: "너른 들의 나무", 벽상토: "담벼락의 흙", 금박금: "얇게 편 금",
+  복등화: "밤을 밝히는 등잔불", 천하수: "하늘에서 내리는 물", 대역토: "큰길의 흙", 차천금: "비녀에 박힌 금",
+  상자목: "누에를 먹이는 뽕나무", 대계수: "큰 시내의 물", 사중토: "모래 속의 흙", 천상화: "하늘 위의 불",
+  석류목: "가을에 여무는 석류나무", 대해수: "끝이 안 보이는 바다",
+};
+const SEASON = ["겨울", "겨울", "봄", "봄", "봄", "여름", "여름", "여름", "가을", "가을", "가을", "겨울"];
+/* 장(章) 제목 — 십성이 그 열 해에 무슨 일을 시켰는가. 사건에서 뽑았지 지어내지 않았다 */
+const CH_TITLE = {
+  정재: "쌓기 시작한 장", 편재: "크게 걸어 본 장", 식신: "손이 열린 장", 상관: "말이 터진 장",
+  정관: "이름을 받은 장", 편관: "짓눌린 장", 정인: "스승을 만난 장", 편인: "혼자 굴을 판 장",
+  비견: "동무가 온 장", 겁재: "빼앗긴 장",
+};
 const EL_OF_NAYIN = (t) => ["목", "화", "토", "금", "수"].find((e) => t.includes(e)) || null;
 const EL_KO2 = { 목: "나무", 화: "불", 토: "흙", 금: "쇠", 수: "물" };
 /* 아홉 자리 ↔ 서양 열두 하우스 대응. 창업자 지적(2026-08-14):
@@ -324,6 +349,18 @@ export function readImprint({ saju, ladder, birth, sex, now = new Date(), lat = 
       dasha: d ? d.lord : null, dashaKo: d ? dashaWord(d.lord, du.startAge) : null, ganji: du.ganji };
   });
   const cur = bands.find((b) => age >= b.from && age <= b.to) || null;
+
+  /* ── 두 셈의 시간 마디 — 사주 대운(10년 균등)과 인도 다샤(120년 불균등)를 맞댄다.
+     ⚠ **여기서 계산한다.** v122 까지는 아홉 하늘 절 안에서 계산해서, 그보다 위에 있는
+        「너의 이야기」가 표식을 못 봤다(관문이 하나도 안 붙었다). 쓰는 곳보다 먼저 둔다. */
+  const dashaTurn = dasha.periods.map((p) => Math.round(p.from)).filter((x) => x >= 12 && x <= 75);
+  const daeunTurn = bands.map((b) => b.from).filter((x) => x >= 12 && x <= 75);
+  const bothTurn = daeunTurn.filter((a2) => dashaTurn.some((d) => Math.abs(d - a2) <= 3));
+  const onlyDasha = dashaTurn.filter((d) => !daeunTurn.some((a2) => Math.abs(d - a2) <= 3));
+  for (const b of bands) {
+    b.doubleTurn = bothTurn.includes(b.from);
+    b.dashaOnly = onlyDasha.some((d) => d >= b.from && d <= b.to);
+  }
 
   /* ── 짝: 세 셈이 만나는 나이 ── */
   const spouseSS = ssOf(idx.dG, JB[idx.dJ]);
@@ -706,6 +743,40 @@ export function readImprint({ saju, ladder, birth, sex, now = new Date(), lat = 
   const money = { path: journey, peak, trough,
     n: fn(`여든 해를 재물 관점 −3~+4 로 매겼다(정재3·편재4·식신2·상관1·정관1·편인0·정인0·비견−1·편관−1·겁재−3, 재다신약이면 −1). <b>금액은 쓰지 않는다</b> — 명리에 원 단위 표준이 없다. 이 곡선은 <b>남과의 비교가 아니라 네 여든 해 안에서의 높낮이</b>다.`) };
 
+  /* ── 너의 이야기 — 같은 값을 서사로 다시 배열한다 ────────────────────── */
+  const saga = (() => {
+    if (!bands.length) return null;
+    const ny = nayin(+birth.y), nyKo = NAYIN_KO[ny] || null;
+    const season = SEASON[(+birth.m - 1 + 12) % 12];
+    const chapters = bands.map((b, i) => {
+      const marks = [];
+      if (b.doubleTurn) marks.push({ k: "관문", w: "여기서 <b>두 하늘이 같이 갈렸어.</b> 동아시아 셈도 인도 셈도 같은 해를 짚어 — 이런 해에 온 변화는 되돌아가지 않아" });
+      if (b.dashaOnly) marks.push({ k: "숨은 마디", w: "겉으로는 조용한 장이야. 그런데 <b>인도 셈만 여기서 판이 바뀐다</b>고 해 — 남들 눈엔 아무 일 없는데 네 속이 뒤집히는 때야" });
+      if (shakeAll.some((x) => x.from === b.from)) marks.push({ k: "시련", w: "<b>가까운 사람과 크게 부딪히는 장이야.</b> 그 사람이 나빠서가 아니라 이 장이 그렇게 쓰여 있어" });
+      if (money.peak && money.peak.from === b.from) marks.push({ k: "보물", w: "<b>네 여든 해에서 손에 가장 많이 남는 장이야.</b> 여기서 벌어 둔 걸로 나머지를 살아" });
+      if (GRP_OF[b.ss] === "인성") marks.push({ k: "조력자", w: "<b>누군가 너를 끌어 주는 장이야.</b> 스승이든 윗사람이든, 혼자 힘으로 넘은 게 아닌 구간이야" });
+      return { i: i + 1, from: b.from, to: b.to, young: b.young,
+        title: b.young ? "아이였던 장" : (CH_TITLE[b.ss] || "지나가는 장"),
+        what: b.event, when: b.dashaKo, marks, now: !!(cur && b.from === cur.from), past: b.to < age };
+    });
+    const nowCh = chapters.find((c) => c.now) || null;
+    const left = chapters.filter((c) => c.from > age).length;
+    return {
+      prologue: `<b>${birth.y}년 ${season}, 네가 왔어.</b>` +
+        (nyKo ? ` 그해에 붙은 이름은 <b>${ny}</b> — <b>${nyKo}</b>${jong(nyKo) ? "이라는" : "라는"} 뜻이야.` : "") +
+        ` 아홉 하늘이 각각 너를 두고 다른 걸 말했는데, 그건 아래에 다 적어 뒀어. ` +
+        `다만 셈이 어느 쪽으로 갈리든 <b>한 가지가 처음부터 비어 있었어 — ${dot(BLOCK[blockKey].plain)}</b> ` +
+        `<b>이건 그 빈 하나를 두고 벌어지는 여든 해의 이야기야.</b>`,
+      chapters, nowCh, left,
+      epilogue: nowCh
+        ? `너는 지금 <b>제${nowCh.i}장</b>에 서 있어. 남은 장이 <b>${left}개</b>야. ` +
+          `이야기의 끝은 정해져 있지 않아 — 하지만 <b>처음부터 비어 있던 그 하나</b>는 끝까지 안 채워져. ` +
+          `${dot(BLOCK[blockKey].fix)} <b>영웅이 되는 건 결핍을 없애서가 아니라 그걸 안고도 걸어서야.</b>`
+        : `아직 첫 장이 시작되기 전이야. ${bands[0].from}세부터 이야기가 돌기 시작해.`,
+      n: fn(`서사는 새 계산이 아니다 — 대운 ${bands.length}구간을 장으로, 가장 빈 자리(${blockKey})를 결핍으로, 두 셈이 겹치는 해를 관문으로, 재물 절정을 보물로 **다시 배열했을 뿐**이다. 값은 위 절들과 같다.`),
+    };
+  })();
+
   /* ── 아홉 하늘의 분업 ────────────────────────────────────────────────
      각 하늘이 **사주가 못 하는 일 하나씩**을 맡는다. 같은 질문에 투표시키지 않는다 —
      투표를 시키면 오행 어휘로 환원돼 결국 사주로 읽힌다(v118 에서 실제로 그랬다). */
@@ -723,10 +794,6 @@ export function readImprint({ saju, ladder, birth, sex, now = new Date(), lat = 
       `상승궁 ${ascSign} 기준 홀사인. 태양 ${sunH}·달 ${moonH}·파트오브포춘 ${pofH}하우스. 삶을 열두 영역으로 쪼개는 축은 사주에 없다. <b>계산 그대로다</b> — 옮긴 말이 없다.`);
   }
   /* ② 인도 — 120년 주기. **사주의 열 해와 마디가 다르다.** 어긋나는 지점이 이 절의 핵심이다 */
-  const dashaTurn = dasha.periods.map((p) => Math.round(p.from)).filter((x) => x >= 12 && x <= 75);
-  const daeunTurn = bands.map((b) => b.from).filter((x) => x >= 12 && x <= 75);
-  const bothTurn = daeunTurn.filter((a2) => dashaTurn.some((d) => Math.abs(d - a2) <= 3));
-  const onlyDasha = dashaTurn.filter((d) => !daeunTurn.some((a2) => Math.abs(d - a2) <= 3));
   {
     const nextBoth = bothTurn.find((x) => x > age), nextOnly = onlyDasha.find((x) => x > age);
     putS("인도 점성술", "시간의 마디가 사주와 어디서 어긋나나", `${dashaTurn.length}번 바뀜`,
@@ -798,12 +865,6 @@ export function readImprint({ saju, ladder, birth, sex, now = new Date(), lat = 
      창업자 요청: "기존 사주와 다르게 해석되는 부분도 알려줘."
      이게 이 문서가 사주 앱과 갈리는 지점이고, 아홉 하늘을 붙인 이유 그 자체다.
      **어긋남이 없으면 없다고 쓴다** — 억지로 만들면 그게 더 나쁘다. */
-  /* 아홉 하늘이 **본문을 실제로 바꾸게** 한다. v118 은 세어만 놓고 아무것도 안 해서
-     "굳이 쟤네 왜 붙였지"가 됐다. 인도 셈과 겹치는 전환 나이를 여든 해 지도에 표식으로 얹는다. */
-  for (const b of bands) {
-    b.doubleTurn = bothTurn.includes(b.from);
-    b.dashaOnly = onlyDasha.some((d) => d >= b.from && d <= b.to);
-  }
   const clash = [];
   if (split) clash.push({ t: "겉과 속", w: `여덟 글자는 너를 <b>${SURFACE[me].w}</b>이라고 해. 그런데 서양 해자리(${sun})는 <b>${INNER[innerEl].w}</b>이라고 해. <b>둘이 안 맞아.</b> 사주만 보면 네 겉모습만 읽고 끝나. 남들이 아는 너와 네가 아는 네가 다른 이유가 여기 있어.`,
     n: fn(`일간 ${me} vs 서양 ${sun}(${ZO_EL[sun]}) — 오행과 사원소가 다른 방향을 가리킨다.`) });
@@ -837,7 +898,7 @@ export function readImprint({ saju, ladder, birth, sex, now = new Date(), lat = 
 
   return {
     age, ageFull, noHour: !!noH, sex: sex || null,
-    domains: D, checks, mateMode, sky9, clash, money, compass,
+    domains: D, checks, mateMode, sky9, clash, money, compass, saga,
     health: { axes, agree: healthAgree, els: uniq },
     given: { married, kids, timeAcc, metAge: metAge ?? null, city: birth.city || null },
     core: {

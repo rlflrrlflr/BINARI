@@ -88,6 +88,13 @@ await onboard(page);
     return /@keyframes impRise/.test(css) && /prefers-reduced-motion/.test(css);
   });
   ck("각인 — 모션이 있고 접근성 설정을 존중한다", motionOk);
+  /* v123 — 같은 값을 서사로도 읽힌다. 단 모호함으로 되돌아가면 안 된다 */
+  ck("각인 — 이야기 절이 있다", /너의 이야기/.test(it) && (await page.locator(".impch").count()) >= 6,
+    `${await page.locator(".impch").count()}장`);
+  ck("각인 — 여정 지도가 그려진다", /관문|보물|시련|조력자/.test(it) && /점선 = 아직 안 온 길/.test(it));
+  ck("각인 — 지금 서 있는 장을 짚는다", (await page.locator(".impch.on").count()) === 1 && /여기/.test(it));
+  ck("각인 — 이야기가 결핍으로 열고 닫는다", /이야기야/.test(it) && /안고도 걸어서야|첫 장이 시작되기 전/.test(it));
+  ck("각인 — 이야기도 모호하지 않다", !/(그릇이|쥘 팔|일 수도|두고 봐야)/.test(it));
   ck("각인 — 비문이 없다", !/(사람|문|손|틀)이 얇/.test(it), (it.match(/.{6}(사람|문|손|틀)이 얇.{6}/) || [""])[0]);
   ck("각인 — 뒤집히는 조건 셋", (await page.locator(".imptrig").count()) === 3);
   ck("각인 — 여든 해가 갈린다", (await page.locator(".impband").count()) >= 6, `${await page.locator(".impband").count()}구간`);

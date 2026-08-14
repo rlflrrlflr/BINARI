@@ -388,6 +388,52 @@ ck("「생김새」에 건강 항목이 없다(4단이 맡는다)", !a.body.some
     [a.body.find((x) => x[0] === "몸"), a.body.find((x) => x[0] === "목소리")].every((x) => /검증되지 않은/.test(a.notes[x[2] - 1])));
 }
 
+/* ── ㉖ 이야기로 읽히는가 — 그리고 그게 모호함으로 되돌아가지 않는가 ──
+   창업자 요청(2026-08-14): "동화나 영화처럼 읽히게 할 수 있을까? 신화나."
+   ⚠ 이건 지난 여섯 판의 **모호함 제거를 되돌리는 게 아니다.**
+     신화는 모호하지 않다 — 신화가 주는 건 모호함이 아니라 **배열**이다.
+     그래서 검사도 둘을 같이 본다: ① 서사 구조가 서는가 ② 문장이 여전히 구체적인가. */
+{
+  const g = a.saga;
+  ck("이야기가 나온다", !!g && !!g.prologue && !!g.epilogue);
+  ck("장이 대운 구간 수와 같다", g.chapters.length === a.bands.length, `${g.chapters.length}장`);
+  ck("장마다 번호·나이·제목·사건이 있다",
+    g.chapters.every((c) => c.i && c.from && c.to && c.title && c.what));
+  /* 서사 구조 — 결핍에서 열고, 관문·시련·보물이 표식으로 붙고, 결핍으로 닫는다 */
+  ck("프롤로그가 결핍으로 연다", g.prologue.includes(a.core.block.plain));
+  ck("에필로그가 그 결핍으로 닫는다", g.epilogue.includes(a.core.block.fix.replace(/<[^>]+>/g, "").slice(0, 10)));
+  ck("지금 서 있는 장을 짚는다", !!g.nowCh && /제\d+장/.test(g.epilogue), g.nowCh ? `제${g.nowCh.i}장` : "없음");
+  ck("남은 장 수를 센다", typeof g.left === "number" && g.left === g.chapters.filter((c) => c.from > a.age).length);
+  /* 표식은 실제 계산에서 나와야 한다 — 지어낸 장식이면 안 된다 */
+  const allMarks = g.chapters.flatMap((c) => c.marks.map((m) => m.k));
+  ck("표식이 실제 계산에서 나온다", allMarks.every((k) => ["관문", "숨은 마디", "시련", "보물", "조력자"].includes(k)),
+    [...new Set(allMarks)].join(",") || "표식 없음");
+  ck("관문 표식은 두 셈이 겹치는 장에만 붙는다",
+    g.chapters.every((c) => c.marks.some((m) => m.k === "관문") === !!a.bands.find((b) => b.from === c.from)?.doubleTurn));
+  ck("보물 표식은 재물 절정 장에만 붙는다",
+    g.chapters.filter((c) => c.marks.some((m) => m.k === "보물")).length === (a.money.peak ? 1 : 0));
+  /* 새 계산을 하지 않았다는 것 — 서사는 배열이지 발명이 아니다 */
+  ck("서사가 새 값을 지어내지 않았다고 각주에 적는다", /다시 배열했을 뿐/.test(a.notes[g.n - 1]));
+  ck("장의 사건이 여든 해 지도와 같은 값이다",
+    g.chapters.every((c, i) => c.what === a.bands[i].event));
+
+  /* ⑳ 의 모호함 금칙을 서사에도 그대로 적용한다 — 신화라고 봐주지 않는다 */
+  const SAGA_TEXT = [g.prologue, g.epilogue, ...g.chapters.flatMap((c) => [c.title, c.what, ...c.marks.map((m) => m.w)])]
+    .map((t) => String(t).replace(/<[^>]+>/g, ""));
+  const VAGUE2 = /(그릇이|쥘\s*팔|팔\s*힘|기운이\s*흐르|일\s*수도|두고\s*봐야)/;
+  ck("이야기도 모호함으로 도망가지 않는다", SAGA_TEXT.every((t) => !VAGUE2.test(t)),
+    SAGA_TEXT.filter((t) => VAGUE2.test(t))[0]?.slice(0, 36) || "깨끗");
+  ck("이야기도 신의 말투를 지킨다", !/[는ㄴ]다\.$|이다\.$/.test(g.prologue.replace(/<[^>]+>/g, "").trim()));
+
+  /* 사람이 바뀌면 이야기도 바뀐다 */
+  const LAD3 = (s2, off) => [...Array(8)].map((_, i) => ({ startAge: s2 + i * 10, endAge: s2 + 9 + i * 10,
+    ganji: ["병진", "을묘", "갑인", "계축", "임자", "신해", "경술", "기유"][(i + off) % 8], el: "토" }));
+  const titles2 = new Set();
+  for (let i = 0; i < 30; i++)
+    titles2.add(readImprint({ ...A, ladder: LAD3(3 + i % 7, i) }).saga.chapters.map((c) => c.title).join("|"));
+  ck("사람이 바뀌면 장 제목도 바뀐다", titles2.size >= 8, `30명 중 ${titles2.size}종`);
+}
+
 const pass = R.filter(Boolean).length;
 console.log(`\n=== 각인 엔진: ${pass}/${R.length} PASS ===`);
 process.exit(pass === R.length ? 0 : 1);
