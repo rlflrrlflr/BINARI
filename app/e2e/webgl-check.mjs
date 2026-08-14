@@ -6,7 +6,7 @@ let pw; try { pw = require("playwright"); } catch { pw = require("/opt/node22/li
 const { chromium } = pw;
 const BASE = process.env.BASE || "http://localhost:4173";
 const R = []; const ck = (n, p, note = "") => { R.push(p); console.log(`${p ? "PASS" : "FAIL"} — ${n}${note ? " · " + note : ""}`); };
-const CALL1 = JSON.stringify({ category: "C", direction: "GO", verdict: "가. 망설이지 마.", against: 2, total: 6 });
+const CALL1 = JSON.stringify({ category: "C", votes: [{ axis: "사주", v: "GO" }, { axis: "달", v: "GO" }, { axis: "별자리", v: "STOP" }], direction: "GO", verdict: "가. 망설이지 마.", against: 2, total: 6 });
 const CALL2 = JSON.stringify({ subline: "이미 답을 알잖아.", reasons: [{ axis: "사주", vote: "GO", text: "목기가 뻗어." }], funLine: "가자.", disclaimer: "" });
 
 async function onboard(page) {
@@ -22,9 +22,7 @@ async function onboard(page) {
   await page.getByRole("button", { name: "다음" }).click();
   await page.getByRole("button", { name: "하늘을 열기" }).click();
   await page.getByRole("button", { name: "응, 기억나" }).click({ timeout: 15000 });
-  await page.waitForSelector("text=요즘의 너는", { timeout: 10000 });
-  for (const t of ["혼자일 때 차오르는 쪽", "아직 오지 않은 것을 보는 쪽", "마음이 먼저 움직이는 쪽", "열어둔 길이 편한 쪽"]) await page.getByRole("button", { name: t }).click();
-  await page.getByRole("button", { name: "마음의 방으로" }).click(); await page.waitForTimeout(400);
+  
   for (const v of ["안정", "성장", "자유", "인정", "관계", "성취"]) await page.getByRole("button", { name: v, exact: true }).click();
   await page.getByRole("button", { name: "여섯 개 골랐어" }).click(); await page.waitForTimeout(200);
   for (const v of ["안정", "성장", "자유"]) await page.getByRole("button", { name: v, exact: true }).click();
@@ -44,13 +42,13 @@ const brightness = (page) => page.evaluate(() => {
   return s / (im.length / 4);
 });
 
-const b = await chromium.launch({ args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
+const b = await chromium.launch({ executablePath: process.env.CHROME_PATH || undefined, args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
 
 // ── ① WebGL 경로 + 픽셀 + 판결 반응 ──
 {
   const page = await b.newPage({ viewport: { width: 430, height: 932 } });
   const errs = []; page.on("pageerror", (e) => errs.push(e.message));
-  await page.addInitScript(({ c1, c2 }) => { window.claude = { complete: async (p) => (p.includes("결론만") ? c1 : c2) }; }, { c1: CALL1, c2: CALL2 });
+  await page.addInitScript(({ c1, c2 }) => { window.claude = { complete: async (p) => (p.includes("[이미 확정된 판결]") ? c2 : c1) }; }, { c1: CALL1, c2: CALL2 });
   await onboard(page);
   await page.waitForTimeout(2200); // 어셈블 진행
   const renderer = await page.evaluate(() => document.querySelector("canvas[data-renderer]")?.getAttribute("data-renderer"));
@@ -58,7 +56,9 @@ const b = await chromium.launch({ args: ["--use-gl=angle", "--use-angle=swiftsha
   const lum1 = await brightness(page);
   ck("① 입자 실제 렌더(평균 밝기 > 1)", lum1 > 1, "avg=" + lum1.toFixed(2));
   await page.locator("textarea.qbox").fill("이 길로 가도 될까?"); await page.waitForTimeout(200);
-  await page.getByRole("button", { name: "가볍게 물을래" }).click();
+  await page.getByRole("button", { name: "판결을 청한다" }).click();
+  await page.waitForSelector("text=동전 셋", { timeout: 5000 });
+  await page.getByRole("button", { name: "한 번에 던지기" }).click();
   let ok = false;
   for (let i = 0; i < 40; i++) { if (((await page.locator(".vv").allTextContents())[0] || "").includes("망설이지 마")) { ok = true; break; } await page.waitForTimeout(300); }
   ck("① WebGL 하에서 판결 L1 렌더", ok);

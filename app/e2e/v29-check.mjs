@@ -6,15 +6,15 @@ let pw; try { pw = require("playwright"); } catch { pw = require("/opt/node22/li
 const { chromium } = pw;
 const BASE = process.env.BASE || "http://localhost:4173";
 const R = []; const ck = (n, p, note = "") => { R.push(p); console.log(`${p ? "PASS" : "FAIL"} — ${n}${note ? " · " + note : ""}`); };
-const CALL1 = JSON.stringify({ category: "C", tone: "단호", direction: "GO", verdict: "가. 망설이지 마.", against: 2, total: 6 });
+const CALL1 = JSON.stringify({ category: "C", votes: [{ axis: "사주", v: "GO" }, { axis: "달", v: "GO" }, { axis: "별자리", v: "STOP" }], tone: "단호", direction: "GO", verdict: "가. 망설이지 마.", against: 2, total: 6 });
 const CALL2 = JSON.stringify({ subline: "이미 답을 알잖아.", reasons: [{ axis: "사주", vote: "GO", text: "목기가 뻗어." }], funLine: "가자.", disclaimer: "" });
 
-const b = await chromium.launch();
+const b = await chromium.launch((process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}));
 const page = await b.newPage({ viewport: { width: 430, height: 932 } });
 page.setDefaultTimeout(9000);
 const errs = [];
 page.on("pageerror", e => errs.push(e.message));
-await page.addInitScript(({ c1, c2 }) => { window.claude = { complete: async (p) => (p.includes("결론만") ? c1 : c2) }; }, { c1: CALL1, c2: CALL2 });
+await page.addInitScript(({ c1, c2 }) => { window.claude = { complete: async (p) => (p.includes("[이미 확정된 판결]") ? c2 : c1) }; }, { c1: CALL1, c2: CALL2 });
 
 // ── 온보딩: MBTI 화면까지 ──
 await page.goto(BASE); await page.waitForTimeout(900);
@@ -29,22 +29,17 @@ await page.getByRole("button", { name: "기억났어" }).click();
 await page.getByRole("button", { name: "다음" }).click();
 await page.getByRole("button", { name: "하늘을 열기" }).click();
 
-// ── ① v30 순차: 회상 나레이션 단계 → "응, 기억나" 탭 → 문항 단계(나레이션 숨김) ──
+// ── ① 회상 나레이션 → "응, 기억나" → 곧장 마음의 방 (v114: 그 사이에 있던 4문항 제거) ──
 await page.waitForSelector("text=너였지", { timeout: 12000 });
-const mentionOnRecall = await page.getByText("너였지", { exact: false }).isVisible().catch(() => false);
-ck("① 회상 단계에서 나레이션 노출", mentionOnRecall);
-ck("① 회상 단계에선 문항 미노출(순차)", (await page.getByText("요즘의 너는", { exact: false }).count()) === 0);
+ck("① 회상 단계에서 나레이션 노출", await page.getByText("너였지", { exact: false }).isVisible().catch(() => false));
 await page.getByRole("button", { name: "응, 기억나" }).click();
-await page.waitForSelector("text=요즘의 너는", { timeout: 8000 });
-const mentionAfter = await page.getByText("너였지", { exact: false }).isVisible().catch(() => false);
-ck("① 문항 단계에선 나레이션 숨김", !mentionAfter);
-await page.getByRole("button", { name: "혼자일 때 차오르는 쪽" }).click(); await page.waitForTimeout(300);
-const q2Visible = await page.getByText("네 눈은 어디를", { exact: false }).isVisible().catch(() => false);
-ck("① 선택은 계속 진행(2번째 문항 노출)", q2Visible);
+await page.waitForSelector("text=마음의 방", { timeout: 10000 });
+ck("① 나레이션이 사라진다", !(await page.getByText("너였지", { exact: false }).isVisible().catch(() => false)));
+// v114: "무슨 말인지 모르겠다"는 제보가 많아 4문항을 통째로 뺐다. 되돌아오면 이 검사가 운다.
+ck("① 성격 문항이 없다", (await page.getByText("기운을 어디서", { exact: false }).count()) === 0
+  && (await page.getByRole("button", { name: "혼자일 때 차오르는 쪽" }).count()) === 0);
+ck("① 회상 다음이 곧장 마음의 방", await page.getByText("마음의 방", { exact: false }).isVisible());
 
-// 나머지 MBTI + 가치 진행
-for (const t of ["아직 오지 않은 것을 보는 쪽", "마음이 먼저 움직이는 쪽", "열어둔 길이 편한 쪽"]) await page.getByRole("button", { name: t }).click();
-await page.getByRole("button", { name: "마음의 방으로" }).click(); await page.waitForTimeout(400);
 for (const v of ["안정", "성장", "자유", "인정", "관계", "성취"]) await page.getByRole("button", { name: v, exact: true }).click();
 await page.getByRole("button", { name: "여섯 개 골랐어" }).click(); await page.waitForTimeout(200);
 for (const v of ["안정", "성장", "자유"]) await page.getByRole("button", { name: v, exact: true }).click();
@@ -64,7 +59,9 @@ await page.waitForTimeout(300);
 
 // ── ③ 정독 스로틀 하에서 판결 렌더 정상 ──
 await page.locator("textarea.qbox").fill("이 길로 가도 될까?"); await page.waitForTimeout(300);
-await page.getByRole("button", { name: "가볍게 물을래" }).click();
+await page.getByRole("button", { name: "판결을 청한다" }).click();
+  await page.waitForSelector("text=동전 셋", { timeout: 5000 });
+  await page.getByRole("button", { name: "한 번에 던지기" }).click();
 let verdictOk = false;
 for (let i = 0; i < 40; i++) { if (((await page.locator(".vv").allTextContents())[0] || "").includes("망설이지 마")) { verdictOk = true; break; } await page.waitForTimeout(300); }
 ck("③ 스로틀 중에도 판결 L1 렌더", verdictOk);
