@@ -932,6 +932,24 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
       </svg>
     );
   };
+  const YearBar = () => {
+    const ys = r.work?.years; if (!ys?.length) return null;
+    const bw = (W - 20) / ys.length;
+    return (
+      <svg viewBox={`0 0 ${W} 78`} width="100%" height="78" className="impsvg drawin" role="img" aria-label="여섯 해의 순역">
+        {ys.map((y, i) => {
+          const h = 6 + Math.abs(y.f) * 16;
+          return <g key={i}>
+            <rect x={10 + i * bw + 3} y={y.f >= 0 ? 44 - h : 44} width={bw - 6} height={h} rx="2"
+              fill={y.f > 0 ? "#5b8fd4" : y.f < 0 ? "#a83229" : "#6f6580"} opacity={i === 0 ? 1 : 0.82} />
+            <text x={10 + i * bw + bw / 2} y={66} fontSize="8" fill={i === 0 ? "#f5d98b" : "#8a7f95"} textAnchor="middle">{y.year}</text>
+          </g>;
+        })}
+        <line x1="10" y1="44" x2={W - 10} y2="44" stroke="#c9b98f44" />
+        <text x={W - 10} y={13} fontSize="7" fill="#6f6580" textAnchor="end">위 = 움직이기 좋은 해</text>
+      </svg>
+    );
+  };
   const CoreFig = () => (
     <svg viewBox="0 0 320 116" width="100%" height="116" className="impsvg" role="img" aria-label="겉과 속">
       <rect x="8" y="20" width="118" height="66" rx="4" fill="none" stroke="#8a7f95" strokeWidth="1.4" />
@@ -1060,6 +1078,28 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
                 <b>{x.from}~{x.to}</b><span>{x.how}</span></div>))}</div></>}
         </div>
       ))}
+
+      {r.work && <>
+        <p className="imph">직장생활 <i>어떤 일이 맞나가 아니라, 조직에서 어떻게 굴러가나</i></p>
+        <p className="impp">맞는 직업을 골라도 <b>조직에서 못 버티는 사람</b>이 있어. 축이 다르거든.
+          여긴 <b>네가 어떻게 일하고, 누구랑 맞고, 어디까지 가고, 언제 움직이나</b>를 봐.</p>
+        {r.work.rows.map(Row)}
+        <p className="imph2">언제 움직이나 <i>여섯 해</i></p>
+        <YearBar />
+        <div className="impyrs">
+          {r.work.years.map((y, i) => (
+            <div className={"impyr" + (y.f > 0 ? " up" : y.f < 0 ? " dn" : "")} key={i}>
+              <b>{y.year}</b><span>{y.w}</span></div>
+          ))}
+        </div>
+        <p className="impcap">
+          {r.work.goYear ? <><b>{r.work.goYear.year}년</b>이 옮기기 가장 좋은 해야. </>
+            : <>여섯 해 안에 <b>자리가 열리는 해가 없어.</b> 지금 자리에서 값을 올리는 게 남아. </>}
+          {r.work.badYear ? <><b>{r.work.badYear.year}년</b>은 피해 — 움직이면 손해거나 밀려서 움직이게 돼. </> : null}
+          {r.work.nextBand ? <>십 년 판 자체는 <b>{r.work.nextBand.from}세</b>에 바뀌어({r.work.nextBand.title}).</> : null}
+          {r.work.moveBand ? <> 그리고 <b>{r.work.moveBand.from}~{r.work.moveBand.to}세</b>에 {r.work.moveBand.why} 한 번 밀려서 움직이게 돼.</> : null}
+          <Ref n={r.work.n} /></p>
+      </>}
 
       {r.compass && (r.compass.self || r.compass.mate) && <Compass />}
       {r.mate && <>
@@ -2363,7 +2403,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v123 · 너의 이야기";
+const APP_VER = "v124 · 직장생활";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -4569,6 +4609,14 @@ const CSS = `
 .impmark b{color:#f0d0a8}
 .impepi{margin:14px 0 4px;padding:13px 14px;border-radius:9px;border:1px solid #c98f3d55;background:#c98f3d10;font-size:13.5px;line-height:1.95;color:#d8cfe8}
 .impepi b{color:#f0e2b8}
+.imph2{font-size:12px;color:#c9b98f;letter-spacing:.06em;margin:16px 0 6px}
+.imph2 i{font-style:normal;font-size:9.5px;color:#6f6580;margin-left:8px;letter-spacing:.1em}
+.impyrs{margin:0 0 4px}
+.impyr{display:flex;gap:10px;align-items:baseline;padding:6px 2px;border-bottom:1px solid #6f658022;font-size:12px}
+.impyr b{flex:0 0 44px;color:#8a7f95;font-weight:500;font-variant-numeric:tabular-nums}
+.impyr span{color:#c8bcd8}
+.impyr.up b,.impyr.up span{color:#9dc0ee}
+.impyr.dn b,.impyr.dn span{color:#e0a094}
 .impwest{margin:9px 0 0;padding:8px 10px;border-left:2px solid #5b8fd455;background:#5b8fd40d;border-radius:0 6px 6px 0;font-size:11.5px;line-height:1.75;color:#9dc0ee}
 .impwest b{color:#c5dcf7}
 .impcap{font-size:11px;line-height:1.75;color:#8a7f95;margin:2px 0 8px}

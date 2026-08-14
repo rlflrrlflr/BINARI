@@ -95,6 +95,13 @@ await onboard(page);
   ck("각인 — 지금 서 있는 장을 짚는다", (await page.locator(".impch.on").count()) === 1 && /여기/.test(it));
   ck("각인 — 이야기가 결핍으로 열고 닫는다", /이야기야/.test(it) && /안고도 걸어서야|첫 장이 시작되기 전/.test(it));
   ck("각인 — 이야기도 모호하지 않다", !/(그릇이|쥘 팔|일 수도|두고 봐야)/.test(it));
+  /* v124 직장생활 — 「일」(직업 선택)과 다른 축이다 */
+  ck("각인 — 직장생활 절이 있다", /직장생활/.test(it) &&
+    ["일 스타일", "어느 위치까지", "잘 맞는 상사", "한 곳에 얼마나", "번아웃 신호"].every((k) => it.includes(k)));
+  ck("각인 — 이직 시기를 여섯 해로 짚는다", (await page.locator(".impyr").count()) === 6,
+    `${await page.locator(".impyr").count()}행`);
+  ck("각인 — 해마다 순역 막대가 그려진다", /위 = 움직이기 좋은 해/.test(it));
+  ck("각인 — 좋은 해가 없으면 없다고 말한다", /옮기기 가장 좋은 해|자리가 열리는 해가 없어/.test(it));
   ck("각인 — 비문이 없다", !/(사람|문|손|틀)이 얇/.test(it), (it.match(/.{6}(사람|문|손|틀)이 얇.{6}/) || [""])[0]);
   ck("각인 — 뒤집히는 조건 셋", (await page.locator(".imptrig").count()) === 3);
   ck("각인 — 여든 해가 갈린다", (await page.locator(".impband").count()) >= 6, `${await page.locator(".impband").count()}구간`);
