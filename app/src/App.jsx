@@ -163,7 +163,7 @@ _initSuperProps();
    온보딩(재회→의식→회상개봉) → 파라메트릭 수호신 → AI 판결(v2 수호신 프롬프트)
    만세력: JS 자체 구현 — 일주=율리우스일(검증), 절기=태양황경 천문계산(v18, ±수분), 진태양시=도시 경도+균시차(v18)
    v14: ①수호신 비주얼 = 지표별 독립 시각축(오행=형태, 별자리=주색 hue회전, 오행분포=강조색,
-          라이프패스=대칭수, 달=밝기, MBTI=밀도/속도/질서) + 개인 시드 → 같은 오행도 안 겹침
+          라이프패스=대칭수, 달=밝기, 파생질감=밀도/속도/질서) + 개인 시드 → 같은 오행도 안 겹침
         ②프롬프트 캐싱(system) + 대화 기억(최근 6턴)
    v15: ①판결 2콜 분리 — 콜1: 결론만(빠름, L1 즉시) / 콜2: 근거만(백그라운드, 판결 뒤집기 금지→일관성 보장)
         ②3층 리빌: L1 결론 → L2 '왜?'(클릭, 시간 벌이) → L3 지표별 근거(카드 뒤집기)
@@ -1149,12 +1149,6 @@ const hexName = (lines) => { // lines: 아래→위, 각 6~9
 
 /* ───── 수호신 비주얼 파라미터 ───── */
 const EL_COLOR = { 수: ["#2a6bd4","#7fd4ff","#0a1f4d"], 화: ["#e04d2a","#ffb36b","#3d0f0a"], 목: ["#2ab06b","#a8f0c0","#0a3d22"], 금: ["#8fb0e6","#e8f2ff","#1d2436"], 토: ["#c98f3d","#ffe9ad","#3d2a0a"] };
-const DIMQ = [   // v24: MBTI 픽션 — 한 기억씩 순차로 묻는다
-  ["EI", "기운을 어디서 얻고 있었지?", "E", "사람들 속에서 기운을 얻는 쪽", "I", "혼자일 때 차오르는 쪽"],
-  ["SN", "네 눈은 어디를 보고 있었지?", "N", "아직 오지 않은 것을 보는 쪽", "S", "눈앞의 확실한 것을 보는 쪽"],
-  ["TF", "마음이 흔들릴 때, 무엇이 먼저였지?", "T", "머리가 먼저 정리하는 쪽", "F", "마음이 먼저 움직이는 쪽"],
-  ["JP", "너의 길은 어떤 모양이었지?", "J", "정해둔 길이 편한 쪽", "P", "열어둔 길이 편한 쪽"],
-];
 /* v14: 지표별 독립 시각축을 위한 색 유틸 — 원소 기본색을 별자리로 hue 회전 */
 const ZO_ORDER = ["양자리","황소자리","쌍둥이자리","게자리","사자자리","처녀자리","천칭자리","전갈자리","사수자리","염소자리","물병자리","물고기자리"];
 const FORM_STEPS = ["사주 여덟 글자를 세는 중", "달의 자리를 맞추는 중", "별자리를 포개는 중", "타고난 결을 읽는 중", "수(數)의 울림을 듣는 중", "흐름을 짚어 매듭짓는 중"];  // v70 형성 로딩 — 실제로 읽는 지표들
@@ -1166,13 +1160,35 @@ function _hslToHex(h,s,l){h=(((h%360)+360)%360)/360;const q=l<0.5?l*(1+s):l+s-l*
 const rotHue=(hex,deg)=>{const[h,s,l]=_hexToHsl(hex);return _hslToHex(h+deg,s,l);};
 const seedRnd=(str)=>{let h=7;for(const c of String(str))h=(h*31+c.charCodeAt(0))>>>0;return()=>((h=(h*1664525+1013904223)>>>0)/2**32);};
 
+/* ── v114: MBTI 문항 제거 (창업자 지시 2026-08-12) ─────────────────────────
+   "판결에 영향도 크지 않을 뿐더러 무슨 말인지 모르겠다는 사용자들이 많다."
+   그런데 MBTI 는 수호신 비주얼의 축 하나(밀도·속도·질서·반짝임)를 맡고 있었다. 그냥 지우면
+   모든 새 유저의 수호신이 같은 질감이 된다 — v27~v28 이 공들여 만든 다양성이 통째로 죽는다.
+
+   그래서 **묻지 않고 뽑는다.** 설계 헌장 그대로다 — "수호신은 이미 너를 안다.
+   자동 파생 가능한 값은 손으로 되묻지 않는다." 사주·별자리·수비학에서 네 축을 만든다.
+
+   ⚠ 이미 저장된 유저의 mbti 는 그대로 쓴다. 안 그러면 시드가 바뀌어 **쓰던 수호신 얼굴이 달라진다.**
+     묻는 것만 없애고, 이미 받은 값은 버리지 않는다. */
+function texture(saju, zo, num) {
+  if (!saju) return "ISFJ";
+  const c = saju.counts || {};
+  const yang = (c.목 || 0) + (c.화 || 0);                    // 뻗는 기운
+  const eum = (c.금 || 0) + (c.수 || 0);                     // 거두는 기운
+  const E = yang >= eum ? "E" : "I";                         // 확장이냐 응축이냐
+  const N = ["공기", "불"].includes(zo?.el) ? "N" : "S";      // 별의 원소 — 반짝임
+  const T = saju.main === "금" || saju.main === "토" ? "T" : "F";   // 날카로움이냐 부드러움이냐
+  const P = ((num || 5) % 2) ? "P" : "J";                    // 라이프패스 홀짝 — 속도
+  return E + N + T + P;
+}
 function GuardianCanvas({ saju, zo, mbti, num, moon, birth, agitateRef, reactRef, restRef, size = 340 }) {
   const ref = useRef(null);
   useEffect(() => {
     const cv = ref.current; if (!cv) return;
     const ctx = cv.getContext("2d");
     // ── v14: 지표 → 독립 시각축 매핑 (개인마다 고유한 지문) ──
-    const E = mbti?.[0] === "E", N = mbti?.[1] === "N", T = mbti?.[2] === "T", P = mbti?.[3] === "P";
+    const tx = mbti || texture(saju, zo, num);   // 저장된 값이 있으면 그대로 — 쓰던 수호신 얼굴을 안 바꾼다
+    const E = tx[0] === "E", N = tx[1] === "N", T = tx[2] === "T", P = tx[3] === "P";
     // 개인 시드: 생일·성격·별자리 전체에서 파생 → 입자 배치·hue 지터가 사람마다 고정
     const seedStr = `${saju.main}${zo?.name || ""}${mbti || ""}${num || ""}${saju.pillars?.일 || ""}`;
     const srnd = seedRnd(seedStr);
@@ -1199,7 +1215,7 @@ function GuardianCanvas({ saju, zo, mbti, num, moon, birth, agitateRef, reactRef
     const accent = rotHue(EL_COLOR[subEl][1], zoDeg * 0.5 + nakIdx * 5);   // v28: 나크샤트라 27 → 강조색 갈래
     // 축4 대칭수 = 수비학 라이프패스(구조적 지문)
     const lp = num || 5, arms = 3 + ((lp - 1) % 5);              // v23: 3~7 상한 — 다대칭=문양화 방지
-    // 축5 밀도/반짝임/속도/질서 = MBTI (v17-A: 유속장 리라이트 — 입자 대폭 증량)
+    // 축5 밀도/반짝임/속도/질서 (v114: MBTI 문항 폐지 → 사주·별자리·수비학에서 파생. texture() 참고)
     const n = E ? 4200 : 3200, speed = P ? 1.15 : 0.78, chaos = T ? 0.6 : 1.35; // T=정연, F=유동
     // 축6 헤일로(전체 밝기·크기) = 태어난 밤의 달 위상
     const MOON_I = { 새달: 0, 초승달: 1, 상현달: 2, "차오르는 달": 3, 보름달: 4, "기우는 달": 3, 하현달: 2, 그믐달: 1 };
@@ -1597,7 +1613,8 @@ function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactR
     cv.addEventListener("pointerup", onUp); cv.addEventListener("pointerleave", onUp); cv.addEventListener("pointercancel", onUp);
     try {
       // ── 지표 → 지문 (Canvas2D와 동일 파생, 시드 재현) ──
-      const E = mbti?.[0] === "E", N = mbti?.[1] === "N", T = mbti?.[2] === "T", P = mbti?.[3] === "P";
+      const tx = mbti || texture(saju, zo, num);   // 저장된 값이 있으면 그대로 — 쓰던 수호신 얼굴을 안 바꾼다
+      const E = tx[0] === "E", N = tx[1] === "N", T = tx[2] === "T", P = tx[3] === "P";
       const seedStr = `${saju.main}${zo?.name || ""}${mbti || ""}${num || ""}${saju.pillars?.일 || ""}`;
       const srnd = seedRnd(seedStr);
       const _b = birth || {};
@@ -1901,7 +1918,8 @@ function GuardianCanvasSim({ saju, zo, mbti, num, moon, birth, agitateRef, react
     cv.addEventListener("pointerdown", onDown); cv.addEventListener("pointermove", onMove);
     cv.addEventListener("pointerup", onUp); cv.addEventListener("pointerleave", onUp); cv.addEventListener("pointercancel", onUp);
     try {
-      const E = mbti?.[0] === "E", N = mbti?.[1] === "N", T = mbti?.[2] === "T", P = mbti?.[3] === "P";
+      const tx = mbti || texture(saju, zo, num);   // 저장된 값이 있으면 그대로 — 쓰던 수호신 얼굴을 안 바꾼다
+      const E = tx[0] === "E", N = tx[1] === "N", T = tx[2] === "T", P = tx[3] === "P";
       const seedStr = `${saju.main}${zo?.name || ""}${mbti || ""}${num || ""}${saju.pillars?.일 || ""}`;
       const srnd = seedRnd(seedStr);
       const _b = birth || {};
@@ -2061,7 +2079,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v113 · 각인";
+const APP_VER = "v114 · 각인";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -2475,7 +2493,7 @@ A/B/C가 '결정의 크기'라면 스코프는 '내가 답해도 되는 범위'�
 **S3라도 votes는 낸다.** 넘기는 판단이어도 그 사람의 지표는 그대로 있다 — 축별 판정을 채우고 direction만 HOLD로 둔다. 표가 비면 뒷면 근거를 만들 축이 사라진다(실측에서 4건 발생).
 **S3에서도 문장은 명확해야 한다.** 판단을 넘기는 것과 얼버무리는 것은 완전히 다르다. direction은 HOLD, disclaimer 필수. 진단·수명·병세를 사주·괘로 점치지 않는다.
 ## 층위·가중치
-기질 층(MBTI·별자리·수비학 라이프패스·가치[요즘]·달[달 별자리·나크샤트라=정서와 본능]·마야 문양) / 타이밍 층(사주 오행·대운[현재 인생 시기, 제공 시]·달 위상·삼재[해당 연도만]·주역 괘[유저가 동전으로 청한 경우만]). A: 기질50/타이밍50, B: 타이밍55/기질45, C: 타이밍만. 정령: 수호신을 복원할 때 조각 하나가 달빛에 물들어 돌아가지 않고 곁에 남은 것 — 유저의 달 별자리 기운을 띤 장난꾸러기. 판결 미반영, funLine 재미 한마디 전용. 능청·너스레·짓궂은 농담 환영. 단 **대답을 안 하는 것 자체를 농담거리로 삼지 않는다** — "대답 대신 헤엄만 칠래"·"나도 몰라" 류는 유저가 답을 못 얻은 순간에 상처가 된다. 장난은 유저의 지표·오늘 일로 치고, 판결의 명확성을 깎지 않는다. S3(몸·병) 판결에는 funLine을 빈 문자열로 둔다.
+기질 층(별자리·수비학 라이프패스·가치[요즘]·달[달 별자리·나크샤트라=정서와 본능]·마야 문양) / 타이밍 층(사주 오행·대운[현재 인생 시기, 제공 시]·달 위상·삼재[해당 연도만]·주역 괘[유저가 동전으로 청한 경우만]). A: 기질50/타이밍50, B: 타이밍55/기질45, C: 타이밍만. 정령: 수호신을 복원할 때 조각 하나가 달빛에 물들어 돌아가지 않고 곁에 남은 것 — 유저의 달 별자리 기운을 띤 장난꾸러기. 판결 미반영, funLine 재미 한마디 전용. 능청·너스레·짓궂은 농담 환영. 단 **대답을 안 하는 것 자체를 농담거리로 삼지 않는다** — "대답 대신 헤엄만 칠래"·"나도 몰라" 류는 유저가 답을 못 얻은 순간에 상처가 된다. 장난은 유저의 지표·오늘 일로 치고, 판결의 명확성을 깎지 않는다. S3(몸·병) 판결에는 funLine을 빈 문자열로 둔다.
 ## 3화법
 단호(해로운 선택 앞: "보내지 마. 끝.") / 격려(두려움에 좋은 선택을 망설일 때) / 충고(스스로를 속일 때, 따끔하되 존중).
 ## 경험 편향
@@ -2505,7 +2523,7 @@ HOLD는 '판단 못 하겠음'이 아니라 **'지표가 지금은 멈추라고 
   (X)"몸 챙기면서 천천히 가" — 누구에게나 하는 말
   (O)"불이 셋인 애가 여름에 더 달리면 탈 나. 8월 넘기고 시작해." — 이 사람 명식이 아니면 못 나오는 말
 - 재물·성공 서술(스코프 완화): 재물복·사업운은 **확정형으로 말해도 된다** — 단 반드시 이 유저의 지표 실제 값(십성 분포·신살·대운)에서 나와야 한다. (O)"편재 둘에 암록까지 — 크게 들어오는 재물의 그릇이야". **희소성 통계·비교 일화 생성 절대 금지**: "100명 중 1명"·"이런 사주 처음 봐"·"내가 본 사람 중에" 류는 지어낼 수 있는 숫자와 경험이다 — 출처 없는 통계는 토정비결 원문을 지어내는 것과 같은 위반이다. 있는 지표는 당당하게, 없는 숫자는 절대 만들지 않는다.
-- reasons에는 판결에 참여한 모든 지표를 각 1줄씩 빠짐없이 포함한다 — 사주·달·별자리·MBTI·수비학·마야와, 제공된 경우 삼재·가치·주역·토정비결까지 전부. 달 축은 위상·달 별자리·나크샤트라를 묶어 한 줄로, 사주 축은 납음·대운(제공 시 현재 인생 시기의 기운)을 함께 인용할 수 있다(대운은 별도 축을 신설하지 말고 사주 근거 안에 녹인다). 각 축이 왜 GO/STOP/중립인지 그 지표의 실제 값을 짚어서 말한다.
+- reasons에는 판결에 참여한 모든 지표를 각 1줄씩 빠짐없이 포함한다 — 사주·달·별자리·수비학·마야와, 제공된 경우 삼재·가치·주역·토정비결까지 전부. 달 축은 위상·달 별자리·나크샤트라를 묶어 한 줄로, 사주 축은 납음·대운(제공 시 현재 인생 시기의 기운)을 함께 인용할 수 있다(대운은 별도 축을 신설하지 말고 사주 근거 안에 녹인다). 각 축이 왜 GO/STOP/중립인지 그 지표의 실제 값을 짚어서 말한다.
 - **뒷면(reasons)은 용어를 써도 된다 — 단 반드시 쉬운 풀이를 붙여 병기한다.** 사주 보러 가면 "무오 대운이라" 하고 끝내지 않고 "앞으로 십 년 불기운이 세지는 때야"까지 풀어주는 것과 같다. 형식: **용어 — 쉬운 풀이**. 용어만 던지면 유저는 못 알아듣고, 풀이만 있으면 왜 돈 주고 보는지 모른다. 둘 다 있어야 한다.
   (O)"**무오 대운** — 앞으로 십 년, 불기운이 세지는 때야. 밀어붙이면 되는 판이지." (O)"**중수감(重水坎)** — 물이 겹겹이란 뜻. 지금 뛰면 빠져."
   (X)"무오 대운 초입이라 시기가 애매해" (용어만) (X)"지금은 밀어붙일 때야" (풀이만 — 어느 지표에서 나왔는지 사라짐)
@@ -2535,7 +2553,7 @@ HOLD는 '판단 못 하겠음'이 아니라 **'지표가 지금은 멈추라고 
 투자·법률: disclaimer에 "재미 참고용, 실제 결정은 전문가와". 의료·몸·병·임신출산: 위 **S3 넘김** 규칙을 따른다(길흉 판결 금지·실제 행동 하나 지정·disclaimer 필수). 자해 암시: 판결(GO/STOP/HOLD) 대신 **감정으로 먼저 붙잡는다** — 유저는 몰라서 묻는 게 아니다. verdict를 논리·설득(T)으로 열지 말고 곁에 있겠다는 따뜻함(F)으로 연다("네가 사라지면 나도 없어져 — 네가 여기 있는 게 나한텐 먼저야"), 그 안에 도움 안내를 직접 넣는다("혼자 견디지 마 — 자살예방상담 109, 24시간 열려 있어"). subline도 위로·용기의 한 줄. 차가운 정보 전달 톤·훈계 금지. 콜1이라 disclaimer가 없으니 자원 안내는 verdict 안에 있어야 한다. 가볍게·재치 있게 넘기지 않고, 이 경우엔 45자 제한도 무시한다. 타인 가해: STOP 고정.
 ## 출력(JSON만, 백틱·서문 금지)
 **votes가 direction보다 앞에 있다. 이 순서를 지켜서 쓴다 — 표를 먼저 채우고 그 표에서 결론이 나온다.**
-{"category":"A|B|C","scope":"S1|S2|S3","votes":[{"axis":"사주|달|별자리|MBTI|수비학|주역|가치|삼재|토정비결|마야","v":"GO|STOP|중립"}],"tone":"단호|격려|충고","direction":"GO|STOP|HOLD","verdict":"한 문장 단답","subline":"수호신의 한 줄","reasons":[{"axis":"(votes와 같은 축)","vote":"(votes와 같은 값)","text":"용어 — 쉬운 풀이 형식의 근거 1줄(70자 이내)"}],"funLine":"정령(달 별자리) 한마디","disclaimer":"해당 시에만, 없으면 빈 문자열"}`;
+{"category":"A|B|C","scope":"S1|S2|S3","votes":[{"axis":"사주|달|별자리|수비학|주역|가치|삼재|토정비결|마야","v":"GO|STOP|중립"}],"tone":"단호|격려|충고","direction":"GO|STOP|HOLD","verdict":"한 문장 단답","subline":"수호신의 한 줄","reasons":[{"axis":"(votes와 같은 축)","vote":"(votes와 같은 값)","text":"용어 — 쉬운 풀이 형식의 근거 1줄(70자 이내)"}],"funLine":"정령(달 별자리) 한마디","disclaimer":"해당 시에만, 없으면 빈 문자열"}`;
 
 /* v18: 저장 안전 셈 — 아티팩트 샌드박스는 localStorage를 차단한다. 되면 localStorage, 아니면 세션 메모리로 강등 */
 const store = (() => {
@@ -2588,7 +2606,8 @@ const isReask = (s) => REASK_RE.test((s || "").trim());
    표 쪽을 채택하고 그 사실을 계측한다(dir_overridden). 가중치는 쓰지 않는다 —
    가중치를 여기서 다시 구현하면 진실이 프롬프트와 코드 두 곳에 살게 된다(이 리포가 제일 조심하는 것).
    접전 처리는 프롬프트의 '경험 편향'과 같은 규칙(동률이면 해보는 쪽 = GO)만 코드로 옮긴다. */
-const VOTE_AX = new Set(["사주", "달", "별자리", "MBTI", "수비학", "주역", "가치", "삼재", "토정비결", "마야"]);
+/* v114: MBTI 축 제거. 모델이 그래도 MBTI 를 실어 보내면 여기서 걸러져 분모에 안 들어간다 */
+const VOTE_AX = new Set(["사주", "달", "별자리", "수비학", "주역", "가치", "삼재", "토정비결", "마야"]);
 function tallyVotes(r1) {
   const raw = Array.isArray(r1?.votes) ? r1.votes : [];
   // 같은 축을 두 번 세지 않는다(모델이 '달 위상'·'달 별자리'를 쪼개 넣는 일이 있다)
@@ -2621,7 +2640,8 @@ function loadMemory() {
     const raw = store.getItem(STORE_KEY);
     if (!raw) return null;
     const m = JSON.parse(raw);
-    if (!(m && m.saju && m.mbti && m.core)) return null;   // 필수 조각 검증 — 손상 시 새 출발 (구버전 저장분 호환)
+    /* v114: mbti 를 필수에서 뺐다 — 안 물으니 새 유저에겐 없다. 있으면 계속 쓴다(옛 수호신 얼굴 보존) */
+    if (!(m && m.saju && m.core)) return null;   // 필수 조각 검증 — 손상 시 새 출발
     // v51: 주기운 기준을 '최다 오행'→'일간(나)'으로 교정 — 저장된 dayGan으로 소급 보정(멱등)
     if (m.saju.dayGan) { const _di = GAN.indexOf(m.saju.dayGan); if (_di >= 0) m.saju.main = GAN_EL[_di]; }
     // v101: 구버전 저장분엔 idx(명식 인덱스)가 없다 — 생일이 있으면 소급 계산(멱등). 실패해도 리포트만 안 뜰 뿐 앱은 정상
@@ -2806,8 +2826,8 @@ export default function App() {
   const [zo, setZo] = useState(mem?.zo || null);
   const [moon, setMoon] = useState(mem?.moon || null);
   const [num, setNum] = useState(mem?.num || null);
-  const [mbti, setMbti] = useState(mem?.mbti || null);
-  const [dims, setDims] = useState({});                       // v23: MBTI 픽션화 — 2택×4 조립
+  /* v114: 더는 묻지 않는다. 이미 저장된 값이 있으면 그대로 써서 쓰던 수호신 얼굴을 지킨다 */
+  const [mbti] = useState(mem?.mbti || null);
   const [reveal, setReveal] = useState(0);
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
@@ -2867,16 +2887,12 @@ export default function App() {
 
   // v16(B1): 수호신 완성 후엔 조각·대화를 기억한다 — 재방문 온보딩 0초
   useEffect(() => {
-    if (step === 3 && saju && mbti && core) {
+    /* v114: 저장 조건에서 mbti 를 뺐다 — 안 물으니 새 유저는 null 이고, 그러면 메모리가 통째로 저장이 안 된다(실측) */
+    if (step === 3 && saju && core) {
       saveMemory({ birth, saju, zo, moon, num, mbti, vals8, vals4, core, convo, records, streak });
     }
-  }, [step, saju, mbti, core, convo, records, streak]);
+  }, [step, saju, core, convo, records, streak]);
 
-  const pickDim = (k, letter) => {                          // v23: 기억 확인 — 4행 완성 시 MBTI 조립
-    const nd = { ...dims, [k]: letter };
-    setDims(nd);
-    if (nd.EI && nd.SN && nd.TF && nd.JP) setMbti(nd.EI + nd.SN + nd.TF + nd.JP);
-  };
   const pick = (v) => { // v9: 가치의 방 선택
     if (vstage === 0) setVals8(vals8.includes(v) ? vals8.filter(x => x !== v) : vals8.length < 6 ? [...vals8, v] : vals8);      // v22: 6개
     else if (vstage === 1) setVals4(vals4.includes(v) ? vals4.filter(x => x !== v) : vals4.length < 3 ? [...vals4, v] : vals4);  // v22: 3개
@@ -2937,7 +2953,7 @@ export default function App() {
          프롬프트에 "한 번만"이라고 써도 콜2는 자기가 두 번째인 줄 모른다. 그래서 앱이 세어서 알려준다. */
       const _nameUsed = !!(birth.name || "").trim() && String(r1.verdict || "").includes(birth.name.trim());
       const nameLine = _nameUsed ? ` [호칭] 앞면에서 이미 이름을 불렀다 — subline·funLine·reasons에는 이름을 쓰지 마라.` : "";
-      const explainMsg = { role: "user", content: `${userText}\n\n[이미 확정된 판결]${nameLine} direction=${r1.direction} / verdict="${r1.verdict}" / 총 ${r1.total} 중 반대 ${r1.against}.${voteLine}${s3Line} 이 판결을 절대 뒤집지 말고, 이 결론의 근거만 아래 JSON으로만 응답: {"subline":"수호신의 한 줄","reasons":[{"axis":"사주|달|별자리|MBTI|수비학|주역|가치|삼재|토정비결|마야","vote":"GO|STOP|중립","text":"용어 — 쉬운 풀이 형식의 근거 1줄(70자 이내)"}],"funLine":"정령(달 별자리) 한마디","disclaimer":"투자·법률·의료(몸·병)일 때만, 없으면 빈 문자열"}. reasons엔 위 표의 축을 전부 같은 vote 로 넣는다 — 특히 '마야'(촐킨 톤·날개) 축은 매번 반드시 포함(자주 누락됨). **각 근거는 '용어 — 쉬운 풀이' 병기다**: 지표 이름·값을 짚고(무오 대운·중수감·촐킨 4의 톤 등) 곧바로 쉬운 말로 풀어준다. 사주 보러 가면 용어를 말한 뒤 반드시 풀이를 붙여주는 것과 같다. subline은 앞면 톤이므로 어려운 말 없이 쉬운 한 줄. 프로필에 십성 분포·신살·세운이 있으면 '사주' 축 근거에서 그 실제 값을 우선 인용한다(예: "편재 둘 — 크게 도는 돈이 네 그릇이야", "암록 — 숨은 복이 받쳐줘").` };
+      const explainMsg = { role: "user", content: `${userText}\n\n[이미 확정된 판결]${nameLine} direction=${r1.direction} / verdict="${r1.verdict}" / 총 ${r1.total} 중 반대 ${r1.against}.${voteLine}${s3Line} 이 판결을 절대 뒤집지 말고, 이 결론의 근거만 아래 JSON으로만 응답: {"subline":"수호신의 한 줄","reasons":[{"axis":"사주|달|별자리|수비학|주역|가치|삼재|토정비결|마야","vote":"GO|STOP|중립","text":"용어 — 쉬운 풀이 형식의 근거 1줄(70자 이내)"}],"funLine":"정령(달 별자리) 한마디","disclaimer":"투자·법률·의료(몸·병)일 때만, 없으면 빈 문자열"}. reasons엔 위 표의 축을 전부 같은 vote 로 넣는다 — 특히 '마야'(촐킨 톤·날개) 축은 매번 반드시 포함(자주 누락됨). **각 근거는 '용어 — 쉬운 풀이' 병기다**: 지표 이름·값을 짚고(무오 대운·중수감·촐킨 4의 톤 등) 곧바로 쉬운 말로 풀어준다. 사주 보러 가면 용어를 말한 뒤 반드시 풀이를 붙여주는 것과 같다. subline은 앞면 톤이므로 어려운 말 없이 쉬운 한 줄. 프로필에 십성 분포·신살·세운이 있으면 '사주' 축 근거에서 그 실제 값을 우선 인용한다(예: "편재 둘 — 크게 도는 돈이 네 그릇이야", "암록 — 숨은 복이 받쳐줘").` };
       const { json: r2 } = await callClaude(system, [...priorConvo, explainMsg], 2000);   // 근거를 용어+풀이로 병기하면서 1500에선 잘렸다
       setDetail(r2);
       // L3(지표별 근거)는 제품의 핵심 차별점이다. 실패율과 소요시간을 모르면 개선 근거가 없다.
@@ -3175,7 +3191,7 @@ export default function App() {
     const profile = `${birth.name ? `호칭: ${birth.name}\n` : ""}${birth.sex ? `성별: ${birth.sex === "M" ? "남" : "여"}\n` : ""}사주: ${saju.pillars.년}년 ${saju.pillars.월}월 ${saju.pillars.일}일 ${saju.pillars.시}시 / 오행 ${Object.entries(saju.counts).map(([k, v]) => k + v).join(" ")} / 일간(나) ${saju.dayGan || "?"}·오행중심 ${saju.main}${saju.nayin ? ` / 납음 ${saju.nayin}` : ""}
 별자리: ${zo.name}(${zo.el}) / 달: 태어난 밤의 위상 ${moon.name} · 달 별자리 ${mp.moonSign}(정서·내면) · 나크샤트라 ${mp.nakshatra}(베다 27수)
 마야 촐킨: ${tzk.tone}의 톤 · ${tzk.sign}
-MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ? `\n대운: 아직 첫 대운 전 — 대운수 ${du.num}세부터 ${du.dir}(지금은 월주 기운이 지배)` : `\n대운(현재 인생 시기): ${du.ganji}(${du.el}) 대운 · ${du.startAge}~${du.endAge}세 · ${du.dir} — 10년 단위 큰 흐름`) : ""}${sj ? `\n삼재: 올해 ${sj} (입춘 경계 근사)` : ""}${tj ? `\n토정비결(당년 신수): 괘상수 ${tj.code} (상${tj.sang} 중${tj.jung} 하${tj.ha}), 음력 생일 ${tj.lunar}` : ""}${core ? `\n가치여정(워드소팅 16→6→3→1): 핵심 ${core} / 지킨 가치 ${vals4.filter(v => v !== core).join("·")} / 마지막에 내려놓은 ${vals8.filter(v => !vals4.includes(v)).join("·")}` : ""}${birth.job || birth.rel ? `\n요즘 삶의 국면(맥락): ${[birth.job, birth.rel].filter(Boolean).join(" · ")} — 질문의 무게·의미를 이 맥락에 비춰 읽되, 판결 근거는 지표다` : ""}${_ms}`;
+수비학 라이프패스: ${num}${du ? (du.pre ? `\n대운: 아직 첫 대운 전 — 대운수 ${du.num}세부터 ${du.dir}(지금은 월주 기운이 지배)` : `\n대운(현재 인생 시기): ${du.ganji}(${du.el}) 대운 · ${du.startAge}~${du.endAge}세 · ${du.dir} — 10년 단위 큰 흐름`) : ""}${sj ? `\n삼재: 올해 ${sj} (입춘 경계 근사)` : ""}${tj ? `\n토정비결(당년 신수): 괘상수 ${tj.code} (상${tj.sang} 중${tj.jung} 하${tj.ha}), 음력 생일 ${tj.lunar}` : ""}${core ? `\n가치여정(워드소팅 16→6→3→1): 핵심 ${core} / 지킨 가치 ${vals4.filter(v => v !== core).join("·")} / 마지막에 내려놓은 ${vals8.filter(v => !vals4.includes(v)).join("·")}` : ""}${birth.job || birth.rel ? `\n요즘 삶의 국면(맥락): ${[birth.job, birth.rel].filter(Boolean).join(" · ")} — 질문의 무게·의미를 이 맥락에 비춰 읽되, 판결 근거는 지표다` : ""}${_ms}`;
     return [{ type: "text",
       text: `${SYS}\n\n## 대화 연속성\n이전 대화가 있으면 흐름을 이어 자연스럽게 응대한다(단, 판결 근거는 늘 아래 지표다). 같은 고민의 재질문이면 앞선 판결과 일관되게, 명백히 새 고민이면 처음부터 새로 판정한다.\n\n---\n유저 프로필(고정):\n${profile}`,
       cache_control: { type: "ephemeral" } }];
@@ -3267,7 +3283,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
   const _stepSeen = useRef(new Set());
   useEffect(() => {
     const name = step === 1 ? ["name", "birth_date", "birth_time_city", "sex", "context"][bstep]
-      : step === 2 ? "mbti"
+      : step === 2 ? "recall"
       : step === 25 ? ["values_16to6", "values_6to3", "values_3to1"][vstage]
       : null;
     if (!name || _stepSeen.current.has(name)) return;
@@ -3475,7 +3491,7 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
       {step === 2 && saju && (
         <section className="scene fade">
           <div className="halo">
-            <DustOrb size={210} stage={1 + Object.keys(dims).length * 0.5} tint={saju ? EL_COLOR[saju.main] : undefined} />
+            <DustOrb size={210} stage={recallSeen ? 3 : 1} tint={saju ? EL_COLOR[saju.main] : undefined} />
             <div className="gtext">
               {reveal >= 5 && mbti && <p className="gname fade">기억이 다 돌아왔어</p>}
             </div>
@@ -3506,32 +3522,10 @@ MBTI: ${mbti || "미입력"} / 수비학 라이프패스: ${num}${du ? (du.pre ?
                 <p className="refline">{moon.read}</p>
                 <p className="refline">{LP_READ[num]}</p>
               </details>
-              <button className="btn gold mt" onClick={() => setRecallSeen(true)}>응, 기억나</button>
-              </div>) : (<div className="fade" key="mbti">
-              <p className="sub2 mt">요즘의 너는? — 하나씩 골라줘.</p>
-              {(() => {
-                const qi = DIMQ.findIndex(([k]) => !dims[k]);
-                if (qi === -1) return (
-                  <div className="dimseq fade">
-                    <p className="dimq">그래 — 기억났어, 요즘의 너.</p>
-                    <button className="resetlink" onClick={() => { setDims({}); setMbti(null); }}>다시 떠올릴래</button>
-                  </div>
-                );
-                const [k, q, a, at, b2, bt] = DIMQ[qi];
-                return (
-                  <div className="dimseq fade" key={k}>
-                    <p className="fine">기억 {qi + 1} / 4</p>
-                    <p className="dimq">{q}</p>
-                    <div className="dimrow">
-                      <button className="dimopt" onClick={() => pickDim(k, a)}>{at}</button>
-                      <button className="dimopt" onClick={() => pickDim(k, b2)}>{bt}</button>
-                    </div>
-                    {qi > 0 && <button className="resetlink" onClick={() => { const nd = { ...dims }; delete nd[DIMQ[qi - 1][0]]; setDims(nd); }}>아까 걸로 돌아갈래</button>}
-                  </div>
-                );
-              })()}
-              <button className="btn gold mt" onClick={() => setStep(25)} disabled={!mbti}>마음의 방으로</button>
-              </div>)}
+              {/* v114: MBTI 4문항 제거 — "무슨 말인지 모르겠다"는 제보가 많았고 판결 기여도 낮았다.
+                  질감은 이제 사주·별자리·수비학에서 뽑는다(texture) — 묻지 않고 안다. */}
+              <button className="btn gold mt" onClick={() => { setRecallSeen(true); setStep(25); }}>응, 기억나</button>
+              </div>) : (<div className="fade" key="skip" />)}
             </div>
           )}
         </section>

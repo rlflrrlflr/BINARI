@@ -35,14 +35,12 @@ await page.getByRole("button", { name: "다음" }).click();
 await page.getByRole("button", { name: "하늘을 열기" }).click();
 await page.waitForTimeout(1600); await shot("j03_리빌_중간");
 await page.getByRole("button", { name: "응, 기억나" }).click({ timeout: 15000 }); // v30: 회상 나레이션 넘기기
-await page.waitForSelector("text=요즘의 너는", { timeout: 15000 });
 await page.waitForTimeout(400); await shot("j04_리빌완료_성격질문");
 // MBTI 순차 문항 (v24) — 두 번째 기억 화면을 한 컷 담는다
 await page.getByRole("button", { name: /혼자/ }).first().click();
 await page.waitForTimeout(350); await shot("j04b_성격_기억2");
 for (const t of ["오지 않은", "마음이", "열어둔"]) await page.getByRole("button", { name: new RegExp(t) }).first().click();
 await page.waitForTimeout(300); await shot("j05_성격선택후");
-await page.getByRole("button", { name: "마음의 방으로" }).click(); await page.waitForTimeout(600);
 await shot("j06_가치_마음의방");
 for (const v of ["안정", "성장", "자유", "인정", "관계", "성취"]) await page.getByRole("button", { name: v, exact: true }).click();
 await page.getByRole("button", { name: "여섯 개 골랐어" }).click(); await page.waitForTimeout(500);

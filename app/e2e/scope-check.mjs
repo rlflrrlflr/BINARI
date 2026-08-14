@@ -97,7 +97,7 @@ console.log("\n── 표 집계 ──");
 {
   const cases = [
     // [설명, 입력, 기대 {dir, against, total} 또는 null]
-    ["GO 우세 → GO", { ...V(["사주","GO"],["달","GO"],["별자리","STOP"],["MBTI","중립"]), direction: "GO" }, { dir:"GO", against:1, total:4 }],
+    ["GO 우세 → GO", { ...V(["사주","GO"],["달","GO"],["별자리","STOP"],["수비학","중립"]), direction: "GO" }, { dir:"GO", against:1, total:4 }],
     ["STOP 우세 → STOP", { ...V(["사주","STOP"],["달","STOP"],["별자리","GO"]), direction: "STOP" }, { dir:"STOP", against:1, total:3 }],
     ["동률 → 경험 편향(GO)", { ...V(["사주","GO"],["달","STOP"],["별자리","중립"]), direction: "STOP" }, { dir:"GO", against:1, total:3 }],
     ["모델이 표와 다른 결론 → 표를 따른다", { ...V(["사주","STOP"],["달","STOP"],["별자리","STOP"]), direction: "GO" }, { dir:"STOP", against:0, total:3 }],
