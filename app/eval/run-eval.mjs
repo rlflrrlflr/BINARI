@@ -132,8 +132,29 @@ const GENERIC = /(무리하지|신중(하게|히)|충분히\s*(고민|생각)|�
 //   실측 오탐: "올여름 화기가 세 — 8월 넘길 때까지 몸 무리하지 마" 는 화기를 짚었는데 '무리하지'만 보고 걸렸다.
 const ANCHORED = /(불|물|나무|쇠|흙|화기|수기|목기|금기|토기|기운|달|보름|초승|그믐|별|괘|톤|날개|삼재|대운|여름|겨울|봄|가을|[0-9]+월|[0-9]+개|셋|넷|다섯)/;
 const isGeneric = (v) => GENERIC.test(v) && !ANCHORED.test(v);
-function autoChecks(v, cat, q, r1) {
+/* v121 모호함 축 — 창업자 지적("판결도 되게 애매모호할 때 많던데").
+   앞면(verdict)만 조여 두고 뒷면(subline·reasons)은 은유를 허용했더니 모호함이 뒷면으로 숨었다.
+   ㉠ 뜻이 안 서는 은유를 서술어로 ㉡ 개수만 던지기 ㉢ 추상명사로 끝내기 ㉣ 판정 유예 어미 */
+const VAGUE_META = /(그릇이|쥘\s*팔|팔\s*힘|기운이\s*흐르|자리가\s*비었|문이\s*닫혀|문이\s*열려)/;
+const VAGUE_END  = /(일\s*수도|인\s*편이(야|다)|두고\s*봐야|경우에\s*따라|나름이(야|다))/;
+/* 개수만 던지고 결과를 안 붙인 문장 — "재성이 셋이야."처럼 짧게 끝나는 것만 잡는다 */
+const COUNT_ONLY = (t) => /(셋|넷|다섯|둘|[0-9]+개)/.test(t) && t.replace(/<[^>]+>/g, "").length < 22;
+function vagueCheck(text, where) {
+  const t = String(text || "");
+  if (!t) return "";
+  if (VAGUE_META.test(t)) return `${where}-은유서술어`;
+  if (VAGUE_END.test(t)) return `${where}-판정유예`;
+  if (COUNT_ONLY(t)) return `${where}-개수만`;
+  return "";
+}
+function autoChecks(v, cat, q, r1, r2) {
   const c = [];
+  c.push(vagueCheck(v, "앞면"));
+  /* 뒷면은 --full 일 때만 존재한다. 있으면 같은 잣대로 잰다 — 앞면만 조이면 모호함이 뒤로 숨는다 */
+  if (r2) {
+    c.push(vagueCheck(r2.subline, "subline"));
+    for (const rr of (Array.isArray(r2.reasons) ? r2.reasons : [])) c.push(vagueCheck(rr?.text, "근거"));
+  }
   // 결론이 표에서 나왔는가. S3(넘김)와 REASK(앞 판결 승계)는 방향을 표가 정하지 않으므로 제외한다.
   if (cat !== "S3" && cat !== "REASK") c.push(voteCheck(r1));
   if (cat === "GUARD") {                              // 가드레일: 길이 예외, 자원 안내 필수
@@ -186,15 +207,16 @@ for (const p of personas) {
       const REASK = q.prev ? reaskTag(q.prev) : "";
       const { json: r1, usage: us1 } = await call(sys, u + STAKE + REASK + CONCLUDE, 560);
       if (us1) { spend.in += us1.input_tokens || 0; spend.out += us1.output_tokens || 0; }
-      const auto = autoChecks(r1.verdict || "", q.cat, q, r1);
-      if (auto !== "OK") flags++;
-      let sub = "", fun = "";
+      /* 자동검사는 뒷면까지 받고 나서 한 번에 돈다 — 앞면만 재면 모호함이 뒷면으로 숨는다(v121) */
+      let sub = "", fun = "", r2full = null;
       if (FULL) {
         const explain = `${u}${STAKE}${REASK}\n\n[이미 확정된 판결] direction=${r1.direction} / verdict="${r1.verdict}" / 총 ${r1.total} 중 반대 ${r1.against}. 이 판결을 절대 뒤집지 말고, 근거만 JSON으로: {"subline":"수호신의 한 줄","reasons":[{"axis":"사주|달|별자리|MBTI|수비학|주역|가치|삼재|토정비결|마야","vote":"GO|STOP|중립","text":"회상체 근거 1줄(60자 이내)"}],"funLine":"정령 한마디","disclaimer":""}. reasons엔 참여 지표 전부.`;
         const { json: r2, usage: us2 } = await call(sys, explain, 2000);
         if (us2) { spend.in += us2.input_tokens || 0; spend.out += us2.output_tokens || 0; }
-        sub = r2.subline || ""; fun = r2.funLine || "";
+        sub = r2.subline || ""; fun = r2.funLine || ""; r2full = r2;
       }
+      const auto = autoChecks(r1.verdict || "", q.cat, q, r1, r2full);
+      if (auto !== "OK") flags++;
       rows.push([p.id + (p.name ? "/" + p.name : ""), p.mbti, p.main, q.id, q.cat, q.mode, q.text, r1.direction, r1.scope || "", (Array.isArray(r1.votes) ? r1.votes.map((x) => `${x.axis}:${x.v || x.vote}`).join(" ") : ""), r1.tone, `${(r1.total || 0) - (r1.against || 0)}:${r1.against || 0}`, r1.verdict, auto, sub, fun, "", ""]);
       console.log(`${p.id} ${q.id} ${r1.direction}/${r1.scope || "?"} [${auto}] ${r1.verdict}`);
     } catch (e) {

@@ -153,6 +153,12 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
       fix: "규칙만으로는 못 막습니다. 콜2는 콜1이 이름을 불렀는지 모릅니다 — 앱이 verdict 를 훑어 세고 콜2에 알려줘야 합니다." },
     { name: "유저 3인칭 호칭 금지", pat: /유저를 3인칭으로 부르지 않는다/,
       fix: "'이 사람·그·본인'으로 부르면 수호신이 유저를 앞에 두고 남 얘기하듯 말하게 됩니다. 대화가 아니라 관전평이 됩니다." },
+    { name: "풀네임 호명 금지", pat: /풀네임으로 부르지 않는다/,
+      fix: "'강석우' 처럼 성까지 붙여 부르면 친밀감이 아니라 소환장이 됩니다. 성을 떼고 이름만 부르게 하세요." },
+    /* 실제 사고(2026-08-02): 앞면 "손볼 데 다듬고 나가" / 뒷면 "손볼 데를 마저 다듬고 나가는 게 맞아".
+       은유만 갈아 같은 말을 두 번 했다. 층이 셋인데 정보가 하나면 뒷면을 열 이유가 없다. */
+    { name: "세 층은 서로 다른 것을 말한다", pat: /세 층은 서로 다른 것을 말한다/,
+      fix: "verdict·subline·funLine 이 같은 결론을 반복하면 '왜 이렇게 봤어?'를 눌러도 새로 읽을 게 없습니다." },
     { name: "scope 계측", pat: /scope_level:/,
       fix: "S3 진입률·이탈률을 못 재면 스코프 설계가 맞는지 영영 알 수 없습니다. verdict_shown 의 scope_level/handoff_triggered 를 확인하세요." },
   ];
@@ -160,6 +166,30 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
     if (r.pat.test(src)) add("정상", `판결 품질 규칙 — ${r.name}`, "있음", "");
     else add("심각", `판결 품질 규칙 사라짐 — ${r.name}`, "코드에서 찾을 수 없음", r.fix);
   }
+  /* tone(단호|격려|충고)은 프롬프트 제어값이다. 화면에 달면 앱이 스스로 "이건 격려였어"라고 고백하는 꼴이라,
+     판결이 지표에서 나온 게 아니라 기분 맞춰 준 것처럼 읽힌다(실사고: 카드 헤더에 '· 격려'가 찍혀 나갔다). */
+  if (/CAT_LABEL\[[^\]]*\][^<\n]*(res\.tone|sharedIn\.to)/.test(src)) {
+    add("심각", "내부 톤 값이 화면에 노출", "카드 헤더가 tone(단호/격려/충고)을 렌더 중",
+      "tone 은 프롬프트 제어값입니다. 헤더에서 {res.tone}·{sharedIn.to} 를 빼세요.");
+  } else add("정상", "내부 톤 값 비노출", "카드 헤더에 tone 없음", "");
+
+  /* 진입 화면 신뢰 라인은 유저에게 하는 '약속'이다 — 문장은 남았는데 근거가 바뀌면 그건 거짓말이 된다.
+     그래서 문구만 보지 않고 ①만세력 문항 수가 실제와 같은지 ②질문 원문이 계측에 안 실리는지를 대조한다. */
+  if (/자동검증 (\d+)문항을 통과한 엔진/.test(src)) {
+    const claimed = +src.match(/자동검증 (\d+)문항을 통과한 엔진/)[1];
+    let real = 0;
+    try { real = (readFileSync("e2e/mansae-test.mjs", "utf8").match(/\bcheck\(/g) || []).length; } catch (_) {}
+    if (real && claimed !== real) {
+      add("심각", "신뢰 라인의 문항 수가 실제와 다름", `화면 표기 ${claimed}문항 vs 실제 ${real}문항`,
+        "화면에 적은 숫자는 유저와의 약속입니다. App.jsx 의 문구를 실제 문항 수로 맞추거나, 검사가 세는 방식을 고치세요.");
+    } else add("정상", "신뢰 라인 — 만세력 문항 수", `표기 ${claimed}문항 = 실제 ${real}문항`, "");
+    // "질문 원문은 통계에 기록하지 않아요" — track() 에 q 원문이 실리면 그 줄이 그 순간 거짓 표시가 된다
+    if (/track\([^)]*\{[^}]*\bq\b\s*[,:}]/.test(src)) {
+      add("심각", "질문 원문이 계측에 실림", "화면엔 '질문 원문은 기록하지 않아요'라고 적혀 있음",
+        "track() 에서 질문 원문을 빼고 qlen(글자수)만 보내세요. 지금 상태면 화면 문구가 거짓입니다.");
+    } else add("정상", "신뢰 라인 — 질문 원문 미기록", "track() 에 q 원문 없음(qlen 만)", "");
+  }
+
   // 티어 허용목록은 api/judge.js 에 있다 — 위 rules 루프는 App.jsx 만 보므로 여기서 따로 검사한다
   try {
     const api = readFileSync("api/judge.js", "utf8");
@@ -167,6 +197,22 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
     else add("심각", "티어를 허용목록으로 받지 않음", "api/judge.js 에서 TIERS 를 찾을 수 없음",
       "tier 를 허용 목록(free/paid)으로만 받으세요. 임의 모델 지정을 열어두면 클라이언트가 비싼 모델을 강제해 비용이 샙니다.");
   } catch (_) { /* 구조가 바뀌면 조용히 넘어간다 */ }
+  /* 실사고(2026-08-02): 카드가 against(반대 수)를 '찬성'이라는 라벨로 표시 — "7개 중 1개 찬성".
+     실제로는 6개 찬성이라, 가장 강한 GO가 화면에선 가장 약해 보였다. 숫자가 그럴듯해서 아무도 의심하지 않았다.
+     라벨과 값이 다시 어긋나면 잡는다. */
+  if (/\{res\.total\}개 중 \{res\.against\}개/.test(src) || /pip \$\{i < res\.against \?/.test(src)) {
+    add("심각", "카드가 반대 수를 찬성처럼 표시", "표시부가 res.against(반대 표)를 그대로 렌더 중",
+      "GO/STOP 판결의 표시 수는 total - against(판결을 민 표)여야 합니다. 실제로 '7개 중 1개 찬성' 사고가 났던 자리입니다.");
+  } else if (/res\.total - res\.against/.test(src)) {
+    add("정상", "판결 지지 수 표시", "카드가 판결을 민 표 수(total-against)를 표시", "");
+  }
+  // tone(단호|격려|충고)은 내부 제어값 — 화면에 노출되면 앱이 판결 포지션을 스스로 무른다(실사고: 헤더 '· 격려')
+  if (/CAT_LABEL\[[^\]]*\][^<\n]*(res\.tone|sharedIn\.to)/.test(src)) {
+    add("심각", "내부 톤 값이 화면에 노출", "카드 헤더가 tone(단호/격려/충고)을 렌더 중",
+      "tone 은 프롬프트 제어값입니다. 헤더에서 {res.tone}·{sharedIn.to} 를 제거하세요.");
+  } else {
+    add("정상", "내부 톤 값 비노출", "카드 헤더에 tone 없음", "");
+  }
   // 콜1이 scope 를 안 뱉으면 계측값이 통째로 null 이 된다(조용한 고장)
   if (/"scope":"S1\|S2\|S3"/.test(src)) add("정상", "판결 품질 규칙 — 콜1 scope 필드", "있음", "");
   else add("심각", "콜1 출력 스키마에 scope 없음", "JSON 스키마에서 찾을 수 없음",
@@ -407,6 +453,154 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
   } else {
     add("정상", "e2e 분기 기준", "토큰 수가 아니라 표지로 콜1/콜2를 가름", "");
   }
+}
+
+/* ── 검사 5-b. 알 권리(헌장 2026-08-06) ─────────────────────────────────
+   사고 #7 (2026-08-06): 리포트가 세 겹으로 숨어 있었다.
+   ① 상세 리포트가 기본 접힘 ② 본문이 170px 스크롤 상자 ③ 사주 여덟 글자·오행 개수는
+   온보딩 연출에만 있어서, 재방문하면(온보딩 생략) 유저가 자기 사주를 두 번 다시 못 봤다.
+   실측 지적 2건이 같은 증상이었다 — "4,900원 답변이 중복됨"·"카드 뒷면을 안 알려줘서 몰랐다".
+   헌장은 '모를 권리'를 판결 국면으로 좁히고 리포트에는 '알 권리'를 세웠다. 되돌아가는 걸 막는다. */
+{
+  const openDefault = /function MyeongsikReportBody[\s\S]{0,400}?useState\(true\)/.test(src);
+  add(openDefault ? "정상" : "심각", openDefault ? "알 권리 — 상세 리포트 기본 펼침" : "알 권리 위반 — 상세 리포트가 다시 접힘",
+    openDefault ? "useState(true)" : "MyeongsikReportBody 의 open 기본값이 false 입니다",
+    "리포트는 유저가 이미 값을 치르고 당긴 문서입니다. 접어두면 값어치 은닉입니다 — CLAUDE.md 설계 헌장 '알 권리'.");
+
+  const capped = /\.msrbody\{[^}]*max-height/.test(src);
+  add(capped ? "심각" : "정상", capped ? "알 권리 위반 — 리포트 본문에 높이 상한" : "알 권리 — 리포트 본문 높이 제한 없음",
+    capped ? ".msrbody 에 max-height 가 다시 붙었습니다" : "스크롤은 .vscroll 하나가 맡음",
+    "본문을 작은 상자에 가두면 한 번에 몇 줄만 보입니다. 스크롤은 뒷면 전체(.vscroll)가 맡아야 합니다.");
+
+  /* 뒷면이 카드 높이를 정하면 앞면 판결 아래가 텅 빈다(실측 1681px). 레이아웃 회귀는 눈으로만 잡힌다 */
+  const backAbs = /\.vface\.back\{[^}]*position:absolute/.test(src);
+  const rowCap = /\.vcard\{[^}]*grid-template-rows:minmax\(0,1fr\)/.test(src);
+  add(backAbs && rowCap ? "정상" : "심각",
+    backAbs && rowCap ? "카드 높이 — 앞면이 정함(뒷면 문서가 늘려도 안 자람)" : "카드 높이를 뒷면 문서가 정함",
+    backAbs && rowCap ? ".vface.back absolute + .vcard grid-template-rows 고정" : `back-absolute=${backAbs} row-cap=${rowCap}`,
+    "뒷면이 카드 크기 산정에 끼면 리포트가 길어질수록 카드가 자라고, 앞면 판결문 아래가 텅 빕니다(실측 1681px).");
+
+  /* 여덟 글자 원판이 리포트에 있는지 — 온보딩 연출에만 있으면 재방문 유저는 영영 못 본다 */
+  const hasWonpan = /각인 — 태어난 순간에 박힌 여덟 자리/.test(src) && /너 자신 \{saju\.dayGan\}/.test(src);
+  add(hasWonpan ? "정상" : "심각", hasWonpan ? "리포트에 여덟 자리 원판(글자·너 자신·기운 개수)" : "리포트에 여덟 자리 원판 없음",
+    hasWonpan ? "있음" : "태어난 여덟 글자가 온보딩 연출에만 있으면 재방문 유저는 다시 못 봅니다",
+    "모든 판단의 뿌리입니다. 리포트 첫 절에 있어야 합니다.");
+}
+
+/* ── 검사 5-c. 용어 은닉 (창업자 지시 2026-08-12: "어떤 분석 기법이 들어갔는지 안 나왔으면 좋겠어") ─
+   용어 자체는 공개 지식이지만, 그대로 쓰면 **어떤 기법을 어떤 표에 매핑했는지**가 한 화면에 통째로 읽힌다.
+   화면 쪽은 report-check 이 실물로 잡는다. 여기서는 **모델에게 보내는 지시서**를 지킨다 —
+   프로필에는 용어가 그대로 실려 있어서(모델의 추론 품질을 위해), 출력 금지 규칙이 빠지면 서신이 그걸 받아쓴다. */
+{
+  const hasBan = /\[용어 금지 —/.test(src);
+  const hasMap = /비견=나란히 서는 힘/.test(src) && /신강=제 힘으로 미는 쪽/.test(src);
+  const hasNote = /용어를 본문에 그대로 쓰지 마라/.test(src);
+  const ok = hasBan && hasMap && hasNote;
+  add(ok ? "정상" : "심각", ok ? "용어 은닉 — 서신 지시서에 출력 금지 규칙" : "용어 은닉 규칙이 빠짐",
+    ok ? "[용어 금지] 절 + 바꿔 쓰는 말 표 + 프로필 주의문" : `금지절=${hasBan} 대응표=${hasMap} 프로필주의=${hasNote}`,
+    "프로필에는 명리 용어가 그대로 실려 갑니다(모델이 추론해야 하니까). 출력 금지 규칙이 없으면 서신이 그 용어를 그대로 받아써서, 우리가 무슨 기법을 어떻게 조합했는지가 유료 문서에 통째로 실립니다.");
+
+  /* 화면 쪽 최후 방어 — 리포트 렌더 구간에 용어가 상수로 박혀 있으면 잡는다 */
+  const bodyStart = src.indexOf("function MyeongsikReportBody");
+  const bodyEnd = src.indexOf("const ganjiIdx");
+  /* 주석은 걷어내고 본다 — 주석에 적힌 '명식에서'는 유저가 볼 수 없는 글인데, 안 걷으면 이 검사가 헛울음을 운다(실측) */
+  const view = (bodyStart > 0 && bodyEnd > bodyStart ? src.slice(bodyStart, bodyEnd) : "")
+    .replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  const leak = ["\"십성", "일간)", "명식에", "(비겁)", "(인성)", "진태양시로", "태양황경"].filter((w) => view.includes(w));
+  add(leak.length ? "심각" : "정상", leak.length ? "리포트 화면에 기법 용어가 되돌아옴" : "리포트 화면 — 기법 용어 없음",
+    leak.length ? leak.join(", ") : "렌더 구간 깨끗",
+    "화면에 나가는 이름은 평범한 말이어야 합니다(SS_KO·EL_KO·GRP_KO·SIN_KO·STR_KO). 실물 검사는 e2e/report-check.mjs 가 합니다.");
+}
+
+/* ── 검사 5-d. 검증 가능한 사실을 지어내거나 되읊지 않는가 ───────────────
+   (실사용 제보 2026-08-14, 두 번)
+   ① "팩트랑 다른 게 너무 많다. 나 키 178이고" — v115 는 일간·상승궁을 cm 로 환산하는 표로
+      키를 **예측**했다. 그 표는 어느 유파에도 없는, 우리가 지어낸 것이었다.
+   ② "키가 179이기 때문에 주변의 이목을 끈다? 전문성 없어 보이고 바보 같아. 신도 아닌 거 같아"
+      — v116 은 그럼 받아서 해석하자고 바꿨는데 **더 나빴다.** 179 를 받아 172 를 빼고
+      "7cm 큰 쪽"이라고 되읊었다. 그건 해석이 아니라 뺄셈이고, 유저가 준 값을 되돌려주는 순간
+      문서는 아는 척하는 계산기가 된다.
+   결론: **키는 다루지 않는다.** 예측도 입력도 없다. 이 검사는 어느 쪽이든 되살아나면 운다. */
+{
+  const imp = readFileSync("src/lib/imprint.js", "utf8");
+  const app = readFileSync(APP, "utf8");
+  const table = /const\s+H_(EL|ASC|BASE)\s*=/.test(imp);         // cm 환산·기준선 표 부활
+  const input = /heightCm/.test(imp) || /heightCm/.test(app);    // 키 입력 경로 부활
+  const wedMode = /mateMode\s*=\s*"wed"/.test(imp);              // 기혼자에게 외모 예언 안 함
+  const ok = !table && !input && wedMode;
+  add(ok ? "정상" : "심각",
+    ok ? "지어낸 사실 — 키를 예측도 입력도 하지 않음" : "각인이 다시 키를 다루기 시작함",
+    ok ? "H_EL/H_ASC/H_BASE 없음 · heightCm 없음 · 기혼 분기 있음"
+       : `환산표=${table} 입력경로=${input} 기혼분기=${wedMode}`,
+    "유저가 정답을 아는 값(키·배우자 외모·결혼 시기)은 맞혀도 소득이 없고 틀리면 문서 전체가 무너집니다. 받아서 되읊는 것도 같습니다 — 뺄셈은 해석이 아닙니다.");
+}
+
+/* ── 검사 5-e. 각인의 말투가 한 문단 안에서 바뀌지 않는가 ─────────────────
+   창업자 판정(2026-08-14): "신도 아닌 거 같아."
+   원인은 표가 사전체("-다")이고 감싸는 문장이 신의 반말("-야")이었던 것이다 —
+   "너는 감정이 먼저 보이는 사람이야. 기분이 얼굴에 그대로 나온다."
+   실물 문장 검사는 e2e/imprint-check.mjs ⑫ 가 한다. 여기서는 **규칙이 파일에 남아 있는지**를 지킨다. */
+{
+  const imp = readFileSync("src/lib/imprint.js", "utf8");
+  const ruleKept = /표는 전부 '-야\/-어'체로 쓴다/.test(imp);
+  const childTable = /const SS_CHILD = \{/.test(imp);   // 유년 구간에 어른의 사건을 안 쓴다
+  const noMeta = /이름을 은유로 짓지 않는다/.test(imp);  // "같이 갈 사람이 얇아" 류 비문 방지
+  const noVague = /"자리가 N개"라고 쓰지 않는다/.test(imp);  // "그릇이 어떻니" 류 모호함 방지
+  const ok = ruleKept && childTable && noMeta && noVague;
+  add(ok ? "정상" : "주의",
+    ok ? "각인 말투 — 네 규칙이 살아 있음" : "각인 말투 규칙이 사라짐",
+    ok ? "'-야/-어'체 + 유년 구간 표 + 은유 금지 + 모호함 금지" : `말투규칙=${ruleKept} 유년표=${childTable} 은유금지=${noMeta} 모호함금지=${noVague}`,
+    "표에 '-다'로 끝나는 문구를 넣으면 신의 목소리가 사전 낭독이 됩니다. 유년 구간에 어른의 사건을 쓰면 '5~14세에 월급이 오른다'가 나갑니다. 제목용 낱말을 본문에 그대로 끼우면 '같이 갈 사람이 얇아' 같은 비문이 됩니다. 그리고 '자리가 3개'·'그릇이야' 같은 말은 유저가 뭘 해야 할지 모릅니다 — 실제 상황과 행동으로 써야 합니다.");
+}
+
+/* ── 검사 5-f. 여러 문명 판독기가 실제로 물려 있는가 ───────────────────────
+   창업자 지적(2026-08-14): "그냥 사주 내용이랑 꼭 같은데, 저번에 글로벌로 찾은
+   생년월일로 운명을 점치는 방법들은 적용이 된 거야 만 거야?"
+   감사해 보니 sky.js 에 열한 개가 계산돼 있는데 각인 본문에 영향을 준 건 셋뿐이었다.
+   나머지는 각주 장식이거나 **한 번도 호출되지 않았다.** 계산해 두고 안 쓰면 없는 것과 같다.
+   이 검사는 아홉이 계속 물려 있는지, 그리고 태어난 곳이 절반만 쓰이지 않는지를 지킨다. */
+{
+  const imp = readFileSync("src/lib/imprint.js", "utf8");
+  const app = readFileSync(APP, "utf8");
+  const wired = ["nayin", "honmeisei", "weton", "akan", "lifePath", "tzolkin", "moonPhase", "partOfFortune"]
+    .filter((f) => new RegExp(`${f}\\(`).test(imp));
+  /* 분업이어야 한다 — 같은 질문에 투표시키면 오행 어휘로 환원돼 결국 사주로 읽힌다(v118 실패).
+     그리고 결과가 본문(여든 해 지도)을 실제로 바꿔야 한다. 세어만 놓으면 부록이다. */
+  const hasWitness = /const sky9 = \[/.test(imp) && /putS\(/.test(imp)
+    && /const clash = \[/.test(imp) && /doubleTurn/.test(imp);
+  const latWired = /cityLat\(/.test(app) && /lat: cityLat/.test(app);
+  const ok = wired.length >= 8 && hasWitness && latWired;
+  add(ok ? "정상" : "심각",
+    ok ? `여러 하늘 — 판독기 ${wired.length}종이 분업 중` : "여러 문명 판독기가 다시 장식이 됨",
+    ok ? `${wired.join("·")} + 분업 절·어긋남 절 + 위도 연결` : `물린 판독기 ${wired.length}종(${wired.join("·")}) 증언절=${hasWitness} 위도=${latWired}`,
+    "판독기에게 같은 질문을 던져 투표시키면 오행 어휘로 환원돼 결국 사주로 읽힙니다 — 각자 사주가 못 하는 질문을 하나씩 맡아야 하고, 그 결과가 본문을 실제로 바꿔야 합니다. 그리고 태어난 곳은 경도·위도를 모두 써야 합니다 — 위도를 안 넘기면 제주에서 태어난 사람이 서울 값을 받습니다.");
+}
+
+/* ── 검사 5-g. 판결 프롬프트가 자기 규칙을 자기 예시로 어기지 않는가 ─────
+   (창업자 2026-08-14: "판결도 되게 애매모호할 때 많던데")
+   실제로 그랬다. 프롬프트에 이런 **모범 예시**가 박혀 있었다:
+     (O)"편재 둘에 암록까지 — 크게 들어오는 재물의 그릇이야"
+   한 줄에 위반이 둘이다. ① 편재·암록은 [용어 금지] 목록의 말이고
+   ② "그릇"은 읽고 나서 아무것도 모르는 은유다. **모델은 규칙보다 예시를 따른다** —
+   금지 조항을 아무리 길게 써도 (O) 예시가 그걸 어기면 예시가 이긴다.
+   그래서 규칙이 아니라 **예시를 검사한다.** */
+{
+  const app = readFileSync(APP, "utf8");
+  const sys = app.slice(app.indexOf("[너는 누구인가]") >= 0 ? app.indexOf("[너는 누구인가]") : 0);
+  /* (O)"..." 형태의 모범 예시를 전부 뽑는다 */
+  const good = [...sys.matchAll(/\(O\)\s*"([^"]{4,120})"/g)].map((m) => m[1]);
+  /* 어디에 쓰이든 금지된 은유 — 읽고 나서 아무것도 모르는 말 */
+  const VAGUE = /(그릇이|그릇이야|쥘\s*팔|팔\s*힘|기운이\s*흐르|자리가\s*비었어)/;
+  const bad = good.filter((g) => VAGUE.test(g));
+  /* 뒷면 모호함 금지 규칙 넷이 실재하는가 */
+  const backRules = ["뜻이 안 서는 은유를 서술어로", "개수만 던지기", "추상명사로 도망가기", "판정을 유예하는 어미"]
+    .filter((k) => sys.includes(k));
+  const ok = bad.length === 0 && good.length >= 15 && backRules.length === 4;
+  add(ok ? "정상" : "심각",
+    ok ? `판결 프롬프트 — 모범 예시 ${good.length}개가 자기 금칙을 안 어김` : "판결 프롬프트의 모범 예시가 자기 금칙을 어김",
+    ok ? `(O) 예시 ${good.length}개 검사 · 뒷면 모호함 규칙 4종 있음`
+       : `위반 예시 ${bad.length}건${bad.length ? `: "${bad[0].slice(0, 40)}…"` : ""} · 예시 ${good.length}개 · 뒷면규칙 ${backRules.length}/4`,
+    "모델은 금지 조항보다 (O) 예시를 강하게 따릅니다. 예시 한 줄이 규칙 열 줄을 이깁니다 — 그래서 예시부터 지켜야 합니다.");
 }
 
 /* ── 검사 6. 의존성 취약점 (npm audit) ───────────────────────────────────
