@@ -3062,7 +3062,10 @@ async function callClaude(system, messages, maxTokens, tier) {
         : await callDirect(system, messages, maxTokens);
       if (!data || data.type === "error" || data.error) throw new Error((data && data.error && data.error.message) || "API 오류");
       const txt = (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n");
-      const out = { json: repairJSON(txt), txt };   // 파싱 실패도 이 경로의 실패로 간주 → 다음 경로
+      // usage(토큰)를 버리지 않고 함께 돌려준다. 서신 4,900원·각인 9,900원을 파는 지금
+      // 원가를 모르면 마진을 못 잰다 — 서버 로그에만 있으면 제품 지표와 나란히 못 본다.
+      const u = data.usage || null;
+      const out = { json: repairJSON(txt), txt, usage: u ? { in: u.input_tokens || 0, out: u.output_tokens || 0 } : null };   // 파싱 실패도 이 경로의 실패로 간주 → 다음 경로
       API_MODE = mode;
       return out;
     } catch (e) { lastErr = e; fails.push({ mode, status: e?.status || 0, msg: String(e?.message || "").slice(0, 120) }); if (API_MODE === mode) API_MODE = null; }
@@ -3284,14 +3287,15 @@ export default function App() {
       const _nameUsed = !!(birth.name || "").trim() && String(r1.verdict || "").includes(birth.name.trim());
       const nameLine = _nameUsed ? ` [호칭] 앞면에서 이미 이름을 불렀다 — subline·funLine·reasons에는 이름을 쓰지 마라.` : "";
       const explainMsg = { role: "user", content: `${userText}\n\n[이미 확정된 판결]${nameLine} direction=${r1.direction} / verdict="${r1.verdict}" / 총 ${r1.total} 중 반대 ${r1.against}.${voteLine}${s3Line} 이 판결을 절대 뒤집지 말고, 이 결론의 근거만 아래 JSON으로만 응답: {"subline":"수호신의 한 줄","reasons":[{"axis":"사주|달|별자리|수비학|주역|가치|삼재|토정비결|마야","vote":"GO|STOP|중립","text":"용어 — 쉬운 풀이 형식의 근거 1줄(70자 이내)"}],"funLine":"정령(달 별자리) 한마디","disclaimer":"투자·법률·의료(몸·병)일 때만, 없으면 빈 문자열"}. reasons엔 위 표의 축을 전부 같은 vote 로 넣는다 — 특히 '마야'(촐킨 톤·날개) 축은 매번 반드시 포함(자주 누락됨). **각 근거는 '용어 — 쉬운 풀이' 병기다**: 지표 이름·값을 짚고(무오 대운·중수감·촐킨 4의 톤 등) 곧바로 쉬운 말로 풀어준다. 사주 보러 가면 용어를 말한 뒤 반드시 풀이를 붙여주는 것과 같다. subline은 앞면 톤이므로 어려운 말 없이 쉬운 한 줄. 프로필에 십성 분포·신살·세운이 있으면 '사주' 축 근거에서 그 실제 값을 우선 인용한다(예: "편재 둘 — 크게 도는 돈이 네 그릇이야", "암록 — 숨은 복이 받쳐줘").` };
-      const { json: r2 } = await callClaude(system, [...priorConvo, explainMsg], 2000);   // 근거를 용어+풀이로 병기하면서 1500에선 잘렸다
+      const { json: r2, usage: _u2 } = await callClaude(system, [...priorConvo, explainMsg], 2000);   // 근거를 용어+풀이로 병기하면서 1500에선 잘렸다
       setDetail(r2);
       // L3(지표별 근거)는 제품의 핵심 차별점이다. 실패율과 소요시간을 모르면 개선 근거가 없다.
       track("detail_shown", { ms: Math.round(performance.now() - _t0), dir: r1?.direction || null, retry: !!isRetry, axes: Array.isArray(r2?.reasons) ? r2.reasons.length : 0,
         subline: r2?.subline || null,        // 카드 앞면 설명 한 줄
         funline: r2?.funLine || null,        // 정령 멘트 — 톤 개선의 유일한 측정 대상
         reasons: reasonMap(r2?.reasons),     // 지표별 근거 전문(축별)
-        disclaimer: r2?.disclaimer || null });
+        disclaimer: r2?.disclaimer || null,
+        tok_in: _u2 ? _u2.in : null, tok_out: _u2 ? _u2.out : null });
     } catch (e) {
       setDetail({ _err: true });
       track("detail_failed", { reason: failReason(e), status: failStatus(e), ms: Math.round(performance.now() - _t0), dir: r1?.direction || null, retry: !!isRetry });
@@ -3412,16 +3416,18 @@ export default function App() {
     const outs = await Promise.allSettled(LETTER_PARTS.map((part, i) => callClaude(
       mat.system, [{ role: "user", content: `${mat.userText}\n\n${letterTask(mat.res, { reasons: mat.reasons }, mat.hesit, part)}` }], LETTER_TOK[i], "paid")));
     const ch = []; let closing = ""; let shape = null;
+    const tok = { in: 0, out: 0 };            // 서신은 여러 조각으로 나눠 쓴다 — 원가는 합쳐야 한 통 값이 된다
     outs.forEach((o) => {
       if (o.status !== "fulfilled") return;
-      const { json, txt } = o.value;
+      const { json, txt, usage } = o.value;
+      if (usage) { tok.in += usage.in; tok.out += usage.out; }
       const got = normChapters(json);
       if (!got.length && !shape) shape = letterShape(json, txt);   // 왜 못 읽었는지 한 조각만 남긴다
       ch.push(...got);
       if (!closing) closing = _pickStr(json || {}, ["closing", "맺음", "closing_line"]);
     });
     // 제목이 비면 정해진 목차로 메운다 — 본문만 오면 그건 우리가 채울 수 있는 결손이다
-    const doc = { chapters: ch.slice(0, 5).map((c, i) => ({ t: c.t || LETTER_SECTIONS[i] || "", body: c.body })), closing: closing.slice(0, 60), at: Date.now() };
+    const doc = { chapters: ch.slice(0, 5).map((c, i) => ({ t: c.t || LETTER_SECTIONS[i] || "", body: c.body })), closing: closing.slice(0, 60), at: Date.now(), tok };
     if (doc.chapters.length < 3) throw Object.assign(new Error(`장이 ${doc.chapters.length}개뿐`), { shape });   // 반쪽을 파느니 실패로 둔다
     return doc;
   };
@@ -3436,7 +3442,8 @@ export default function App() {
       setLetterDoc(doc);
       // 판결 기록에 붙여 둔다 — 홈 서신함에서 언제든 다시 열 수 있고, 새로고침에도 살아남는다
       setRecords((prev) => { if (!prev.length) return prev; const nx = prev.slice(); nx[nx.length - 1] = { ...nx[nx.length - 1], letter: doc }; return nx; });
-      track("letter_written", { ..._base(), ms: Math.round(performance.now() - t0), chapters: doc.chapters.length, chars: doc.chapters.reduce((a, c) => a + c.body.length, 0) });
+      track("letter_written", { ..._base(), ms: Math.round(performance.now() - t0), chapters: doc.chapters.length, chars: doc.chapters.reduce((a, c) => a + c.body.length, 0),
+        price: LETTER_PRICE, tok_in: doc.tok ? doc.tok.in : null, tok_out: doc.tok ? doc.tok.out : null });   // 4,900원짜리 한 통의 원가
     } catch (e) {
       setLetterDoc({ _err: true });
       // shape: 응답이 오긴 왔는데 못 읽은 경우 '어떤 키로 왔나'를 남긴다(본문은 담지 않는다).
@@ -3552,7 +3559,7 @@ export default function App() {
       // ── 콜1: 결론만(작은 출력=빠름) → L1 즉시 노출 ──
       const concludeMsg = { role: "user", content: `${userText}\n\n[이번 출력] 아래 JSON만. **votes를 먼저 채우고, 그 표를 세어 direction을 정하고, verdict는 그 direction을 말로 옮긴다.** 결론을 먼저 정해두고 표를 맞추지 마라 — 순서가 곧 판결의 정직함이다.\n{"category":"A|B|C","scope":"S1|S2|S3","votes":[{"axis":"지표명","v":"GO|STOP|중립"}],"tone":"단호|격려|충고","direction":"GO|STOP|HOLD","verdict":"한 문장 단답"}\nvotes엔 이번 판결에 참여한 지표를 전부 넣는다(사주·달·별자리·MBTI·수비학·마야 + 제공된 경우 삼재·가치·주역·토정비결). against·total은 앱이 센다 — 쓰지 마라. reasons·subline·funLine도 이번엔 쓰지 마.` };
       const priorConvo = convo; // 콜2가 쓸 이전 맥락(이번 턴 제외) 스냅샷
-      const { json: r1 } = await callClaude(system, [...priorConvo, concludeMsg], 560);   // votes 를 함께 받으므로 320→560
+      const { json: r1, usage: _u1 } = await callClaude(system, [...priorConvo, concludeMsg], 560);   // votes 를 함께 받으므로 320→560
       // 결론을 지표 표에서 산술로 확정 — 모델이 숫자를 지어내거나 표와 다른 결론을 말하지 못하게
       //   단 되물음은 새 판정이 아니라 앞 판결의 '풀이'다 — 표로 방향을 다시 정하면 승계가 깨진다.
       //   실측: "그래서 뭘 하라는 거야?"(앞 판결 GO)에서 표가 1GO:2STOP 이 나와 GO 를 STOP 으로 뒤집었다.
@@ -3569,7 +3576,8 @@ export default function App() {
         scope_level: _sLevel, scope_hint: _sHint, scope_agree: _sLevel ? _sLevel === _sHint : null, handoff_triggered: _sLevel === "S3", reask: _reask,
         // 표가 없거나(votes_ok=false) 표와 결론이 어긋난(dir_overridden) 비율이 곧 '판결이 지표에서 나오는가'의 지표다
         votes_ok: !!_tally, votes_n: _tally ? _tally.total : 0, dir_overridden: _tally ? _tally.overridden : null,
-        votes: voteMap(r1.votes) }));      // 축별 찬반 — HOLD 편중의 원인을 여기서 짚는다
+        votes: voteMap(r1.votes),
+        tok_in: _u1 ? _u1.in : null, tok_out: _u1 ? _u1.out : null }));   // 원가 — 유료 상품의 마진을 재려면 필요하다      // 축별 찬반 — HOLD 편중의 원인을 여기서 짚는다
       reactRef.current = { dir: r1.direction, t0: performance.now() };   // v28: 수호신이 판결을 연기
       setTimeout(() => { agitateRef.current = false; }, 700);
       setTimeout(() => { setCardOn(true); }, 1400);                       // 몸짓을 보여준 뒤 카드

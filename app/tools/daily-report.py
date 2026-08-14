@@ -97,7 +97,14 @@ SELECT
     countIf(event = 'verdict_rated' AND {EXT})                          AS rated,
     countIf(event = 'letter_clicked' AND {EXT})                         AS letter,
     countIf(event = 'letter_intent_confirmed' AND {EXT})                AS letter_yes,
+    countIf(event = 'letter_written' AND {EXT})                         AS letter_made,
+    countIf(event LIKE 'letter_%failed' AND {EXT})                      AS letter_err,
+    countIf(event = 'imprint_clicked' AND {EXT})                        AS imprint,
+    countIf(event = 'imprint_opened' AND {EXT})                         AS imprint_open,
     countIf(event = 'verdict_shared' AND {EXT})                         AS shared,
+    -- 원가: 유료 상품을 파는 이상 마진을 매일 봐야 한다
+    sumIf(toInt(coalesce(properties.tok_in, 0)) + toInt(coalesce(properties.tok_out, 0)),
+          event IN ('verdict_shown','detail_shown','letter_written') AND {EXT})  AS tokens,
     uniqIf(person_id, properties.is_internal = true)                    AS in_people,
     countIf(event = 'verdict_shown' AND properties.is_internal = true)  AS in_verdicts
 FROM events
@@ -171,14 +178,19 @@ MSG = {
     "숫자_판결":    "질문 {질문} → 판결 {판결}{판결증감}",
     "숫자_실패":    " · 실패 {실패}",
     "숫자_방향":    "GO {GO} · HOLD {HOLD}({HOLD비율}) · STOP {STOP}",
-    "숫자_반응":    "평가 {평가}건 {평가율} · 서신 {서신}건 {서신클릭률}",
+    "숫자_반응":    "평가 {평가}건 {평가율}",
     "숫자_받을게":  " → 받을게 {받을게}건",
     "숫자_공유":    " · 공유 {공유}건",
+    "숫자_서신":    "서신 {클릭}건 클릭 → {확인}건 받을게 → {발행}건 발행",
+    "숫자_서신실패": " · 실패 {실패}건",
+    "숫자_각인":    "각인 {클릭}건 클릭 → {열람}건 열람",
+    "숫자_원가":    "AI 원가 약 {원}원 · 1인 {인당}원",
 
     # ── 코멘트: 해당하는 것만 • 로 붙는다 ──
     "말_실패원인":  "실패 이유는 {원인}입니다. 그만큼 사람들이 답을 못 받고 나갔다는 뜻이라 제일 먼저 봐야 합니다.",
     "말_이탈지점":  "{화면} 화면에서 {인원}명이 빠져나갔습니다. 어제 사람을 가장 많이 잃은 곳입니다. 이 화면을 줄이거나 순서를 바꾸는 걸 생각해볼 만합니다.",
     "말_STOP없음":  "어제 'STOP(하지 마)' 판결이 하나도 없었습니다. 망설일 때 딱 잘라 말해주는 게 비나리인데, 정작 말리는 법이 없는 셈입니다. 데이터가 좀 더 쌓이면 판결 기준을 손볼지 정해야 합니다.",
+    "말_서신실패":  "서신 발행이 {실패}건 실패했습니다. 돈 받는 물건이라 판결 실패보다 급합니다. 바로 확인이 필요합니다.",
     "말_서신유보":  "서신은 아직 눌린 횟수가 적어 돈 낼 사람이 있는지 판단하기 이릅니다. 계속 지켜보겠습니다.",
     "말_서신판정":  "서신이 300번 넘게 노출됐습니다. 이제 돈 낼 사람이 있는지 판단할 수 있는 시점입니다.",
 
@@ -285,7 +297,8 @@ def build_report(cfg):
         return say("제목", 날짜=kdate(yesterday_kst())) + "\n" + MSG["데이터없음"]
 
     keys = ["d", "people", "visits", "ob_start", "ob_done", "asked", "verdicts",
-            "failed", "rated", "letter", "letter_yes", "shared", "in_people", "in_verdicts"]
+            "failed", "rated", "letter", "letter_yes", "letter_made", "letter_err",
+            "imprint", "imprint_open", "shared", "tokens", "in_people", "in_verdicts"]
     t = dict(zip(keys, rows[0]))
     p = dict(zip(keys, rows[1])) if len(rows) > 1 else {}
 
@@ -317,11 +330,19 @@ def build_report(cfg):
                  판결증감=delta(t["verdicts"], p.get("verdicts")))
              + (say("숫자_실패", 실패=t["failed"]) if t["failed"] else ""))
     if t["verdicts"]:
-        D += [say("숫자_방향", GO=go, HOLD=hold, HOLD비율=pct(hold, tv), STOP=stop),
-              say("숫자_반응", 평가=t["rated"], 평가율=pct(t["rated"], t["verdicts"]),
-                  서신=t["letter"], 서신클릭률=pct(t["letter"], t["verdicts"]))
-              + (say("숫자_받을게", 받을게=t["letter_yes"]) if t["letter"] else "")
-              + (say("숫자_공유", 공유=t["shared"]) if t["shared"] else "")]
+        D.append(say("숫자_방향", GO=go, HOLD=hold, HOLD비율=pct(hold, tv), STOP=stop))
+        D.append(say("숫자_반응", 평가=t["rated"], 평가율=pct(t["rated"], t["verdicts"]))
+                 + (say("숫자_공유", 공유=t["shared"]) if t["shared"] else ""))
+    # 유료 상품 두 개는 각자 한 줄을 갖는다 — 돈이 오가는 자리라 클릭만 세면 안 된다
+    if t["letter"] or t["letter_made"]:
+        D.append(say("숫자_서신", 클릭=t["letter"], 확인=t["letter_yes"], 발행=t["letter_made"])
+                 + (say("숫자_서신실패", 실패=t["letter_err"]) if t["letter_err"] else ""))
+    if t["imprint"]:
+        D.append(say("숫자_각인", 클릭=t["imprint"], 열람=t["imprint_open"]))
+    if t["tokens"]:
+        # 대략치다. 정확한 단가는 모델·티어마다 다르니 '약' 으로 적는다.
+        won = round(t["tokens"] / 1000 * 4)          # 1,000토큰 ≈ 4원 (sonnet 급 입출력 평균)
+        D.append(say("숫자_원가", 원=f"{won:,}", 인당=round(won / t["people"]) if t["people"] else 0))
     if t["in_people"] or t["in_verdicts"]:
         D.append(say("숫자_내부", 내부=t["in_people"], 내부판결=t["in_verdicts"]))
     D.append("```")
@@ -329,6 +350,9 @@ def build_report(cfg):
 
     # ── 코멘트: 숫자 반복 없이 '무엇을 할 것인가'만 ──
     notes = []
+    if t["letter_err"]:
+        notes.append(say("말_서신실패", 실패=t["letter_err"]))
+
     if t["failed"]:
         fails = hogql(cfg, Q_FAIL)
         cause = " · ".join(f"{FAIL_KO.get(str(r[0]), str(r[0]))} {r[1]}건" for r in fails) if fails else "원인 미분류"
