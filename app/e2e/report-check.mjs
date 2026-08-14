@@ -60,14 +60,16 @@ await onboard(page);
   const it = (await page.locator(".imp").textContent()) || "";
   ck("각인 — 겉과 속을 갈라 말한다", /너는 .{4,}(이야|야)/.test(it) && /네 속은 다르다/.test(it));
   ck("각인 — 생김새·짝 표가 채워진다", (await page.locator(".imp .impr").count()) >= 5, `${await page.locator(".imp .impr").count()}행`);
-  /* v118 여러 하늘의 증언 — 창업자 지적("글로벌 방법들은 적용이 된 거야 만 거야?")의 답이 되는 절이다.
-     감사 결과 열한 개 판독기 중 본문에 영향을 준 건 셋뿐이었다. 이 검사가 그 절의 실재를 지킨다. */
-  ck("각인 — 아홉 하늘이 화면에 증언한다", (await page.locator(".impwrow").count()) === 9, `${await page.locator(".impwrow").count()}줄`);
-  ck("각인 — 아홉 문명 이름이 다 나온다",
-    ["동아시아", "일본", "자바", "서양", "마야", "인도", "서아프리카", "수비학"].every((k) => it.includes(k)),
-    ["동아시아", "일본", "자바", "서양", "마야", "인도", "서아프리카", "수비학"].filter((k) => !it.includes(k)).join(",") || "전부");
-  ck("각인 — 사주가 아홉 중 하나라고 말한다", /사주는 그중 하나|아홉 하늘 중|아홉이 갈려/.test(it));
-  ck("각인 — 겹치거나 갈리거나 둘 중 하나로 판정한다", /같은 말을 해|갈려/.test(it));
+  /* v119 아홉 하늘 — 창업자 판정("그냥 사주인데 굳이 쟤네 왜 붙였지")의 답이다.
+     투표가 아니라 분업이어야 하고, 결과가 본문을 실제로 바꿔야 한다. */
+  ck("각인 — 아홉 하늘이 각자 다른 질문을 맡는다", (await page.locator(".impsky").count()) >= 9, `${await page.locator(".impsky").count()}개`);
+  ck("각인 — 사주에 없는 축을 화면에서 묻는다",
+    ["인생의 무게가 어디에 실렸나", "어느 쪽으로 움직여야 풀리나", "얼마나 무거운가", "시작에 강한가"].every((k) => it.includes(k)),
+    ["인생의 무게가 어디에 실렸나", "어느 쪽으로 움직여야 풀리나", "얼마나 무거운가", "시작에 강한가"].filter((k) => !it.includes(k)).join(",") || "전부");
+  ck("각인 — 사주와 다르게 읽히는 곳을 따로 말한다", (await page.locator(".impclash").count()) >= 1 && /사주와 다르게 읽히는 곳/.test(it),
+    `${await page.locator(".impclash").count()}개`);
+  ck("각인 — 사주에 아예 없는 것을 짚는다", /사주에 아예 없는 것/.test(it));
+  ck("각인 — 아홉 하늘이 여든 해 지도를 바꾼다", /두 셈이 같이 바뀌는 해|인도 셈만 바뀌는/.test(it));
   ck("각인 — 겉모습과 건강을 두 번 쓰지 않는다", !/생김새와 몸/.test(it) && (it.match(/평생 약한 곳/g) || []).length <= 1);
   ck("각인 — 비문이 없다", !/(사람|문|손|틀)이 얇/.test(it), (it.match(/.{6}(사람|문|손|틀)이 얇.{6}/) || [""])[0]);
   ck("각인 — 뒤집히는 조건 셋", (await page.locator(".imptrig").count()) === 3);

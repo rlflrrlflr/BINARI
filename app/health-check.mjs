@@ -561,15 +561,18 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
 {
   const imp = readFileSync("src/lib/imprint.js", "utf8");
   const app = readFileSync(APP, "utf8");
-  const wired = ["nayin", "honmeisei", "weton", "akan", "lifePath", "tzolkin", "nakshatra", "sunSign"]
+  const wired = ["nayin", "honmeisei", "weton", "akan", "lifePath", "tzolkin", "moonPhase", "partOfFortune"]
     .filter((f) => new RegExp(`${f}\\(`).test(imp));
-  const hasWitness = /const witness = \{/.test(imp) && /putW\(/.test(imp);
+  /* 분업이어야 한다 — 같은 질문에 투표시키면 오행 어휘로 환원돼 결국 사주로 읽힌다(v118 실패).
+     그리고 결과가 본문(여든 해 지도)을 실제로 바꿔야 한다. 세어만 놓으면 부록이다. */
+  const hasWitness = /const sky9 = \[/.test(imp) && /putS\(/.test(imp)
+    && /const clash = \[/.test(imp) && /doubleTurn/.test(imp);
   const latWired = /cityLat\(/.test(app) && /lat: cityLat/.test(app);
   const ok = wired.length >= 8 && hasWitness && latWired;
   add(ok ? "정상" : "심각",
-    ok ? `여러 하늘 — 판독기 ${wired.length}종이 본문에 물려 있음` : "여러 문명 판독기가 다시 장식이 됨",
-    ok ? `${wired.join("·")} + 증언 절 + 위도 연결` : `물린 판독기 ${wired.length}종(${wired.join("·")}) 증언절=${hasWitness} 위도=${latWired}`,
-    "판독기를 계산만 해 두고 본문에 안 쓰면 '사주 앱'으로 읽힙니다. 그리고 태어난 곳은 경도·위도를 모두 써야 합니다 — 위도를 안 넘기면 제주에서 태어난 사람이 서울 값을 받습니다.");
+    ok ? `여러 하늘 — 판독기 ${wired.length}종이 분업 중` : "여러 문명 판독기가 다시 장식이 됨",
+    ok ? `${wired.join("·")} + 분업 절·어긋남 절 + 위도 연결` : `물린 판독기 ${wired.length}종(${wired.join("·")}) 증언절=${hasWitness} 위도=${latWired}`,
+    "판독기에게 같은 질문을 던져 투표시키면 오행 어휘로 환원돼 결국 사주로 읽힙니다 — 각자 사주가 못 하는 질문을 하나씩 맡아야 하고, 그 결과가 본문을 실제로 바꿔야 합니다. 그리고 태어난 곳은 경도·위도를 모두 써야 합니다 — 위도를 안 넘기면 제주에서 태어난 사람이 서울 값을 받습니다.");
 }
 
 /* ── 검사 6. 의존성 취약점 (npm audit) ───────────────────────────────────

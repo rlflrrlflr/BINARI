@@ -186,47 +186,57 @@ ck("확인 문항 개수와 실제 축 개수가 맞는다",
    a.checks.filter((c) => /말썽인가/.test(c[0])).length === a.health.els.length);
 
 
-/* ── ⑯ 여러 하늘이 실제로 물려 있는가 ──
-   창업자 지적(2026-08-14): "그냥 사주 내용이랑 꼭 같은데, 글로벌 방법들은 적용이 된 거야 만 거야?"
-   감사 결과 열한 개 판독기 중 본문에 영향을 준 건 셋뿐이었고 나머지는 각주 장식이거나 미사용이었다.
-   이 검사는 **아홉 문명이 각각 자기 값을 내고, 사주가 그중 하나로만 세어지는지**를 지킨다. */
+/* ── ⑯ 아홉 하늘이 **분업**하는가, 그리고 사주를 실제로 흔드는가 ──
+   v118 은 아홉에게 같은 질문을 던져 다섯 낱말(=오행)에 투표시켰다. 두 가지가 망가졌다:
+   ① 오행 어휘로 환원돼 결국 사주로 읽혔고 ② 세어 놓고 그 결과로 아무것도 안 했다.
+   창업자 판정: "그냥 사주인데 굳이 쟤네 왜 붙였지 싶어."
+   이 검사는 **각자 다른 질문을 맡는가**와 **결과가 본문을 실제로 바꾸는가**를 지킨다. */
 {
-  const w = a.witness;
-  ck("아홉 하늘이 전부 증언한다", w.total >= 9, `${w.total}개 — ${w.rows.map((x) => x.from.split(" · ")[0]).join(",")}`);
-  ck("사주는 아홉 중 하나다(첫 줄일 뿐 가중치 없음)", w.rows[0].from.includes("여덟 글자") && w.tally.reduce((t, x) => t + x.n, 0) === w.total);
-  ck("증언마다 근거 각주가 붙는다", w.rows.every((x) => Number.isInteger(x.n) && x.n >= 1 && x.n <= a.notes.length));
-  ck("해석이 섞인 문명은 그렇다고 밝힌다",
-    ["마야", "인도", "서아프리카", "수비학"].every((k) => {
-      const row = w.rows.find((x) => x.from.includes(k));
-      return row && a.notes[row.n - 1].includes("해석이 섞인다");
-    }));
-  ck("변환 없는 문명은 그렇다고 밝힌다",
-    ["소리의 오행", "아홉 별", "다섯 장날"].every((k) => {
-      const row = w.rows.find((x) => x.from.includes(k));
-      return row && a.notes[row.n - 1].includes("변환이 없다");
-    }));
-  /* 합의라고 말할 때만 실제로 합의여야 한다 — 3:3:3 을 1위라 부르면 반올림이지 합의가 아니다 */
-  for (const [nm, r] of [["A", a], ["B", b]]) {
-    const v = r.witness;
-    ck(`${nm} — 겹친다고 말할 때만 실제로 겹친다`,
-      v.agree ? (v.topN >= 4 && v.topN - v.secondN >= 2) : true, `${v.topN}:${v.secondN} agree=${v.agree}`);
-    ck(`${nm} — 갈리면 급소라고 쓴다`, v.agree ? /흔하지 않아/.test(v.tail) : /급소/.test(v.tail));
-  }
-  /* 사람이 바뀌면 증언도 바뀌어야 한다 — 안 바뀌면 아홉을 돌린 의미가 없다 */
+  ck("아홉 하늘이 전부 답한다", a.sky9.length >= 9, `${a.sky9.length}개`);
+  const asks = a.sky9.map((x) => x.ask);
+  ck("아홉이 서로 다른 질문을 맡는다(투표가 아니다)", new Set(asks).size === asks.length, `${new Set(asks).size}/${asks.length}종`);
+  ck("사주에 없는 축을 실제로 채운다",
+    ["인생의 무게", "어느 쪽으로", "얼마나 무거운가", "시작에 강한가"].every((k) => asks.some((q) => q.includes(k))),
+    asks.join(" / "));
+  ck("답마다 근거 각주가 붙는다", a.sky9.every((x) => Number.isInteger(x.n) && x.n >= 1 && x.n <= a.notes.length));
+  /* 아홉 전부가 셋 중 하나로 자기 급을 밝혀야 한다 — 계산 그대로 / 변환이 없다 / 해석이 섞인다.
+     급을 안 밝히면 지어낸 것과 옮긴 것이 같은 목소리로 나간다. */
+  const grade = (x) => ["계산 그대로", "변환이 없다", "해석이 섞인다"].filter((g) => a.notes[x.n - 1].includes(g));
+  ck("아홉 전부가 근거의 급을 밝힌다", a.sky9.every((x) => grade(x).length === 1),
+    a.sky9.filter((x) => grade(x).length !== 1).map((x) => x.from).join(",") || "전부 밝힘");
+  ck("해석이 섞인 곳이 있고, 그렇다고 적혀 있다", a.sky9.filter((x) => grade(x)[0] === "해석이 섞인다").length >= 2);
+  ck("옮김 없이 그대로 쓴 곳도 있다", a.sky9.filter((x) => grade(x)[0] !== "해석이 섞인다").length >= 4);
+  /* 결과가 본문을 실제로 바꾸는가 — 여든 해 지도에 표식이 얹혀야 한다 */
+  const marked = a.bands.filter((x) => x.doubleTurn || x.dashaOnly).length;
+  ck("아홉 하늘이 여든 해 지도를 실제로 바꾼다", a.bands.every((x) => "doubleTurn" in x && "dashaOnly" in x) && marked >= 1,
+    `표식 붙은 구간 ${marked}개`);
+}
+
+/* ── ⑯-b 사주와 어긋나는 곳을 따로 말하는가 ──
+   창업자 요청: "기존 사주와 다르게 해석되는 부분도 알려줘." 이게 아홉을 붙인 이유 그 자체다.
+   ⚠ 억지로 만들면 더 나쁘다 — 어긋남이 없으면 없다고 써야 한다. */
+{
+  ck("어긋나는 곳을 따로 모은다", Array.isArray(a.clash) && a.clash.length >= 1, `${a.clash.length}개 — ${a.clash.map((c) => c.t).join(", ")}`);
+  ck("어긋남마다 근거가 붙는다", a.clash.every((c) => Number.isInteger(c.n) && c.n >= 1 && c.n <= a.notes.length));
+  ck("'사주에 아예 없는 것'은 항상 있다", a.clash.some((c) => c.t.includes("아예 없는")));
+  /* 겉과 속이 같은 사람에게는 '겉과 속' 어긋남을 쓰지 않는다 — 없는 걸 지어내지 않는다 */
+  const same = readImprint({ ...A, saju: { ...A.saju, idx: { ...A.saju.idx, dG: 2 } } });
+  const hasSplit = (r) => r.clash.some((c) => c.t === "겉과 속");
+  ck("겉과 속이 같으면 그 어긋남을 안 쓴다", hasSplit(a) === a.core.split && hasSplit(same) === same.core.split);
+  /* 사람이 바뀌면 어긋남도 바뀌어야 한다 */
   const LAD = (s2) => [...Array(8)].map((_, i) => ({ startAge: s2 + i * 10, endAge: s2 + 9 + i * 10,
     ganji: ["병진", "을묘", "갑인", "계축", "임자", "신해", "경술", "기유"][i], el: ["토", "목", "목", "토", "수", "수", "토", "금"][i] }));
-  const seen = new Set(), splits = [];
+  const kinds = new Set(), vals = new Set();
   for (let i = 0; i < 60; i++) {
     const r = readImprint({ saju: { idx: { yG: i % 10, yJ: i % 12, mG: (i * 3) % 10, mJ: (i * 5) % 12, dG: (i * 7) % 10, dJ: (i * 11) % 12, hG: (i * 2) % 10, hJ: (i * 4) % 12 },
       counts: { 목: i % 4, 화: (i + 1) % 4, 토: (i + 2) % 4, 금: (i + 3) % 4, 수: (i + 1) % 3 } },
       ladder: LAD(3 + i % 7), birth: { y: 1970 + i % 40, m: 1 + i % 12, d: 1 + i % 28, h: i % 24, min: 0 },
       sex: i % 2 ? "M" : "F", now: new Date(2026, 7, 14) });
-    seen.add(r.witness.rows.map((x) => x.tag).join(""));
-    splits.push(r.witness.agree);
+    kinds.add(r.clash.map((c) => c.t).join("|"));
+    vals.add(r.sky9.map((x) => x.val).join("|"));
   }
-  ck("사람이 바뀌면 증언 조합도 바뀐다", seen.size >= 40, `60명 중 ${seen.size}종`);
-  const agreeRate = splits.filter(Boolean).length / splits.length;
-  ck("합의가 늘 나오지도, 아예 안 나오지도 않는다", agreeRate > 0.05 && agreeRate < 0.8, `합의율 ${(agreeRate * 100).toFixed(0)}%`);
+  ck("사람이 바뀌면 아홉 하늘의 값도 바뀐다", vals.size >= 50, `60명 중 ${vals.size}종`);
+  ck("사람이 바뀌면 어긋나는 항목도 바뀐다", kinds.size >= 4, `${kinds.size}종`);
 }
 
 /* ── ⑰ 은유가 비문이 되지 않는가 ──

@@ -819,7 +819,7 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
       </svg>
     );
   };
-  const WitnessBar = () => {
+  const _unusedBar = () => {
     const t = r.witness.tally, tot = r.witness.total;
     const C = ["#5b8fd4", "#c98f3d", "#8a7f95", "#6f6580", "#4a4256"];
     let x = 10;
@@ -901,24 +901,24 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
       <p className="impp"><b>그리고 네게는 {r.core.block.t}이 얇아.</b><Ref n={r.core.n3} /> {r.core.block.s}. {r.core.block.w}</p>
       <p className="impfix"><b>그래서 필요한 건 하나야</b> — {r.core.block.fix}.</p>
 
-      <p className="imph">아홉 하늘이 뭐라고 하는가 <i>사주는 그중 하나야</i></p>
-      <p className="impp">한 사람을 <b>아홉 문명이 따로 읽었어.</b> 동아시아 · 일본 · 자바 · 서양 · 마야 · 인도 · 서아프리카 · 수비학.
-        서로 아는 사이도 아니고 같은 걸 보지도 않아. 그런데 <b>겹치면 그건 진짜고, 갈리면 그게 네 급소야.</b></p>
-      <div className={"impwv" + (r.witness.agree ? " agree" : "")}>
-        <p className="impwh"><H t={r.witness.head} /><Ref n={r.witness.n} /></p>
-        <p className="impwt"><H t={r.witness.tail} /></p>
-        {r.witness.sajuLine && <p className="impws"><H t={r.witness.sajuLine} /></p>}
-      </div>
-      <WitnessBar />
-      <div className="impwrows">
-        {r.witness.rows.map((x, i) => (
-          <div className={"impwrow" + (x.tag === r.witness.tally[0].tag ? " on" : "")} key={i}>
-            <div className="impwfrom">{x.from}</div>
-            <div className="impwval">{x.val}</div>
-            <div className="impwsay">{x.w}<Ref n={x.n} /></div>
-          </div>
-        ))}
-      </div>
+      <p className="imph">아홉 하늘 <i>각자 다른 걸 본다</i></p>
+      <p className="impp">아홉 문명이 <b>서로 다른 질문</b>을 맡았어. 같은 걸 아홉 번 묻지 않아 —
+        사주가 <b>못 하는 질문</b>을 하나씩 나눠 가졌어. 삶을 열두 자리로 쪼개는 축, 방위, 날의 무게,
+        시작에 강한가 마무리에 강한가. <b>사주에는 이 질문 자체가 없어.</b></p>
+      {r.sky9.map((x, i) => (
+        <div className="impsky" key={i}>
+          <p className="impskh"><i>{x.from}</i>{x.ask}<Ref n={x.n} /></p>
+          <p className="impskv">{x.val}</p>
+          <p className="impskw"><H t={x.say} /></p>
+        </div>
+      ))}
+
+      <p className="imph">사주와 다르게 읽히는 곳 <i>여기가 갈리는 지점이야</i></p>
+      <p className="impp">사주 한 벌만 봤으면 <b>못 나왔을 것들</b>이야. 겹치는 건 더 무겁게 보고,
+        어긋나는 건 어긋난 채로 둬 — <b>사람은 한 줄로 안 적혀.</b></p>
+      {r.clash.map((c, i) => (
+        <div className="impclash" key={i}><b>{c.t}</b><Ref n={c.n} /><p><H t={c.w} /></p></div>
+      ))}
 
       <p className="imph">생김새 <i>거울 앞에서 바로 확인돼</i></p>
       {r.body.map(Row)}
@@ -954,7 +954,9 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
         <div className={"impband" + (r.cur && b.from === r.cur.from ? " now" : "")} key={i}>
           <div className="impage">{b.from}~{b.to}<i>세</i></div>
           <div><b>{b.title}</b>{r.cur && b.from === r.cur.from ? <em> ◂ 지금</em> : null}
-            <p>{b.event}{b.dashaKo ? ` · ${b.dashaKo}` : ""}</p></div>
+            {b.doubleTurn ? <em className="dbl"> ◆ 두 셈이 같이 바뀌는 해</em> : null}
+            <p>{b.event}{b.dashaKo ? ` · ${b.dashaKo}` : ""}</p>
+            {b.dashaOnly ? <p className="only">사주로는 조용한데 인도 셈만 바뀌는 구간이 여기 들어 있어</p> : null}</div>
         </div>
       ))}
 
@@ -2239,7 +2241,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v118 · 아홉 하늘";
+const APP_VER = "v119 · 하늘의 분업";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -4406,6 +4408,18 @@ const CSS = `
 .impaskrow span{font-size:11.5px;color:#9d8fb5;flex:0 0 72px}
 .impchip{background:none;border:1px solid #c9b98f3d;border-radius:14px;color:#bfb6cc;font-size:11.5px;padding:4px 13px;cursor:pointer}
 .impchip.on{border-color:#f5d98b;color:#f5d98b;background:#c98f3d1f}
+.impsky{margin:0 0 4px;padding:11px 12px;border-left:2px solid #6f658055;background:#1a152455;border-radius:0 7px 7px 0}
+.impskh{font-size:11px;color:#8a7f95;margin:0;letter-spacing:.02em}
+.impskh i{font-style:normal;display:block;font-size:9.5px;color:#c98f3daa;letter-spacing:.12em;margin-bottom:3px}
+.impskv{font-size:12px;color:#f0e2b8;margin:5px 0 6px;font-weight:600}
+.impskw{font-size:13px;line-height:1.85;color:#c8bcd8;margin:0}
+.impskw b{color:#e6dff2}
+.impclash{margin:0 0 8px;padding:12px 13px;border:1px solid #c98f3d44;border-radius:9px;background:#c98f3d0d}
+.impclash>b{font-size:12px;color:#f0e2b8;letter-spacing:.04em}
+.impclash p{font-size:13px;line-height:1.85;color:#c8bcd8;margin:6px 0 0}
+.impclash p b{color:#e8a06a}
+.impband .dbl{font-size:9.5px;color:#e8a06a;font-style:normal;margin-left:6px}
+.impband .only{font-size:10.5px;color:#8a7f95;margin-top:4px}
 .impwv{margin:12px 0 10px;padding:13px 14px;border-radius:9px;border:1px solid #6f658055;background:#1a152488}
 .impwv.agree{border-color:#c98f3d66;background:#c98f3d10}
 .impwh{font-size:14px;line-height:1.75;color:#e6dff2;margin:0}
