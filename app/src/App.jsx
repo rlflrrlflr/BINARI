@@ -730,10 +730,14 @@ const IMPRINT_PRICE = 9900;
 const josa = (w, a, b) => { const c = String(w).charCodeAt(String(w).length - 1) - 0xac00; return (c >= 0 && c < 11172 && c % 28) ? a : b; };
 function ImprintDoc({ saju, birth, sex, onClose }) {
   const [notesOn, setNotesOn] = useState(false);
+  /* v115 선택 입력 — **각인을 열 때만** 묻는다. 무료 온보딩은 건드리지 않는다.
+     없어도 문서는 나온다. 있으면 **틀린 말을 안 하게 된다** — 마흔 살 기혼자에게
+     "서른에 짝을 만난다"고 쓰는 순간 문서 전체가 죽는다. 그 한 줄을 막으려고 받는다. */
+  const [extra, setExtra] = useState(() => { try { return JSON.parse(localStorage.getItem("binari_imprint_extra") || "{}"); } catch { return {}; } });
+  const [askOpen, setAskOpen] = useState(extra.married == null && (new Date().getFullYear() - +(birth?.y || 0) + 1) >= 20);
+  const setEx = (k, v) => { const n = { ...extra, [k]: v }; setExtra(n); try { localStorage.setItem("binari_imprint_extra", JSON.stringify(n)); } catch {} };
   const r = useMemo(() => {
     try {
-      /* 열 해 사다리는 여기서 직접 뽑는다 — 밖에서 받아 오면 계산이 두 군데로 갈린다.
-         성별이 없으면 방향이 안 서므로 빈 배열이 되고, 그러면 각인이 그 자리를 비운다. */
       const ladder = [];
       if (sex && birth && birth.y) {
         for (let a = 1; a <= 71; a += 10) {
@@ -742,26 +746,98 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
           if (du && !du.pre && !ladder.some((x) => x.startAge === du.startAge)) ladder.push(du);
         }
       }
-      return readImprint({ saju, ladder, birth, sex, lon: cityLon(birth?.city) });
+      return readImprint({ saju, ladder, birth, sex, lon: cityLon(birth?.city),
+        married: extra.married ?? null, kids: extra.kids ?? null, timeAcc: extra.timeAcc ?? null });
     } catch (e) { return null; }
-  }, [saju, birth, sex]);
-  useEffect(() => { track("imprint_opened", { has_sex: !!sex, has_hour: !!(saju?.idx && saju.idx.hG != null), notes: r ? r.notes.length : 0 }); }, []);
-  if (!r) return (
-    <div className="imp"><p className="impmsg">각인을 읽지 못했어. 생년월일을 다시 확인해 줄래?</p>
-      <button className="btn ghost mt" onClick={onClose}>닫을게</button></div>
-  );
+  }, [saju, birth, sex, extra.married, extra.kids, extra.timeAcc]);
+  useEffect(() => { track("imprint_opened", { has_sex: !!sex, has_hour: !!(saju?.idx && saju.idx.hG != null), has_extra: extra.married != null }); }, []);
+  if (!r) return (<div className="imp"><p className="impmsg">각인을 읽지 못했어. 생년월일을 다시 확인해 줄래?</p>
+    <button className="btn ghost mt" onClick={onClose}>닫을게</button></div>);
   const Ref = ({ n }) => (notesOn && n ? <sup className="impfx">{n}</sup> : null);
+  const H = ({ t }) => <span dangerouslySetInnerHTML={{ __html: t }} />;
   const Row = ([k, v, n], i) => (
     <div className="impr" key={i}><div className="impk">{k}</div>
-      <div className="impv"><span dangerouslySetInnerHTML={{ __html: v }} /><Ref n={n} /></div></div>
+      <div className="impv"><H t={v} /><Ref n={n} /></div></div>
+  );
+  /* ── 그래프 — 숫자가 눈에 보여야 문서가 값을 갖는다 ── */
+  const W = 320;
+  const LifeChart = () => {
+    if (!r.bands.length) return null;
+    const F = { 정재: 2, 편재: 3, 식신: 1, 상관: 2, 정관: -1, 편관: -2, 정인: 1, 편인: 0, 비견: 1, 겁재: -1 };
+    const bw = (W - 20) / r.bands.length;
+    return (
+      <svg viewBox={`0 0 ${W} 108`} width="100%" height="108" className="impsvg" role="img" aria-label="여든 해의 높낮이">
+        {r.bands.map((b, i) => {
+          const f = F[b.ss] ?? 0, h = 8 + Math.abs(f) * 13, y = f >= 0 ? 58 - h : 58;
+          const on = r.cur && b.from === r.cur.from;
+          return <g key={i}>
+            <rect x={10 + i * bw + 2} y={y} width={bw - 4} height={h} rx="2"
+              fill={f >= 2 ? "#5b8fd4" : f === 1 ? "#4a6f9e" : f === 0 ? "#6f6580" : f === -1 ? "#a8674f" : "#a83229"} opacity={on ? 1 : 0.75} />
+            <text x={10 + i * bw + bw / 2} y={96} fontSize="7.5" fill={on ? "#f5d98b" : "#8a7f95"} textAnchor="middle">{b.from}</text>
+          </g>;
+        })}
+        <line x1="10" y1="58" x2={W - 10} y2="58" stroke="#c9b98f44" />
+        <text x={W - 10} y="104" fontSize="7" fill="#6f6580" textAnchor="end">위로 갈수록 순한 열 해</text>
+      </svg>
+    );
+  };
+  const MonthChart = () => {
+    const ms = [...r.when.hardMonths.map((m) => [m, -1]), ...r.when.softMonths.map((m) => [m, 1])].sort((a, b) => a[0] - b[0]);
+    if (!ms.length) return null;
+    const bw = (W - 20) / 12;
+    return (
+      <svg viewBox={`0 0 ${W} 82`} width="100%" height="82" className="impsvg" role="img" aria-label="열두 달의 높낮이">
+        {[...Array(12)].map((_, i) => {
+          const m = i + 1, f = (ms.find((x) => x[0] === m) || [0, 0])[1], h = 6 + Math.abs(f) * 26;
+          return <g key={m}>
+            <rect x={10 + i * bw + 2} y={f >= 0 ? 50 - h : 50} width={bw - 4} height={h} rx="2" fill={f > 0 ? "#5b8fd4" : f < 0 ? "#a83229" : "#6f6580"} opacity="0.85" />
+            <text x={10 + i * bw + bw / 2} y={70} fontSize="7.5" fill="#8a7f95" textAnchor="middle">{m}</text>
+          </g>;
+        })}
+        <line x1="10" y1="50" x2={W - 10} y2="50" stroke="#c9b98f44" />
+      </svg>
+    );
+  };
+  const CoreFig = () => (
+    <svg viewBox="0 0 320 116" width="100%" height="116" className="impsvg" role="img" aria-label="겉과 속">
+      <rect x="8" y="20" width="118" height="66" rx="4" fill="none" stroke="#8a7f95" strokeWidth="1.4" />
+      <text x="67" y="14" fontSize="8" fill="#8a7f95" textAnchor="middle" letterSpacing="2">겉</text>
+      <text x="67" y="52" fontSize="12" fill="#e6dff2" textAnchor="middle">{r.core.surface.w.slice(0, 9)}</text>
+      <rect x="194" y="20" width="118" height="66" rx="4" fill="none" stroke="#a83229" strokeWidth="1.4" />
+      <text x="253" y="14" fontSize="8" fill="#e8a06a" textAnchor="middle" letterSpacing="2">속</text>
+      <text x="253" y="52" fontSize="12" fill="#f0b6ab" textAnchor="middle">{r.core.inner.w}</text>
+      <path d="M188 53 L146 53" stroke="#e8a06a" strokeWidth="1.6" />
+      <path d="M152 48 L144 53 L152 58" fill="none" stroke="#e8a06a" strokeWidth="1.6" />
+      <line x1="160" y1="34" x2="160" y2="72" stroke="#a83229" strokeWidth="3" />
+      <line x1="152" y1="40" x2="168" y2="66" stroke="#a83229" strokeWidth="1.6" />
+      <text x="160" y="86" fontSize="8" fill="#f0b6ab" textAnchor="middle">{r.core.block.t}이 얇다</text>
+      <text x="160" y="106" fontSize="7.5" fill="#6f6580" textAnchor="middle">그래서 안에서만 돈다</text>
+    </svg>
   );
   return (
     <div className="imp fade">
       <div className="imphead">
         <p className="impeyebrow">비 나 리 · 각 인</p>
         <p className="imptitle">네가 어떻게 만들어졌는지</p>
-        <p className="impsub">이건 한 질문에 대한 답이 아니야. <b>너라는 사람 전체</b>에 대한 문서야.</p>
+        <p className="impsub">이건 한 질문에 대한 답이 아니야. <b>너라는 사람 전체</b>에 대한 문서야.
+          자리마다 넷으로 나눠 적었어 — <b>어떻게 태어났나, 자라며 어떻게 나타났나, 지금 어디인가, 앞으로 어떻게 되나.</b></p>
       </div>
+
+      {askOpen && (
+        <div className="impask fade">
+          <p className="impaskh">두 가지만 더 알려주면 훨씬 정확해져 <i>선택이야</i></p>
+          <div className="impaskrow"><span>결혼했어?</span>
+            <button className={"impchip" + (extra.married === true ? " on" : "")} onClick={() => setEx("married", true)}>했어</button>
+            <button className={"impchip" + (extra.married === false ? " on" : "")} onClick={() => setEx("married", false)}>아직</button>
+          </div>
+          <div className="impaskrow"><span>아이가 있어?</span>
+            <button className={"impchip" + (extra.kids === true ? " on" : "")} onClick={() => setEx("kids", true)}>있어</button>
+            <button className={"impchip" + (extra.kids === false ? " on" : "")} onClick={() => setEx("kids", false)}>없어</button>
+          </div>
+          <p className="impaskw">이걸 모르면 <b>이미 지난 일을 앞일처럼</b> 적게 돼. 안 알려줘도 문서는 나오지만, 그 부분이 헐거워져.</p>
+          <button className="btn ghost sm" onClick={() => setAskOpen(false)}>{extra.married != null || extra.kids != null ? "이대로 읽을게" : "안 알려줄래"}</button>
+        </div>
+      )}
 
       <p className="imph">너는 어떤 사람인가</p>
       <p className="impdcl">너는 <b>{r.core.surface.w}</b>{josa(r.core.surface.w, "이야", "야")}.<Ref n={r.core.n1} /></p>
@@ -771,6 +847,7 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
         <p className="impcv">네 속은 다르다. <b>{r.core.inner.w}.</b><Ref n={r.core.n2} /></p>
         <p className="impcw">{r.core.inner.d}. {r.core.split ? "겉으로 보이는 모습과 속이 다른 사람이야." : "겉과 속이 같은 방향이라 오해는 덜 받아."}</p>
       </div>
+      <CoreFig />
       <p className="impp"><b>그리고 네게는 {r.core.block.t}이 얇아.</b><Ref n={r.core.n3} /> {r.core.block.s}. {r.core.block.w}</p>
       <p className="impfix"><b>그래서 필요한 건 하나야</b> — {r.core.block.fix}.</p>
 
@@ -779,15 +856,20 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
 
       <p className="imph">언제 네가 너 같지 않은가</p>
       <p className="impp">사람은 늘 같지 않아. <b>차분한 사람도 무너질 때가 있고, 순한 사람도 사나워질 때가 있어.</b> 네 곁에 있을 사람들이 알아야 할 건 네가 어떤 사람인지가 아니라 <b>언제 네가 달라지는지</b>야.</p>
-      {r.trig.map((t, i) => (
-        <div className="imptrig" key={i}><b>{t.t}</b><Ref n={t.n} /><p>{t.w}</p></div>
-      ))}
+      {r.trig.map((t, i) => (<div className="imptrig" key={i}><b>{t.t}</b><Ref n={t.n} /><p>{t.w}</p></div>))}
+      <MonthChart />
       <p className="impwhen"><b>해마다</b> {r.when.hardMonths.length ? `${r.when.hardMonths.join("·")}월이 무겁다` : "특별히 무거운 달은 없다"}
         {r.when.softMonths.length ? ` · ${r.when.softMonths.join("·")}월이 순하다` : ""}.<Ref n={r.when.n} /> 무거운 달엔 새로 시작하지 말고 하던 걸 지켜.</p>
 
-      <p className="imph">일 — 어디서 밥을 버나</p>
-      <p className="impdcl2"><b>{r.job.job}</b>{josa(r.job.job, "이야", "야")}.<Ref n={r.job.n} /></p>
-      <p className="impp">{r.job.grew}. 맞는 판은 <b>{r.job.ex}</b>{josa(r.job.ex, "이야", "야")}.</p>
+      <p className="imph">네 삶의 {["","한","두","세","네","다섯","여섯","일곱","여덟","아홉"][r.domains.length] || r.domains.length} 자리 <i>태어날 때 · 자라면서 · 지금 · 앞으로</i></p>
+      {r.domains.map((d, i) => (
+        <div className="impdom" key={i}>
+          <p className="impdh">{d.t}<Ref n={d.n} /></p>
+          {d.steps.map(([lab, txt], k) => (
+            <div className="impstep" key={k}><i>{lab}</i><span><H t={txt} /></span></div>
+          ))}
+        </div>
+      ))}
 
       {r.mate && <>
         <p className="imph">짝 — 누구를 만나나</p>
@@ -797,6 +879,7 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
 
       <p className="imph">여든 해 — 네 인생 지도</p>
       {r.bands.length === 0 && <p className="impmsg">열 해 단위 큰 흐름은 <b>성별이 있어야</b> 방향이 서.</p>}
+      <LifeChart />
       {r.bands.map((b, i) => (
         <div className={"impband" + (r.cur && b.from === r.cur.from ? " now" : "")} key={i}>
           <div className="impage">{b.from}~{b.to}<i>세</i></div>
@@ -804,16 +887,23 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
             <p>{b.event}{b.dashaKo ? ` · ${b.dashaKo}` : ""}</p></div>
         </div>
       ))}
+
+      <p className="imph">지금 확인해 보아라 <i>오늘 알 수 있는 것들</i></p>
+      <p className="impp">왜 그런지는 안 적었어. <b>대신 확인할 방법을 줄게.</b> 아래가 맞는지는 네가 이미 알아.
+        <b>일곱 이상 맞으면</b> 나머지도 참고할 만하고, <b>여섯 이하면 접어 둬.</b></p>
+      {r.checks.map(([q, w], i) => (
+        <div className="impck" key={i}><i /><div><b>{q}</b><p>{w}</p></div></div>
+      ))}
+
       {r.noHour && <p className="impmsg">태어난 <b>시(時)를 몰라</b> 네 자리 중 하나가 비었어. 시에 걸린 건 못 읽었다고 봐야 해.</p>}
+      {!r.given.city && <p className="impmsg">태어난 <b>도시를 몰라</b> 서울 기준으로 읽었어. 다른 지역이면 시(時)와 겉모습이 한 칸 옮겨갈 수 있어.</p>}
 
       <div className="impfoot">
         <button className="btn ghost sm" onClick={() => { setNotesOn(v => !v); track("imprint_notes_toggled", { on: !notesOn }); }}>
           {notesOn ? "▴ 근거 접기" : `▾ 근거 보기 — ${r.notes.length}개`}</button>
-        {notesOn && (
-          <ol className="impnotes">
-            {r.notes.map((t, i) => <li key={i}><span>{i + 1}</span><span dangerouslySetInnerHTML={{ __html: t }} /></li>)}
-          </ol>
-        )}
+        {notesOn && (<ol className="impnotes">
+          {r.notes.map((t, i) => <li key={i}><span>{i + 1}</span><span dangerouslySetInnerHTML={{ __html: t }} /></li>)}
+        </ol>)}
         <button className="btn ghost mt" onClick={onClose}>닫을게</button>
       </div>
     </div>
@@ -2079,7 +2169,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v114 · 각인";
+const APP_VER = "v115 · 각인 심화";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -4238,6 +4328,28 @@ const CSS = `
 .dstep b{color:#f0d9a0}
 
 /* ── v113 각인 — 판결 카드와 다른 결이어야 한다. 카드는 짧고 각인은 문서다 ── */
+/* v115 각인 — 4단·그래프·추가 입력 */
+.impask{margin:14px 0 6px;padding:14px 14px;border:1px solid #c98f3d44;border-radius:9px;background:#c98f3d0f}
+.impaskh{font-size:12.5px;color:#f0e2b8;margin:0}
+.impaskh i{font-style:normal;float:right;font-size:9.5px;color:#8a7f95;letter-spacing:.1em}
+.impaskrow{display:flex;align-items:center;gap:7px;margin-top:11px}
+.impaskrow span{font-size:11.5px;color:#9d8fb5;flex:0 0 72px}
+.impchip{background:none;border:1px solid #c9b98f3d;border-radius:14px;color:#bfb6cc;font-size:11.5px;padding:4px 13px;cursor:pointer}
+.impchip.on{border-color:#f5d98b;color:#f5d98b;background:#c98f3d1f}
+.impaskw{font-size:10.5px;line-height:1.7;color:#8a7f95;margin:11px 0 9px}
+.impaskw b{color:#c9b98f}
+.impsvg{display:block;margin:12px 0 2px;background:#0f0b1a4d;border-radius:8px;padding:6px 0}
+.impdom{margin-top:14px;padding:12px 12px 6px;border:1px solid #c9b98f1f;border-radius:9px;background:#0f0b1a40}
+.impdh{margin:0 0 6px !important;font-size:13.5px !important;color:#f0e2b8 !important;font-weight:700}
+.impstep{display:flex;gap:9px;padding:7px 0;border-top:1px solid #c9b98f14}
+.impstep:first-of-type{border-top:none}
+.impstep i{flex:0 0 48px;font-style:normal;font-size:9px;color:#c9b98f;letter-spacing:.04em;text-align:right;padding-top:3px;white-space:nowrap}
+.impstep span{flex:1 1 auto;min-width:0;font-size:12px;line-height:1.8;color:#bfb6cc}
+.impstep b{color:#f0e2b8;font-weight:700}
+.impck{display:grid;grid-template-columns:20px 1fr;gap:0 10px;padding:9px 2px;border-bottom:1px solid #c9b98f14;align-items:start}
+.impck i{width:16px;height:16px;border:1.4px solid #c98f3d;border-radius:3px;margin-top:2px;display:block}
+.impck b{font-size:12.5px;color:#e6dff2;font-weight:700;line-height:1.6}
+.impck p{font-size:10.5px;color:#8a7f95;line-height:1.6;margin:4px 0 0}
 .impbadge{font-size:9px;letter-spacing:.14em;border:1px solid #c9b98f55;border-radius:3px;padding:1px 5px;margin-left:6px;color:#c9b98f;vertical-align:1px}
 .imp{font-family:sans-serif;padding:6px 2px 30px}
 .imphead{padding:6px 0 20px;border-bottom:1px solid #c9b98f2e;margin-bottom:8px}

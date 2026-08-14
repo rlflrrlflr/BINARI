@@ -139,7 +139,11 @@ const SEOUL = { lat: 37.5665, lon: 126.978 };
 const HANGUL_AGE = (y, now) => now.getFullYear() - y + 1;
 
 /** 각인 한 벌을 만든다. saju/idx/counts/ladder 는 App.jsx 가 계산해 넘긴다. */
-export function readImprint({ saju, ladder, birth, sex, now = new Date(), lat = SEOUL.lat, lon = SEOUL.lon }) {
+export function readImprint({ saju, ladder, birth, sex, now = new Date(), lat = SEOUL.lat, lon = SEOUL.lon,
+  /* ── 선택 입력 (각인을 열 때만 묻는다. 무료 온보딩은 그대로 둔다) ──
+     ⚠ 이 셋이 없어도 문서는 나온다. 있으면 **틀린 말을 안 하게 된다.**
+     특히 married/kids 가 없으면 마흔 살 기혼자에게 "서른에 짝을 만난다"고 쓰게 된다 — 그 한 줄이 문서 전체를 죽인다. */
+  married = null, kids = null, timeAcc = null } = {}) {
   if (!saju || !saju.idx || !birth || !birth.y) return null;
   const idx = saju.idx, counts = saju.counts;
   const notes = [];
@@ -306,8 +310,135 @@ export function readImprint({ saju, ladder, birth, sex, now = new Date(), lat = 
   const hardMonths = mos.filter((x) => x.f < 0).map((x) => x.m);
   const softMonths = mos.filter((x) => x.f > 0).map((x) => x.m);
 
+  /* ── 아홉 자리 × 4단 ────────────────────────────────────────────────────
+     "태어날 때 이랬다 → 자라며 이렇게 나타났다 → 지금 어디다 → 앞으로 이렇게 된다".
+     지난 일을 앞일처럼 쓰지 않는다 — married/kids 가 있으면 그 자리를 과거형으로 돌린다. */
+  const bandAt = (a) => bands.find((b) => a >= b.from && a <= b.to) || null;
+  const nextOfGrp = (g) => bands.find((b) => b.from > age && GRP_OF[b.ss] === g) || null;
+  const nowLine = (g, on, off) =>
+    !bands.length ? "성별이 없어서 지금이 어느 열 해인지 못 짚어"
+      : !cur ? `아직 첫 열 해가 시작되기 전이야. ${bands[0].from}세부터 큰 흐름이 돌기 시작해`
+        : GRP_OF[cur.ss] === g ? `<b>${cur.from}~${cur.to}세 — 지금이 바로 그 열 해야.</b> ${on}`
+          : `지금 열 해(${cur.from}~${cur.to}세)는 다른 쪽에 쏠려 있어. ${off}`;
+  const nextLine = (g, none) => {
+    if (!bands.length) return "흐름의 방향이 안 서서 못 펼쳤어";
+    const d = nextOfGrp(g);
+    return d ? `<b>${d.from}~${d.to}세</b> — ${d.title}가 와. ${d.event}` : none;
+  };
+  const young = age < 14;
+  const D = [];
+  const putD = (k, t, a, b2, c, d, n) => D.push({ k, t, steps: [["새겨질 때", a], ["자라면서", b2], ["지금", c], ["앞으로", d]], n });
+
+  putD("몸", "몸 — 어디가 얇게 왔나",
+    `<b>${ORGAN[weakEl[0]].part}</b>가 평생 가장 얇아. ${lackEl.length ? "있어야 할 것이 아예 안 들어 있다는 뜻이야." : "다른 자리보다 눈에 띄게 얇아."}`,
+    `어릴 때부터 ${ORGAN[weakEl[0]].sym}. 크게 아프진 않은데 잔병이 안 끊기는 쪽이야.`,
+    (() => { const c2 = cur; if (!c2) return "아직 첫 열 해가 시작되기 전이야";
+      if (weakEl.includes(c2.el)) return `<b>${c2.from}~${c2.to}세 — 지금 열 해가 그 자리를 채워 줘.</b> 몸으로는 가장 수월한 구간이야`;
+      return `지금 열 해(${c2.from}~${c2.to}세)는 이 자리와 직접 관계는 없어. 관리는 계속 필요해`; })(),
+    (() => { const f = bands.find((b) => b.from > age && weakEl.includes(b.el));
+      return f ? `<b>${f.from}~${f.to}세</b>부터 그 기운이 들어와 — 그 열 해에 몸이 한 단계 편해져`
+        : "여든까지 그 기운이 들어오는 열 해는 없어. <b>흐름을 기다릴 자리가 아니라 평생 관리할 자리</b>라는 뜻이야"; })(),
+    fn(`${weakEl[0]} ${lackEl.length ? "0개" : "최소"}. ${maxEl[1] >= 3 && beaten[maxEl[0]] === weakEl[0] ? `게다가 가장 센 ${maxEl[0]}(${maxEl[1]}개)이 그 자리를 친다.` : ""}`));
+
+  putD("마음", "마음 — 어떤 사람으로 자라나",
+    `${SURFACE[me].w}으로 왔어. ${SURFACE[me].d}.`,
+    `${INNER[innerEl].d}. ${split ? "<b>겉과 속이 다른 사람</b>이라, 남들이 네 속을 자주 오해해." : "겉과 속이 같은 방향이라 오해는 덜 받아."}`,
+    cur ? `<b>${cur.from}~${cur.to}세 — ${cur.title}</b>야. ${cur.dashaKo ? cur.dashaKo + "이기도 해." : ""}` : "아직 첫 열 해가 시작되기 전이야",
+    (() => { const d = bands.find((b) => b.from > age); return d ? `<b>${d.from}~${d.to}세</b>부터 결이 바뀌어 — ${d.title}. ${d.event}` : "여든까지의 흐름은 아래 지도에 다 펼쳐 뒀어"; })(),
+    fn(`일간 ${GANK[idx.dG]}(${me}) + 서양 해자리 ${sun}·달자리 ${moon}${split ? " — 원소가 갈린다" : ""}.`));
+
+  putD("말", `${BLOCK[blockKey].t} — 네게 가장 얇은 자리`,
+    `<b>${BLOCK[blockKey].t}이 얇게 왔어.</b> ${BLOCK[blockKey].s}.`,
+    `${BLOCK[blockKey].w}`,
+    nowLine(blockKey, "이 열 해에 그 자리가 열려 있어. 지금 쓰지 않으면 다시 닫혀", "그래서 지금은 더 답답할 거야. 억지로 뚫으려 하지 말고 딴 길로 돌아가"),
+    nextLine(blockKey, `여든까지 그 자리가 열리는 열 해는 오지 않아. <b>흐름이 데려다주지 않는다는 뜻이야</b> — ${BLOCK[blockKey].fix}`),
+    fn(`가장 빈 자리 ${blockKey} ${G[blockKey]}개. 없는 것이 있는 것보다 많은 걸 정한다.`));
+
+  putD("공부", "공부 — 어떻게 붙나",
+    G.인성 >= 3 ? "<b>배우는 복이 두꺼워.</b> 머리로 푸는 일이 맞고, 문서와 자격이 널 도와줘"
+      : G.인성 === 0 ? "<b>앉아서 외우는 쪽은 아니야.</b> 손으로 해봐야 붙는 사람이야"
+        : "<b>보통이야.</b> 배우는 것도 하고 몸으로 익히는 것도 하는, 치우치지 않은 쪽",
+    G.인성 >= 3 ? "설명해 주면 빨리 알아들었을 거야. 대신 준비가 길어서 시작이 늦었어"
+      : "가만히 앉혀 두면 오래 못 갔을 거야. 만들면서 배우는 게 네 방식이야",
+    nowLine("인성", "배움이 붙는 열 해야 — 학교·자격·문서가 유독 잘 풀려", "이 열 해엔 배움보다 다른 게 먼저야. 공부는 짧게 끊어 가"),
+    nextLine("인성", "여든까지 그 자리가 열리는 열 해는 없어 — <b>배움은 필요할 때 직접 사둬야 해</b>"),
+    fn(`배움을 맡은 자리 ${G.인성}개.`));
+
+  putD("일", "일 — 어디서 밥을 버나",
+    `<b>${THICK[thickKey].job}</b>으로 새겨졌어.`,
+    `${THICK[thickKey].grew}. 맞는 판은 <b>${THICK[thickKey].ex}</b>야.`,
+    nowLine(thickKey, "네 방식이 그대로 먹히는 열 해야. 판을 바꾸려면 지금이야", "네 결이 아닌 쪽이 힘을 쓰는 열 해라, 억지로 밀기보다 배우는 데 쓰는 게 남아"),
+    nextLine(thickKey, "여든까지 그 결의 열 해는 다시 안 와 — <b>지금 잡은 자리를 오래 끌고 가</b>"),
+    fn(`가장 두꺼운 자리 ${thickKey} ${G[thickKey]}개.`));
+
+  {
+    const jd2 = G.재성, weakRich = jd2 >= 3 && (G.비겁 + G.인성) <= 2;
+    const money = bands.filter((b) => GRP_OF[b.ss] === "재성");
+    putD("돈", "돈 — 얼마나, 언제",
+      weakRich ? `재물 자리가 <b>${jd2}개로 두꺼운데 너를 받치는 힘은 ${G.비겁 + G.인성}개</b>야. <b>돈은 보이는데 쥘 팔 힘이 모자라는</b> 그릇이야`
+        : jd2 === 0 ? "<b>재물 자리가 비었어.</b> 못 번다는 게 아니라, <b>정해진 돈(월급·고정 계약)이 맞고 굴리는 돈은 새기 쉽다</b>는 뜻이야"
+          : jd2 >= 3 ? `재물 자리가 <b>${jd2}개로 두꺼워.</b> 흐름이 열릴 때 <b>크게 받는 그릇</b>이야`
+            : `재물 자리가 <b>${jd2}개</b>야. 크게 터지진 않아도 끊기지도 않는 쪽`,
+      weakRich ? "큰돈이 눈앞을 지나가는 걸 여러 번 봤을 거야. 잡으려다 몸이나 사람을 잃은 적도 있고 — 그릇이 아니라 <b>체력과 사람의 문제</b>였어"
+        : jd2 === 0 ? "통장에 남는 게 실력보다 늘 적었을 거야. 큰 판보다 <b>꼬박꼬박이 네 방식</b>이야"
+          : "쓸 만큼은 들어왔고, 필요할 때 어디선가 생기는 편이었을 거야",
+      nowLine("재성", "돈이 실제로 움직이는 열 해야 — 계약·거래·목돈이 이 구간에 몰려", "이 열 해는 돈보다 다른 게 먼저야. 무리해서 굴리면 새는 쪽이야"),
+      money.length ? (() => { const f = money.filter((b) => b.to > age);
+        return f.length ? `<b>${f[0].from}~${f[f.length - 1].to}세가 네 돈의 시간</b>이야. ${f.map((b) => `${b.from}~${b.to}세는 ${b.title}`).join(", ")}.`
+          : `돈이 도는 구간은 <b>${money[0].from}~${money[money.length - 1].to}세</b>로 이미 지나갔어. 앞으로는 지키는 쪽이야`; })()
+        : "여든까지 재물이 도는 열 해는 없어 — <b>한 방을 기다리지 말고 고정 수입을 두껍게 하는 게 네 정답</b>이야",
+      fn(`재물 자리 ${jd2}개 · 나를 받치는 힘 ${G.비겁 + G.인성}개.${weakRich ? " 재다신약 배치." : ""}`));
+  }
+
+  putD("사람", "사람 — 곁에 누가 서나",
+    G.비겁 === 0 ? "<b>같이 갈 자리가 비었어.</b> 무리에 섞이기보다 혼자 하는 게 빠른 사람이야"
+      : G.비겁 >= 3 ? "<b>사람이 늘 있어.</b> 대신 나눌 때 네 몫이 줄고, 빌려준 돈이 안 돌아온 적이 있어"
+        : "<b>깊은 친구가 몇 있는</b> 쪽이야. 무리의 중심은 아니고, 무리가 기대는 자리야",
+    "먼저 다가가는 일은 드물었을 거야. 그래서 손해 보는 자리가 딱 여기야 — <b>부탁을 못 해서 혼자 다 진다.</b>",
+    nowLine("비겁", "사람이 몰리는 열 해야 — 동업·팀·독립 이야기가 이 구간에 나와", "이 열 해는 사람보다 네 일이 먼저야"),
+    nextLine("비겁", "여든까지 그 열 해는 안 와 — <b>혼자 가는 게 기본값</b>인 삶이야. 나쁜 게 아니라 계산에 넣으라는 말이야"),
+    fn(`같이 가는 자리 ${G.비겁}개.`));
+
+  if (sex) {
+    const g2 = sex === "F" ? "관성" : "재성";
+    putD("연애", "연애 — 인연이 오는 방식",
+      `인연을 맡은 자리가 <b>${G[g2]}개</b>야. ${G[g2] === 0 ? "가만히 있으면 안 와. <b>네가 움직인 자리에서만</b> 생겨" : G[g2] >= 3 ? "없어서 문제였던 적은 없고, <b>고르는 게 문제</b>였을 거야" : "때 되면 오고 때 되면 정리되는, 요란하지 않은 쪽이야"}`,
+      young ? "아직 오지 않았어." : (G[g2] === 0 ? "돌아보면 늘 네가 먼저 움직인 자리에서 생겼을 거야" : "크게 애쓰지 않아도 사람이 있었을 거야"),
+      nowLine(g2, "인연이 실제로 움직이는 열 해야", "이 열 해엔 저절로 오지 않아. 오면 네가 만든 자리에서 와"),
+      married === true ? "<b>이미 만났으니 이 자리는 지나갔어.</b> 앞으로 이 자리가 말하는 건 인연이 아니라 <b>그 사람과의 온도</b>야"
+        : nextLine(g2, "여든까지 그 열 해는 안 와 — <b>때를 기다리는 자리가 아니야.</b> 네가 판을 만드는 쪽이 맞아"),
+      fn(`${sex === "F" ? "여자에게 관성" : "남자에게 재성"}이 인연의 자리. ${G[g2]}개.${married === true ? " 기혼 입력이 있어 '앞으로'를 과거형으로 돌렸다." : ""}`));
+
+    const g3 = sex === "F" ? "식상" : "관성";
+    putD("자식", "자식 — 몇을, 언제",
+      `아이를 맡은 자리가 <b>${G[g3]}개</b>야. ${G[g3] === 0 ? "비었다고 자식이 없다는 뜻이 아니야. <b>늦게 오거나, 애쓴 만큼 와 준다</b>는 쪽이야" : G[g3] >= 3 ? "<b>두껍게 실려 있어.</b> 그만큼 네 시간과 돈이 그쪽으로 가" : "무리 없이 오는 자리야"}${noH ? ". 다만 <b>태어난 시를 몰라</b> 이 자리의 절반은 못 읽었어" : ""}`,
+      young || kids === false ? "아직 오지 않았어." : "아이 문제로 크게 흔들린 적이 있다면 그게 이 자리야.",
+      kids === true ? "<b>이미 왔어.</b> 지금 이 자리는 '올까'가 아니라 '어떻게 키우나'의 자리야" : nowLine(g3, "아이 일이 실제로 움직이는 열 해야", "이 열 해는 그쪽보다 다른 자리가 먼저야"),
+      kids === true ? `아이와의 관계는 <b>${BLOCK[blockKey].t}</b>에서 갈려. 네게 얇은 그 자리가 아이에게도 그대로 간다 — 미리 알면 반은 막혀`
+        : nextLine(g3, "여든까지 그 열 해는 안 와 — 흐름을 기다리는 자리가 아니라는 뜻이야"),
+      fn(`${sex === "F" ? "여자에게 식상" : "남자에게 관성"}이 자식의 자리. ${G[g3]}개.${kids != null ? ` 자녀 유무 입력(${kids ? "있음" : "없음"})을 반영했다.` : ""}`));
+  }
+
+  /* ── 지금 확인해 보아라 — 근거를 안 대는 대신 확인할 방법을 준다 ── */
+  const checks = [
+    [`또래보다 ${bump >= 2 ? "키가 큰" : bump <= -1 ? "키가 작은" : "키가 평범한"} 편인가`, `${hLo}~${hHi}cm 로 봤다`],
+    [`${BUILD[me].replace(" 쪽", "")} 체형인가`, "타고난 골격으로 봤다"],
+    [ORGAN[weakEl[0]].part + "가 자주 말썽인가", "평생 가장 얇은 자리로 적었다"],
+    [`${FACE[me].split(".")[0]}는 말을 듣는가`, "얼굴의 결로 적었다"],
+    [`${BLOCK[blockKey].s}는 편인가`, "가장 빈 자리에서 나오는 증상이다"],
+    [split ? "겉으로 보이는 모습과 속이 다르다는 말을 듣는가" : "겉과 속이 같다는 말을 듣는가", split ? "겉과 속의 원소가 갈린다" : "겉과 속의 원소가 같다"],
+    [`${INNER[innerEl].w} 편인가`, "속의 성질로 적었다"],
+    [hardMonths.length ? `${hardMonths.slice(0, 3).join("·")}월쯤 유독 컨디션이 떨어지는가` : "계절을 타지 않는 편인가", "무거운 달로 계산했다"],
+    [G.비겁 === 0 ? "부탁을 잘 못 하는가" : "곁에 사람이 끊이지 않는가", "같이 가는 자리로 적었다"],
+    [G.인성 >= 3 ? "혼자 두면 시작을 안 하는가" : "몸으로 해봐야 이해가 되는가", "배움의 자리로 적었다"],
+    [`${THICK[thickKey].job}이 편한가`, "가장 두꺼운 자리로 적었다"],
+    [cur ? `요즘이 ${cur.title.replace(" 열 해", "")} 같은가` : "요즘 흐름이 바뀌는 느낌이 있는가", "지금 열 해로 적었다"],
+  ];
+
   return {
     age, ageFull, noHour: !!noH, sex: sex || null,
+    domains: D, checks,
+    given: { married, kids, timeAcc, city: birth.city || null },
     core: {
       surface: SURFACE[me], inner: INNER[innerEl], split,
       block: BLOCK[blockKey], blockKey, blockN: G[blockKey],

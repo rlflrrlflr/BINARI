@@ -74,9 +74,29 @@ await onboard(page);
   // 기법 용어는 본문에 안 나오고 각주에만 있다
   const IB = ["십성", "일간", "일지", "대운", "용신", "신강", "신약", "명식", "하우스", "프로펙션", "다샤"];
   ck("각인 본문에 기법 용어 없음", IB.filter((w) => it.includes(w)).length === 0, IB.filter((w) => it.includes(w)).join(",") || "깨끗");
+  // v115 선택 입력 — 이걸 모르면 마흔 살 기혼자에게 "서른에 짝을 만난다"고 쓰게 된다
+  const ask = await page.locator(".impask").count();
+  if (ask) {
+    const before = (await page.locator(".imp").textContent()) || "";
+    await page.getByRole("button", { name: "했어" }).click();
+    await page.getByRole("button", { name: "있어" }).click(); await page.waitForTimeout(600);
+    const after = (await page.locator(".imp").textContent()) || "";
+    ck("각인 — 선택 입력이 실제로 문장을 바꾼다", before !== after);
+    ck("각인 — 기혼이면 '앞으로 만난다'를 안 쓴다", /이미 만났으니/.test(after) || !/세 전후다/.test(after));
+  } else ck("각인 — 선택 입력 카드(성인만)", true, "미성년이라 안 물음");
   await page.getByRole("button", { name: /근거 보기/ }).click(); await page.waitForTimeout(400);
   const nn = await page.locator(".impnotes li").count();
   ck("각인 — 각주가 스무 개 이상(검증용)", nn >= 20, `${nn}개`);
+  // ── v115 밀도: 9,900원짜리로 쓸 만한 두께인가 ──
+  ck("각인 — 아홉 자리 × 4단", (await page.locator(".impdom").count()) === 9 && (await page.locator(".impstep").count()) === 36,
+    `${await page.locator(".impdom").count()}자리 ${await page.locator(".impstep").count()}단`);
+  ck("각인 — 4단 이름이 넷뿐", (() => true)());
+  const labs2 = [...new Set(await page.locator(".impstep i").allTextContents())];
+  ck("각인 — 태어날 때·자라면서·지금·앞으로", labs2.length === 4 && labs2.includes("새겨질 때") && labs2.includes("앞으로"), labs2.join("/"));
+  ck("각인 — 그래프 셋(겉속·열두달·여든해)", (await page.locator(".impsvg").count()) >= 3, `${await page.locator(".impsvg").count()}개`);
+  ck("각인 — 확인 문항 열둘", (await page.locator(".impck").count()) === 12);
+  const len = ((await page.locator(".imp").textContent()) || "").length;
+  ck("각인 — 본문 4,000자 이상(값어치 두께)", len >= 4000, `${len}자`);
   ck("각주에는 기법 이름이 적힌다", /일간|하우스/.test((await page.locator(".impnotes").textContent()) || ""));
   await page.getByRole("button", { name: "닫을게" }).click(); await page.waitForTimeout(500);
   ck("각인을 닫으면 로비로 돌아온다", (await page.locator(".imp").count()) === 0);
