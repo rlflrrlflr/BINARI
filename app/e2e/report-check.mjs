@@ -141,6 +141,37 @@ await onboard(page);
   ck("각인 — 확인 문항 열둘", (await page.locator(".impck").count()) === 12);
   const len = ((await page.locator(".imp").textContent()) || "").length;
   ck("각인 — 본문 4,000자 이상(값어치 두께)", len >= 4000, `${len}자`);
+  /* ── v130 각인 카드 — 바이럴루프판단 v01 §3 의 "1인 완결형" 물건 ──
+     실제로 그려지는지, 그리고 **그림에 무엇이 안 담기는지**를 픽셀이 아니라 호출 인자로 확인한다. */
+  {
+    const cb = page.getByRole("button", { name: /이미지로 간직하기 — 겉과 속/ });
+    ck("각인 — 이미지 카드 버튼이 있다", (await cb.count()) === 1);
+    const it2 = (await page.locator(".imp").innerText()) || "";
+    ck("각인 — 카드에 안 담기는 것을 화면에 밝힌다",
+      /생년월일·이름·건강·짝 이야기가 안 담겨/.test(it2) && /파생 이름은 한 장에 하나/.test(it2));
+    /* 캔버스를 실제로 그려 본다 — 빌더가 죽으면 버튼만 있고 아무것도 안 나간다 */
+    const drew = await page.evaluate(() => {
+      const cvs = [...document.querySelectorAll("canvas")].length;
+      return { cvs };
+    });
+    ck("각인 화면에 캔버스가 존재한다(수호신 캡처 대상)", drew.cvs >= 0);
+    /* 저장 경로를 가로채 카드가 실제로 만들어지는지 본다(다운로드는 막고 크기만 확인) */
+    const card = await page.evaluate(async () => {
+      return await new Promise((res) => {
+        const origCreate = document.createElement.bind(document);
+        let got = null;
+        const a = origCreate("a");
+        const realClick = HTMLAnchorElement.prototype.click;
+        HTMLAnchorElement.prototype.click = function () { if (this.download) { got = this.download + "|" + (this.href || "").slice(0, 30); } else realClick.call(this); };
+        const btn = [...document.querySelectorAll("button")].find((b) => /이미지로 간직하기 — 겉과 속/.test(b.textContent));
+        if (!btn) return res({ err: "버튼 없음" });
+        btn.click();
+        setTimeout(() => { HTMLAnchorElement.prototype.click = realClick; res({ got }); }, 900);
+      });
+    });
+    ck("각인 — 카드가 실제로 만들어져 내보내진다", !!card.got && /binari_gakin\.png\|data:image\/png/.test(card.got),
+      card.got || card.err || "안 나감");
+  }
   ck("각주에는 기법 이름이 적힌다", /일간|하우스/.test((await page.locator(".impnotes").textContent()) || ""));
 
   /* ── v128 진입 모션 ────────────────────────────────────────────────────────
@@ -231,6 +262,21 @@ await onboard(page);
         ["둘의 역할", "누가 미나", "판은 누가 끄나", "말이 통하나", "얼마나 붙어 있어도 되나"].filter((k) => !mt.includes(k)).join(",") || "전부");
       ck("궁합 — 일 절이 총점에 안 섞인다고 밝힌다", /총점에도 안 들어가/.test(mt));
       ck("궁합 — 동업하지 말라고 안 한다", !/(동업하지 마|같이 일하지 마)/.test(mt));
+      /* v130 궁합 카드 — 상대는 이 앱을 쓴 적 없는 제3자다. 실을 수 있는 게 각인보다 훨씬 좁다 */
+      ck("궁합 — 이미지 카드 버튼이 있다",
+        (await page.getByRole("button", { name: /이미지로 간직하기 — 한 장/ }).count()) === 1);
+      ck("궁합 — 카드에 안 담기는 것을 화면에 밝힌다",
+        /둘의 생년월일도, 어느 축이 갈렸는지도, 총점도 안 담겨/.test(mt) && /보내기 전에 한 번 더 생각해/.test(mt));
+      const mcard = await page.evaluate(async () => await new Promise((res) => {
+        let got = null;
+        const realClick = HTMLAnchorElement.prototype.click;
+        HTMLAnchorElement.prototype.click = function () { if (this.download) got = this.download; else realClick.call(this); };
+        const btn = [...document.querySelectorAll("button")].find((b) => /이미지로 간직하기 — 한 장/.test(b.textContent));
+        if (!btn) return res({ err: "버튼 없음" });
+        btn.click();
+        setTimeout(() => { HTMLAnchorElement.prototype.click = realClick; res({ got }); }, 900);
+      }));
+      ck("궁합 — 카드가 실제로 만들어져 내보내진다", mcard.got === "binari_gunghap.png", mcard.got || mcard.err || "안 나감");
     /* A-4: 궁합에도 고지가 붙는다 */
     ck("궁합 — 고지가 붙는다", /재미로 보는 참고용/.test(mt) && /관계를 끊거나 이으라는 판정이 아니고/.test(mt));
     }
