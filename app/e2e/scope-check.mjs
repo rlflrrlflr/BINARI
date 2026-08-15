@@ -99,7 +99,9 @@ console.log("\n── 표 집계 ──");
     // [설명, 입력, 기대 {dir, against, total} 또는 null]
     ["GO 우세 → GO", { ...V(["사주","GO"],["달","GO"],["별자리","STOP"],["수비학","중립"]), direction: "GO" }, { dir:"GO", against:1, total:4 }],
     ["STOP 우세 → STOP", { ...V(["사주","STOP"],["달","STOP"],["별자리","GO"]), direction: "STOP" }, { dir:"STOP", against:1, total:3 }],
-    ["동률 → 경험 편향(GO)", { ...V(["사주","GO"],["달","STOP"],["별자리","중립"]), direction: "STOP" }, { dir:"GO", against:1, total:3 }],
+    /* v132.3: 예전엔 동률이면 GO 였다("해보는 쪽이 인생에 남는다"). 그건 지표가 아니라 인생관이라
+       걷어냈다 — 표가 반반이면 반반이라고 말한다. 모델이 STOP 이라 해도 표가 갈렸으면 HOLD 다. */
+    ["동률 → 갈림(HOLD). 한쪽으로 밀지 않는다", { ...V(["사주","GO"],["달","STOP"],["별자리","중립"]), direction: "STOP" }, { dir:"HOLD", against:1, total:3 }],
     ["모델이 표와 다른 결론 → 표를 따른다", { ...V(["사주","STOP"],["달","STOP"],["별자리","STOP"]), direction: "GO" }, { dir:"STOP", against:0, total:3 }],
     ["HOLD 는 표로 뒤집지 않는다", { ...V(["사주","GO"],["달","GO"],["별자리","GO"]), direction: "HOLD" }, { dir:"HOLD", total:3 }],
     ["같은 축 중복은 한 번만", { ...V(["사주","GO"],["사주","STOP"],["달","GO"],["별자리","GO"]), direction: "GO" }, { dir:"GO", total:3 }],
