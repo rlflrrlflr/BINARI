@@ -96,12 +96,21 @@ void main(){
 const SAENG_PREV = { 화: "목", 토: "화", 금: "토", 수: "금", 목: "수" };  // 나를 생해 주는 오행
 const GEUK_BY = { 화: "수", 금: "화", 목: "금", 토: "목", 수: "토" };      // 나를 극하는 오행
 
-/* 네 판 — 판단은 이 넷을 나란히 놓고 한다 */
+/* 여섯 판 — 판단은 이 여섯을 나란히 놓고 한다.
+   ⑤⑥ 은 "사람이 많아지면 어떻게 되나"에 답하려고 붙였다. 규칙 없이 그냥 늘리면
+   반드시 벌레떼가 된다(⑤). 그래서 규칙을 둔다(⑥) — 아래 CAP/예산 참조. */
+const many = (n) => Array.from({ length: n }, (_, i) => ({
+  rel: [1, -1, 0, 1, 1, 0, -1, 1, 0, 1][i % 10],
+  ang: (i * 2.399) % 6.2832,                       // 황금각 — 뭉치지 않게 고르게 흩는다
+  rank: i,                                          // 최근 주고받은 순서(앞 3만 앞줄에 선다)
+}));
 const PANELS = [
   { key: "none", title: "① 곁 없음", sub: "지금 앱 그대로", co: [] },
   { key: "saeng", title: "② 곁 하나 · 생", sub: "나를 받쳐 주는 사람", co: [{ rel: 1, ang: 0.4 }] },
   { key: "geuk", title: "③ 곁 하나 · 극", sub: "부딪히는 사람", co: [{ rel: -1, ang: 1.9 }] },
   { key: "three", title: "④ 곁 셋", sub: "생 · 극 · 동", co: [{ rel: 1, ang: 0.3 }, { rel: -1, ang: 2.4 }, { rel: 0, ang: 4.3 }] },
+  { key: "raw10", title: "⑤ 곁 열 · 규칙 없음", sub: "나쁜 예 — 그냥 늘린 것", co: many(10), rule: false },
+  { key: "cap10", title: "⑥ 곁 열 · 규칙 적용", sub: "앞줄 셋 + 나머지는 배경으로", co: many(10), rule: true },
 ];
 
 const DATA = { els: ELS.map(e => ({ ...e, colors: EL_COLOR[e.key] })), panels: PANELS, saeng: SAENG_PREV, geuk: GEUK_BY, elColor: EL_COLOR };
@@ -127,17 +136,17 @@ const HTML = `<!doctype html><meta charset="utf-8">
   .els button.on{background:#1e1b3a;color:#fff;border-color:#4a4380}
   .panels{position:relative}
   canvas#gl{width:100%;display:block;border-radius:14px;background:#04040a}
-  .heads{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin-bottom:8px}
+  .heads{display:grid;grid-template-columns:repeat(6,1fr);gap:0;margin-bottom:8px}
   .heads div{padding:0 8px}
   .heads b{display:block;font-size:13px}
   .heads span{font-size:11px;color:var(--dim)}
-  .caps{display:grid;grid-template-columns:repeat(4,1fr);margin-top:10px}
+  .caps{display:grid;grid-template-columns:repeat(6,1fr);margin-top:10px}
   .caps div{padding:0 8px;font-size:11px;color:var(--dim);min-height:34px}
   .note{color:var(--dim);font-size:12px;margin-top:26px;border-top:1px solid var(--line);padding-top:16px}
   .note h3{color:var(--ink);font-size:13px;margin:0 0 8px}
   .note li{margin:4px 0}
   .fail{display:none;padding:20px;border:1px solid #663;border-radius:10px;color:#fc9}
-  @media(max-width:900px){ .heads,.caps{grid-template-columns:repeat(2,1fr)} }
+  @media(max-width:1100px){ .heads,.caps{grid-template-columns:repeat(3,1fr)} }
 </style>
 <div class="wrap">
   <h1>곁 — 친구의 기운이 수호신에 들어오는 표현 (시안)</h1>
@@ -165,6 +174,7 @@ const HTML = `<!doctype html><meta charset="utf-8">
       <li><b>관계는 방향으로만</b> — 생이면 곁에서 본체로 알갱이가 흘러들고, 극이면 궤도가 <b>반대로 돌며 본체를 가로지르고</b> 스치는 지점에 마디 하나가 밝아진다. 동일이면 나란히 돌다 겹치는 구간에서 같이 밝아진다.</li>
       <li><b>숫자 없음</b> — 개수·점수·진행바를 쓰지 않는다. 곁이 0이어도 ①번 판처럼 화면이 완결된다(빈 슬롯 금지).</li>
       <li><b>친밀도</b>는 밝기와 거리로만 나타난다. 소원해져도 사라지지 않고 멀어질 뿐이다 — 슬라이더를 왼쪽 끝까지 내려 확인.</li>
+      <li><b>많아져도 안 늘어난다</b> — 사람이 늘어도 곁이 쓰는 <b>입자 총량은 고정</b>이고, 궤도에 서는 건 <b>최근에 주고받은 셋까지</b>다. 나머지는 바깥으로 물러나 배경 성운이 된다 — 세어지지 않고, 사라지지도 않는다. ⑤(규칙 없음)와 ⑥(규칙 적용)을 나란히 보면 이 규칙이 왜 있어야 하는지가 보인다.</li>
       <li><b>비용</b> — 실제 앱에 넣을 땐 헤일로(<code>step(0.84,a_r1.y)</code>, 본체 입자의 16%) 전례대로 <b>기존 입자에서 떼어 재배정</b>한다. 렌더 비용 추가 0. 시안에서만 따로 그린다(슬라이더로 만져 보려고).</li>
     </ul>
     <h3>왜 v68에서 뺀 그 점과 다른가</h3>
@@ -203,6 +213,9 @@ function paintCaps(){
   const my = DATA.els[elIdx].key;
   document.getElementById("caps").innerHTML = DATA.panels.map(p => {
     if(!p.co.length) return '<div>혼자여도 완결된다 — 빈자리를 만들지 않는다.</div>';
+    if(p.co.length > 4) return '<div>'+(p.rule
+      ? '앞줄 셋만 궤도에 서고 나머지 일곱은 배경으로 물러난다. 입자 총량은 ②③④와 같다.'
+      : '열 명이 그대로 열 개. 밝기도 입자도 열 배 — 이 판이 어노잉의 정체다.')+'</div>';
     const t = p.co.map(c => partnerEl(my, c.rel)+'('+relName[String(c.rel)]+')').join(' · ');
     return '<div>'+t+'</div>';
   }).join("");
@@ -305,7 +318,7 @@ function init(){
     ]);
   }
 
-  function drawCo(myKey,c,t){
+  function drawCo(myKey,c,t,budget,lumK,radK){
     gl.useProgram(coP);
     gl.bindBuffer(gl.ARRAY_BUFFER,cb); gl.enableVertexAttribArray(CA); gl.vertexAttribPointer(CA,4,gl.FLOAT,false,0,0);
     const pk = partnerEl(myKey,c.rel);
@@ -313,11 +326,11 @@ function init(){
     gl.uniform3fv(CL.u_col,col);
     gl.uniform1f(CL.u_t,t); gl.uniform1f(CL.u_ang,c.ang); gl.uniform1f(CL.u_rel,c.rel);
     /* 친밀도가 낮을수록 멀어지고 어두워진다 — 사라지지는 않는다 */
-    gl.uniform1f(CL.u_rad,S.rad*(1+(1-S.close)*0.5)); gl.uniform1f(CL.u_spd,S.spd); gl.uniform1f(CL.u_tail,S.tail);
-    gl.uniform1f(CL.u_lum,S.lum); gl.uniform1f(CL.u_close,S.close);
+    gl.uniform1f(CL.u_rad,S.rad*(1+(1-S.close)*0.5)*radK); gl.uniform1f(CL.u_spd,S.spd); gl.uniform1f(CL.u_tail,S.tail);
+    gl.uniform1f(CL.u_lum,S.lum*lumK); gl.uniform1f(CL.u_close,S.close);
     gl.uniform2fv(CL.u_ctr, bodyCenter(t));
-    gl.uniform1f(CL.u_ps,1.7*dpr); gl.uniform1f(CL.u_alpha,0.10); gl.drawArrays(gl.POINTS,0,cn);
-    gl.uniform1f(CL.u_ps,4.2*dpr); gl.uniform1f(CL.u_alpha,0.028); gl.drawArrays(gl.POINTS,0,cn);
+    gl.uniform1f(CL.u_ps,1.7*dpr); gl.uniform1f(CL.u_alpha,0.10); gl.drawArrays(gl.POINTS,0,budget);
+    gl.uniform1f(CL.u_ps,4.2*dpr); gl.uniform1f(CL.u_alpha,0.028); gl.drawArrays(gl.POINTS,0,budget);
     gl.disableVertexAttribArray(CA);
   }
 
@@ -331,7 +344,21 @@ function init(){
       const px=i*CELL*dpr, w=CELL*dpr;
       gl.viewport(px,0,w,w); gl.enable(gl.SCISSOR_TEST); gl.scissor(px,0,w,w);
       drawBody(el,t);
-      DATA.panels[i].co.forEach(c => drawCo(el.key,c,t));
+      const P = DATA.panels[i], N = P.co.length;
+      if(!P.rule){
+        /* 규칙 없음 — 사람 수만큼 그대로 곱해진다. 10명이면 밝기도 입자도 10배 */
+        P.co.forEach(c => drawCo(el.key,c,t,cn,1,1));
+      } else {
+        /* 규칙 ① 입자 예산 고정 — 몇 명이 오든 곁이 쓰는 총량은 그대로다(본체 입자의 16%).
+           규칙 ② 앞줄은 셋까지 — 최근에 주고받은 셋만 궤도에 서고,
+                  나머지는 바깥으로 물러나 배경 성운이 된다(숫자로 세지 않는다). */
+        const CAP = 3;
+        const front = P.co.filter(c => c.rank < CAP), back = P.co.filter(c => c.rank >= CAP);
+        const fb = Math.floor(cn*0.72/Math.max(1,front.length));
+        const bb = Math.floor(cn*0.28/Math.max(1,back.length));
+        front.forEach(c => drawCo(el.key,c,t,fb,1,1));
+        back.forEach(c => drawCo(el.key,c,t,bb,0.30,1.42));
+      }
     }
   };
   loop();
