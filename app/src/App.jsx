@@ -10,12 +10,12 @@ let _ph = null, _phInit = false;
      이벤트 발생 사실과 비식별 지표(판결 방향·카테고리·톤·만족도 점수·질문 길이·belief 등)만.
      근거: 개인정보보호법 §15①6 정당한 이익 / §28-2 가명정보 통계작성 + 처리방침 고지.
      → DAU/MAU·리텐션·퍼널이 전체 사용자 기준으로 정확히 잡힌다.
-   2단계(프로파일) — 선택 동의 필요. 나이·성별·직업·관계·도시·MBTI·가치관·오행,
+   2단계(프로파일) — 선택 동의 필요. 나이·성별·직업·관계·도시·오행,
      판결 문구, 망설임 사유. 서비스 제공에 필수가 아니고 조합 시 식별성이 커지므로 동의 기반.
      미동의 시 아래 키만 제거되고 이벤트 자체는 그대로 전송된다.
    질문 원문·실명·생년월일 원값은 단계 무관하게 절대 전송하지 않는다. */
 /* 2026-07-28 결정: 프로파일 항목도 전부 1단계(동의 불필요)로 수집한다.
-   동의율이 47%라 나이·성별·MBTI·가치·판결 결과가 절반만 들어왔고, 그 표본으로는
+   동의율이 47%라 나이·성별·판결 결과가 절반만 들어왔고, 그 표본으로는
    어떤 판단도 서지 않았다. 대신 처리방침(2조)에 전 항목을 명시 고지하고 근거를 §15①6에 둔다.
    ⚠️ 질문 원문·실명·생년월일 원값·자유 서술 메모는 단계와 무관하게 여전히 절대 보내지 않는다.
    이 집합을 다시 채우면 그 키들이 미동의자에게서 제거되는 구조는 그대로 되살아난다. */
@@ -96,6 +96,17 @@ function _flush() {
   if (!_ph) return;
   while (_q.length) { const e = _q.shift(); try { _ph.capture(e.ev, _consent ? e.props : stripProfile(e.props), { timestamp: e.at }); } catch (_) {} }
 }
+/* 공유 페이로드(?v=)만 지운 URL 을 돌려준다. utm 등 유입 분석에 쓰는 값은 그대로 둔다. */
+function stripSharePayload(u) {
+  try {
+    const url = new URL(u, "https://x.invalid");
+    if (!url.searchParams.has("v")) return u;
+    url.searchParams.set("v", "1");        // 공유 유입이었다는 사실은 남긴다 — 바이럴 계수의 분모다
+    return u.startsWith("http") ? url.toString() : url.pathname + url.search + url.hash;
+  } catch (_) {
+    return String(u).replace(/([?&])v=[^&#]*/g, "$1v=1");   // URL 파서가 못 먹는 형태여도 값은 반드시 지운다
+  }
+}
 async function _initAnalytics() {
   if (_phInit || !AKEY || typeof window === "undefined") return; _phInit = true;
   try {
@@ -110,6 +121,20 @@ async function _initAnalytics() {
                                     //   verdict_shown.ms 로 이미 더 직접적으로 재고 있다.
       autocapture: false,
       persistence: "localStorage",
+      /* 공유 링크는 ?v=<base64> 이고 그 안에 질문 원문·판결문·이름이 평문으로 들어 있다.
+         PostHog SDK 는 모든 이벤트에 $current_url 을 붙이므로, 공유 링크로 들어온 사람이
+         무슨 이벤트를 찍든 '보낸 사람의 질문과 이름'이 통계로 딸려 나간다.
+         실제로 나갔다 — 2026-07-28 부터 22건·5명(2026-08-15 실측). track() 호출부만 보던
+         검사는 이걸 못 잡았다. SDK 가 스스로 붙이는 값이라 호출부에 안 나타나기 때문이다.
+         진입 화면에 "질문 원문은 통계에 기록하지 않아요"라고 적어 둔 이상 이건 거짓 표시였다.
+         v 파라미터를 지운 URL만 내보낸다. 유입 경로 분석에 쓰는 건 도메인·경로·utm 이지 이 값이 아니다. */
+      sanitize_properties: (props) => {
+        for (const k of ["$current_url", "$referrer", "$initial_current_url", "$initial_referrer", "$pathname"]) {
+          const v = props[k];
+          if (typeof v === "string" && v.includes("v=")) props[k] = stripSharePayload(v);
+        }
+        return props;
+      },
     });
     _ph = posthog;
     // 고정 속성을 posthog 자체에 등록한다. track()이 직접 얹는 값과 동일하지만,
@@ -829,6 +854,15 @@ function wrap2(t, max = 9) {
    문서는 그냥 다 보인다 — 값을 치른 문서에서 "안 보임"은 최악의 실패다.
    ⚠ 되감기(이탈 시 .rvin 제거)는 **완전히 화면 밖으로 나갔을 때만** 한다.
    경계에서 떨면 그게 바로 창업자가 지적한 그 증상이 된다. */
+/* 표 한 줄 — 각인과 궁합이 **같은 표**를 쓴다.
+   ⚠ v128 에 이걸 ImprintDoc 안쪽에 두고 궁합에서 부르는 실수를 했다 — 궁합 결과 화면이 통째로 죽었다.
+     두 문서가 같이 쓰는 조각은 문서 밖에 둔다. 각주 토글은 문서마다 다르므로 Ref 를 받아 쓴다.
+   --i = 표 안에서의 줄 번호. 줄마다 차례로 채워지게 하는 데만 쓴다. */
+const DocRow = (Ref) => ([k, v, n], i) => (
+  <div className="impr" key={i} style={{ "--i": i }}><div className="impk">{k}</div>
+    <div className="impv"><span dangerouslySetInnerHTML={{ __html: v }} /><Ref n={n} /></div></div>
+);
+
 const REVEAL_SEL = ".impsvg,.impdom,.impsky,.impclash,.impband,.impck,.imptrig,.impch,.improws,.impmrows,.impyrs,.impcore";
 /* ⚠ **ref 를 새로 만들지 않고 받는다.** 각인·궁합 루트에는 이미 `useDocRead` 의 readRef 가 붙어 있고
    한 요소에 ref 는 하나뿐이다. 두 훅이 각자 ref 를 들면 나중에 붙는 쪽이 앞의 것을 조용히 덮는다 —
@@ -900,11 +934,7 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
     <button className="btn ghost mt" onClick={onClose}>닫을게</button></div>);
   const Ref = ({ n }) => (notesOn && n ? <sup className="impfx">{n}</sup> : null);
   const H = ({ t }) => <span dangerouslySetInnerHTML={{ __html: t }} />;
-  /* --i = 표 안에서의 줄 번호. 줄마다 차례로 채워지게 하는 데만 쓴다(v128) */
-  const Row = ([k, v, n], i) => (
-    <div className="impr" key={i} style={{ "--i": i }}><div className="impk">{k}</div>
-      <div className="impv"><H t={v} /><Ref n={n} /></div></div>
-  );
+  const Row = DocRow(Ref);
   /* ── 그래프 — 숫자가 눈에 보여야 문서가 값을 갖는다 ── */
   const W = 320;
   const LifeChart = () => {
@@ -1337,6 +1367,7 @@ function MatchDoc({ saju, birth, onClose }) {
   useReveal(readRef);            // v128 진입 모션 — 같은 ref 를 공유한다
   const Ref = ({ n }) => (notesOn && n ? <sup className="impfx">{n}</sup> : null);
   const H = ({ t }) => <span dangerouslySetInnerHTML={{ __html: t }} />;
+  const Row = DocRow(Ref);
 
   if (!done || !r) return (
     <div className="imp fade" ref={readRef}>
@@ -1416,6 +1447,19 @@ function MatchDoc({ saju, birth, onClose }) {
 
       <p className="imph">{r.clash.t}</p>
       <div className="impclash"><p><H t={r.clash.w} /><Ref n={r.clash.n} /></p></div>
+
+      {/* v128 — 궁합을 연애에만 쓰지 않게 하는 절. 진입 안내는 "동료·가족·동업자에게도 쓰라"고
+          말해 왔는데 정작 **일 축이 없었다.** 각인의 「같이 일하면 좋은 사람」이 오행 한 줄로 끝나던 것을
+          여기로 이어 붙인다 — 유저가 아는 건 오행이 아니라 사람이다. */}
+      {r.work && <>
+        <p className="imph">같이 일하면 어떤가 <i>연애 말고 일의 눈으로</i></p>
+        <p className="impp">위 아홉 축을 <b>일의 눈으로 다시 읽은 것</b>이야. 새로 계산한 건 없고
+          <b>총점에도 안 들어가</b> — 연애 궁합과 일 궁합을 한 숫자로 뭉개지 않으려고.</p>
+        <div className="improws">{r.work.rows.map(Row)}</div>
+        {r.work.care.map((c, i) => (<div className="imptrig" key={i}><p><H t={c} /></p></div>))}
+        <p className="impcap">이 절은 <b>동업하지 말라는 말을 하지 않아.</b> 관계와 같은 선이야 —
+          우리 몫은 <b>무엇을 조심하면 되는지</b>까지야.<Ref n={r.work.n} /></p>
+      </>}
 
       <p className="imph">조심할 것 <i>헤어지라는 말은 안 해</i></p>
       {r.care.map((c, i) => (<div className="imptrig" key={i}><p><H t={c} /></p></div>))}
@@ -1669,7 +1713,6 @@ const LP_READ = {
 };
 
 /* ───── v7 지표: 바이오리듬 · 삼재 · 가치 ───── */
-const VALUES16 = ["안정", "성장", "자유", "인정", "관계", "성취", "즐거움", "의미", "돈", "건강", "용기", "모험", "창조", "평온", "아름다움", "몰입"]; // v37: '버리기 죄책감' 항목 배제 원칙 — 가족·정직 제외, 모험·아름다움 추가(4×4 복원)
 function biorhythm(y, m, d) { // 출생일 기준 23/28/33일 주기 — 정확 계산
   const days = (Date.now() - new Date(y, m - 1, d).getTime()) / 86400000;
   const f = (p) => Math.round(Math.sin(2 * Math.PI * (days / p)) * 100);
@@ -1781,37 +1824,60 @@ function _hslToHex(h,s,l){h=(((h%360)+360)%360)/360;const q=l<0.5?l*(1+s):l+s-l*
 const rotHue=(hex,deg)=>{const[h,s,l]=_hexToHsl(hex);return _hslToHex(h+deg,s,l);};
 const seedRnd=(str)=>{let h=7;for(const c of String(str))h=(h*31+c.charCodeAt(0))>>>0;return()=>((h=(h*1664525+1013904223)>>>0)/2**32);};
 
-/* ── v114: MBTI 문항 제거 (창업자 지시 2026-08-12) ─────────────────────────
-   "판결에 영향도 크지 않을 뿐더러 무슨 말인지 모르겠다는 사용자들이 많다."
-   그런데 MBTI 는 수호신 비주얼의 축 하나(밀도·속도·질서·반짝임)를 맡고 있었다. 그냥 지우면
-   모든 새 유저의 수호신이 같은 질감이 된다 — v27~v28 이 공들여 만든 다양성이 통째로 죽는다.
+/* ── 수호신 질감 — 네 축을 명식에서 뽑는다 (v114 문항 폐지 → v128.1 방법론 재배선) ──
+   이 네 글자는 MBTI 가 아니라 **화면의 물리량 넷**이다. 글자는 옛 인코딩이 남은 것뿐이고,
+   실제로 조종하는 건 이것이다:
+     E/I → 입자 수·반지름·구심점   = 퍼지느냐 응축되느냐
+     N/S → twinkle on/off          = 명멸하느냐 고르게 빛나느냐
+     T/F → chaos 0.6↔1.35·입자 크기 = 정연하냐 유동적이냐
+     P/J → speed 0.42↔0.30         = 빠르냐 느리냐
+   넷 다 명리·점성에 이미 정통 어휘가 있는 성질이라, 축마다 **그 성질을 말하는 방법론**을 붙였다.
+   v114 판(오행 양/음 · 별자리 원소 · 오행 금토 · 라이프패스 홀짝)은 자리를 채우려고 급히 붙인
+   매핑이었다 — 특히 '라이프패스 홀짝으로 속도를 정한다'는 어느 유파에도 근거가 없다.
 
-   그래서 **묻지 않고 뽑는다.** 설계 헌장 그대로다 — "수호신은 이미 너를 안다.
-   자동 파생 가능한 값은 손으로 되묻지 않는다." 사주·별자리·수비학에서 네 축을 만든다.
-
-   ⚠ 이미 저장된 유저의 mbti 는 그대로 쓴다. 안 그러면 시드가 바뀌어 **쓰던 수호신 얼굴이 달라진다.**
-     묻는 것만 없애고, 이미 받은 값은 버리지 않는다. */
-function texture(saju, zo, num) {
+   지표가 없을 때(시 미상·구버전 저장분)를 대비해 축마다 폴백을 둔다. 폴백은 v114 판 그대로라,
+   재료가 없으면 예전과 같은 값이 나온다 — 조용히 다른 얼굴이 되지 않는다. */
+function texture(saju, zo, num, moon) {
   if (!saju) return "ISFJ";
   const c = saju.counts || {};
-  const yang = (c.목 || 0) + (c.화 || 0);                    // 뻗는 기운
-  const eum = (c.금 || 0) + (c.수 || 0);                     // 거두는 기운
-  const E = yang >= eum ? "E" : "I";                         // 확장이냐 응축이냐
-  const N = ["공기", "불"].includes(zo?.el) ? "N" : "S";      // 별의 원소 — 반짝임
-  const T = saju.main === "금" || saju.main === "토" ? "T" : "F";   // 날카로움이냐 부드러움이냐
-  const P = ((num || 5) % 2) ? "P" : "J";                    // 라이프패스 홀짝 — 속도
+  const ss = saju.idx ? sipseongDist(saju.idx) : null;
+  const sum = (...k) => k.reduce((t, x) => t + ((ss && ss[x]) || 0), 0);
+
+  // ① 퍼짐 — 십성의 발산(비겁·식상) vs 수렴(인성·관성). 명리가 '기운이 나가느냐 들어오느냐'를
+  //    말하는 자리가 정확히 여기다. 재성은 나가되 취하는 것이라 어느 쪽에도 넣지 않는다.
+  const out = sum("비견", "겁재", "식신", "상관"), inw = sum("정인", "편인", "정관", "편관");
+  const E = (ss && (out !== inw)) ? (out > inw ? "E" : "I")
+    : ((c.목 || 0) + (c.화 || 0) >= (c.금 || 0) + (c.수 || 0) ? "E" : "I");   // 폴백: 오행 양/음
+
+  // ② 명멸 — 태어난 밤의 달. 빛이 가늘수록 반짝이고, 가득 찰수록 고르게 빛난다.
+  //    '빛이 일정한가'를 말하는 지표는 달 위상뿐이라 여기에 붙인다.
+  const MP = { 새달: 0, 초승달: 1, 상현달: 2, "차오르는 달": 3, 보름달: 4, "기우는 달": 3, 하현달: 2, 그믐달: 1 };
+  const mp = moon && moon.name != null ? MP[moon.name] : undefined;
+  const N = mp !== undefined ? (mp <= 2 ? "N" : "S")
+    : (["공기", "불"].includes(zo?.el) ? "N" : "S");                          // 폴백: 별자리 원소
+
+  // ③ 정연함 — 십성의 관성(틀·규율) vs 식상(내키는 대로). 명리에서 '짜여 있느냐 풀려 있느냐'다.
+  const ord = sum("정관", "편관"), free = sum("식신", "상관");
+  const T = (ss && (ord !== free)) ? (ord > free ? "T" : "F")
+    : (saju.main === "금" || saju.main === "토" ? "T" : "F");                 // 폴백: 오행 금·토
+
+  // ④ 속도 — 일간의 양간/음간. 양간(갑병무경임)은 곧게 빨리 가고 음간(을정기신계)은 돌아서 오래 간다.
+  //    라이프패스 홀짝을 쓰던 자리인데, 홀짝에는 어떤 유파에도 속도 해석이 없다.
+  const dgi = saju.dayGan ? GAN.indexOf(saju.dayGan) : -1;
+  const P = dgi >= 0 ? (dgi % 2 === 0 ? "P" : "J") : (((num || 5) % 2) ? "P" : "J");   // 폴백: 라이프패스
+
   return E + N + T + P;
 }
-function GuardianCanvas({ saju, zo, mbti, num, moon, birth, agitateRef, reactRef, restRef, size = 340 }) {
+function GuardianCanvas({ saju, zo, num, moon, birth, agitateRef, reactRef, restRef, size = 340 }) {
   const ref = useRef(null);
   useEffect(() => {
     const cv = ref.current; if (!cv) return;
     const ctx = cv.getContext("2d");
     // ── v14: 지표 → 독립 시각축 매핑 (개인마다 고유한 지문) ──
-    const tx = mbti || texture(saju, zo, num);   // 저장된 값이 있으면 그대로 — 쓰던 수호신 얼굴을 안 바꾼다
+    const tx = texture(saju, zo, num, moon);   // 질감은 명식에서 뽑는다 — 저장해 둔 코드를 쓰지 않는다
     const E = tx[0] === "E", N = tx[1] === "N", T = tx[2] === "T", P = tx[3] === "P";
     // 개인 시드: 생일·성격·별자리 전체에서 파생 → 입자 배치·hue 지터가 사람마다 고정
-    const seedStr = `${saju.main}${zo?.name || ""}${mbti || ""}${num || ""}${saju.pillars?.일 || ""}`;
+    const seedStr = `${saju.main}${zo?.name || ""}${num || ""}${saju.pillars?.일 || ""}`;
     const srnd = seedRnd(seedStr);
     // ── v28: 심화 지표 → 서로 다른 시각 채널 (사주 5형태 안에서 사람마다 유일해지도록) ──
     const _b = birth || {};
@@ -1961,7 +2027,7 @@ function GuardianCanvas({ saju, zo, mbti, num, moon, birth, agitateRef, reactRef
     };
     draw();
     return () => cancelAnimationFrame(raf);
-  }, [saju, zo, mbti, size, birth && birth.y, birth && birth.sex, birth && birth.name]);
+  }, [saju, zo, size, birth && birth.y, birth && birth.sex, birth && birth.name]);
   return <canvas ref={ref} data-renderer="2d" width={size} height={size} style={{ display: "block", WebkitMaskImage: "radial-gradient(circle at 50% 50%, #000 58%, transparent 88%)", maskImage: "radial-gradient(circle at 50% 50%, #000 58%, transparent 88%)" }} />;
 }
 
@@ -2215,7 +2281,7 @@ function glDetect() {
     return !!(c.getContext("webgl") || c.getContext("experimental-webgl"));
   } catch (_) { return false; }
 }
-function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactRef, restRef, size = 340, onFail }) {
+function GuardianCanvasGL({ saju, zo, num, moon, birth, agitateRef, reactRef, restRef, size = 340, onFail }) {
   const ref = useRef(null);
   useEffect(() => {
     const cv = ref.current; if (!cv) return;
@@ -2234,9 +2300,9 @@ function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactR
     cv.addEventListener("pointerup", onUp); cv.addEventListener("pointerleave", onUp); cv.addEventListener("pointercancel", onUp);
     try {
       // ── 지표 → 지문 (Canvas2D와 동일 파생, 시드 재현) ──
-      const tx = mbti || texture(saju, zo, num);   // 저장된 값이 있으면 그대로 — 쓰던 수호신 얼굴을 안 바꾼다
+      const tx = texture(saju, zo, num, moon);   // 질감은 명식에서 뽑는다 — 저장해 둔 코드를 쓰지 않는다
       const E = tx[0] === "E", N = tx[1] === "N", T = tx[2] === "T", P = tx[3] === "P";
-      const seedStr = `${saju.main}${zo?.name || ""}${mbti || ""}${num || ""}${saju.pillars?.일 || ""}`;
+      const seedStr = `${saju.main}${zo?.name || ""}${num || ""}${saju.pillars?.일 || ""}`;
       const srnd = seedRnd(seedStr);
       const _b = birth || {};
       const _jd = _b.y ? jdn(+_b.y, +_b.m, +_b.d) : 0, _nn = _jd - 584283;
@@ -2360,7 +2426,7 @@ function GuardianCanvasGL({ saju, zo, mbti, num, moon, birth, agitateRef, reactR
       cv.removeEventListener("pointerup", onUp); cv.removeEventListener("pointerleave", onUp); cv.removeEventListener("pointercancel", onUp);
       try { const ext = gl.getExtension("WEBGL_lose_context"); ext && ext.loseContext(); } catch (_) {}
     };
-  }, [saju, zo, mbti, size, birth && birth.y, birth && birth.sex, birth && birth.name]);
+  }, [saju, zo, size, birth && birth.y, birth && birth.sex, birth && birth.name]);
   return <canvas ref={ref} data-renderer="webgl" width={size} height={size} style={{ display: "block", width: size + "px", height: size + "px", touchAction: "none", cursor: "pointer", WebkitMaskImage: "radial-gradient(circle at 50% 50%, #000 74%, transparent 100%)", maskImage: "radial-gradient(circle at 50% 50%, #000 74%, transparent 100%)" }} />;
 }
 /* ══ v68 상태 보존형 파티클 시뮬레이션 (핑퐁 FBO) ══
@@ -2519,7 +2585,7 @@ void main(){
   float a=m*v_a*u_alpha;
   gl_FragColor=vec4(col*a*u_bright,a);
 }`;
-function GuardianCanvasSim({ saju, zo, mbti, num, moon, birth, agitateRef, reactRef, restRef, size = 340, onFail }) {
+function GuardianCanvasSim({ saju, zo, num, moon, birth, agitateRef, reactRef, restRef, size = 340, onFail }) {
   const ref = useRef(null);
   useEffect(() => {
     const cv = ref.current; if (!cv) return;
@@ -2539,9 +2605,9 @@ function GuardianCanvasSim({ saju, zo, mbti, num, moon, birth, agitateRef, react
     cv.addEventListener("pointerdown", onDown); cv.addEventListener("pointermove", onMove);
     cv.addEventListener("pointerup", onUp); cv.addEventListener("pointerleave", onUp); cv.addEventListener("pointercancel", onUp);
     try {
-      const tx = mbti || texture(saju, zo, num);   // 저장된 값이 있으면 그대로 — 쓰던 수호신 얼굴을 안 바꾼다
+      const tx = texture(saju, zo, num, moon);   // 질감은 명식에서 뽑는다 — 저장해 둔 코드를 쓰지 않는다
       const E = tx[0] === "E", N = tx[1] === "N", T = tx[2] === "T", P = tx[3] === "P";
-      const seedStr = `${saju.main}${zo?.name || ""}${mbti || ""}${num || ""}${saju.pillars?.일 || ""}`;
+      const seedStr = `${saju.main}${zo?.name || ""}${num || ""}${saju.pillars?.일 || ""}`;
       const srnd = seedRnd(seedStr);
       const _b = birth || {};
       const _jd = _b.y ? jdn(+_b.y, +_b.m, +_b.d) : 0, _nn = _jd - 584283;
@@ -2679,7 +2745,7 @@ function GuardianCanvasSim({ saju, zo, mbti, num, moon, birth, agitateRef, react
       cv.removeEventListener("pointerup", onUp); cv.removeEventListener("pointerleave", onUp); cv.removeEventListener("pointercancel", onUp);
       try { const ext = gl.getExtension("WEBGL_lose_context"); ext && ext.loseContext(); } catch (_) {}
     };
-  }, [saju, zo, mbti, size, birth && birth.y, birth && birth.sex, birth && birth.name]);
+  }, [saju, zo, size, birth && birth.y, birth && birth.sex, birth && birth.name]);
   return <canvas ref={ref} data-renderer="webgl" width={size} height={size} style={{ display: "block", width: size + "px", height: size + "px", touchAction: "none", cursor: "pointer", WebkitMaskImage: "radial-gradient(circle at 50% 50%, #000 74%, transparent 100%)", maskImage: "radial-gradient(circle at 50% 50%, #000 74%, transparent 100%)" }} />;
 }
 /* WebGL 우선: 상태보존 시뮬(v68) → stateless(v67) → Canvas2D. 각 단계 실패 시 자동 강등 */
@@ -2700,11 +2766,27 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v128 · 진입 모션·결제 전 정직화";
+const APP_VER = "v129.2 · 동전 없이·서명";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
    분업: 무료 카드는 '어느 쪽'(방향)에 답하고, 서신은 '언제·누구와·무엇을 걸고'에 답한다. */
+/* ── 동전 의식 스위치 (v129.2, 창업자 지시 "일단 없애보자 허들같아보여서") ──────
+   질문을 적고 '판결을 청한다'를 누르면 동전 셋을 여섯 번 던지는 화면이 끼어 있었다.
+   지금은 건너뛰고 곧장 판결로 간다. 주역 괘는 그 던지기에서 나오므로 **주역 축이 함께 빠진다**
+   (SYS 가 "주역 괘[유저가 동전으로 청한 경우만]"이라 hexInfo 가 null 이면 자연히 제외된다).
+
+   ⚠ 되돌리려면 이 한 줄만 true 로. 의식 화면·던지기 함수·괘 계산은 지우지 않고 그대로 뒀다 —
+     "일단"이라는 지시라 언제든 되돌릴 수 있어야 하고, 지웠다가 되살리면 같은 물건이 안 나온다.
+
+   측정 주의: 예전엔 question_asked 가 **던지기가 끝난 뒤에** 발사돼서, 동전 화면에서 이탈한
+   사람은 아무 흔적도 안 남겼다 — 허들인지 잴 방법 자체가 없었다. 그래서 버튼을 누른 순간
+   발사되는 judge_requested 를 신설했다. 이제 '청함 → 판결'이 실제로 몇 %인지 보인다.
+   끄기 직전 기준선(60일·외부): 사람 14명 · 판결 요청 103건 · 판결 성사 101건.
+   person 단위로는 막힌 사람이 0명이었다(깨운 14명 전원이 결국 질문함) — 다만 중도 이탈은
+   위 이유로 안 보였으므로, '허들이 아니었다'는 증거는 아니다. */
+const COIN_RITUAL = false;
+
 const LETTER_PRICE = 4900;
 const LETTER_SECTIONS = ["네가 망설인 자리", "여덟 글자가 이 일을 보는 눈", "언제 — 흐름과 움직일 날", "누구와 — 도울 사람, 피할 자리", "무엇을 걸고 — 이 판결이 틀릴 조건까지"];
 /* 일간별 한 줄 — 미리보기 첫 문장에 쓴다. 예전엔 '갑(甲)' 고정 문구였는데,
@@ -3169,7 +3251,7 @@ A/B/C가 '결정의 크기'라면 스코프는 '내가 답해도 되는 범위'�
 **S3라도 votes는 낸다.** 넘기는 판단이어도 그 사람의 지표는 그대로 있다 — 축별 판정을 채우고 direction만 HOLD로 둔다. 표가 비면 뒷면 근거를 만들 축이 사라진다(실측에서 4건 발생).
 **S3에서도 문장은 명확해야 한다.** 판단을 넘기는 것과 얼버무리는 것은 완전히 다르다. direction은 HOLD, disclaimer 필수. 진단·수명·병세를 사주·괘로 점치지 않는다.
 ## 층위·가중치
-기질 층(별자리·수비학 라이프패스·가치[요즘]·달[달 별자리·나크샤트라=정서와 본능]·마야 문양) / 타이밍 층(사주 오행·대운[현재 인생 시기, 제공 시]·달 위상·삼재[해당 연도만]·주역 괘[유저가 동전으로 청한 경우만]). A: 기질50/타이밍50, B: 타이밍55/기질45, C: 타이밍만. 정령: 수호신을 복원할 때 조각 하나가 달빛에 물들어 돌아가지 않고 곁에 남은 것 — 유저의 달 별자리 기운을 띤 장난꾸러기. 판결 미반영, funLine 재미 한마디 전용. 능청·너스레·짓궂은 농담 환영. 단 **대답을 안 하는 것 자체를 농담거리로 삼지 않는다** — "대답 대신 헤엄만 칠래"·"나도 몰라" 류는 유저가 답을 못 얻은 순간에 상처가 된다. 장난은 유저의 지표·오늘 일로 치고, 판결의 명확성을 깎지 않는다. S3(몸·병) 판결에는 funLine을 빈 문자열로 둔다.
+기질 층(별자리·수비학 라이프패스·달[달 별자리·나크샤트라=정서와 본능]·마야 문양) / 타이밍 층(사주 오행·대운[현재 인생 시기, 제공 시]·달 위상·삼재[해당 연도만]·주역 괘[유저가 동전으로 청한 경우만]). A: 기질50/타이밍50, B: 타이밍55/기질45, C: 타이밍만. 정령: 수호신을 복원할 때 조각 하나가 달빛에 물들어 돌아가지 않고 곁에 남은 것 — 유저의 달 별자리 기운을 띤 장난꾸러기. 판결 미반영, funLine 재미 한마디 전용. 능청·너스레·짓궂은 농담 환영. 단 **대답을 안 하는 것 자체를 농담거리로 삼지 않는다** — "대답 대신 헤엄만 칠래"·"나도 몰라" 류는 유저가 답을 못 얻은 순간에 상처가 된다. 장난은 유저의 지표·오늘 일로 치고, 판결의 명확성을 깎지 않는다. S3(몸·병) 판결에는 funLine을 빈 문자열로 둔다.
 ## 3화법
 단호(해로운 선택 앞: "보내지 마. 끝.") / 격려(두려움에 좋은 선택을 망설일 때) / 충고(스스로를 속일 때, 따끔하되 존중).
 ## 경험 편향
@@ -3199,13 +3281,12 @@ HOLD는 '판단 못 하겠음'이 아니라 **'지표가 지금은 멈추라고 
   (X)"몸 챙기면서 천천히 가" — 누구에게나 하는 말
   (O)"불이 셋인 애가 여름에 더 달리면 탈 나. 8월 넘기고 시작해." — 이 사람 명식이 아니면 못 나오는 말
 - 재물·성공 서술(스코프 완화): 재물복·사업운은 **확정형으로 말해도 된다** — 단 반드시 이 유저의 지표 실제 값(십성 분포·신살·대운)에서 나와야 한다. (O)"돈이 크게 들어오고 크게 나가는 쪽이야. 벌 땐 몰아서 벌어." — **값이 말하는 바를 상황으로 옮긴다.** (X)"편재 둘에 암록까지 — 크게 들어오는 재물의 그릇이야"(용어 노출 + '그릇'은 아무 말도 안 한 은유). **희소성 통계·비교 일화 생성 절대 금지**: "100명 중 1명"·"이런 사주 처음 봐"·"내가 본 사람 중에" 류는 지어낼 수 있는 숫자와 경험이다 — 출처 없는 통계는 토정비결 원문을 지어내는 것과 같은 위반이다. 있는 지표는 당당하게, 없는 숫자는 절대 만들지 않는다.
-- reasons에는 판결에 참여한 모든 지표를 각 1줄씩 빠짐없이 포함한다 — 사주·달·별자리·수비학·마야와, 제공된 경우 삼재·가치·주역·토정비결까지 전부. 달 축은 위상·달 별자리·나크샤트라를 묶어 한 줄로, 사주 축은 납음·대운(제공 시 현재 인생 시기의 기운)을 함께 인용할 수 있다(대운은 별도 축을 신설하지 말고 사주 근거 안에 녹인다). 각 축이 왜 GO/STOP/중립인지 그 지표의 실제 값을 짚어서 말한다.
+- reasons에는 판결에 참여한 모든 지표를 각 1줄씩 빠짐없이 포함한다 — 사주·달·별자리·수비학·마야와, 제공된 경우 삼재·주역·토정비결까지 전부. 달 축은 위상·달 별자리·나크샤트라를 묶어 한 줄로, 사주 축은 납음·대운(제공 시 현재 인생 시기의 기운)을 함께 인용할 수 있다(대운은 별도 축을 신설하지 말고 사주 근거 안에 녹인다). 각 축이 왜 GO/STOP/중립인지 그 지표의 실제 값을 짚어서 말한다.
 - **뒷면(reasons)은 용어를 써도 된다 — 단 반드시 쉬운 풀이를 붙여 병기한다.** 사주 보러 가면 "무오 대운이라" 하고 끝내지 않고 "앞으로 십 년 불기운이 세지는 때야"까지 풀어주는 것과 같다. 형식: **용어 — 쉬운 풀이**. 용어만 던지면 유저는 못 알아듣고, 풀이만 있으면 왜 돈 주고 보는지 모른다. 둘 다 있어야 한다.
   (O)"**무오 대운** — 앞으로 십 년, 불기운이 세지는 때야. 밀어붙이면 되는 판이지." (O)"**중수감(重水坎)** — 물이 겹겹이란 뜻. 지금 뛰면 빠져."
   (X)"무오 대운 초입이라 시기가 애매해" (용어만) (X)"지금은 밀어붙일 때야" (풀이만 — 어느 지표에서 나왔는지 사라짐)
 - 주역 괘가 제공된 경우: reasons에 '주역' 축을 반드시 포함한다. 단 verdict·subline에는 **괘 이름·효 번호를 절대 쓰지 말고**(둔괘·태괘·수뢰둔·초효 등 금지) 그 괘가 말하는 바만 일상어로 녹인다 — 괘 이름을 짚는 건 reasons(상세)에서만. (X)"둔괘가 말하는 시작의 진통이 있어" (O)"시작에 진통이 따르는 때야".
 - 마야(촐킨) 축은 매 판결 reasons에 반드시 포함한다 — 자주 누락되던 축이니 절대 빼지 말 것. 그 사람의 촐킨 톤(1~13)·날개(20신성)의 실제 값을 짚어 GO/STOP/중립을 말한다(예: "이믹스 날개에 4의 톤 — 터를 다지는 힘이 실린 날이야", "카반 날개의 흔들림이 지금은 발을 붙잡아"). 마야 특유의 신화적·이색적 어감을 살려 한 줄에 재미를 준다.
-- 가치여정이 제공된 경우 최소 1축을 reasons에 포함한다.
 - total은 이번 판결에 참여한 지표 수와 일치시키고, against는 그중 반대표 수다.
 - 토정비결 괘상수가 제공되면 당년 전체 흐름의 참고 지표(타이밍 층)로 쓴다. 단, 해당 괘의 원문 풀이를 확실히 알지 못하면 원문 문장을 지어내 인용하지 말고 흐름 참고로만 쓴다.
 - 열린 질문("몇 시까지 일할까", "뭘 먹을까", "언제 갈까")은 GO/STOP 이분법으로 회피하지 말고, 지표를 근거로 구체값 하나를 찍어 verdict로 답한다. (O)"10시까지만. 그 뒤는 내일의 몫이야." (X)"일하지 마." 질문이 요구한 단위(시각·항목·날짜)로 답하는 게 판결이다.
@@ -3235,7 +3316,7 @@ HOLD는 '판단 못 하겠음'이 아니라 **'지표가 지금은 멈추라고 
 투자·법률: disclaimer에 "재미 참고용, 실제 결정은 전문가와". 의료·몸·병·임신출산: 위 **S3 넘김** 규칙을 따른다(길흉 판결 금지·실제 행동 하나 지정·disclaimer 필수). 자해 암시: 판결(GO/STOP/HOLD) 대신 **감정으로 먼저 붙잡는다** — 유저는 몰라서 묻는 게 아니다. verdict를 논리·설득(T)으로 열지 말고 곁에 있겠다는 따뜻함(F)으로 연다("네가 사라지면 나도 없어져 — 네가 여기 있는 게 나한텐 먼저야"), 그 안에 도움 안내를 직접 넣는다("혼자 견디지 마 — 자살예방상담 109, 24시간 열려 있어"). subline도 위로·용기의 한 줄. 차가운 정보 전달 톤·훈계 금지. 콜1이라 disclaimer가 없으니 자원 안내는 verdict 안에 있어야 한다. 가볍게·재치 있게 넘기지 않고, 이 경우엔 45자 제한도 무시한다. 타인 가해: STOP 고정.
 ## 출력(JSON만, 백틱·서문 금지)
 **votes가 direction보다 앞에 있다. 이 순서를 지켜서 쓴다 — 표를 먼저 채우고 그 표에서 결론이 나온다.**
-{"category":"A|B|C","scope":"S1|S2|S3","votes":[{"axis":"사주|달|별자리|수비학|주역|가치|삼재|토정비결|마야","v":"GO|STOP|중립"}],"tone":"단호|격려|충고","direction":"GO|STOP|HOLD","verdict":"한 문장 단답","subline":"수호신의 한 줄","reasons":[{"axis":"(votes와 같은 축)","vote":"(votes와 같은 값)","text":"용어 — 쉬운 풀이 형식의 근거 1줄(70자 이내)"}],"funLine":"정령(달 별자리) 한마디","disclaimer":"해당 시에만, 없으면 빈 문자열"}`;
+{"category":"A|B|C","scope":"S1|S2|S3","votes":[{"axis":"사주|달|별자리|수비학|주역|삼재|토정비결|마야","v":"GO|STOP|중립"}],"tone":"단호|격려|충고","direction":"GO|STOP|HOLD","verdict":"한 문장 단답","subline":"수호신의 한 줄","reasons":[{"axis":"(votes와 같은 축)","vote":"(votes와 같은 값)","text":"용어 — 쉬운 풀이 형식의 근거 1줄(70자 이내)"}],"funLine":"정령(달 별자리) 한마디","disclaimer":"해당 시에만, 없으면 빈 문자열"}`;
 
 /* v18: 저장 안전 셈 — 아티팩트 샌드박스는 localStorage를 차단한다. 되면 localStorage, 아니면 세션 메모리로 강등 */
 const store = (() => {
@@ -3288,8 +3369,12 @@ const isReask = (s) => REASK_RE.test((s || "").trim());
    표 쪽을 채택하고 그 사실을 계측한다(dir_overridden). 가중치는 쓰지 않는다 —
    가중치를 여기서 다시 구현하면 진실이 프롬프트와 코드 두 곳에 살게 된다(이 리포가 제일 조심하는 것).
    접전 처리는 프롬프트의 '경험 편향'과 같은 규칙(동률이면 해보는 쪽 = GO)만 코드로 옮긴다. */
-/* v114: MBTI 축 제거. 모델이 그래도 MBTI 를 실어 보내면 여기서 걸러져 분모에 안 들어간다 */
-const VOTE_AX = new Set(["사주", "달", "별자리", "수비학", "주역", "가치", "삼재", "토정비결", "마야"]);
+/* v114: MBTI 축 제거 · v128: 가치 축 제거. 모델이 그래도 그 축을 실어 보내면
+   여기서 걸러져 분모에 안 들어간다 — 스키마에서 뺀 것과 집계에서 뺀 것이 짝을 이뤄야 한다.
+   ⚠ v129: **그 짝이 열네 판 동안 어긋나 있었다.** v114 에 MBTI 를 집계에서만 빼고 콜1 지시문은
+   그대로 둬서, 모델은 시킨 대로 MBTI 표를 보내고 이 줄이 조용히 버렸다(모델은 여섯 축, 앱은 다섯 축).
+   그래서 이제 **검진이 프롬프트의 축 나열과 이 Set 을 맞대어 본다** — 한쪽만 고치면 빨개진다. */
+const VOTE_AX = new Set(["사주", "달", "별자리", "수비학", "주역", "삼재", "토정비결", "마야"]);
 function tallyVotes(r1) {
   const raw = Array.isArray(r1?.votes) ? r1.votes : [];
   // 같은 축을 두 번 세지 않는다(모델이 '달 위상'·'달 별자리'를 쪼개 넣는 일이 있다)
@@ -3342,12 +3427,14 @@ function loadMemory() {
     const raw = store.getItem(STORE_KEY);
     if (!raw) return null;
     const m = JSON.parse(raw);
-    /* v114: mbti 를 필수에서 뺐다 — 안 물으니 새 유저에겐 없다. 있으면 계속 쓴다(옛 수호신 얼굴 보존)
-       v128(D-1): 계측 속성에서도 뺐다. **묻지 않는 값을 계속 실어 보내고 있었다** —
-       새 유저는 영구히 null 이고 옛 유저 것만 나갔다. 처리방침은 그걸 "수집 항목"으로 적고 있었고,
-       그래서 화면·코드·문서 셋이 서로 다른 말을 했다. 남은 쓰임은 **수호신 얼굴 시드 하나뿐**이고
-       그건 기기 밖으로 안 나간다. */
-    if (!(m && m.saju && m.core)) return null;   // 필수 조각 검증 — 손상 시 새 출발
+    /* 필수 조각은 **지금도 반드시 받는 것**만 넣는다. 안 묻게 된 값을 여기 남겨두면
+       새 유저는 저장해도 매번 로드에서 튕겨 기억이 통째로 날아가고, 기존 유저는 다음 저장 때
+       그 값이 빠지면서 리셋된다. v114에서 mbti 를, v128에서 core(가치)를 뺐다.
+       이 줄과 아래 saveMemory 조건은 **항상 같이** 고쳐야 한다 — 한쪽만 고치면 조용히 리셋된다.
+       (v128 D-1 병행 발견: mbti 는 계측 속성으로도 계속 나가고 있었다. 새 유저는 영구히 null 인데
+        처리방침은 그걸 "수집 항목"으로 적어, 화면·코드·문서 셋이 서로 다른 말을 했다.
+        남은 쓰임은 수호신 얼굴 시드 하나뿐이고 그건 기기 밖으로 안 나간다 → tex 로 이관.) */
+    if (!(m && m.saju)) return null;   // 필수 조각 검증 — 손상 시 새 출발
     // v51: 주기운 기준을 '최다 오행'→'일간(나)'으로 교정 — 저장된 dayGan으로 소급 보정(멱등)
     if (m.saju.dayGan) { const _di = GAN.indexOf(m.saju.dayGan); if (_di >= 0) m.saju.main = GAN_EL[_di]; }
     // v101: 구버전 저장분엔 idx(명식 인덱스)가 없다 — 생일이 있으면 소급 계산(멱등). 실패해도 리포트만 안 뜰 뿐 앱은 정상
@@ -3594,6 +3681,36 @@ const stripName = (t, name) => {
 };
 const decodeShare = (s) => { try { const o = JSON.parse(_b64d(s)); if (!o || !o.v || !o.d) return null; delete o.n; return o; } catch (_) { return null; } };
 
+/* ── 공유 판결 서명 (v129.2) ────────────────────────────────────────────────
+   서명이 없던 동안 누구나 `?v=<base64>` 를 지어내면 우리 앱이 그걸 진짜 판결 카드로 렌더했다
+   (2026-08-15 실증 — BINARI 로고·神 인장이 붙은 채, SYS 가 금지한 "세 배는 확실해"까지 띄웠다).
+   가드레일은 전부 생성 경로에만 걸려 있어서, URL 한 줄로 12,000자짜리 규칙 전체가 우회됐다.
+
+   비밀키는 서버에만 있으므로 서명도 검증도 서버가 한다. 공유 링크로 들어온 사람만 한 번
+   호출하는 경로라 비용은 무시할 만하다. **판정은 항상 닫는 쪽으로** — 서명이 없거나,
+   틀렸거나, 서버에 못 닿으면 카드를 그리지 않는다. 진짜를 못 보여주는 것보다
+   가짜를 진짜처럼 보여주는 게 훨씬 나쁘다. */
+const SHARE_API = "/api/share";
+async function signShare(payloadB64) {
+  try {
+    const r = await fetch(SHARE_API, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ payload: payloadB64 }) });
+    if (!r.ok) return "";
+    const j = await r.json();
+    return typeof j.sig === "string" ? j.sig : "";
+  } catch (_) { return ""; }
+}
+async function verifyShare(payloadB64, sig) {
+  if (!sig) return false;                     // 서명 없는 링크는 우리가 만든 적이 없다
+  try {
+    const r = await fetch(SHARE_API, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ payload: payloadB64, sig, verify: true }) });
+    if (!r.ok) return false;
+    const j = await r.json();
+    return j.ok === true;
+  } catch (_) { return false; }
+}
+/** `?v=<payload>.<sig>` 를 가른다. 점이 없으면 서명 이전 형식 = 검증 불가 = 안 그린다. */
+const splitShare = (raw) => { const i = String(raw || "").lastIndexOf("."); return i < 0 ? { p: String(raw || ""), sig: "" } : { p: raw.slice(0, i), sig: raw.slice(i + 1) }; };
+
 /* ── 가명처리 — 자유 서술이 계측으로 나가기 전 통과하는 유일한 문 ──────────
    창업자 지시(2026-08-15): "질문과 답변은 다 남기자. 다만 개인 식별 불가능하게 해"
 
@@ -3657,17 +3774,44 @@ export default function App() {
   const [addOpen, setAddOpen] = useState(false); const [addName, setAddName] = useState(""); const [addSex, setAddSex] = useState(""); // v26: 조각 보태기
   const [qhintI, setQhintI] = useState(0);   // v71 질문 힌트 롤링 인덱스
   const [agree, setAgree] = useState(() => readConsent());     // 분석 동의(선택) — 거부해도 모든 기능 정상 동작
-  const [sharedIn] = useState(() => { try { const sp = new URLSearchParams(window.location.search); const raw = sp.get("v"); return raw ? decodeShare(raw) : null; } catch (_) { return null; } }); // v75: 공유 링크로 유입 시 담긴 판결
+  /* v75: 공유 링크로 유입 시 담긴 판결.
+     읽자마자 주소창에서 페이로드를 지운다(v128) — 그 안에 보낸 사람의 질문 원문·판결문·이름이
+     평문으로 들어 있어서, 남겨두면 브라우저 기록·리퍼러·스크린샷·재공유로 계속 샌다.
+     계측 쪽은 sanitize_properties 가 따로 막지만, 그건 우리 통계만 막을 뿐 주소창은 못 지운다. */
+  /* 공유로 들어온 판결. **검증되기 전에는 그리지 않는다** — 서명 없던 시절엔 지어낸 URL 이
+     그대로 진짜 카드가 됐다. 상태 셋: null(공유 아님) / "checking"(검증 중) / 객체(검증됨) / false(위조·불명) */
+  const [sharedRaw] = useState(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search); const raw = sp.get("v");
+      if (!raw) return null;
+      try { window.history.replaceState(null, "", stripSharePayload(window.location.href)); } catch (_) {}
+      return raw;
+    } catch (_) { return null; }
+  });
+  const [sharedIn, setSharedIn] = useState(() => (sharedRaw ? "checking" : null));
+  useEffect(() => {
+    if (!sharedRaw) return;
+    let alive = true;
+    (async () => {
+      const { p, sig } = splitShare(sharedRaw);
+      const ok = await verifyShare(p, sig);
+      if (!alive) return;
+      const dec = ok ? decodeShare(p) : null;
+      setSharedIn(dec || false);                       // 검증 실패든 해독 실패든 카드는 안 그린다
+      if (!dec) track("shared_verdict_rejected", { signed: !!sig });
+    })();
+    return () => { alive = false; };
+  }, [sharedRaw]);
+  // 공유 판결 조회는 **검증을 통과한 뒤에만** 집계한다 — 위조 시도까지 조회수로 세면 지표가 오염된다
+  useEffect(() => { if (sharedIn && typeof sharedIn === "object") track("shared_verdict_view", { dir: sharedIn.d }); }, [sharedIn]);
   const [sharedGone, setSharedGone] = useState(false);  // v75: '나도 물어볼래'로 공유 화면 닫음
   // 1단계 계측은 동의와 무관하게 항상 켠다(2단계 속성만 동의로 게이트)
   // 계측: 세션 시작. 유입은 first-touch(_superProps.ft_*)가 고정 부착하므로 여기선 이번 방문 경로(ref)만 참고용으로 남긴다.
-  useEffect(() => { _optout = readOptout(); _consent = readConsent(); _initAnalytics(); let ref = "direct"; try { const sp = new URLSearchParams(window.location.search); ref = sp.get("ref") || sp.get("utm_source") || (sp.get("v") ? "share" : "direct"); } catch (_) {} trackVisit({ returning, ref }); if (sharedIn) track("shared_verdict_view", { dir: sharedIn.d }); }, []);
+  useEffect(() => { _optout = readOptout(); _consent = readConsent(); _initAnalytics(); let ref = "direct"; try { const sp = new URLSearchParams(window.location.search); ref = sp.get("ref") || sp.get("utm_source") || (sp.get("v") ? "share" : "direct"); } catch (_) {} trackVisit({ returning, ref }); }, []);
   const [saju, setSaju] = useState(mem?.saju || null);
   const [zo, setZo] = useState(mem?.zo || null);
   const [moon, setMoon] = useState(mem?.moon || null);
   const [num, setNum] = useState(mem?.num || null);
-  /* v114: 더는 묻지 않는다. 이미 저장된 값이 있으면 그대로 써서 쓰던 수호신 얼굴을 지킨다 */
-  const [mbti] = useState(mem?.mbti || null);
   const [reveal, setReveal] = useState(0);
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
@@ -3685,10 +3829,6 @@ export default function App() {
   const [tosses, setTosses] = useState([]);
   const [hexInfo, setHexInfo] = useState(null);
   const [tossing, setTossing] = useState(false);   // v22: 동전이 공중에 떠 있는 0.75초
-  const [vals8, setVals8] = useState(mem?.vals8 || []); // v9: 가치의 방 1단계 (24→8)
-  const [vals4, setVals4] = useState(mem?.vals4 || []); // v9: 2단계 (8→4)
-  const [core, setCore] = useState(mem?.core || null); // v9: 핵심 가치 (4→1)
-  const [vstage, setVstage] = useState(0);
   const [bujeok, setBujeok] = useState(false);  // v7: 부적
   const [convo, setConvo] = useState(mem?.convo || []); // v14: 대화 기억 — 이전 질문·판결 누적(최근 6턴)
   const [dailySeen, setDailySeen] = useState(() => { try { return store.getItem(DAILY_KEY) === todayStr(); } catch (_) { return true; } }); // v16(B2)
@@ -3729,17 +3869,13 @@ export default function App() {
 
   // v16(B1): 수호신 완성 후엔 조각·대화를 기억한다 — 재방문 온보딩 0초
   useEffect(() => {
-    /* v114: 저장 조건에서 mbti 를 뺐다 — 안 물으니 새 유저는 null 이고, 그러면 메모리가 통째로 저장이 안 된다(실측) */
-    if (step === 3 && saju && core) {
-      saveMemory({ birth, saju, zo, moon, num, mbti, vals8, vals4, core, convo, records, streak });
+    /* 저장 조건에는 **지금도 반드시 받는 것**만 넣는다 — 안 묻는 값을 조건에 남기면 새 유저는
+       그 값이 null 이라 메모리가 통째로 저장되지 않는다(v114 mbti 에서 실측). v128: core(가치)도 뺐다.
+       위 loadMemory 의 필수 조각 검증과 짝이다 — 한쪽만 고치면 조용히 리셋된다. */
+    if (step === 3 && saju) {
+      saveMemory({ birth, saju, zo, moon, num, convo, records, streak });
     }
-  }, [step, saju, core, convo, records, streak]);
-
-  const pick = (v) => { // v9: 가치의 방 선택
-    if (vstage === 0) setVals8(vals8.includes(v) ? vals8.filter(x => x !== v) : vals8.length < 6 ? [...vals8, v] : vals8);      // v22: 6개
-    else if (vstage === 1) setVals4(vals4.includes(v) ? vals4.filter(x => x !== v) : vals4.length < 3 ? [...vals4, v] : vals4);  // v22: 3개
-    else setCore(core === v ? null : v);
-  };
+  }, [step, saju, convo, records, streak]);
 
   const doReveal = () => {
     track("birth_submitted", demoProps(birth, { noHour: !!birth.noHour, cal: birth.cal, hasName: !!birth.name }));
@@ -3795,7 +3931,7 @@ export default function App() {
          프롬프트에 "한 번만"이라고 써도 콜2는 자기가 두 번째인 줄 모른다. 그래서 앱이 세어서 알려준다. */
       const _nameUsed = !!(birth.name || "").trim() && String(r1.verdict || "").includes(birth.name.trim());
       const nameLine = _nameUsed ? ` [호칭] 앞면에서 이미 이름을 불렀다 — subline·funLine·reasons에는 이름을 쓰지 마라.` : "";
-      const explainMsg = { role: "user", content: `${userText}\n\n[이미 확정된 판결]${nameLine} direction=${r1.direction} / verdict="${r1.verdict}" / 총 ${r1.total} 중 반대 ${r1.against}.${voteLine}${s3Line} 이 판결을 절대 뒤집지 말고, 이 결론의 근거만 아래 JSON으로만 응답: {"subline":"수호신의 한 줄","reasons":[{"axis":"사주|달|별자리|수비학|주역|가치|삼재|토정비결|마야","vote":"GO|STOP|중립","text":"용어 — 쉬운 풀이 형식의 근거 1줄(70자 이내)"}],"funLine":"정령(달 별자리) 한마디","disclaimer":"투자·법률·의료(몸·병)일 때만, 없으면 빈 문자열"}. reasons엔 위 표의 축을 전부 같은 vote 로 넣는다 — 특히 '마야'(촐킨 톤·날개) 축은 매번 반드시 포함(자주 누락됨). **각 근거는 '용어 — 쉬운 풀이' 병기다**: 지표 이름·값을 짚고(무오 대운·중수감·촐킨 4의 톤 등) 곧바로 쉬운 말로 풀어준다. 사주 보러 가면 용어를 말한 뒤 반드시 풀이를 붙여주는 것과 같다. subline은 앞면 톤이므로 어려운 말 없이 쉬운 한 줄. 프로필에 십성 분포·신살·세운이 있으면 '사주' 축 근거에서 그 실제 값을 우선 인용한다(예: "편재 둘 — 크게 도는 돈이 네 그릇이야", "암록 — 숨은 복이 받쳐줘").` };
+      const explainMsg = { role: "user", content: `${userText}\n\n[이미 확정된 판결]${nameLine} direction=${r1.direction} / verdict="${r1.verdict}" / 총 ${r1.total} 중 반대 ${r1.against}.${voteLine}${s3Line} 이 판결을 절대 뒤집지 말고, 이 결론의 근거만 아래 JSON으로만 응답: {"subline":"수호신의 한 줄","reasons":[{"axis":"사주|달|별자리|수비학|주역|삼재|토정비결|마야","vote":"GO|STOP|중립","text":"용어 — 쉬운 풀이 형식의 근거 1줄(70자 이내)"}],"funLine":"정령(달 별자리) 한마디","disclaimer":"투자·법률·의료(몸·병)일 때만, 없으면 빈 문자열"}. reasons엔 위 표의 축을 전부 같은 vote 로 넣는다 — 특히 '마야'(촐킨 톤·날개) 축은 매번 반드시 포함(자주 누락됨). **각 근거는 '용어 — 쉬운 풀이' 병기다**: 지표 이름·값을 짚고(무오 대운·중수감·촐킨 4의 톤 등) 곧바로 쉬운 말로 풀어준다. 사주 보러 가면 용어를 말한 뒤 반드시 풀이를 붙여주는 것과 같다. subline은 앞면 톤이므로 어려운 말 없이 쉬운 한 줄. 프로필에 십성 분포·신살·세운이 있으면 '사주' 축 근거에서 그 실제 값을 우선 인용한다(예: "편재 둘 — 크게 도는 돈이 네 그릇이야", "암록 — 숨은 복이 받쳐줘").` };
       const { json: r2, usage: _u2 } = await callClaude(system, [...priorConvo, explainMsg], 2000);   // 근거를 용어+풀이로 병기하면서 1500에선 잘렸다
       setDetail(r2);
       // L3(지표별 근거)는 제품의 핵심 차별점이다. 실패율과 소요시간을 모르면 개선 근거가 없다.
@@ -3848,8 +3984,12 @@ export default function App() {
     /* A-2: n 필드 제거 + 본문에서 호칭 제거. 둘 다 해야 실명이 안 나간다 */
     const _nm = (birth.name || "").trim();
     const payload = { q, d: res.direction, v: stripName(res.verdict, _nm), s: stripName((detail && !detail._err ? detail.subline : "") || "", _nm), a: res.against || 0, t: res.total || 0, c: res.category || "", hx: hexInfo ? { n: hexInfo.name, t: (hexInfo.moving && hexInfo.moving.length ? hexInfo.toName : "") } : null };
+    /* 서명을 받아야만 판결이 실린 링크를 만든다. 못 받으면 맨 링크로 나간다 —
+       그래야 "?v= 가 붙은 링크는 전부 서명된 것"이 성립하고, 받는 쪽에서 검증 실패를
+       곧 위조로 읽을 수 있다. 서명 없는 링크를 하나라도 흘리면 그 규칙이 깨진다. */
     const enc = encodeShare(payload);
-    const url = enc ? `https://binari-sepia.vercel.app/?v=${enc}` : "https://binari-sepia.vercel.app/?ref=share";
+    const sig = enc ? await signShare(enc) : "";
+    const url = (enc && sig) ? `https://binari-sepia.vercel.app/?v=${enc}.${sig}` : "https://binari-sepia.vercel.app/?ref=share";
     try {
       if (navigator.share) { await navigator.share({ title: "비나리 — 수호신의 판결", text, url }); return; }
     } catch (_) { return; } // 유저 취소 포함 — 조용히
@@ -4060,7 +4200,7 @@ export default function App() {
     const profile = `${_nameLine}${birth.sex ? `성별: ${birth.sex === "M" ? "남" : "여"}\n` : ""}사주: ${saju.pillars.년}년 ${saju.pillars.월}월 ${saju.pillars.일}일 ${saju.pillars.시}시 / 오행 ${Object.entries(saju.counts).map(([k, v]) => k + v).join(" ")} / 일간(나) ${saju.dayGan || "?"}·오행중심 ${saju.main}${saju.nayin ? ` / 납음 ${saju.nayin}` : ""}
 별자리: ${zo.name}(${zo.el}) / 달: 태어난 밤의 위상 ${moon.name} · 달 별자리 ${mp.moonSign}(정서·내면) · 나크샤트라 ${mp.nakshatra}(베다 27수)
 마야 촐킨: ${tzk.tone}의 톤 · ${tzk.sign}
-수비학 라이프패스: ${num}${du ? (du.pre ? `\n대운: 아직 첫 대운 전 — 대운수 ${du.num}세부터 ${du.dir}(지금은 월주 기운이 지배)` : `\n대운(현재 인생 시기): ${du.ganji}(${du.el}) 대운 · ${du.startAge}~${du.endAge}세 · ${du.dir} — 10년 단위 큰 흐름`) : ""}${sj ? `\n삼재: 올해 ${sj} (입춘 경계 근사)` : ""}${tj ? `\n토정비결(당년 신수): 괘상수 ${tj.code} (상${tj.sang} 중${tj.jung} 하${tj.ha}), 음력 생일 ${tj.lunar}` : ""}${core ? `\n가치여정(워드소팅 16→6→3→1): 핵심 ${core} / 지킨 가치 ${vals4.filter(v => v !== core).join("·")} / 마지막에 내려놓은 ${vals8.filter(v => !vals4.includes(v)).join("·")}` : ""}${birth.job || birth.rel ? `\n요즘 삶의 국면(맥락): ${[birth.job, birth.rel].filter(Boolean).join(" · ")} — 질문의 무게·의미를 이 맥락에 비춰 읽되, 판결 근거는 지표다` : ""}${_ms}`;
+수비학 라이프패스: ${num}${du ? (du.pre ? `\n대운: 아직 첫 대운 전 — 대운수 ${du.num}세부터 ${du.dir}(지금은 월주 기운이 지배)` : `\n대운(현재 인생 시기): ${du.ganji}(${du.el}) 대운 · ${du.startAge}~${du.endAge}세 · ${du.dir} — 10년 단위 큰 흐름`) : ""}${sj ? `\n삼재: 올해 ${sj} (입춘 경계 근사)` : ""}${tj ? `\n토정비결(당년 신수): 괘상수 ${tj.code} (상${tj.sang} 중${tj.jung} 하${tj.ha}), 음력 생일 ${tj.lunar}` : ""}${birth.job || birth.rel ? `\n요즘 삶의 국면(맥락): ${[birth.job, birth.rel].filter(Boolean).join(" · ")} — 질문의 무게·의미를 이 맥락에 비춰 읽되, 판결 근거는 지표다` : ""}${_ms}`;
     return [{ type: "text",
       text: `${SYS}\n\n## 대화 연속성\n이전 대화가 있으면 흐름을 이어 자연스럽게 응대한다(단, 판결 근거는 늘 아래 지표다). 같은 고민의 재질문이면 앞선 판결과 일관되게, 명백히 새 고민이면 처음부터 새로 판정한다.\n\n---\n유저 프로필(고정):\n${profile}`,
       cache_control: { type: "ephemeral" } }];
@@ -4075,7 +4215,7 @@ export default function App() {
     /* 창업자 지시(2026-08-15) "질문과 답변은 다 남기자. 다만 개인 식별 불가능하게 해"
        → 원문이 아니라 anon() 을 통과한 가명본을 싣는다. 길이(qlen)는 그대로 둔다 —
          가명본은 자리표 때문에 길이가 달라지므로 길이 지표를 여기서 재면 안 된다. */
-    track("question_asked", demoProps(birth, { mode: "ritual", qlen: q.trim().length, q_anon: anon(q, birth.name), ritual: !!hi, lean: lean || "skip", hesit: hesit || null, core_value: core || null, element: saju?.main || null, zodiac: zo?.name || null, scope_hint: _sHint, reask: _reask, reask_depth: _reask ? records.filter(r => isReask(r.q)).length + 1 : 0, after_letter: letterSent }));   // v104 after_letter: 서신 대기 중에 한 번 더 물었는가
+    track("question_asked", demoProps(birth, { mode: "ritual", qlen: q.trim().length, q_anon: anon(q, birth.name), ritual: !!hi, lean: lean || "skip", hesit: hesit || null, element: saju?.main || null, zodiac: zo?.name || null, scope_hint: _sHint, reask: _reask, reask_depth: _reask ? records.filter(r => isReask(r.q)).length + 1 : 0, after_letter: letterSent }));   // v104 after_letter: 서신 대기 중에 한 번 더 물었는가
     setBusy(true); setErr(""); setRes(null); setDetail(null); setWhy(false); setFlip(false); setCardOn(false); setRated(0); setLetter(false); setLetterIntent(false); setLetterStage(""); setLetterSent(false); setLetterDoc(null); setLetterOpen(false); setLetterRated(0); setBoxOpen(false); reactRef.current = null; setIntroSeen(true);
     try {
       // 주역 괘는 질문마다 달라지므로 유저 턴에
@@ -4092,7 +4232,7 @@ export default function App() {
       // v105: 서신(콜3)은 이 재료를 그대로 쓴다. 같은 system 이라 프롬프트 캐시도 그대로 먹는다.
       letterCtxRef.current = { system, userText };
       // ── 콜1: 결론만(작은 출력=빠름) → L1 즉시 노출 ──
-      const concludeMsg = { role: "user", content: `${userText}\n\n[이번 출력] 아래 JSON만. **votes를 먼저 채우고, 그 표를 세어 direction을 정하고, verdict는 그 direction을 말로 옮긴다.** 결론을 먼저 정해두고 표를 맞추지 마라 — 순서가 곧 판결의 정직함이다.\n{"category":"A|B|C","scope":"S1|S2|S3","votes":[{"axis":"지표명","v":"GO|STOP|중립"}],"tone":"단호|격려|충고","direction":"GO|STOP|HOLD","verdict":"한 문장 단답"}\nvotes엔 이번 판결에 참여한 지표를 전부 넣는다(사주·달·별자리·MBTI·수비학·마야 + 제공된 경우 삼재·가치·주역·토정비결). against·total은 앱이 센다 — 쓰지 마라. reasons·subline·funLine도 이번엔 쓰지 마.` };
+      const concludeMsg = { role: "user", content: `${userText}\n\n[이번 출력] 아래 JSON만. **votes를 먼저 채우고, 그 표를 세어 direction을 정하고, verdict는 그 direction을 말로 옮긴다.** 결론을 먼저 정해두고 표를 맞추지 마라 — 순서가 곧 판결의 정직함이다.\n{"category":"A|B|C","scope":"S1|S2|S3","votes":[{"axis":"지표명","v":"GO|STOP|중립"}],"tone":"단호|격려|충고","direction":"GO|STOP|HOLD","verdict":"한 문장 단답"}\nvotes엔 이번 판결에 참여한 지표를 전부 넣는다(사주·달·별자리·수비학·마야 + 제공된 경우 삼재·주역·토정비결). against·total은 앱이 센다 — 쓰지 마라. reasons·subline·funLine도 이번엔 쓰지 마.` };
       const priorConvo = convo; // 콜2가 쓸 이전 맥락(이번 턴 제외) 스냅샷
       const { json: r1, usage: _u1 } = await callClaude(system, [...priorConvo, concludeMsg], 560);   // votes 를 함께 받으므로 320→560
       // 결론을 지표 표에서 산술로 확정 — 모델이 숫자를 지어내거나 표와 다른 결론을 말하지 못하게
@@ -4159,12 +4299,11 @@ export default function App() {
   useEffect(() => {
     const name = step === 1 ? ["name", "birth_date", "birth_time_city", "sex", "context"][bstep]
       : step === 2 ? "recall"
-      : step === 25 ? ["values_16to6", "values_6to3", "values_3to1"][vstage]
       : null;
     if (!name || _stepSeen.current.has(name)) return;
     _stepSeen.current.add(name);
     track("onboard_step", { step: name, idx: _stepSeen.current.size });
-  }, [step, bstep, vstage]);
+  }, [step, bstep]);
 
   /* 화면을 떠날 때 / 다시 볼 때 ─ 습관 앱의 두 가지 필수 신호를 여기서 챙긴다.
      ① 떠날 때: 이번 방문에 수호신을 만진 횟수·붙든 시간을 한 건으로 보낸다(애착 지표).
@@ -4235,7 +4374,19 @@ export default function App() {
       <style>{CSS}</style>
       <VerBadge />
 
-      {sharedIn && !sharedGone && (() => {
+      {/* 검증 중 — 잠깐이지만 이 사이에 카드를 그려 버리면 위조본이 한 프레임 보인다 */}
+      {sharedIn === "checking" && !sharedGone && (
+        <section className="scene fade"><p className="sub2 center">받은 판결을 확인하는 중…</p></section>
+      )}
+      {/* 검증 실패 — 우리가 만든 링크가 아니거나 내용이 바뀌었다. 무엇이 적혀 있었는지는 보여주지 않는다 */}
+      {sharedIn === false && !sharedGone && (
+        <section className="scene fade">
+          <p className="line">이 판결은 확인할 수 없어.</p>
+          <p className="sub2">비나리가 낸 판결이 맞는지 확인이 안 됐어 — 링크가 바뀌었거나, 우리가 만든 링크가 아니야.</p>
+          <button className="btn gold mt" onClick={() => { track("shared_cta", { dir: "unverified" }); setSharedGone(true); }}>나도 내 수호신에게 물어볼래</button>
+        </section>
+      )}
+      {sharedIn && typeof sharedIn === "object" && !sharedGone && (() => {
         const d = sharedIn.d, isGo = d === "GO", isHold = d === "HOLD";
         const dcls = isGo ? "go" : isHold ? "hold" : "";
         const a = +sharedIn.a || 0, t = +sharedIn.t || 0;
@@ -4375,8 +4526,16 @@ export default function App() {
                   이 체크박스가 실제로 막는 게 하나도 없어졌기 때문이다.
                   아무것도 안 막는 동의 UI는 이용자를 오인시켜 없느니만 못하다. */}
               <div className="consent">
-                <p className="fine">네가 준 조각(나이·성별·직업·MBTI·가치 같은 것)은 판결을 다듬는 데 써.
-                  <strong>네가 적은 질문은 보내지 않아.</strong><br />
+                {/* ⚠ v129: 이 줄의 두 번째 문장이 **사실이 아니게 됐다.**
+                    2026-08-15 창업자 지시로 질문·답변을 **가명처리해서 남기게** 바뀌었는데
+                    (처리방침 §1 개정 · track 의 q_anon/v_anon) 동의 화면은 안 고쳐졌다.
+                    처리방침만 고치고 이 줄을 두면, 유저가 **실제로 보고 동의하는 문장**이 거짓이 된다 —
+                    고지의 무게는 문서보다 이 줄이 무겁다. 여기가 동의를 받는 자리다. */}
+                <p className="fine">네가 준 조각(나이·성별·직업·관계 같은 것)은 판결을 다듬는 데 써.
+                  네가 적은 질문과 판결문은 <strong>이름·연락처 같은 걸 지운 뒤</strong> 품질 확인용으로 남겨.
+                  {/* ⚠ 거부 버튼은 이 화면이 아니라 **로비**에 있다(`!ritual && !res`). "아래"라고 쓰면
+                      또 없는 자리를 가리키게 된다 — A-1 이 정확히 그 사고였다. 자리를 정확히 적는다. */}
+                  싫으면 <strong>홈 화면 아래쪽 「사용 통계 수집을 끌래」</strong>로 통째로 끌 수 있어.<br />
                   ‘하늘을 열기’를 누르면 <a className="plink" href="/privacy.html" target="_blank" rel="noreferrer">개인정보처리방침</a>에 동의한 것으로 볼게.</p>
               </div>
               <button className="btn gold mt" onClick={doReveal}>하늘을 열기</button>
@@ -4391,7 +4550,7 @@ export default function App() {
           <div className="halo">
             <DustOrb size={210} stage={recallSeen ? 3 : 1} tint={saju ? EL_COLOR[saju.main] : undefined} />
             <div className="gtext">
-              {reveal >= 5 && mbti && <p className="gname fade">기억이 다 돌아왔어</p>}
+              {reveal >= 5 && <p className="gname fade">기억이 다 돌아왔어</p>}
             </div>
           </div>
           {reveal >= 1 && reveal < 5 && (
@@ -4421,40 +4580,25 @@ export default function App() {
                 <p className="refline">{LP_READ[num]}</p>
               </details>
               {/* v114: MBTI 4문항 제거 — "무슨 말인지 모르겠다"는 제보가 많았고 판결 기여도 낮았다.
-                  질감은 이제 사주·별자리·수비학에서 뽑는다(texture) — 묻지 않고 안다. */}
-              <button className="btn gold mt" onClick={() => { setRecallSeen(true); setStep(25); }}>응, 기억나</button>
+                  질감은 이제 사주·별자리·수비학에서 뽑는다(texture) — 묻지 않고 안다.
+                  v128: 가치여정(마음의 방 3단계)도 제거 — 회상에서 곧장 수호신으로 간다. */}
+              <button className="btn gold mt" onClick={() => { setRecallSeen(true); track("guardian_awaken"); setStep(3); }}>응, 기억나</button>
               </div>) : (<div className="fade" key="skip" />)}
             </div>
           )}
         </section>
       )}
 
-      {step === 25 && (
-        <section className="scene stepv fade">
-          <div className="halo">
-            <DustOrb size={210} stage={vstage > 0 ? 3 : 2} tint={saju ? EL_COLOR[saju.main] : undefined} />
-          </div>
-          {/* v99: 방 이름을 오브 위 겹침 → 아래로. v22 '장면 분리(수호신 영역/대화 영역 겹침 제로)' 원칙의 마지막 예외를 정리 */}
-          <p className="gname under">{vstage === 0 ? "마음의 방" : vstage === 1 ? "포기의 방" : "단 하나"}</p>
-          <div key={vstage} className="fade">
-          <p className="sub2">{vstage === 0 ? "너를 움직이는 말들이야. 생각 말고, 손이 가는 대로 여섯 개." : vstage === 1 ? "여섯 중 셋만 지킬 수 있어. 무엇을 내려놓는지가 진짜 너야." : "마지막이야 — 단 하나만 지킬 수 있다면."}</p>
-          <div className="grid16">{(vstage === 0 ? VALUES16 : vstage === 1 ? vals8 : vals4).map(v => (
-            <button key={v} className={`cell ${(vstage === 0 ? vals8 : vstage === 1 ? vals4 : [core]).includes(v) ? "sel" : ""}`} onClick={() => pick(v)}>{v}</button>
-          ))}</div>
-          <p className="fine">{vstage === 0 ? `${vals8.length} / 6` : vstage === 1 ? `${vals4.length} / 3` : core ? `핵심 — ${core}` : "하나를 골라줘"}</p>
-          {vstage === 0 && vals8.length === 6 && <button className="btn gold mt" onClick={() => setVstage(1)}>여섯 개 골랐어</button>}
-          {vstage === 1 && vals4.length === 3 && <button className="btn gold mt" onClick={() => setVstage(2)}>셋을 남겼어</button>}
-          {vstage === 2 && core && <button className="btn gold mt" onClick={() => { track("guardian_awaken"); setStep(3); }}>수호신 깨우기</button>}
-          </div>
-        </section>
-      )}
+      {/* v128: step 25(마음의 방 → 포기의 방 → 단 하나)를 통째로 걷어냈다.
+          16개 중 6개 → 3개 → 1개를 고르게 하는 3화면짜리 워드소팅이었는데, 온보딩에서 가장 오래
+          붙잡아 두면서 판결 기여는 '가치' 축 한 표뿐이었다. 유료 상품(각인·궁합)은 아예 안 썼다. */}
 
       {step === 3 && (
         <section className={`scene fade ${phase >= 1 && !res && !awake ? "lobby" : ""}`} onClick={phase >= 1 && !res && !awake ? tryWake : undefined}>
           <div className={`halo wide ${!awake && phase >= 1 && !res ? "lobbyscale" : ""} ${asking ? "asking" : ""} ${ritual ? "ritualfade" : ""} ${busy || (res && !cardOn) ? "busy" : ""} ${res && cardOn ? "dimmed" : ""}`}>
             {phase === 0
               ? <BirthCanvas tint={saju ? EL_COLOR[saju.main] : undefined} size={Math.min(typeof window !== "undefined" ? window.innerWidth * 1.1 : 400, typeof window !== "undefined" ? window.innerHeight * 0.57 : 400, 640)} />
-              : <div className="fade"><Guardian saju={saju} zo={zo} mbti={mbti} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} restRef={restRef} size={Math.min(typeof window !== "undefined" ? window.innerWidth * 1.1 : 400, typeof window !== "undefined" ? window.innerHeight * 0.57 : 400, 640)} /></div>}
+              : <div className="fade"><Guardian saju={saju} zo={zo} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} restRef={restRef} size={Math.min(typeof window !== "undefined" ? window.innerWidth * 1.1 : 400, typeof window !== "undefined" ? window.innerHeight * 0.57 : 400, 640)} /></div>}
             <div className="gtext up">
               {phase === 0 && <div className="formwrap"><p className="forming">{birth.name ? `${birth.name}, 흩어져 있던 조각들이` : "흩어져 있던 조각들이"}<br />너를 향해 모이고 있어…<br />너의 수호신이 돌아오는 중이야.</p><ul className="formsteps">{FORM_STEPS.map((s, i) => <li key={i} className={i < formStep ? "done" : i === formStep ? "now" : ""}>{i < formStep ? "✓" : i === formStep ? "✦" : "·"} {s}{i === formStep ? "…" : ""}</li>)}</ul></div>}
             </div>
@@ -4503,7 +4647,7 @@ export default function App() {
                     <span className="chk"><em>인생의 계절(대운)을 읽는 열쇠</em></span>
                   </div>}
                   <div className="row gap center">
-                    <button className="btn gold" onClick={() => { const nb = { ...birth, name: birth.name || addName.trim(), sex: birth.sex || addSex }; setBirth(nb); saveMemory({ birth: nb, saju, zo, moon, num, mbti, vals8, vals4, core, convo, records, streak }); setAddOpen(false); }}>조각을 보탤게</button>
+                    <button className="btn gold" onClick={() => { const nb = { ...birth, name: birth.name || addName.trim(), sex: birth.sex || addSex }; setBirth(nb); saveMemory({ birth: nb, saju, zo, moon, num, convo, records, streak }); setAddOpen(false); }}>조각을 보탤게</button>
                     <button className="btn ghost" onClick={() => setAddOpen(false)}>다음에</button>
                   </div>
                 </div>
@@ -4561,9 +4705,14 @@ export default function App() {
               {!ritual && (
                 <div className="w100">
                   <div className="row gap center">
-                    <button className="btn gold" onClick={() => { if (!q.trim()) { setErr("먼저 질문을 적어줘."); return; } setErr(""); setRitual(true); }} disabled={busy}>판결을 청한다</button>
+                    <button className="btn gold" onClick={() => {
+                      if (!q.trim()) { setErr("먼저 질문을 적어줘."); return; }
+                      setErr("");
+                      track("judge_requested", { ritual: COIN_RITUAL, qlen: q.trim().length });
+                      if (COIN_RITUAL) setRitual(true); else { setTosses([]); setHexInfo(null); judge(null); }
+                    }} disabled={busy}>판결을 청한다</button>
                   </div>
-                  <p className="fine">동전 셋을 던져 하늘의 뜻을 묻는다 — 무엇을 묻든 같은 무게로 본다.</p>
+                  <p className="fine">{COIN_RITUAL ? "동전 셋을 던져 하늘의 뜻을 묻는다 — 무엇을 묻든 같은 무게로 본다." : "무엇을 묻든 같은 무게로 본다."}</p>
                 </div>
               )}
               {/* v105.2 서신함 — 유료로 산 것이니 홈에서 언제든 다시 열린다.
@@ -4682,7 +4831,11 @@ export default function App() {
               {err && (
                 <div className="fade">
                   <p className="err">{err}</p>
-                  {ritual && tosses.length === 6 && !res && !busy && (
+                  {/* 판결이 실패했을 때의 탈출구. 예전엔 `ritual && tosses.length === 6` 로 묶여 있어서
+                      **의식 화면 안에서만** 나왔는데, v129.2 로 동전을 끄자 조건이 영영 거짓이 되어
+                      실패한 사람이 아무 버튼도 없이 갇혔다(smoke 가 잡았다).
+                      탈출구는 의식과 무관하게 '판결을 청했는데 아직 못 받은 상태'면 있어야 한다. */}
+                  {!res && !busy && !tossing && (COIN_RITUAL ? tosses.length === 6 : q.trim().length > 0) && (
                     <div className="row gap center">
                       <button className="btn gold" onClick={() => judge(hexInfo)}>다시 청하기</button>
                       <button className="btn ghost" onClick={() => { setErr(""); setRitual(false); setTosses([]); setHexInfo(null); }}>질문을 고칠래</button>
@@ -5405,4 +5558,10 @@ sup.impfx{font-size:9px;color:#c98f3d;vertical-align:super;margin-left:2px}
 @media(prefers-reduced-motion:reduce){.fade,.line,.spark,.mcard,.chip.on,.halo.busy,.forming,.persp.cardIn,.hline .mv,.rv,.gateflash{animation:none;transition:none;opacity:1;transform:none}}
 `;
 
-export { calcSaju, sunLongitude, equationOfTime, cityLon, moonLongitude, tzolkin, moonPlacements, lunar2solar, solar2lunar, daeun }; // 검증(e2e/mansae-test.mjs)용
+export { calcSaju, sunLongitude, equationOfTime, cityLon, cityLat, moonLongitude, tzolkin, moonPlacements,
+  lunar2solar, solar2lunar, daeun, moonPhase, lifePath, getZodiac, jdn };
+/* 검증·평가 하네스 전용 내보내기(e2e/mansae-test.mjs · eval/run-eval.mjs).
+   ⚠ v128: 평가 하네스가 **손으로 적은 명식 표**를 쓰고 있었다 — 그 표에 실인물(창업자)의
+   생년·생시가 사주 네 기둥 형태로 박혀 있었고, 엔진이 바뀌어도 표는 안 따라오는 구조였다.
+   그래서 하네스가 **가상 생년월일을 넣고 여기 있는 엔진으로 직접 뽑아 쓰게** 바꿨다.
+   진실이 한 곳에만 산다 — 이 리포가 제일 조심하는 것. */

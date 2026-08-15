@@ -22,13 +22,6 @@ async function onboard(page) {
   await page.getByRole("button", { name: "다음" }).click();
   await page.getByRole("button", { name: "하늘을 열기" }).click();
   await page.getByRole("button", { name: "응, 기억나" }).click({ timeout: 15000 });
-  
-  for (const v of ["안정", "성장", "자유", "인정", "관계", "성취"]) await page.getByRole("button", { name: v, exact: true }).click();
-  await page.getByRole("button", { name: "여섯 개 골랐어" }).click(); await page.waitForTimeout(200);
-  for (const v of ["안정", "성장", "자유"]) await page.getByRole("button", { name: v, exact: true }).click();
-  await page.getByRole("button", { name: "셋을 남겼어" }).click(); await page.waitForTimeout(200);
-  await page.getByRole("button", { name: "안정", exact: true }).click();
-  await page.getByRole("button", { name: "수호신 깨우기" }).click();
   await page.waitForSelector("text=두드려봐", { timeout: 12000 });        // v52: 로비
   await page.locator("canvas").first().dblclick();                              // 두드려봐 깨움
   await page.waitForSelector("textarea.qbox", { timeout: 12000 });
@@ -57,8 +50,6 @@ const b = await chromium.launch({ executablePath: process.env.CHROME_PATH || und
   ck("① 입자 실제 렌더(평균 밝기 > 1)", lum1 > 1, "avg=" + lum1.toFixed(2));
   await page.locator("textarea.qbox").fill("이 길로 가도 될까?"); await page.waitForTimeout(200);
   await page.getByRole("button", { name: "판결을 청한다" }).click();
-  await page.waitForSelector("text=동전 셋", { timeout: 5000 });
-  await page.getByRole("button", { name: "한 번에 던지기" }).click();
   let ok = false;
   for (let i = 0; i < 40; i++) { if (((await page.locator(".vv").allTextContents())[0] || "").includes("망설이지 마")) { ok = true; break; } await page.waitForTimeout(300); }
   ck("① WebGL 하에서 판결 L1 렌더", ok);

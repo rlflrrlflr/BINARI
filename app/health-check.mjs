@@ -183,6 +183,56 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
       add("심각", "신뢰 라인의 문항 수가 실제와 다름", `화면 표기 ${claimed}문항 vs 실제 ${real}문항`,
         "화면에 적은 숫자는 유저와의 약속입니다. App.jsx 의 문구를 실제 문항 수로 맞추거나, 검사가 세는 방식을 고치세요.");
     } else add("정상", "신뢰 라인 — 만세력 문항 수", `표기 ${claimed}문항 = 실제 ${real}문항`, "");
+    const shareInUrl = /encodeShare\(/.test(src) && /\?v=\$\{|[?&]v=/.test(src);
+    if (shareInUrl && !/sanitize_properties/.test(src)) {
+      add("심각", "질문 원문이 계측에 실림($current_url)", "공유 페이로드가 URL 에 있는데 SDK URL 정화가 없음",
+        "posthog.init 에 sanitize_properties 를 넣어 $current_url·$referrer 의 v= 값을 지우세요. 실제로 22건이 이 경로로 샜습니다.");
+    } else if (shareInUrl) add("정상", "신뢰 라인 — 질문 원문 미기록($current_url)", "SDK URL 정화 있음", "");
+    // 주소창에 남은 페이로드는 브라우저 기록·리퍼러·스크린샷으로 계속 샌다 — 읽은 즉시 지워야 한다
+    if (shareInUrl && !/history\.replaceState\(null, "", stripSharePayload/.test(src)) {
+      add("주의", "공유 페이로드가 주소창에 남음", "읽은 뒤에도 ?v= 가 URL 에 그대로 있음",
+        "decodeShare 직후 history.replaceState 로 페이로드를 지우세요. 계측만 막으면 브라우저 기록·리퍼러로는 계속 샙니다.");
+    } else if (shareInUrl) add("정상", "공유 페이로드 주소창 정리", "읽은 즉시 URL 에서 제거", "");
+  }
+
+  /* ── 기억이 조용히 리셋되는 사고 ─────────────────────────────────────────
+     두 번 났다. v114에서 MBTI 문항을, v128에서 가치여정을 없앴는데, 그때마다
+     saveMemory 조건과 loadMemory 필수 조각에 '이제 안 받는 값'이 남아 있었다.
+     결과는 화면에 오류 하나 없이 ①새 유저는 저장해도 로드에서 튕겨 매번 온보딩을 다시 하고
+     ②기존 유저는 다음 저장 때 그 값이 빠지면서 통째로 리셋된다.
+     그래서 두 곳이 **같은 조각 목록**을 쓰는지 대조한다. */
+  try {
+    const saveGate = (src.match(/if \(step === 3 && ([^)]+)\) \{\s*\n\s*saveMemory\(/) || [])[1] || "";
+    const loadGate = (src.match(/if \(!\(m && ([^)]+)\)\) return null;/) || [])[1] || "";
+    const norm = (t) => t.replace(/m\./g, "").split("&&").map((x) => x.trim()).filter(Boolean).sort().join(",");
+    if (saveGate && loadGate && norm(saveGate) !== norm(loadGate)) {
+      add("심각", "기억 저장·로드 조건이 어긋남", `저장 [${norm(saveGate)}] vs 로드 [${norm(loadGate)}]`,
+        "두 조건은 같은 조각을 요구해야 합니다. 어긋나면 오류 없이 기억이 리셋됩니다 — 저장은 됐는데 로드가 튕기거나, 그 반대입니다.");
+    } else if (saveGate && loadGate) add("정상", "기억 저장·로드 조건 일치", `둘 다 [${norm(saveGate)}]`, "");
+    // 안 받는 값을 조건에 남기면 그게 곧 위 사고다 — 이름째로 막아 둔다
+    const dead = ["core", "mbti", "vals8", "vals4"].filter((k) => new RegExp(`\\b${k}\\b`).test(saveGate + loadGate));
+    if (dead.length) add("심각", "이제 안 받는 값이 기억 조건에 남음", dead.join(", "),
+      "묻지 않는 값은 새 유저에게 항상 null 입니다. 조건에서 빼세요. 안 그러면 새 유저의 기억이 저장·복원되지 않습니다.");
+  } catch (_) { /* 구조가 바뀌면 조용히 넘어간다 */ }
+
+  /* v128 제거분이 되살아나지 않는지 — 프롬프트 축과 앱 집계 축은 짝이라 한쪽만 남으면 표가 어긋난다 */
+  {
+    const axInPrompt = /"axis":"[^"]*\|가치\|/.test(src) || /votes엔[^`]*·가치/.test(src);
+    const axInCode = /VOTE_AX = new Set\(\[[^\]]*"가치"/.test(src);
+    if (axInPrompt || axInCode) {
+      add("심각", "제거한 '가치' 축이 남아 있음", `프롬프트 ${axInPrompt ? "있음" : "없음"} · 집계 ${axInCode ? "있음" : "없음"}`,
+        "v128에서 가치여정을 없앴습니다. 스키마와 VOTE_AX 양쪽에서 '가치'를 빼세요 — 한쪽만 남으면 모델이 낸 표가 집계에서 걸러져 총합이 어긋납니다.");
+    } else add("정상", "가치 축 제거 정합", "프롬프트·집계 양쪽에서 빠짐", "");
+    if (/\bmbti\b\s*:/.test(src) || /VALUES16/.test(src)) {
+      add("주의", "제거한 MBTI·가치 잔재", "계측 속성 또는 가치 목록 상수가 남음",
+        "묻지 않는 값을 계속 계측하면 분석에서 항상 null 인 열이 생깁니다. 상수도 쓰이지 않으면 지우세요.");
+    } else add("정상", "MBTI·가치 잔재 없음", "계측 속성·상수 모두 정리됨", "");
+    /* v128.1: 저장해 둔 질감 코드를 아예 쓰지 않는다. 네 축을 명식(십성·달·일간)에서 뽑기 때문이다.
+       저장값 폴백이 되살아나면 '묻지 않고 안다'가 다시 '예전에 받아둔 걸 쓴다'로 돌아간다. */
+    if (/tex \|\| texture\(|mem\?\.tex|mbti \|\| texture\(/.test(src)) {
+      add("주의", "저장해 둔 질감 코드 폴백이 되살아남", "texture() 앞에 저장값 폴백이 있음",
+        "질감은 명식에서 뽑습니다. 저장값을 다시 쓰면 옛 유저만 다른 규칙을 타게 됩니다.");
+    } else add("정상", "질감은 명식에서 파생", "저장해 둔 코드에 기대지 않음", "");
     /* 2026-08-15 규칙 교체. 예전 약속은 "질문 원문은 통계에 기록하지 않아요"였고, 이 검사는
        track() 에 q 가 실리는지를 봤다. 창업자 지시로 **질문·답변 본문을 가명처리해 기록**하게 되면서
        그 약속이 화면에서 내려갔다. 그러면 검사도 새 약속을 지켜야 한다 —
@@ -198,6 +248,36 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
       add("심각", "화면은 '지운 뒤 기록'이라는데 지우는 장치가 없음", "anon() 경유가 코드에서 사라짐",
         "anon() 이 지워졌거나 이름이 바뀌었습니다. 화면 문구를 내리거나 가명처리를 되살리세요.");
     } else add("정상", "신뢰 라인 — 질문·답변 가명처리", "anon() 경유 확인(원문 미전송)", "");
+  }
+
+  /* 수호신 질감 — 네 축이 실제로 갈리는지는 '코드 모양'으로는 알 수 없다. 값을 넣어 돌려 봐야 안다.
+     한 축이 상수로 굳으면 그 시각 채널이 죽어 모두 비슷한 수호신이 되는데, 오류가 안 뜬다.
+     브라우저가 필요 없는 검사라 검진에서 같이 돌린다(1초 안에 끝난다). */
+  try {
+    execFileSync("node", ["e2e/texture-check.mjs"], { stdio: "pipe", timeout: 60000 });
+    add("정상", "수호신 질감 다양성", "네 축이 모두 갈림(표본 4,000)", "");
+  } catch (e) {
+    const out = String(e.stdout || "") + String(e.stderr || "");
+    const bad = (out.match(/^FAIL — .*/gm) || []).map((l) => l.replace("FAIL — ", "")).join(" / ");
+    add("심각", "수호신 질감이 사람마다 안 갈림", bad || "texture-check 실패",
+      "축 하나가 상수로 굳으면 모두 비슷한 수호신이 됩니다. `node e2e/texture-check.mjs` 를 돌려 어느 축인지 보세요.");
+  }
+
+  /* 공유 판결 서명 — 없으면 누구나 '비나리 판결'을 지어내 우리 앱이 진짜처럼 그린다(2026-08-15 실증).
+     가드레일은 전부 생성 경로에만 있어서, 표시 경로가 열려 있으면 URL 한 줄로 전부 우회된다. */
+  {
+    const hasApi = existsSync("api/share.js");
+    const signs = /signShare\(/.test(src) && /\?v=\$\{enc\}\.\$\{sig\}/.test(src);
+    const verifies = /verifyShare\(/.test(src) && /setSharedIn\(dec \|\| false\)/.test(src);
+    if (!hasApi || !signs || !verifies) {
+      add("심각", "공유 판결에 서명이 없다", `api ${hasApi ? "있음" : "없음"} · 서명 ${signs ? "함" : "안 함"} · 검증 ${verifies ? "함" : "안 함"}`,
+        "서명이 빠지면 누구나 URL 을 지어내 '비나리 판결' 카드를 만들 수 있습니다. api/share.js 와 signShare/verifyShare 배선을 되살리세요.");
+    } else add("정상", "공유 판결 서명", "서명·검증 배선 있음", "");
+    // 검증에 실패했는데도 카드를 그리면 서명이 있으나 마나다 — '열어두는 쪽' 실수를 이름째로 막는다
+    if (signs && !/sharedIn && typeof sharedIn === "object"/.test(src)) {
+      add("심각", "검증 전에 공유 판결을 그린다", "렌더 조건이 검증 상태를 안 본다",
+        "sharedIn 이 객체일 때만 카드를 그리세요. 'checking'·false 상태에서 그리면 위조본이 한 프레임이라도 보입니다.");
+    } else if (signs) add("정상", "검증된 공유 판결만 렌더", "객체일 때만 그림", "");
   }
 
   // 티어 허용목록은 api/judge.js 에 있다 — 위 rules 루프는 App.jsx 만 보므로 여기서 따로 검사한다
@@ -405,6 +485,39 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
         "eval/run-eval.mjs에도 같은 문자열을 넣으세요. 안 그러면 채점 결과가 실제 앱 품질과 무관합니다.");
     } else {
       add("정상", "평가 도구 정합", `앱과 하네스가 같은 프롬프트를 사용(${shared.length}개 대조)`, "");
+    }
+    /* ⚠ 위 검사는 **한 방향만** 본다 — "앱에 있는데 하네스에 없는 것". 반대쪽은 못 잡았고,
+       실제로 하네스에만 `MBTI` 축이 남아 있었다(v128 발견). 축 목록은 양방향으로 대조한다. */
+    const axOf = (t) => { const m = t.match(/"axis":"(사주\|[^"]+)"/); return m ? m[1] : null; };
+    const aApp = axOf(src), aEv = axOf(ev);
+    if (aApp && aEv && aApp !== aEv) {
+      add("심각", "평가 도구와 앱의 지표 축이 다름", `앱 [${aApp}] · 하네스 [${aEv}]`,
+        "축이 다르면 채점표의 찬반 개수가 앱과 다른 분모로 계산됩니다. 두 곳의 축 열거를 같게 맞추세요.");
+    } else if (aApp) {
+      add("정상", "지표 축 일치", `앱·하네스 모두 ${aApp.split("|").length}축`, "");
+    }
+  }
+  /* ── 프롬프트가 시키는 축 == 앱이 세는 축인가 (v128) ──────────────────────
+     이게 오늘 잡은 진짜 버그다. v114 에 MBTI 축을 없애면서 **세는 쪽(VOTE_AX)만** 고치고
+     **시키는 쪽(콜1 지시문)은 열네 판 동안 안 고쳤다.** 모델은 시킨 대로 MBTI 표를 실어 보냈고
+     tallyVotes 가 그걸 조용히 버렸다 — 모델은 여섯 축으로 재고 앱은 다섯 축으로 센 셈이다.
+     둘을 맞대면 다음에 축을 더하거나 뺄 때 한쪽만 고치는 일이 안 생긴다. */
+  {
+    const setM = src.match(/const VOTE_AX = new Set\(\[([^\]]+)\]\)/);
+    const askM = src.match(/votes엔 이번 판결에 참여한 지표를 전부 넣는다\(([^)]*)\)/);
+    if (setM && askM) {
+      const counted = new Set(setM[1].match(/"([^"]+)"/g).map((x) => x.slice(1, -1)));
+      const asked = new Set(askM[1].replace(/\s*\+\s*제공된 경우\s*/, "·").split("·").map((x) => x.trim()).filter(Boolean));
+      const onlyAsked = [...asked].filter((a) => !counted.has(a));
+      const onlyCounted = [...counted].filter((c) => !asked.has(c));
+      if (onlyAsked.length || onlyCounted.length) {
+        add("심각", "모델에게 시키는 축과 앱이 세는 축이 다름",
+          [onlyAsked.length ? `시키는데 안 세는 축 — ${onlyAsked.join(",")}` : "",
+           onlyCounted.length ? `세는데 안 시키는 축 — ${onlyCounted.join(",")}` : ""].filter(Boolean).join(" · "),
+          "콜1 지시문의 지표 나열과 VOTE_AX 를 같게 맞추세요. 어긋나면 모델이 낸 표 중 일부가 조용히 버려져 찬반 개수가 왜곡됩니다.");
+      } else {
+        add("정상", "시키는 축 = 세는 축", `${counted.size}축이 프롬프트와 코드에서 일치`, "");
+      }
     }
   }
 }
