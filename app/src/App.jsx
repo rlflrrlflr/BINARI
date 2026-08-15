@@ -129,12 +129,23 @@ async function _initAnalytics() {
    그게 없으면 하루 종일 탭을 열어둔 사람은 재방문이 영영 안 잡힌다. */
 const VISIT_KEY = "binari.lastvisit.v1";
 const VISIT_GAP_MS = 30 * 60 * 1000;
+/* v127.5 광고 유입 진입면 — 본편(…불렀어?)은 그대로 두고, **광고로 들어온 방문에만** 한 줄을 얹는다.
+   왜: 첫 화면 문구가 '…불렀어?' / '조각을 모으러 갈래' 둘뿐이라 3초 안에 "여기가 뭐 하는 곳인가"가 안 읽힌다
+       (팀 피드백 트리아지 §3-3 채택). 몰입 설계는 직접 들어온 사람에게 맞는 것이고,
+       광고 클릭은 맥락 없이 떨어지는 유입이라 같은 화면으로는 감당이 안 된다.
+   이번 방문의 URL 만 본다 — 저장된 first-touch 로 판단하면 재방문자에게도 광고 문구가 계속 뜬다. */
+function isAdEntry() {
+  try {
+    const sp = new URLSearchParams(window.location.search);
+    return !!(sp.get("utm_source") || sp.get("utm_medium") || sp.get("utm_campaign") || sp.get("fbclid") || sp.get("gclid") || sp.get("ad"));
+  } catch (_) { return false; }
+}
 function trackVisit(props) {
   let last = 0;
   try { last = +(window.localStorage.getItem(VISIT_KEY) || 0) || 0; } catch (_) {}
   if (Date.now() - last < VISIT_GAP_MS) return false;
   try { window.localStorage.setItem(VISIT_KEY, String(Date.now())); } catch (_) {}
-  track("app_open", props);
+  track("app_open", { ...props, landing: (typeof window !== "undefined" && isAdEntry()) ? "ad" : "direct" });   // v127.5: 진입면 구분 — 소재별 성과와 붙이려면 이 값이 있어야 한다
   return true;
 }
 /* 방문당 1회로 묶는 계측. '이번 방문에 일어났는가'만 남기고 횟수는 속성으로 따로 싣는다.
@@ -2647,7 +2658,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v127.4 · 오행 색";
+const APP_VER = "v127.5 · 진입면";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -3541,6 +3552,8 @@ export default function App() {
   if (birth.name === undefined) birth.name = ""; if (birth.sex === undefined) birth.sex = ""; if (birth.hanja === undefined) birth.hanja = ""; // v26·v105.5: 구버전 저장 호환
   const [bstep, setBstep] = useState(0);                      // v26: 동화 도입부 장면 인덱스
   const [hanjaOpen, setHanjaOpen] = useState(false);   // v105.5: 한자 이름 노크
+  const [adEntry] = useState(() => (typeof window === "undefined" ? false : isAdEntry()));   // v127.5: 광고 유입 진입면
+
   const [addOpen, setAddOpen] = useState(false); const [addName, setAddName] = useState(""); const [addSex, setAddSex] = useState(""); // v26: 조각 보태기
   const [qhintI, setQhintI] = useState(0);   // v71 질문 힌트 롤링 인덱스
   const [agree, setAgree] = useState(() => readConsent());     // 분석 동의(선택) — 거부해도 모든 기능 정상 동작
@@ -4143,6 +4156,7 @@ export default function App() {
       {step === 0 && (
         <section className="scene fade">
           <div className="orb"><DustOrb size={170} stage={0} /></div>
+          {adEntry && <p className="adhook">망설이는 일에 <b>판결</b>을 내려주는 곳이야 — 가라 · 멈춰라 · 기다려라, 셋 중 하나로.</p>}
           <p className="line">…불렀어?</p>
           <p className="line d1">어른이 된다는 건, 나를 이루던 것들이 조금씩 흩어지는 일이야.</p>
           <p className="line d2">나는 그 흩어진 조각들이야. 네가 모아주면, 다시 너의 곁이 될 수 있어.</p>
@@ -4769,6 +4783,9 @@ const CSS = `
 .gsealinner{transform:scale(.58);transform-origin:center;opacity:.92}
 .gsealline{margin:10px 0 0;font-size:13.5px;color:#f0e2b8;letter-spacing:.04em}
 .gsealkind{margin:2px 0 0;font-family:sans-serif;font-size:10.5px;letter-spacing:.12em;color:#8a7f95;text-transform:none}
+/* v127.5 광고 유입 훅 — 세계관 문장 위에 한 줄. 본편 방문자에겐 렌더되지 않는다 */
+.adhook{font-size:15px;line-height:1.7;color:#ffe9ad;margin:0 0 14px;padding:10px 16px;border:1px solid rgba(245,217,139,.28);border-radius:14px;background:rgba(245,217,139,.06)}
+.adhook b{color:#fff3d4;font-weight:700}
 .confirmline{font-size:12.5px;color:#c9bb96;letter-spacing:.02em;margin:2px 0 0;padding:7px 14px;border:1px dashed rgba(245,217,139,.28);border-radius:10px;background:rgba(245,217,139,.045)}
 .in::placeholder{color:#4d445f}
 .in.sm{width:60px}.in.wide{width:100%;text-align:center;font-size:15px}
