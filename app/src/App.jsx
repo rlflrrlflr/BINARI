@@ -2827,7 +2827,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v131 · 카드 되묻기";
+const APP_VER = "v132 · 곁 탭";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -4131,6 +4131,10 @@ export default function App() {
   const [tosses, setTosses] = useState([]);
   const [hexInfo, setHexInfo] = useState(null);
   const [tossing, setTossing] = useState(false);   // v22: 동전이 공중에 떠 있는 0.75초
+  /* v132 곁 탭 (곁탭IA v01 §6 단계 1) — 하단 탭 둘. 판결 탭은 **문구 하나도 안 바꾼다**, 껍데기만 씌운다.
+     탭 도입은 이 리포에서 충돌면이 제일 넓은 변경이라(App.jsx 렌더 루트) 단계를 쪼개 올린다.
+     지금 단계는 껍데기 + 곁 탭 1층(내 수호신)까지다. 곁 목록·부르기·궁합 이동은 다음 단계. */
+  const [tab, setTab] = useState("judge");
   const [bujeok, setBujeok] = useState(false);  // v7: 부적
   const [convo, setConvo] = useState(mem?.convo || []); // v14: 대화 기억 — 이전 질문·판결 누적(최근 6턴)
   const [dailySeen, setDailySeen] = useState(() => { try { return store.getItem(DAILY_KEY) === todayStr(); } catch (_) { return true; } }); // v16(B2)
@@ -4907,7 +4911,38 @@ export default function App() {
           16개 중 6개 → 3개 → 1개를 고르게 하는 3화면짜리 워드소팅이었는데, 온보딩에서 가장 오래
           붙잡아 두면서 판결 기여는 '가치' 축 한 표뿐이었다. 유료 상품(각인·궁합)은 아예 안 썼다. */}
 
-      {step === 3 && (
+      {/* ── 곁 탭 · 1층: 내 수호신 (곁탭IA v01 §4) ────────────────────────────
+         곁이 0이어도 **이 층이 화면을 완결시킨다.** 빈 슬롯·진행바·"0명" 표기는 금지다 —
+         비어 있음을 세는 순간 이 탭은 '아직 못 채운 것'이 되고, 그러면 안 여는 게 낫다.
+         그래서 여기 있는 건 오늘의 네 수호신 하나뿐이고, 그건 결핍이 아니라 사실이다.
+         ⚠ 다음 단계(곁 목록·부르기·궁합 이동)가 오기 전까지 여기에 상품을 놓지 않는다(§5). */}
+      {/* ── 하단 탭 (곁탭IA v01 §4) ────────────────────────────────────────────
+         **집중 국면에서는 숨긴다.** 판결 카드가 떠 있을 때·문서를 읽는 중일 때·부적을 볼 때
+         탭이 깔려 있으면 "지금 이걸 봐라"라는 화면 위에 "다른 데로 가라"를 겹쳐 놓는 꼴이다.
+         온보딩(step<3)과 수호신 형성(phase 0)에도 안 띄운다 — 아직 갈 곳이 하나뿐이다. */}
+      {step === 3 && phase >= 1 && !res && !imprintOpen && !matchOpen && !letterOpen && !bujeok && (
+        <nav className="tabbar" aria-label="화면 전환">
+          {[["judge", "판결"], ["gyeot", "곁"]].map(([k, label]) => (
+            <button key={k} className={`tabbtn ${tab === k ? "on" : ""}`} aria-current={tab === k ? "page" : undefined}
+              onClick={() => { if (tab !== k) { setTab(k); track("tab_switched", { to: k }); } }}>{label}</button>
+          ))}
+        </nav>
+      )}
+
+      {step === 3 && tab === "gyeot" && phase >= 1 && (
+        <section className="scene fade gyeot">
+          <div className="halo wide">
+            <div className="fade"><Guardian saju={saju} zo={zo} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} restRef={restRef} size={Math.min(typeof window !== "undefined" ? window.innerWidth * 1.1 : 400, typeof window !== "undefined" ? window.innerHeight * 0.5 : 400, 600)} /></div>
+          </div>
+          <div className="gyeotpanel fade">
+            <p className="gname under">곁</p>
+            {saju && <p className="gsay">{EL_TRAIT[saju.main]} 네 곁에, 오늘도 이렇게 서 있어.</p>}
+            <p className="fine">여기는 네 옆자리야. 누가 서게 되면 이 자리에 같이 보일 거야.</p>
+          </div>
+        </section>
+      )}
+
+      {step === 3 && tab === "judge" && (
         <section className={`scene fade ${phase >= 1 && !res && !awake ? "lobby" : ""}`} onClick={phase >= 1 && !res && !awake ? tryWake : undefined}>
           <div className={`halo wide ${!awake && phase >= 1 && !res ? "lobbyscale" : ""} ${asking ? "asking" : ""} ${ritual ? "ritualfade" : ""} ${busy || (res && !cardOn) ? "busy" : ""} ${res && cardOn ? "dimmed" : ""}`}>
             {phase === 0
@@ -5377,7 +5412,7 @@ const CSS = `
 .orb{position:relative;width:170px;height:170px;margin:20px 0 28px;filter:drop-shadow(0 0 24px rgba(245,217,139,.2))}
 .line{font-size:17px;line-height:1.8;margin:8px 0;opacity:0;animation:fd 1.6s cubic-bezier(.22,.7,.25,1) forwards}.d1{animation-delay:1.4s}.d2{animation-delay:3s}
 .brand-mark{margin-top:56px;font-size:11px;letter-spacing:.4em;color:#8a7f95;font-family:sans-serif}
-.verbadge{position:fixed;right:9px;bottom:7px;z-index:70;font-family:sans-serif;font-size:9px;letter-spacing:.08em;color:#575070;pointer-events:none;user-select:none}
+.verbadge{position:fixed;right:9px;bottom:calc(58px + env(safe-area-inset-bottom));z-index:70;font-family:sans-serif;font-size:9px;letter-spacing:.08em;color:#575070;pointer-events:none;user-select:none}
 .title{font-size:20px;font-weight:600;color:#f0e2b8;margin:6px 0 4px}
 .sub2{font-size:14px;color:#9d8fb5;line-height:1.7;margin:6px 0 18px}
 .form{display:flex;flex-direction:column;gap:12px;width:100%;margin-bottom:14px}
@@ -5544,6 +5579,15 @@ const CSS = `
 .memrow{display:flex;gap:18px;justify-content:center}
 .halo.busy{animation:haloPulse 1.4s ease-in-out infinite}
 /* v129.4 대기 문구 — 수호신이 가라앉는 동안 아래에 조용히 뜬다. 맥동은 느리게(숨 고르는 속도) */
+/* v132 하단 탭 — 판결/곁. 화면 맨 아래 고정, 안전영역(노치·홈바) 확보 */
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:40;display:flex;justify-content:center;gap:8px;
+  padding:8px 16px calc(8px + env(safe-area-inset-bottom));background:linear-gradient(to top,rgba(5,4,8,.92),rgba(5,4,8,0))}
+.tabbtn{flex:0 0 auto;min-width:104px;padding:10px 20px;border-radius:999px;border:1px solid rgba(245,217,139,.18);
+  background:rgba(12,9,20,.6);color:#8d84a3;font-size:13px;letter-spacing:.18em;cursor:pointer;transition:color .2s,border-color .2s}
+.tabbtn.on{color:#f5d98b;border-color:rgba(245,217,139,.45);background:rgba(24,18,38,.8)}
+/* 탭이 하단을 덮으므로 마지막 요소가 가리지 않게 여백을 준다 */
+.scene{padding-bottom:76px}
+.gyeot .gyeotpanel{margin-top:18px;text-align:center}
 .brooding{font-size:13px;letter-spacing:.14em;color:#cfc4e2;margin:14px 0 0;text-align:center;animation:formPulse 2.4s ease-in-out infinite}
 @keyframes haloPulse{0%,100%{filter:drop-shadow(0 0 26px rgba(245,217,139,.14))}50%{filter:drop-shadow(0 0 46px rgba(245,217,139,.34))}}
 .halo.dimmed{opacity:.32;filter:blur(2px) drop-shadow(0 0 30px rgba(245,217,139,.2));transition:opacity .6s,filter .6s}
