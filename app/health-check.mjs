@@ -954,6 +954,89 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
     "리포트 모션은 **화면에 들어온 블록만** 움직여야 합니다. `.imp .impXXX{animation:…}` 처럼 표식 없이 걸면 문서를 여는 순간 수십 개가 동시에 떨립니다.");
 }
 
+/* ── 검사 5-l. 사람을 말하는 자리의 금지어 (작업지시_역할과초대 §A-2) ──────
+   창업자 화법 규칙 셋: **등급이 아니라 역할 / 총점이 아니라 축 / 좋은 말이 아니라 쓸모.**
+   금지어는 그 셋을 깨는 낱말들이고, 두 무리로 갈린다:
+     ① **단언** — 해결한다·풀어준다·낫게 한다. 우리가 금지한 "지어낸 확신"이 된다.
+     ② **서열·부정** — 가장·1순위·최적·추천·피해라·도움이 안 된다. 규칙 1을 깬다.
+     ③ **자격 참칭** — 상담·전문가·멘토. 우리는 의료도 상담도 아니다.
+
+   ⚠ **검사 범위를 좁게 잡는 게 이 검사의 핵심이다.** "가장"·"추천" 같은 말은 앱 어디에나
+      정상적으로 나온다(예: 렌더러 안내, 개발 주석). 전역으로 걸면 오탐이 쏟아지고,
+      오탐이 쏟아지는 검사는 곧 무시당한다. 그래서 **사람을 두고 말하는 자리 넷**만 본다:
+      서신 4장 지시 · 서신 목차 · 궁합 역할표(match.js) · 곁 사이 문구.
+   ⚠ 지시문이 **금지하려고 인용하는 말**은 위반이 아니다 — 프롬프트가 (X)"소띠는 피해라"로
+      나쁜 예를 보여주는 게 오히려 규칙을 지키는 방법이다. (X) 줄은 빼고 본다. */
+{
+  const app = readFileSync(APP, "utf8");
+  const mj = readFileSync("src/lib/match.js", "utf8");
+  const cut = (s, a, b) => { const i = s.indexOf(a); if (i < 0) return ""; const j = s.indexOf(b, i); return j < 0 ? s.slice(i) : s.slice(i, j); };
+  /* (X) 로 시작하는 줄 = 모델에게 보여주는 나쁜 예. 금지어가 거기 있는 건 의도다. */
+  const dropX = (s) => s.split("\n").filter((l) => !/\(X\)/.test(l)).join("\n");
+  const ZONES = [
+    ["서신 4장 지시", dropX(cut(app, `4) "누구와`, `5) "무엇을 걸고"`))],
+    ["서신 목차", cut(app, "const LETTER_SECTIONS =", "\n")],
+    ["궁합 역할표", cut(mj, "const ROLE = {", "\n  };")],
+    ["곁 사이 문구", cut(app, "const GYEOT_REL_LINE = {", "\n};")],
+  ];
+  const BAN = [
+    [/해결한다|해결해\s*줄|풀어준다|풀어줄|낫게\s*한다|낫게\s*해/, "단언(해결·풀어줌·낫게함)"],
+    [/도와줘라|물어봐라|찾아가라/, "명령형 지시"],
+    [/가장\s*(잘|좋|맞)|1순위|최적|추천(한다|해|합니다)|맞는\s*사람/, "서열(가장·1순위·최적·추천)"],
+    [/도움이\s*안\s*(된|돼)|피해라|피하라|멀리\s*해라/, "부정 판정(피해라·도움이 안 된다)"],
+    [/상담(사|을 받|해 ?줄)|전문가|멘토/, "자격 참칭(상담·전문가·멘토)"],
+  ];
+  const hits = [], missing = [];
+  for (const [zone, text] of ZONES) {
+    if (!text) { missing.push(zone); continue; }
+    for (const [re, label] of BAN) {
+      const m = re.exec(text);
+      if (m) hits.push(`${zone}: "${m[0]}" (${label})`);
+    }
+  }
+  const ok = hits.length === 0 && missing.length === 0;
+  add(ok ? "정상" : "심각",
+    ok ? "사람을 말하는 자리 — 금지어 없음 (등급 아닌 역할 · 좋은 말 아닌 쓸모)"
+       : "사람을 말하는 자리에 금지어가 들어감",
+    ok ? `검사 구역 ${ZONES.length}곳 · 금지 묶음 ${BAN.length}종`
+       : [...hits, ...missing.map((z) => `구역을 못 찾음 — ${z}`)].join(" · "),
+    "\"가장 잘 맞는 사람\"·\"이 사람은 피해라\"는 사람을 **등급**으로 만듭니다. 적합도가 낮아지면 등급이 내려가는 게 아니라 **역할이 바뀝니다**. 부정으로 쓰지 말고 쓸모로 바꾸세요 — \"긴장을 못 풀게 하는 자리(네가 있으면 이 사람이 움직인다)\"처럼.");
+}
+
+/* ── 검사 5-m. 곁 명부가 순위가 되지 않는가 (작업지시_역할과초대 §C·D) ─────
+   **지금까지 곁에 순위가 없었던 건 원칙이 아니라 화면에 사람이 한 명뿐이었기 때문이다.**
+   `MATCH_LAST_KEY` 가 한 칸·덮어쓰기라 목록 자체가 없었다. 명부를 만드는 순간 그 장치가 사라진다.
+   그래서 방어를 코드로 세웠고, 여기서 그 방어가 살아 있는지 본다.
+   e2e 는 동작을 돌려 보고(gyeot-roster-check), 이 검사는 **되살아나면 안 되는 것**을 본다. */
+{
+  const app = readFileSync(APP, "utf8");
+  const bad = [];
+  if (!/const GYEOT_KEY = "binari\.gyeot\./.test(app)) bad.push("명부 저장 키 없음");
+  if (!/function gyeotOrder\(/.test(app)) bad.push("정렬 함수 없음");
+  /* 정렬 함수 본문에 최근순(at) 말고 다른 키가 끼면 그게 순위다 */
+  const ordFn = (app.match(/function gyeotOrder\([\s\S]*?\n\}/) || [""])[0];
+  if (/\.rel\b|\.el\b|score|point|ratio|sc\b/.test(ordFn)) bad.push("정렬에 최근순 아닌 키가 섞임");
+  /* 궤도 자리를 인덱스로 주면 앞줄 셋이 1·2·3등으로 읽힌다 */
+  const viewFn = (app.match(/function gyeotView\([\s\S]*?\n\}/) || [""])[0];
+  if (/ang:\s*[^,]*\bi\b/.test(viewFn)) bad.push("궤도 자리를 목록 인덱스로 줌");
+  if (!/function gyeotSeat\(/.test(app)) bad.push("자리 배정 함수 없음");
+  /* 화면에 개수를 찍으면 곁 탭이 친구 수 카운터가 된다(곁탭IA §5) */
+  const panel = (app.match(/<ul className="gyeotlist">[\s\S]*?<\/ul>/) || [""])[0];
+  if (/\.length\}/.test(panel)) bad.push("목록에 개수를 찍음");
+  if (!/잘 맞는 순서가 아니야/.test(app)) bad.push("최근순임을 화면에 안 밝힘");
+  /* 원값을 쌓으면 남의 생년월일을 우리가 들고 있게 된다 */
+  if (/gyeotAdd\([^)]*\b(y|birth)\s*:/.test(app)) bad.push("명부에 생년월일을 넣음");
+  /* 규칙이 남아 있는 것과 실제로 그렇게 도는 것은 다르다 — 동작은 e2e 가 돌려 본다 */
+  if (existsSync("e2e/gyeot-roster-check.mjs")) {
+    try { execFileSync("node", ["e2e/gyeot-roster-check.mjs"], { stdio: "pipe", timeout: 60000 }); }
+    catch (_) { bad.push("명부 동작 검사 실패 — node e2e/gyeot-roster-check.mjs"); }
+  } else bad.push("명부 동작 검사 파일이 없음");
+  add(bad.length ? "심각" : "정상",
+    bad.length ? "곁 명부가 순위로 읽힐 수 있음" : "곁 명부 — 최근순 하나 · 자리는 지문에서 · 개수 미표기 · 원값 미저장",
+    bad.length ? bad.join(" · ") : "정렬키 1종 · 자리 배정 gyeotSeat · 목록 개수 0 · 순서 고지 있음",
+    "곁 목록에 두 번째 정렬 키를 넣거나 궤도 자리를 인덱스로 주면 목록이 **순위**가 됩니다. 그러면 앱이 사람을 줄 세우게 됩니다 — 적합도가 낮아지면 등급이 내려가는 게 아니라 역할이 바뀐다는 규칙이 거기서 무너집니다.");
+}
+
 /* ── 검사 6. 의존성 취약점 (npm audit) ───────────────────────────────────
    남이 만든 부품에서 보안 구멍이 발견되는 일은 우리가 코드를 안 건드려도 일어난다.
    중요한 구분: **사용자에게 배달되는 부품(prod)** 과 **내 컴퓨터에서만 쓰는 부품(dev)** 은

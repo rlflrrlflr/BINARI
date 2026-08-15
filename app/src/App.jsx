@@ -1355,7 +1355,7 @@ function OfferShown({ records }) {
   return null;
 }
 
-function MatchDoc({ saju, birth, onClose }) {
+function MatchDoc({ saju, birth, onClose, onMet }) {
   const [notesOn, setNotesOn] = useState(false);
   const [f, setF] = useState(() => { try { return JSON.parse(localStorage.getItem(MATCH_LAST_KEY) || "{}"); } catch { return {}; } });
   const [done, setDone] = useState(false);
@@ -1409,7 +1409,18 @@ function MatchDoc({ saju, birth, onClose }) {
             제3자 정보는 쓸 데가 분명할 때만 받는다 — 쓰지도 않으면서 받는 건 그냥 수집이다. */}
         <p className="impaskw">상대의 <b>이름도 연락처도 안 받아.</b> 생년월일은 이 기기에만 남고 서버로 안 보내.
           궁합은 <b>연인만이 아니야</b> — 같이 일하는 사람, 가족, 동업자에게도 그대로 써.</p>
-        <button className="btn mt" disabled={!ok} onClick={() => { try { localStorage.setItem(MATCH_LAST_KEY, JSON.stringify(f)); } catch {} track("match_run", { has_hour: f.h != null }); setDone(true); }}>
+        <button className="btn mt" disabled={!ok} onClick={() => {
+          try { localStorage.setItem(MATCH_LAST_KEY, JSON.stringify(f)); } catch {}
+          track("match_run", { has_hour: f.h != null });
+          /* 곁 명부에 한 자리 — **명부에 사람이 생기는 유일한 입구**다.
+             위로 올려 보내는 건 파생값 둘(지문·오행)뿐이다. 생년월일은 이 콜백 밖으로 안 나간다. */
+          try {
+            const noH = !f.h && f.h !== 0;
+            const bs = calcSaju(+f.y, +f.m, +f.d, noH ? 12 : +f.h, 0, noH, 126.978);
+            if (bs?.main && onMet) onMet({ key: gyeotFingerprint(f.y, f.m, f.d), el: bs.main });
+          } catch (_) {}
+          setDone(true);
+        }}>
           {ok ? "둘을 맞대 볼게" : "생년월일을 채워 줘"}
         </button>
         <button className="btn ghost mt" onClick={onClose}>닫을게</button>
@@ -2294,7 +2305,11 @@ void main(){
   if(u_orb>0.0005){
     float ospin = u_t*(0.05+0.06*u_focal);
     float otilt = 0.28+0.55*fract(u_zodiac*0.083+u_nayF);
-    float oth   = a_r1.x*6.2832 + ospin;
+    /* ⚠ 목적지를 **지금 있는 자리와 상관시킨다.** 구면 좌표를 난수로만 배정하면
+       위쪽 입자가 아래쪽으로 가는 식이라 전부 중앙을 가로지르고, 그게 "확 퍼졌다 뭉치는" 정체다.
+       현재 화면각을 경도에 섞어 주면 **제 자리 근처로 모여** 이동이 짧아진다(0.55 = 섞는 정도). */
+    float bAng  = atan(spos.y, spos.x);
+    float oth   = mix(a_r1.x*6.2832, bAng, 0.55) + ospin;
     float oph   = acos(clamp(2.0*a_r0.z-1.0,-1.0,1.0));
     vec3  osp   = vec3(sin(oph)*cos(oth), cos(oph), sin(oph)*sin(oth));
     float olat  = osp.y, obn = 3.0+u_strands, otex;
@@ -2320,9 +2335,20 @@ void main(){
       opos = orq.xy*(odc/(odc+orq.z))*0.96;
       otex = (0.22+0.40*abs(sin(orr*23.0)))*(0.45+0.55*smoothstep(-oR,oR,orq.z))*(0.30+0.75*u_nayA)*0.62;
     }
-    spos  = mix(spos, opos, u_orb);
-    orbK  = mix(1.0, otex*2.1, u_orb);
-    orbPS = mix(1.0, 1.02, u_orb);
+    /* 시차 — 한꺼번에 움직이면 '전환'이지만 파도처럼 도착하면 '응축'으로 읽힌다.
+       터치 응집(TUNE.stg)이 쓰는 것과 같은 수법이다. */
+    float ok = clamp((u_orb - a_r1.z*0.38)/0.62, 0.0, 1.0);
+    ok = ok*ok*(3.0-2.0*ok);
+    /* 직선으로 보간하면 현(弦)을 따라 **중심을 가로지른다.** 각도를 돌리고 반지름을 따로 줄이면
+       호(弧)를 그리며 감겨 들어간다 — 같은 시간이 걸려도 눈에는 이어져 보인다. */
+    float lA = max(length(spos), 1e-4), lB = max(length(opos), 1e-4);
+    vec2  dA = spos/lA, dB = opos/lB;
+    float aw = acos(clamp(dot(dA,dB),-1.0,1.0))*ok;
+    float sg = (dA.x*dB.y - dA.y*dB.x) >= 0.0 ? 1.0 : -1.0;
+    float ca = cos(aw*sg), sa = sin(aw*sg);
+    spos  = vec2(dA.x*ca - dA.y*sa, dA.x*sa + dA.y*ca) * mix(lA, lB, ok);
+    orbK  = mix(1.0, otex*2.1, ok);
+    orbPS = mix(1.0, 1.02, ok);
   }
   /* ── v134 곁 — 궤도를 도는 빛 하나 = 사람 하나 ───────────────────────────
      ⚠ **입자를 새로 만들지 않는다.** 위 헤일로(입자 16%)에서 앞쪽 일부를 떼어 쓴다.
@@ -2548,7 +2574,7 @@ function GuardianCanvasGL({ saju, zo, num, moon, birth, agitateRef, reactRef, re
         gl.uniform1f(L.u_agi, agi); gl.uniform1f(L.u_expand, expand); gl.uniform1f(L.u_bright, bright);
         /* v133 응축 보간 — **끊기면 "교체"로 읽히고 이어지면 "자세"로 읽힌다.**
            그게 이 변화가 헌장(수호신 비주얼 교체 금지)을 안 어기는 조건이라 반드시 시간을 들여 넘긴다. */
-        orb += ((orbRef && orbRef.current ? 1 : 0) - orb) * (1 - Math.exp(-dt / 0.75));
+        orb += ((orbRef && orbRef.current ? 1 : 0) - orb) * (1 - Math.exp(-dt / 1.25));
         gl.uniform1f(L.u_orb, orb < 0.0004 ? 0 : orb);
         /* v134 곁 — ref 로 받은 목록을 그대로 셰이더에 넘긴다(리렌더 없음).
            앞줄 셋까지만 궤도에 서고, 넷째부터는 뒤 성운이 짙어진다(§곁 예산). */
@@ -2966,7 +2992,7 @@ function Guardian(props) {
 /* 돌아올 주소 — 부적·각인 카드·공유 링크가 같은 값을 쓴다. 자체 도메인을 붙이는 날 **여기 한 곳만** 고친다.
    예전엔 세 곳에 따로 박혀 있어서, 한 곳만 고치면 나머지가 옛 주소로 남는 종류의 사고가 예약돼 있었다. */
 const SHARE_HOST = "https://binari-sepia.vercel.app";
-const APP_VER = "v134.1 · 고지·서신·부적";
+const APP_VER = "v134.2 · 곁 명부";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -2988,7 +3014,7 @@ const APP_VER = "v134.1 · 고지·서신·부적";
 const COIN_RITUAL = false;
 
 const LETTER_PRICE = 4900;
-const LETTER_SECTIONS = ["네가 망설인 자리", "여덟 글자가 이 일을 보는 눈", "언제 — 흐름과 움직일 날", "누구와 — 도울 사람, 피할 자리", "무엇을 걸고 — 이 판결이 틀릴 조건까지"];
+const LETTER_SECTIONS = ["네가 망설인 자리", "여덟 글자가 이 일을 보는 눈", "언제 — 흐름과 움직일 날", "누구와 — 도울 사람, 몫을 갈라 둘 자리", "무엇을 걸고 — 이 판결이 틀릴 조건까지"];
 /* 일간별 한 줄 — 미리보기 첫 문장에 쓴다. 예전엔 '갑(甲)' 고정 문구였는데,
    자기 사주와 다른 글자를 미리보기에서 보면 그 순간 신뢰가 깨진다. 실제 명식에서 뽑아 쓴다. */
 const GAN_READ = { 갑: "곧게 자라려는 나무", 을: "휘어도 끝내 자라는 덩굴", 병: "한낮의 해", 정: "어둠에 켜 두는 등불", 무: "움직이지 않는 산", 기: "받아서 기르는 땅", 경: "아직 벼려지지 않은 쇠", 신: "이미 날이 선 칼", 임: "흐름이 큰 물", 계: "스며드는 비" };
@@ -3085,7 +3111,7 @@ direction=${dir} / verdict="${res?.verdict || ""}" / category=${res?.category ||
 1) "네가 망설인 자리" — 유저가 쓴 질문을 직접 인용하며 연다.${hesit ? ` 유저는 망설인 이유로 "${hesit}"를 골랐다 — 이걸 짚는다.` : ""} 그다음 **이 사람의 명식에서 이런 종류의 결정이 유독 어려운 이유**를 십성 분포로 진단한다(관성이 두터우면 남의 눈이 먼저 보이고, 비겁이 많으면 묻지 않고 밀어붙이고, 식상이 많으면 벌여놓고 못 거둔다 — 실제 분포대로). 위로가 아니라 진단이다.
 2) "여덟 글자가 이 일을 보는 눈" — 이 질문이 걸린 영역(돈·일·사람·몸)이 이 사람 명식에서 **두터운 자리인지 빈 자리인지**를 일간·오행 개수·십성으로 말한다. 카드 뒷면 근거를 반복하지 말고, 그 근거들이 왜 그렇게 갈렸는지 한 겹 아래로 내려간다.
 3) "언제 — 흐름과 움직일 날" — **이 서신에서 가장 중요한 장.** 지금 어느 열 해의 어디쯤인지, 올해의 결, 다음 석 달의 결. 그리고 **실제로 움직일 날을 프로필의 길일에서 골라 두셋 찍는다.** "때가 되면"은 금지. 날짜를 못 찍으면 "이달 하순"·"추석 전"처럼 폭을 주되 반드시 시점을 남긴다.
-4) "누구와 — 도울 사람, 피할 자리" — 프로필의 신살·합충으로 이번 일에서 **힘이 되는 띠·사람 유형**과 **조심할 자리**를 짚는다. 방위·직업 오행이 이 질문에 걸리면 함께. 프로필에 없는 것은 지어내지 않는다 — 있는 것만 쓴다.
+4) "누구와 — 도울 사람, 몫을 갈라 둘 자리" — 프로필의 신살·합충으로 이번 일에서 **힘이 되는 띠·사람 유형**과 **조심할 자리**를 짚는다. 방위·직업 오행이 이 질문에 걸리면 함께. 프로필에 없는 것은 지어내지 않는다 — 있는 것만 쓴다.
    **부딪히는 띠는 반드시 '쓸모'로 쓴다 — 사람을 미워할 이유로 주지 않는다.** 무료 명식 리포트는 이미 그렇게 쓰고 있다("미워하란 게 아니라, 큰돈·보증만 조심하란 뜻이야"). 값을 받는 서신이 그보다 험하면 안 된다.
    반드시 **무엇을 조심하라는 것인지**를 붙인다 — 돈·보증·계약·약속 시점처럼 **행동**으로. 띠는 사람의 등급이 아니라 그 사람과 나 사이에서 조심할 **국면**의 이름이다.
    (X)"소띠는 피해라" · "뱀띠와는 엮이지 마라" · "그 사람은 너를 해친다" — 사람 자체를 배제하는 말은 쓰지 않는다.
@@ -3918,6 +3944,116 @@ const MATCH_LAST_KEY = "binari.match_last.v1";
     }
   } catch (_) {}
 })();
+
+/* ── 곁 명부 (v134.2 · 작업지시_역할과초대 §D) ────────────────────────────────
+   `gyeotShares(n)` 은 사람 수 n 을 받는데 **그 n 을 만드는 것이 여태 없었다.**
+   `MATCH_LAST_KEY` 는 한 칸이고 궁합을 돌릴 때마다 덮어써서, 화면엔 늘 한 명뿐이었다.
+
+   ⚠ **원값(생년월일)을 쌓지 않는다.** 명부에 남는 건 파생값 넷뿐이다 —
+      상대 일간의 오행 한 글자 · 지문 · 층 · 마지막으로 주고받은 때.
+      수호신 궤도도 사이 한 줄도 이 넷이면 그려진다. 원값이 필요한 계산은 명부에 없다.
+   ⚠ `key` 는 **같은 사람을 두 번 안 세우려고 두는 중복제거 지문**이다. 해시라서 안전하다고 쓰지 않는다 —
+      후보가 4만 개뿐이라 마음먹으면 되돌려진다. 이 값이 하는 일은 "명부에 생년월일이 **문자열로** 안 남는다"
+      까지고, 그래서 **명부를 기기 밖으로 내보내는 배선을 만들지 않는다**(공유·서버 전송 경로 0).
+   ⚠ 두 층 (창업자 결정 2026-08-15 #1): 회신이 온 사람은 `곁`, 내가 궁합만 본 사람은 `대기` — 흐리게 선다.
+      지금은 회신 레그가 없으므로 새로 드는 사람은 전부 `대기`다. 스키마만 먼저 깔아 둔다. */
+const GYEOT_KEY = "binari.gyeot.v1";
+const GYEOT_MAX = 24;                     // 상한이 없으면 명부가 곧 수집 카운터가 된다
+const GYEOT_SAENG = { 화: "목", 토: "화", 금: "토", 수: "금", 목: "수" };   // 나를 생하는 오행
+const GYEOT_GEUK  = { 화: "수", 금: "화", 목: "금", 토: "목", 수: "토" };   // 나를 극하는 오행
+/* 사이 한 줄 — 셋 다 **쓸모의 서술**이다(역할과초대 §0 규칙 3). 등급이 아니라 종류라서 서열이 안 선다.
+   -1 이 "안 좋은 사이"가 아니라는 게 이 표의 핵심이다 — 창업자 예시 "긴장을 풀 수 없게 하는 사람"이 그 자리다. */
+const GYEOT_REL_LINE = {
+  "1": "네 기운을 밀어 주는 사이야",
+  "-1": "네 긴장을 못 풀게 하는 사이야 — 네가 움직이게 되는 쪽",
+  "0": "나란히 서는 사이야",
+};
+/* FNV-1a 32비트 — 암호용이 아니다(위 ⚠ 참조). 같은 입력이면 같은 값, 그게 전부 필요한 성질이다. */
+function gyeotHash(s) {
+  let h = 2166136261 >>> 0;
+  const t = String(s);
+  for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+  return h >>> 0;
+}
+function gyeotFingerprint(y, m, d) { return gyeotHash(`${+y}-${+m}-${+d}`).toString(36); }
+/* ── 궤도 위 자리 ────────────────────────────────────────────────────────────
+   **그 사람 자신의 지문에서 나온다. 목록 순서를 절대 안 쓴다** — 자리각을 인덱스로 주면
+   앞줄 셋이 시계방향으로 1·2·3등처럼 읽힌다(방어 ②, 아래 gyeotOrder 주석).
+
+   자리를 12칸으로 끊고 겹치면 비켜 앉힌다. 처음엔 해시를 각도로 바로 썼는데
+   **가까운 지문이 거의 같은 각으로 떨어져 둘이 한 사람처럼 겹쳐 보였다**(검사에서 잡혔다:
+   0.097 / 0.098 / 0.099). 비켜 앉는 차례는 **키 사전순**이다 — 최근순이 아니다.
+   여기에 최근순을 쓰면 "요즘 사람이 앞자리"가 되어 자리 자체가 순위가 된다. */
+const GYEOT_SEATS = 12;
+function gyeotSeat(list) {
+  const taken = new Set(), out = new Map();
+  const byKey = list.slice().sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+  for (const g of byKey) {
+    let s = gyeotHash(g.key) % GYEOT_SEATS;
+    // 5 는 12 와 서로소라 열두 칸을 전부 돈다. 칸이 다 차면 겹침을 허용한다(무한루프 방지)
+    for (let k = 0; k < GYEOT_SEATS && taken.has(s); k++) s = (s + 5) % GYEOT_SEATS;
+    taken.add(s);
+    out.set(g.key, (s * Math.PI * 2) / GYEOT_SEATS);
+  }
+  return out;
+}
+/* 나 기준 사이. 0 은 '동'만이 아니라 **생·극에 안 걸리는 나머지 전부**다 — 셋으로만 가른다(그림이 셋이므로). */
+function gyeotRel(mine, theirs) {
+  if (!mine || !theirs) return 0;
+  return GYEOT_SAENG[mine] === theirs ? 1 : GYEOT_GEUK[mine] === theirs ? -1 : 0;
+}
+function readGyeot() {
+  try {
+    const a = JSON.parse(store.getItem(GYEOT_KEY) || "[]");
+    return Array.isArray(a) ? a.filter((x) => x && x.key && x.el).slice(0, GYEOT_MAX) : [];
+  } catch (_) { return []; }
+}
+function writeGyeot(list) {
+  const out = list.slice(0, GYEOT_MAX);
+  try { store.setItem(GYEOT_KEY, JSON.stringify(out)); } catch (_) {}
+  return out;
+}
+/* 들이기 — 같은 지문이면 새로 세우지 않고 **마지막으로 주고받은 때만** 갱신한다.
+   같은 사람을 두 번 세면 명부가 곧 "몇 번 돌렸나" 카운터가 된다. */
+function gyeotAdd(list, e, now) {
+  if (!e || !e.key || !e.el) return list;
+  const t = now || Date.now();
+  const i = list.findIndex((x) => x.key === e.key);
+  if (i >= 0) {
+    const next = list.slice();
+    next[i] = { ...next[i], el: e.el, at: t };
+    return writeGyeot(next);
+  }
+  return writeGyeot([{ key: e.key, el: e.el, alias: "", tier: e.tier === "곁" ? "곁" : "대기", at: t }, ...list]);
+}
+function gyeotDrop(list, key) { return writeGyeot(list.filter((x) => x.key !== key)); }
+/* 별칭은 **유저가 스스로 붙이는 말**이다(곁탭IA §5). 상대에게서 이름을 받지 않는다 —
+   목록이 생겼다는 이유로 그 금지를 되살리지 않는다. */
+function gyeotRename(list, key, alias) {
+  return writeGyeot(list.map((x) => (x.key === key ? { ...x, alias: String(alias || "").slice(0, 12) } : x)));
+}
+/* ── 목록이 순위가 되지 않게 하는 장치 (작업지시_역할과초대 §C-3 방어 1) ──────
+   지금까지 순위가 안 생긴 건 원칙이 아니라 **화면에 사람이 한 명뿐이었기 때문**이다.
+   명부를 만드는 순간 그 장치가 사라지므로, 대신 셋을 세운다:
+     ① 정렬 키는 **최근순 하나뿐**이다. 사이(생/극/동)로도, 궁합 점수로도, 오행으로도 정렬하지 않는다.
+        최근순은 품질이 아니라 시간이라 "요즘 누가 곁에 있나"로 읽히고, 그게 곁탭IA §4가 앞줄을 셋으로 자른 이유다.
+     ② 궤도 위 자리는 gyeotAngle(key) — **목록 순서와 무관**하다(위 주석).
+     ③ 숫자를 안 쓴다 — 개수·배지·순번·게이지 전부(곁탭IA §5).
+   ⚠ 여기에 두 번째 정렬 키를 넣는 순간 방어 ①이 사라진다. 넣지 마라. */
+function gyeotOrder(list) {
+  return list.slice().sort((a, b) => (b.at || 0) - (a.at || 0));
+}
+/* 셰이더가 받는 모양 {rel, ang, col} 로 낮춘다 — 명부의 원소는 여기서 밖으로 안 나간다.
+   `대기` 층은 색을 죽여 흐리게 세운다. 셰이더는 손대지 않는다(u_gc 가 이미 밝기를 나르는 vec3다). */
+function gyeotView(list, myMain) {
+  const seat = gyeotSeat(list);
+  return list.map((g) => {
+    const base = hex2rgb((EL_COLOR[g.el] || EL_COLOR.토)[1]);
+    const dim = g.tier === "곁" ? 1 : 0.45;
+    return { rel: gyeotRel(myMain, g.el), ang: seat.get(g.key) || 0, col: base.map((c) => c * dim) };
+  });
+}
+
 function loadMemory() {
   try {
     const raw = store.getItem(STORE_KEY);
@@ -4333,25 +4469,23 @@ export default function App() {
   /* v133 응축 — 곁 탭이면 행성, 판결 탭이면 펼친 형상. ref 로 넘겨 **리렌더 없이** 셰이더만 따라가게 한다
      (state 로 넘기면 size 처럼 deps 를 건드려 WebGL 컨텍스트가 재생성된다). */
   const orbRef = useRef(false);
-  /* v134 곁 목록 — 아직 **데이터가 없다.** 초대·저장 방식(서버냐 링크냐)이 미결이라
-     실제 곁은 다음 단계에서 붙는다. 지금은 렌더 경로만 살려 두고,
-     `?gyeot=1~3` 으로만 켠다 — `?r=sim` 과 같은 성격의 **디버그 진입**이다.
-     ⚠ 가짜 사람을 만들어 화면에 세우지 않는다. 색은 유저 자신의 오행에서 생/극/동으로 파생한
-        것이라 "이렇게 보인다"를 확인하는 용도지, 누군가를 나타내지 않는다. */
+  /* v134.2 곁 명부 — 이제 **실제 데이터가 붙는다**(작업지시_역할과초대 §D).
+     명부의 유일한 입구는 궁합을 돌리는 순간이다(MatchDoc onMet). 저장·정렬·파생은 전부 위 모듈 함수에 있다. */
+  const [gyeot, setGyeot] = useState(() => readGyeot());
+  const gyeotSorted = useMemo(() => (saju ? gyeotOrder(gyeot) : []), [gyeot, saju]);
   const gyeotRef = useRef([]);
   useEffect(() => {
-    let n = 0;
-    try { n = Math.max(0, Math.min(3, parseInt((window.location.search.match(/[?&]gyeot=(\d)/) || [])[1] || "0", 10) || 0)); } catch (_) {}
-    if (!n || !saju) { gyeotRef.current = []; return; }
-    const SAENG = { 화: "목", 토: "화", 금: "토", 수: "금", 목: "수" };   // 나를 생하는 오행
-    const GEUK = { 화: "수", 금: "화", 목: "금", 토: "목", 수: "토" };    // 나를 극하는 오행
-    const rels = [1, -1, 0];                                              // 생 · 극 · 동
-    gyeotRef.current = Array.from({ length: n }, (_, i) => {
-      const rel = rels[i % 3];
-      const el = rel > 0 ? SAENG[saju.main] : rel < 0 ? GEUK[saju.main] : saju.main;
-      return { rel, ang: (i * 2.399) % 6.2832, col: hex2rgb((EL_COLOR[el] || EL_COLOR.토)[1]) };
-    });
-  }, [saju]);
+    /* `?gyeot=1~3` 은 그림만 보는 **디버그 진입**으로 남긴다(`?r=sim` 과 같은 성격).
+       ⚠ 가짜 사람을 명부에 **넣지 않는다** — 뷰에서만 살고 저장되지 않는다. */
+    let dbg = 0;
+    try { dbg = Math.max(0, Math.min(3, parseInt((window.location.search.match(/[?&]gyeot=(\d)/) || [])[1] || "0", 10) || 0)); } catch (_) {}
+    if (!saju) { gyeotRef.current = []; return; }
+    const fake = Array.from({ length: dbg }, (_, i) => ({
+      key: `dbg${i}`, tier: i % 2 ? "대기" : "곁",
+      el: [GYEOT_SAENG[saju.main], GYEOT_GEUK[saju.main], saju.main][i % 3],
+    }));
+    gyeotRef.current = gyeotView(gyeotSorted.concat(fake), saju.main);
+  }, [gyeotSorted, saju]);
   const [bujeok, setBujeok] = useState(false);  // v7: 부적
   const [convo, setConvo] = useState(mem?.convo || []); // v14: 대화 기억 — 이전 질문·판결 누적(최근 6턴)
   const [dailySeen, setDailySeen] = useState(() => { try { return store.getItem(DAILY_KEY) === todayStr(); } catch (_) { return true; } }); // v16(B2)
@@ -5156,26 +5290,21 @@ export default function App() {
         </nav>
       )}
 
-      {/* 탭이 바뀌면 목표만 세운다 — 실제 변형은 셰이더에서 0.75초에 걸쳐 따라간다 */}
+      {/* 탭이 바뀌면 목표만 세운다 — 실제 변형은 셰이더에서 1.25초에 걸쳐 따라간다 */}
       {(() => { orbRef.current = tab === "gyeot"; return null; })()}
-      {step === 3 && tab === "gyeot" && phase >= 1 && (
-        <section className="scene fade gyeot">
-          <div className="halo wide gyeotscale">
-            {/* ⚠ 판결 탭과 **같은 size 식**을 쓴다. v132 에 여기만 0.5/600 으로 작게 잡고 확대율도 안 줘서
-                실측 466px — 판결(719px)의 65% 였다. 수호신이 탭마다 다른 크기로 보이면 같은 존재로 안 읽힌다. */}
-            <div className="fade"><Guardian saju={saju} zo={zo} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} restRef={restRef} orbRef={orbRef} gyeotRef={gyeotRef} size={guardianSize(vp)} /></div>
-          </div>
-          <div className="gyeotpanel fade">
-            <p className="gname under">곁</p>
-            {saju && <p className="gsay">{EL_TRAIT[saju.main]} 네 곁에, 오늘도 이렇게 서 있어.</p>}
-            <p className="fine">여기는 네 옆자리야. 누가 서게 되면 이 자리에 같이 보일 거야.</p>
-          </div>
-        </section>
-      )}
 
-      {step === 3 && tab === "judge" && (
-        <section className={`scene fade ${phase >= 1 && !res && !awake ? "lobby" : ""}`} onClick={phase >= 1 && !res && !awake ? tryWake : undefined}>
-          <div className={`halo wide ${!awake && phase >= 1 && !res ? "lobbyscale" : ""} ${asking ? "asking" : ""} ${ritual ? "ritualfade" : ""} ${busy || (res && !cardOn) ? "busy" : ""} ${res && cardOn ? "dimmed" : ""}`}>
+      {/* ── v134.1 탭 공용 한 섹션 ─────────────────────────────────────────────
+           ⚠ 전엔 판결·곁이 **각자 <section> 안에 각자 <Guardian>** 을 두고 있었다.
+             React 는 부모가 다르면 같은 컴포넌트라도 **언마운트 후 새로 만든다** — 탭을 누를 때마다
+             WebGL 컨텍스트가 새로 열리고 born 이 0 으로 돌아가 수호신이 처음부터 다시 응집했다.
+             그게 "확 퍼졌다가 뭉치는" 정체였다(응축 보간을 아무리 다듬어도 안 고쳐지는 이유).
+             한 섹션·한 Guardian 으로 합치면 트리 위치가 같아 **재생성이 없고**, 그때부터 u_orb 보간이
+             실제로 화면에 보인다. 바뀌는 건 감싸는 class 와 아래 패널뿐이다. */}
+      {step === 3 && (
+        <section
+          className={`scene fade ${tab === "gyeot" ? "gyeot" : (phase >= 1 && !res && !awake ? "lobby" : "")}`}
+          onClick={tab === "judge" && phase >= 1 && !res && !awake ? tryWake : undefined}>
+          <div className={`halo wide ${tab === "gyeot" ? "gyeotscale" : `${!awake && phase >= 1 && !res ? "lobbyscale" : ""} ${asking ? "asking" : ""} ${ritual ? "ritualfade" : ""} ${busy || (res && !cardOn) ? "busy" : ""} ${res && cardOn ? "dimmed" : ""}`}`}>
             {phase === 0
               ? <BirthCanvas tint={saju ? EL_COLOR[saju.main] : undefined} size={guardianSize(vp)} />
               : <div className="fade"><Guardian saju={saju} zo={zo} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} restRef={restRef} orbRef={orbRef} gyeotRef={gyeotRef} broodRef={broodRef} size={guardianSize(vp)} /></div>}
@@ -5183,6 +5312,43 @@ export default function App() {
               {phase === 0 && <div className="formwrap"><p className="forming">{birth.name ? `${birth.name}, 흩어져 있던 조각들이` : "흩어져 있던 조각들이"}<br />너를 향해 모이고 있어…<br />너의 수호신이 돌아오는 중이야.</p><ul className="formsteps">{FORM_STEPS.map((s, i) => <li key={i} className={i < formStep ? "done" : i === formStep ? "now" : ""}>{i < formStep ? "✓" : i === formStep ? "✦" : "·"} {s}{i === formStep ? "…" : ""}</li>)}</ul></div>}
             </div>
           </div>
+
+          {/* 곁 탭 — 1층은 위 수호신이 그대로 맡고, 여기는 글만 바뀐다 */}
+          {tab === "gyeot" && phase >= 1 && (
+            <div className="gyeotpanel fade">
+              <p className="gname under">곁</p>
+              {saju && <p className="gsay">{EL_TRAIT[saju.main]} 네 곁에, 오늘도 이렇게 서 있어.</p>}
+              {/* ── 2층 · 곁에 선 사람들 (곁탭IA §4) ────────────────────────────
+                 비어 있으면 **세지 않는다** — "0명"도 빈 슬롯도 안 만든다(§5). 1층이 이미 화면을 완결한다. */}
+              {gyeotSorted.length === 0 ? (
+                <p className="fine">여기는 네 옆자리야. 누가 서게 되면 이 자리에 같이 보일 거야.</p>
+              ) : (<>
+                {/* 방어 ① 을 **화면에도 적는다.** 코드에서만 최근순이면 유저는 그걸 순위로 읽는다.
+                    이 한 줄이 "위에 있는 사람이 더 잘 맞는 사람"이라는 오독을 막는 유일한 장치다. */}
+                <p className="fine gorderline">요즘 주고받은 순서야 — <b>잘 맞는 순서가 아니야.</b></p>
+                <ul className="gyeotlist">
+                  {gyeotSorted.map((g) => (
+                    <li key={g.key} className={g.tier === "곁" ? "" : "wait"}>
+                      <i className="gdot" style={{ background: (EL_COLOR[g.el] || EL_COLOR.토)[1] }} aria-hidden="true" />
+                      <div className="gbody">
+                        <input className="galias" value={g.alias || ""} maxLength={12} placeholder="별칭을 붙일래"
+                          aria-label="이 곁의 별칭"
+                          onChange={(e) => setGyeot((p) => gyeotRename(p, g.key, e.target.value))} />
+                        <span className="grel">{GYEOT_REL_LINE[String(gyeotRel(saju?.main, g.el))]}</span>
+                        {g.tier !== "곁" && <span className="gwaitline">아직 답을 기다리는 자리야</span>}
+                      </div>
+                      <button className="gdrop" aria-label="이 곁을 지운다"
+                        onClick={() => { setGyeot((p) => gyeotDrop(p, g.key)); track("gyeot_dropped", {}); }}>지울래</button>
+                    </li>
+                  ))}
+                </ul>
+                {/* 상대에게서 받은 건 생년월일뿐이고 그마저 안 쌓는다 — 그 사실을 여기서 한 번 말한다 */}
+                <p className="fine">별칭은 <b>네가 붙이는 말</b>이고 이 기기에만 남아. 상대 이름도 생년월일도 여기 없어.</p>
+              </>)}
+            </div>
+          )}
+
+          {tab === "judge" && (<>
 
           {phase >= 1 && !res && !awake && (
             <div className="lobbypanel fade">
@@ -5556,6 +5722,7 @@ export default function App() {
           )}
           {res && cardOn && <button className="btn ghost mt" onClick={backToLobby}>다른 걸 물어볼래</button>}
           {res && cardOn && <p className="ainote card">이 판결은 AI가 생성한 내용입니다</p>}
+          </>)}
         </section>
       )}
 
@@ -5586,7 +5753,8 @@ export default function App() {
         <div className="readwrap">
           <button className="escx" onClick={() => setMatchOpen(false)} aria-label="닫기">✕</button>
           <div className="readbody">
-            <MatchDoc saju={saju} birth={birth} onClose={() => setMatchOpen(false)} />
+            <MatchDoc saju={saju} birth={birth} onClose={() => setMatchOpen(false)}
+              onMet={(e) => setGyeot((p) => gyeotAdd(p, e))} />
           </div>
         </div>
       )}
@@ -5839,6 +6007,24 @@ const CSS = `
 /* 탭이 하단을 덮으므로 마지막 요소가 가리지 않게 여백을 준다 */
 .scene{padding-bottom:calc(var(--tabh) + var(--tabscrim) + 28px)}
 .scene.gyeot{position:relative;min-height:calc(100dvh - 96px)}
+/* ── 곁 명부 2층 ─────────────────────────────────────────────────────────────
+   ⚠ 여기에 순번·개수·게이지를 그리지 마라(곁탭IA §5). 행은 **전부 같은 높이·같은 굵기**다 —
+      한 행만 크게 만드는 순간 목록이 순위가 된다. '대기' 층만 흐려지고, 그건 서열이 아니라 상태다. */
+.gorderline{margin:2px 0 8px;color:#8f84a8}
+/* 패널이 화면 아래에 고정돼 있어 목록은 **위로** 자란다 — 상한을 안 주면 상한(24명)에 가까워질수록
+   화면 밖으로 밀려 올라가 위쪽 행이 잘린다. 넘치면 목록 안에서 스크롤한다. */
+.gyeotlist{list-style:none;margin:0;padding:0;width:100%;max-width:340px;display:flex;flex-direction:column;gap:6px;max-height:44vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.gyeotlist li{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid rgba(159,143,196,.22);border-radius:11px;background:rgba(20,15,38,.55);text-align:left}
+.gyeotlist li.wait{opacity:.55}
+.gdot{flex:0 0 auto;width:9px;height:9px;border-radius:50%;box-shadow:0 0 9px currentColor}
+.gbody{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px}
+.galias{background:none;border:none;border-bottom:1px dashed rgba(159,143,196,.3);color:#efe6ff;font-family:inherit;font-size:14px;padding:1px 0;width:100%;max-width:150px}
+.galias:focus{outline:none;border-bottom-color:rgba(245,217,139,.6)}
+.galias::placeholder{color:#6f658a}
+.grel{font-size:12px;line-height:1.6;color:#b6aacc}
+.gwaitline{font-size:11px;color:#8f84a8}
+.gdrop{flex:0 0 auto;background:none;border:none;color:#7d7296;font-family:inherit;font-size:11px;padding:4px;cursor:pointer}
+.gdrop:hover{color:#c9bde3}
 .brooding{font-size:13px;letter-spacing:.14em;color:#cfc4e2;margin:14px 0 0;text-align:center;animation:formPulse 2.4s ease-in-out infinite}
 @keyframes haloPulse{0%,100%{filter:drop-shadow(0 0 26px rgba(245,217,139,.14))}50%{filter:drop-shadow(0 0 46px rgba(245,217,139,.34))}}
 .halo.dimmed{opacity:.32;filter:blur(2px) drop-shadow(0 0 30px rgba(245,217,139,.2));transition:opacity .6s,filter .6s}
