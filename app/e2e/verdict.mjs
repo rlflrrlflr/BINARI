@@ -45,15 +45,7 @@ async function onboard(page, qs = "", nm = "") {   // qs: "?trackdebug" 처럼 �
   await page.getByRole("button", { name: "기억났어" }).click();
   await page.getByRole("button", { name: "다음" }).click();
   await page.getByRole("button", { name: "하늘을 열기" }).click();
-  await page.getByRole("button", { name: "응, 기억나" }).click({ timeout: 12000 }); // v114: 여기서 바로 마음의 방
-  await page.waitForSelector("text=마음의 방", { timeout: 10000 });
-  
-  for (const v of ["안정", "성장", "자유", "인정", "관계", "성취"]) await page.getByRole("button", { name: v, exact: true }).click();
-  await page.getByRole("button", { name: "여섯 개 골랐어" }).click(); await page.waitForTimeout(300);
-  for (const v of ["안정", "성장", "자유"]) await page.getByRole("button", { name: v, exact: true }).click();
-  await page.getByRole("button", { name: "셋을 남겼어" }).click(); await page.waitForTimeout(300);
-  await page.getByRole("button", { name: "안정", exact: true }).click();
-  await page.getByRole("button", { name: "수호신 깨우기" }).click();
+  await page.getByRole("button", { name: "응, 기억나" }).click({ timeout: 12000 }); // v128: 회상 다음이 곧장 수호신 형성
   await page.waitForSelector("text=두드려봐", { timeout: 12000 });        // v52: 로비
   await page.locator("canvas").first().dblclick();                              // 두드려봐 깨움
   await page.waitForSelector("textarea.qbox", { timeout: 12000 }); await page.waitForTimeout(600);

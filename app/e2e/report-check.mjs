@@ -28,14 +28,6 @@ async function onboard(page) {
   await page.getByRole("button", { name: "다음" }).click();
   await page.getByRole("button", { name: "하늘을 열기" }).click();
   await page.getByRole("button", { name: "응, 기억나" }).click({ timeout: 12000 });
-  await page.waitForSelector("text=마음의 방", { timeout: 10000 });
-  
-  for (const v of ["안정", "성장", "자유", "인정", "관계", "성취"]) await page.getByRole("button", { name: v, exact: true }).click();
-  await page.getByRole("button", { name: "여섯 개 골랐어" }).click(); await page.waitForTimeout(300);
-  for (const v of ["안정", "성장", "자유"]) await page.getByRole("button", { name: v, exact: true }).click();
-  await page.getByRole("button", { name: "셋을 남겼어" }).click(); await page.waitForTimeout(300);
-  await page.getByRole("button", { name: "안정", exact: true }).click();
-  await page.getByRole("button", { name: "수호신 깨우기" }).click();
   await page.waitForSelector("text=두드려봐", { timeout: 12000 });
   await page.locator("canvas").first().dblclick();
   await page.waitForSelector("textarea.qbox", { timeout: 12000 }); await page.waitForTimeout(600);
@@ -110,7 +102,6 @@ await onboard(page);
     `${await page.locator(".impyr").count()}행`);
   ck("각인 — 해마다 순역 막대가 그려진다", /위 = 움직이기 좋은 해/.test(it));
   ck("각인 — 좋은 해가 없으면 없다고 말한다", /옮기기 가장 좋은 해|자리가 열리는 해가 없어/.test(it));
-
 
   ck("각인 — 비문이 없다", !/(사람|문|손|틀)이 얇/.test(it), (it.match(/.{6}(사람|문|손|틀)이 얇.{6}/) || [""])[0]);
   ck("각인 — 뒤집히는 조건 셋", (await page.locator(".imptrig").count()) === 3);
@@ -231,8 +222,6 @@ ck("계산 근거 고지(직접 계산·대조 검증)", /태양의 실제 위�
 ck("시각 보정 분 공개", /[+−]\d+분 보정/.test(body), (body.match(/[+−]\d+분 보정/) || [])[0] || "");
 ck("자리 전량 공개(그 밖의 자리들)", /그 밖의 자리들/.test(body));
 
-
-
 // ── v110 정직성 4 (작명 구상 §3-8 차용). 리포트는 '알 권리' 국면이라 판결과 규칙이 반대다.
 // ① 판단마다 확신도 3단 — 계산값과 유파 해석과 곁가지를 같은 목소리로 말하면 전부가 헐거워진다
 const cfs = await page.locator(".msrbody .cf").allTextContents();
@@ -299,9 +288,7 @@ ck("평범한 말로 갈렸다(십성 자리 이름)",
 ck("확신도 꼬리표도 평범한 말", ["확실한 것", "갈리는 것", "곁들이는 것"].every((t) => cfs.includes(t)), [...new Set(cfs)].join("/"));
 ck("화면 오류 없음", errs.length === 0, errs.join(" / "));
 
-
 await b.close();
-
 
 const pass = R.filter(Boolean).length;
 console.log(`\n=== 리포트 체크: ${pass}/${R.length} PASS ===`);

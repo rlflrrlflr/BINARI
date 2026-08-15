@@ -205,6 +205,44 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
     } else if (shareInUrl) add("정상", "공유 페이로드 주소창 정리", "읽은 즉시 URL 에서 제거", "");
   }
 
+  /* ── 기억이 조용히 리셋되는 사고 ─────────────────────────────────────────
+     두 번 났다. v114에서 MBTI 문항을, v128에서 가치여정을 없앴는데, 그때마다
+     saveMemory 조건과 loadMemory 필수 조각에 '이제 안 받는 값'이 남아 있었다.
+     결과는 화면에 오류 하나 없이 ①새 유저는 저장해도 로드에서 튕겨 매번 온보딩을 다시 하고
+     ②기존 유저는 다음 저장 때 그 값이 빠지면서 통째로 리셋된다.
+     그래서 두 곳이 **같은 조각 목록**을 쓰는지 대조한다. */
+  try {
+    const saveGate = (src.match(/if \(step === 3 && ([^)]+)\) \{\s*\n\s*saveMemory\(/) || [])[1] || "";
+    const loadGate = (src.match(/if \(!\(m && ([^)]+)\)\) return null;/) || [])[1] || "";
+    const norm = (t) => t.replace(/m\./g, "").split("&&").map((x) => x.trim()).filter(Boolean).sort().join(",");
+    if (saveGate && loadGate && norm(saveGate) !== norm(loadGate)) {
+      add("심각", "기억 저장·로드 조건이 어긋남", `저장 [${norm(saveGate)}] vs 로드 [${norm(loadGate)}]`,
+        "두 조건은 같은 조각을 요구해야 합니다. 어긋나면 오류 없이 기억이 리셋됩니다 — 저장은 됐는데 로드가 튕기거나, 그 반대입니다.");
+    } else if (saveGate && loadGate) add("정상", "기억 저장·로드 조건 일치", `둘 다 [${norm(saveGate)}]`, "");
+    // 안 받는 값을 조건에 남기면 그게 곧 위 사고다 — 이름째로 막아 둔다
+    const dead = ["core", "mbti", "vals8", "vals4"].filter((k) => new RegExp(`\\b${k}\\b`).test(saveGate + loadGate));
+    if (dead.length) add("심각", "이제 안 받는 값이 기억 조건에 남음", dead.join(", "),
+      "묻지 않는 값은 새 유저에게 항상 null 입니다. 조건에서 빼세요. 안 그러면 새 유저의 기억이 저장·복원되지 않습니다.");
+  } catch (_) { /* 구조가 바뀌면 조용히 넘어간다 */ }
+
+  /* v128 제거분이 되살아나지 않는지 — 프롬프트 축과 앱 집계 축은 짝이라 한쪽만 남으면 표가 어긋난다 */
+  {
+    const axInPrompt = /"axis":"[^"]*\|가치\|/.test(src) || /votes엔[^`]*·가치/.test(src);
+    const axInCode = /VOTE_AX = new Set\(\[[^\]]*"가치"/.test(src);
+    if (axInPrompt || axInCode) {
+      add("심각", "제거한 '가치' 축이 남아 있음", `프롬프트 ${axInPrompt ? "있음" : "없음"} · 집계 ${axInCode ? "있음" : "없음"}`,
+        "v128에서 가치여정을 없앴습니다. 스키마와 VOTE_AX 양쪽에서 '가치'를 빼세요 — 한쪽만 남으면 모델이 낸 표가 집계에서 걸러져 총합이 어긋납니다.");
+    } else add("정상", "가치 축 제거 정합", "프롬프트·집계 양쪽에서 빠짐", "");
+    if (/\bmbti\b\s*:/.test(src) || /VALUES16/.test(src)) {
+      add("주의", "제거한 MBTI·가치 잔재", "계측 속성 또는 가치 목록 상수가 남음",
+        "묻지 않는 값을 계속 계측하면 분석에서 항상 null 인 열이 생깁니다. 상수도 쓰이지 않으면 지우세요.");
+    } else add("정상", "MBTI·가치 잔재 없음", "계측 속성·상수 모두 정리됨", "");
+    // 옛 유저의 질감 코드는 이름만 바뀌어 살아 있어야 한다 — 버리면 쓰던 수호신 얼굴이 달라진다
+    if (/mem\?\.tex \|\| mem\?\.mbti/.test(src)) add("정상", "옛 수호신 질감 코드 이관", "tex ← mbti 폴백 있음", "");
+    else add("주의", "옛 수호신 질감 코드 이관이 없음", "mem.mbti 를 읽지 않음",
+      "이미 쓰던 사람의 수호신 얼굴이 달라집니다(실측 16명 중 14명이 값 보유). tex ← mbti 폴백을 두세요.");
+  }
+
   // 티어 허용목록은 api/judge.js 에 있다 — 위 rules 루프는 App.jsx 만 보므로 여기서 따로 검사한다
   try {
     const api = readFileSync("api/judge.js", "utf8");

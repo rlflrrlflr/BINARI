@@ -39,25 +39,12 @@ try {
   await page.getByRole("button", { name: "다음" }).click();
   await page.getByRole("button", { name: "하늘을 열기" }).click();
 
-  // 3. 회상 리빌 → 곧장 마음의 방 (v114: MBTI 4문항 제거)
-  await page.getByRole("button", { name: "응, 기억나" }).click({ timeout: 12000 }); // v114: 여기서 바로 마음의 방
-  await page.waitForSelector("text=마음의 방", { timeout: 10000 });
+  // 3. 회상 리빌 → 곧장 수호신 형성 (v114 MBTI 4문항 · v128 가치여정 3화면 제거)
+  await page.getByRole("button", { name: "응, 기억나" }).click({ timeout: 12000 }); // v128: 회상 다음이 곧장 수호신 형성
   
   check("혈액형 입력 제거됨(v24)", (await page.getByText("혈액형").count()) === 0 && (await page.getByRole("button", { name: "B형", exact: true }).count()) === 0);
   await shot("03_reveal");
-
-  // 4. 가치여정 8→4→1
   await page.waitForTimeout(700);
-  for (const v of ["안정", "성장", "자유", "인정", "관계", "성취"]) await page.getByRole("button", { name: v, exact: true }).click();
-  await page.getByRole("button", { name: "여섯 개 골랐어" }).click();
-  await page.waitForTimeout(500);
-  for (const v of ["안정", "성장", "자유"]) await page.getByRole("button", { name: v, exact: true }).click();
-  await page.getByRole("button", { name: "셋을 남겼어" }).click();
-  await page.waitForTimeout(500);
-  await page.getByRole("button", { name: "안정", exact: true }).click();
-  await shot("04_values");
-  await page.getByRole("button", { name: "수호신 깨우기" }).click();
-
   // 5. 수호신 형성(3.2s) → 로비(질문 감춤) → 두드려봐 깨움 → 질문 UI
   await page.waitForSelector("text=두드려봐", { timeout: 12000 });
   await page.waitForTimeout(800);
@@ -157,6 +144,26 @@ try {
   check("A-6 리셋이 상대 생년월일을 지운다", left.match === null, String(left.match));
   check("A-6 리셋이 각인 선택 입력도 지운다", left.extra === null, String(left.extra));
   check("A-6 리셋이 팀 플래그는 남긴다(계측 오염 방지)", left.team === "1", String(left.team));
+
+  /* v128 이관 — 가치여정·MBTI 를 없앤 뒤에도 **그 전에 저장한 사람**이 멀쩡해야 한다.
+     두 번 났던 사고라 실제 옛 저장분을 심어 놓고 확인한다: 필수 조각 검증에 core 가 남아 있으면
+     ①온보딩이 처음부터 다시 뜨고 ②질감 코드가 사라져 쓰던 수호신 얼굴이 달라진다. 둘 다 오류는 안 뜬다. */
+  const legacy = {
+    birth: { y: "1990", m: "2", d: "25", h: "14", min: "30", name: "테스트", sex: "여", cal: "양", city: "서울" },
+    saju: { main: "화", dayGan: "병", counts: { 목: 1, 화: 3, 토: 2, 금: 1, 수: 1 }, pillars: { 년: "경오", 월: "무인", 일: "병자", 시: "을미" } },
+    zo: { name: "물고기자리", el: "물" }, moon: { name: "그믐달", sub: "s", read: "r" }, num: 7,
+    mbti: "ENTJ", vals8: ["안정", "성장", "자유", "인정", "관계", "성취"], vals4: ["안정", "성장", "자유"], core: "안정",
+    convo: [], records: [], streak: { last: "2026-08-15", count: 1 },
+  };
+  await page.goto("http://localhost:4173/");
+  await page.evaluate((m) => localStorage.setItem("binari.v1", JSON.stringify(m)), legacy);
+  await page.reload(); await page.waitForTimeout(3000);
+  const btxt = await page.locator("body").innerText();
+  check("v128 이관: 옛 저장분이 온보딩을 다시 요구하지 않음", !btxt.includes("조각을 모으러 갈래"));
+  const mig = await page.evaluate(() => JSON.parse(localStorage.getItem("binari.v1") || "{}"));
+  check("v128 이관: 수호신 질감 코드 보존(mbti→tex)", mig.tex === "ENTJ", `tex=${mig.tex}`);
+  check("v128 이관: 가치 필드는 정리됨", mig.core === undefined && mig.vals8 === undefined);
+  check("v128 이관: 기억 본체 생존", !!mig.saju);
 } catch (e) {
   check("예외 없이 완주", false, e.message.slice(0, 200));
   await shot("99_error");
