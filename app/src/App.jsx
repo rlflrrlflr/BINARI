@@ -2855,7 +2855,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v132.6 · 기기 대응";
+const APP_VER = "v132.7 · 탭 그림자 축소";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -5441,8 +5441,11 @@ const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600;900&display=swap');
 *{box-sizing:border-box} 
 /* v132.4 --tabh: 탭 알약+안전영역 / --tabscrim: 그 위 페이드. 두 값이 "본문이 침범하면 안 되는 높이"다.
-   px 로 못 박는다 — vh 로 잡으면 작은 기기(667px)에서 문구가 탭 밑으로 들어간다(실기 확인). */
-.stage{--tabh:calc(56px + env(safe-area-inset-bottom, 0px));--tabscrim:72px;min-height:100vh;min-height:100dvh;background:radial-gradient(130% 100% at 50% 0%,#141021,#0a0812 55%,#050408);color:#d8cfe6;font-family:'Noto Serif KR',serif;display:flex;justify-content:center;padding:26px 20px 70px;position:relative;overflow:hidden}
+   px 로 못 박는다 — vh 로 잡으면 작은 기기(667px)에서 문구가 탭 밑으로 들어간다(실기 확인).
+   ⚠ v132.7 에서 scrim 을 72→34 로 줄였다. 넓은 페이드는 가리는 것보다 나쁜 짓을 한다 —
+      화면 아래가 어둡게 닫히면 **"여기가 끝"으로 읽혀서** 그 밑의 각인·궁합을 아무도 안 찾는다
+      (실기 지적). 스크림은 탭 글자가 읽히게만 하면 되고, 그 이상은 본문을 지운다. */
+.stage{--tabh:calc(56px + env(safe-area-inset-bottom, 0px));--tabscrim:34px;min-height:100vh;min-height:100dvh;background:radial-gradient(130% 100% at 50% 0%,#141021,#0a0812 55%,#050408);color:#d8cfe6;font-family:'Noto Serif KR',serif;display:flex;justify-content:center;padding:26px 20px 70px;position:relative;overflow:hidden}
 .stage::before{content:"";position:absolute;inset:0;pointer-events:none;background-image:radial-gradient(1px 1px at 12% 22%,#ffffff55,transparent),radial-gradient(1px 1px at 78% 14%,#ffe9ad44,transparent),radial-gradient(1.5px 1.5px at 62% 68%,#ffffff33,transparent),radial-gradient(1px 1px at 30% 84%,#ffe9ad33,transparent),radial-gradient(1px 1px at 88% 48%,#ffffff40,transparent),radial-gradient(1.5px 1.5px at 8% 58%,#ffe9ad2e,transparent);animation:twk 6s ease-in-out infinite alternate}
 @keyframes twk{to{opacity:.45}}
 .scene{width:100%;max-width:400px;display:flex;flex-direction:column;align-items:center;text-align:center;position:relative;word-break:keep-all}
@@ -5453,7 +5456,8 @@ const CSS = `
 .orb{position:relative;width:170px;height:170px;margin:20px 0 28px;filter:drop-shadow(0 0 24px rgba(245,217,139,.2))}
 .line{font-size:17px;line-height:1.8;margin:8px 0;opacity:0;animation:fd 1.6s cubic-bezier(.22,.7,.25,1) forwards}.d1{animation-delay:1.4s}.d2{animation-delay:3s}
 .brand-mark{margin-top:56px;font-size:11px;letter-spacing:.4em;color:#8a7f95;font-family:sans-serif}
-.verbadge{position:fixed;right:9px;bottom:calc(58px + env(safe-area-inset-bottom));z-index:70;font-family:sans-serif;font-size:9px;letter-spacing:.08em;color:#575070;pointer-events:none;user-select:none}
+/* 버전 배지 — 탭이 차지하는 높이 위로 올린다. 전엔 본문(각인 버튼)과 겹쳐 읽혔다 */
+.verbadge{position:fixed;right:9px;bottom:calc(var(--tabh, 58px) + var(--tabscrim, 0px) + 2px);z-index:70;font-family:sans-serif;font-size:9px;letter-spacing:.08em;color:#575070;pointer-events:none;user-select:none}
 .title{font-size:20px;font-weight:600;color:#f0e2b8;margin:6px 0 4px}
 .sub2{font-size:14px;color:#9d8fb5;line-height:1.7;margin:6px 0 18px}
 .form{display:flex;flex-direction:column;gap:12px;width:100%;margin-bottom:14px}
@@ -5636,12 +5640,12 @@ const CSS = `
    위로 96px 더 뻗은 별도 층을 깔고, **아래 절반은 완전 불투명**(#050408 = .stage 바닥색)으로 둔다.
    가산 블렌딩으로 그린 입자는 어두운 바탕 위에서도 뚫고 올라오므로 알파를 남기면 안 된다. */
 .tabbar::before{content:"";position:absolute;left:0;right:0;bottom:0;top:calc(-1 * var(--tabscrim, 72px));pointer-events:none;
-  background:linear-gradient(to top,#050408 0%,#050408 42%,rgba(5,4,8,.88) 62%,rgba(5,4,8,.55) 78%,rgba(5,4,8,0) 100%)}
+  background:linear-gradient(to top,#050408 0%,#050408 55%,rgba(5,4,8,.72) 80%,rgba(5,4,8,0) 100%)}
 .tabbtn{position:relative;flex:0 0 auto;min-width:104px;padding:10px 20px;border-radius:999px;border:1px solid rgba(245,217,139,.18);
   background:#0d0a16;color:#8d84a3;font-size:13px;letter-spacing:.18em;cursor:pointer;transition:color .2s,border-color .2s,background .2s}
 .tabbtn.on{color:#f5d98b;border-color:rgba(245,217,139,.45);background:#1b1530}
 /* 탭이 하단을 덮으므로 마지막 요소가 가리지 않게 여백을 준다 */
-.scene{padding-bottom:calc(var(--tabh) + var(--tabscrim))}
+.scene{padding-bottom:calc(var(--tabh) + var(--tabscrim) + 28px)}
 .scene.gyeot{position:relative;min-height:calc(100dvh - 96px)}
 .brooding{font-size:13px;letter-spacing:.14em;color:#cfc4e2;margin:14px 0 0;text-align:center;animation:formPulse 2.4s ease-in-out infinite}
 @keyframes haloPulse{0%,100%{filter:drop-shadow(0 0 26px rgba(245,217,139,.14))}50%{filter:drop-shadow(0 0 46px rgba(245,217,139,.34))}}
