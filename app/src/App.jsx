@@ -2582,7 +2582,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v127.1 · 인장";
+const APP_VER = "v127.2 · 부적";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -2893,7 +2893,21 @@ function BujeokCanvas({ saju, direction, seed, size = 220 }) {
 
 /* v16(B4): 부적 포스터 — 1080×1920(인스타 스토리 규격). 질문 원문은 절대 넣지 않는다: 스포일러 없는 자랑 */
 const CAT_LABEL = { A: "인생의 물음", B: "마음의 물음", C: "오늘의 물음" };
-function buildBujeokPoster({ saju, direction, seed, tosses, hexInfo, category, against, total }) {
+/* v127.2: 부적에 **수호신 초상과 판결 한 줄**을 싣는다.
+   왜: 45일 계측에서 판결 100회에 부적 4·공유 4. 앱 밖으로 나가는 유일한 그림인데
+   정작 우리 얼굴(수호신)도, 무엇이라 답했는지도 없어서 받은 사람이 읽을 게 없었다.
+   질문 원문은 여전히 넣지 않는다(스포일러 없는 자랑) — 판결문은 우리 답이지 그 사람의 물음이 아니다. */
+/* v127.2: 화면에 살아 있는 수호신 캔버스에서 한 프레임을 뜬다.
+   렌더러가 gl/sim/2d 중 무엇이든 `data-renderer` 가 붙어 있어 그걸로 찾는다. */
+function grabGuardianFrame() {
+  try {
+    const list = document.querySelectorAll("canvas[data-renderer]");
+    let best = null;
+    list.forEach((c) => { if (c.width && (!best || c.width > best.width)) best = c; });
+    return best;
+  } catch (_) { return null; }
+}
+function buildBujeokPoster({ saju, direction, seed, tosses, hexInfo, category, against, total, verdict, guardian }) {
   const W = 1080, H = 1920;
   const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
   const ctx = cv.getContext("2d");
@@ -2909,6 +2923,22 @@ function buildBujeokPoster({ saju, direction, seed, tosses, hexInfo, category, a
   const bj = document.createElement("canvas"); bj.width = 640; bj.height = 640;
   drawBujeokInto(bj.getContext("2d"), saju, direction, seed, 640);
   ctx.drawImage(bj, (W - 640) / 2, 240);
+  /* 수호신 초상 — 화면에 살아 있는 그 캔버스를 그대로 한 장 떠서 문양 위에 겹친다.
+     GL/sim 은 preserveDrawingBuffer:true 라 프레임이 남아 있고, 2D 폴백도 그대로 읽힌다.
+     실패해도 부적은 나와야 하므로 통째로 try 로 감싼다. */
+  try {
+    if (guardian && guardian.width) {
+      ctx.save();
+      ctx.globalAlpha = 0.95; ctx.globalCompositeOperation = "lighter";
+      const gs = 620;
+      /* 화면 캔버스는 가로가 긴 사각형이라 그대로 늘리면 수호신이 한쪽으로 쏠린다 —
+         짧은 변 기준 정사각으로 중앙 크롭해서 넣는다(실측: 오른쪽 치우침). */
+      const side = Math.min(guardian.width, guardian.height);
+      const sx = (guardian.width - side) / 2, sy = (guardian.height - side) / 2;
+      ctx.drawImage(guardian, sx, sy, side, side, (W - gs) / 2, 250, gs, gs);
+      ctx.restore();
+    }
+  } catch (_) {}
   const SEAL = { GO: ["나아가라", "#3dc98f"], STOP: ["멈춰라", "#e05a5a"], HOLD: ["기다려라", "#7f8fd4"] };
   const [word, color] = SEAL[direction] || SEAL.HOLD;
   ctx.font = "900 130px 'Noto Serif KR', serif"; ctx.fillStyle = color;
@@ -2917,8 +2947,20 @@ function buildBujeokPoster({ saju, direction, seed, tosses, hexInfo, category, a
   ctx.shadowBlur = 0;
   ctx.font = "600 44px sans-serif"; ctx.fillStyle = "#c9b98f";
   ctx.fillText(direction, W / 2, 1150);
+  /* 판결 한 줄 — 한 장만 봐도 "무엇이라 답했는지"가 읽혀야 한다(45자 이내 일상어라 두 줄이면 충분) */
+  if (verdict) {
+    ctx.font = "600 46px 'Noto Serif KR', serif"; ctx.fillStyle = "#ede0c2";
+    const words = String(verdict).split(" ");
+    const lines = []; let cur = "";
+    for (const w of words) {
+      const t = cur ? cur + " " + w : w;
+      if (ctx.measureText(t).width > W - 200 && cur) { lines.push(cur); cur = w; } else cur = t;
+    }
+    if (cur) lines.push(cur);
+    lines.slice(0, 2).forEach((ln, i) => ctx.fillText(ln, W / 2, 1240 + i * 62));
+  }
   if (tosses && tosses.length === 6) {
-    const bw = 300, bh = 16, gap = 30, x0 = (W - bw) / 2, y0 = 1480;
+    const bw = 300, bh = 16, gap = 30, x0 = (W - bw) / 2, y0 = 1560;   // v127.2: 판결 한 줄이 들어와 아래로 밀었다
     tosses.forEach((t, i) => {
       const y = y0 - i * (bh + gap);
       ctx.fillStyle = "#e6d0a0";
@@ -2926,13 +2968,13 @@ function buildBujeokPoster({ saju, direction, seed, tosses, hexInfo, category, a
       else { ctx.fillRect(x0, y, bw * 0.42, bh); ctx.fillRect(x0 + bw * 0.58, y, bw * 0.42, bh); }
       if (t.v === 6 || t.v === 9) { ctx.fillStyle = "#ffe9ad"; ctx.beginPath(); ctx.arc(x0 + bw + 26, y + bh / 2, 6, 0, 7); ctx.fill(); }
     });
-    if (hexInfo) { ctx.font = "500 36px 'Noto Serif KR', serif"; ctx.fillStyle = "#c9b98f"; ctx.fillText(`卦 ${hexInfo.name}${hexInfo.moving && hexInfo.moving.length ? " → " + hexInfo.toName : ""}`, W / 2, 1560); }
+    if (hexInfo) { ctx.font = "500 36px 'Noto Serif KR', serif"; ctx.fillStyle = "#c9b98f"; ctx.fillText(`卦 ${hexInfo.name}${hexInfo.moving && hexInfo.moving.length ? " → " + hexInfo.toName : ""}`, W / 2, 1636); }
   }
   ctx.font = "500 38px 'Noto Serif KR', serif"; ctx.fillStyle = "#9d8fb5";
-  ctx.fillText(CAT_LABEL[category] || "어느 물음", W / 2, 1650);
+  ctx.fillText(CAT_LABEL[category] || "어느 물음", W / 2, 1706);
   if (total > 0 && against > 0 && against / total >= 0.4) {
     ctx.font = "600 34px sans-serif"; ctx.fillStyle = "#e5b96b";
-    ctx.fillText(`지표가 갈라섰다 · ${total - against} : ${against}`, W / 2, 1710);
+    ctx.fillText(`지표가 갈라섰다 · ${total - against} : ${against}`, W / 2, 1758);
   }
   const d = new Date();
   ctx.font = "400 30px sans-serif"; ctx.fillStyle = "#5f5670";
@@ -4508,6 +4550,10 @@ export default function App() {
             </div>
           )}
           {res && cardOn && <button className="btn gold mt" onClick={shareVerdict}>{shared ? "복사했어 — 붙여넣으면 돼" : "카톡·라인으로 판결 보내기"}</button>}
+          {/* v127.2: 부적을 서신(유료) 위로 올린다. 이 화면에서 앱 밖으로 나갈 수 있는 그림은 이것뿐인데
+              지금까지 맨 아래 ghost 한 줄이라 판결 100회에 4번 열렸다(45일 계측).
+              자동으로 펼치지는 않는다 — 판결 국면의 push 금지(설계 헌장)는 그대로 지킨다. */}
+          {res && cardOn && !bujeok && <button className="btn ghost mt" onClick={() => { track("bujeok_opened"); setBujeok(true); }}>수호신이 찍힌 한 장 — 부적으로 간직하기</button>}
           {/* D4: 결제 fake-door — 지불 의사만 잰다. 결제 인프라는 만들지 않는다. */}
           {res && cardOn && letterOk && (
             !letter ? (
@@ -4526,13 +4572,12 @@ export default function App() {
               </div>
             )
           )}
-          {res && cardOn && !bujeok && <button className="btn ghost mt" onClick={() => { track("bujeok_opened"); setBujeok(true); }}>수호신의 부적 받기</button>}
           {res && cardOn && bujeok && (
             <div className="fade bwrap">
               <BujeokCanvas saju={saju} direction={res.direction} seed={q + (res.verdict || "")} />
               <p className="fine">오늘의 판결을 지키는 부적 — 같은 질문·같은 판결에서만 같은 문양이 나와.</p>
-              <button className="btn ghost sm" onClick={() => saveOrShareBujeok({ saju, direction: res.direction, seed: q + (res.verdict || ""), tosses, hexInfo, category: res.category, against: res.against || 0, total: res.total || 0 })}>부적 간직하기 — 이미지로</button>
-              <p className="fine">질문은 이미지에 담기지 않아 — 문양과 판결의 방향만.</p>
+              <button className="btn ghost sm" onClick={() => saveOrShareBujeok({ saju, direction: res.direction, seed: q + (res.verdict || ""), tosses, hexInfo, category: res.category, against: res.against || 0, total: res.total || 0, verdict: res.verdict || "", guardian: grabGuardianFrame() })}>부적 간직하기 — 이미지로</button>
+              <p className="fine">질문은 이미지에 담기지 않아 — 수호신과 판결만.</p>
             </div>
           )}
           {res && cardOn && <button className="btn ghost mt" onClick={backToLobby}>다른 걸 물어볼래</button>}
