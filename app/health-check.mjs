@@ -178,6 +178,10 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
        SYS 도 같은 말을 한다 — "표가 갈렸다는 이유로 HOLD 를 고르지 마라". HOLD 는 '멈추라'는 판결이지 '모르겠다'가 아니다. */
     { name: "동률을 모름(HOLD)으로 바꾸지 않음", pat: /go === stop \? "HOLD"/, want: false,
       fix: "갈림을 모름으로 바꾸면 유저에겐 회피로 읽힙니다. 표가 다수를 못 만들면 모델이 읽은 방향을 그대로 두세요." },
+    /* 규칙만 지우고 재료를 남기면 아무것도 안 고쳐진다(2026-08-15 실측: 심야 보정 규칙을 지운 뒤에도
+       "자라"가 계속 나왔다 — 시각이 여전히 프롬프트에 들어가고 있었다). 재료 쪽을 검사한다. */
+    { name: "물어본 시각을 모델에 안 보냄", pat: /\$\{_nd\.getHours\(\)\}시/, want: false,
+      fix: "시각을 보내면 모델이 시계로 판단합니다. 지표는 날짜의 함수지 시각의 함수가 아닙니다 — [오늘] 에서 시를 빼세요." },
     { name: "scope 계측", pat: /scope_level:/,
       fix: "S3 진입률·이탈률을 못 재면 스코프 설계가 맞는지 영영 알 수 없습니다. verdict_shown 의 scope_level/handoff_triggered 를 확인하세요." },
   ];

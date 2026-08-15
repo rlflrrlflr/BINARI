@@ -2855,7 +2855,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v132.8 · 탭 그림자 축소";
+const APP_VER = "v132.10 · 시각 미전송";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -4611,7 +4611,15 @@ export default function App() {
       const innerLine = hesit ? `\n[유저의 망설임 — 판결 방향엔 영향 없음, 어조·공감만] 망설이는 이유: ${hesit} — 방향은 오직 지표로 정하고, 이 두려움/막힘은 판결의 어조로만 어루만진다` : "";
       // 되물음이면 앞 판결을 명시적으로 물려준다 — 이게 없으면 모델이 매번 새로 합산하고, 되물음엔 GO/STOP 축이 없어 HOLD로 내려앉는다.
       const reaskLine = _reask ? `\n[되물음] 유저가 방금 판결("${_prevRec.direction} — ${_prevRec.verdict}")을 못 알아들어 되묻고 있다. 새로 판정하지 말고 direction=${_prevRec.direction}·category=${_prevRec.cat || "A"}를 그대로 승계한 뒤, verdict 자리에 **되물은 그것의 답**을 맨말로 넣는다. 선택지를 줬으면 그중 하나를 고른다. 새 비유 금지.` : "";
-      const userText = `질문: ${q}${qExtra}\n[오늘] ${_nd.getFullYear()}년 ${_nd.getMonth() + 1}월 ${_nd.getDate()}일 ${_nd.getHours()}시 · 오늘 밤 달 ${_tmoon.name}${innerLine}${reaskLine}${fuLine}`;
+      /* v132.10: **시각(시)을 모델에 안 보낸다.** v132.2~132.4 에서 '심야 충동 보정' 규칙과
+         '시각은 방향을 못 바꾼다'는 금지를 넣었는데도 밤에 물으면 여전히 "자라"가 나왔다 —
+         당연하다. 규칙만 지우고 **재료를 남겨 뒀기 때문**이다. 모델에 "지금 새벽 1시"를 매번
+         알려주면서 "시간으로 판단하지 마"라고 쓴 꼴이고, LLM 은 지시 없이도 '1시니까 자라'고 말한다.
+         이 리포에서 프롬프트 규칙만으로는 안 막힌다는 걸 반복해서 겪었다(이름 중복·축 불일치).
+         **날짜는 남긴다** — 일진·달 위상·세운이 날짜의 함수라 지표에 실제로 필요하다.
+         **시는 지표 어디에도 안 쓰인다** — 사주는 '태어난' 시각을 쓰지 '물어본' 시각을 안 쓴다.
+         잃는 것: 밤이 깊은 걸 아는 회상체. 그건 화면 인사말(isNight)이 대신한다 — 거긴 판결이 아니다. */
+      const userText = `질문: ${q}${qExtra}\n[오늘] ${_nd.getFullYear()}년 ${_nd.getMonth() + 1}월 ${_nd.getDate()}일 · 오늘 밤 달 ${_tmoon.name}${innerLine}${reaskLine}${fuLine}`;
       const system = makeSystem();
       // v105: 서신(콜3)은 이 재료를 그대로 쓴다. 같은 system 이라 프롬프트 캐시도 그대로 먹는다.
       letterCtxRef.current = { system, userText };
