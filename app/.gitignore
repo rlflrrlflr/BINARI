@@ -3,3 +3,8 @@ dist/
 .vercel/
 .env
 .env.*
+
+# 검증용 임시 번들 — App.jsx 통짜 복사본이라 커밋되면 소스가 두 벌이 된다(v128 실제 사고)
+*.tmp.mjs
+eval/verdicts.csv
+eval/summary.md

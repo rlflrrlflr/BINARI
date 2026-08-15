@@ -8,6 +8,7 @@
 //   기본: 콜1(결론)만. --full: 콜2(근거·정령)까지. 사람이 채점할 수 있게 CSV로 출력.
 // 앱과 동일한 SYS 프롬프트를 src/App.jsx에서 직접 추출해 검증(프롬프트 드리프트 방지).
 import { readFileSync, writeFileSync } from "node:fs";
+import { loadPersonas } from "./build-personas.mjs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -36,7 +37,11 @@ const VIA_GAP_MS = 1500;   // 경유 시 호출 간격 — 1분 90회 한도 아
 const APP = readFileSync(join(HERE, "..", "src", "App.jsx"), "utf8");
 const SYS = APP.slice(APP.indexOf("const SYS = `") + 13, APP.indexOf("`;", APP.indexOf("const SYS = `")));
 if (!SYS.includes("층위 분리")) { console.error("SYS 추출 실패(마커 없음) — App.jsx 구조 확인"); process.exit(1); }
-let personas = JSON.parse(readFileSync(join(HERE, "personas.json"), "utf8"));
+/* v128: 페르소나는 **가상 생년월일에서 앱 엔진으로 뽑는다.** 손으로 적은 명식 표를 안 쓴다 —
+   그 표엔 실인물이 들어 있었고(창업자), 엔진이 바뀌어도 표는 안 따라왔다. build-personas.mjs 참고.
+   ⚠ 대운은 '올해'에 따라 구간이 바뀌므로 기준 연도를 **밖에서 못 박아 넘긴다.** */
+const NOW_Y = +(process.argv.find((a) => a.startsWith("--year=")) || "").split("=")[1] || new Date().getFullYear();
+let personas = await loadPersonas(NOW_Y);
 let questions = JSON.parse(readFileSync(join(HERE, "questions.json"), "utf8"));
 if (process.argv.includes("--sample")) {            // 저비용 데모: 2인 × 대표 5문항
   personas = personas.slice(0, 2);
@@ -57,12 +62,12 @@ function profile(p) {
 사주: ${p.saju} / 오행 ${p.ohaeng} / 주기운 ${p.main} / 납음 ${p.nayin}
 별자리: ${p.zodiac} / 달: 태어난 밤의 위상 ${p.moon} · 달 별자리 ${p.moonSign} · 나크샤트라 ${p.nakshatra}
 마야 촐킨: ${p.tzolkin}
-MBTI: ${p.mbti} / 수비학 라이프패스: ${p.lifepath}
-대운(현재 인생 시기): ${p.daeun} — 10년 단위 큰 흐름
-가치여정(워드소팅 16→6→3→1): ${p.values}`;
+수비학 라이프패스: ${p.lifepath}
+대운(현재 인생 시기): ${p.daeun} — 10년 단위 큰 흐름${p.job || p.rel ? `
+요즘 삶의 국면(맥락): ${[p.job, p.rel].filter(Boolean).join(" · ")} — 질문의 무게·의미를 이 맥락에 비춰 읽되, 판결 근거는 지표다` : ""}`;
 }
 const system = (p) => `${SYS}\n\n## 대화 연속성\n이전 대화가 있으면 흐름을 이어 자연스럽게 응대한다(단, 판결 근거는 늘 아래 지표다). 같은 고민의 재질문이면 앞선 판결과 일관되게, 명백히 새 고민이면 처음부터 새로 판정한다.\n\n---\n유저 프로필(고정):\n${profile(p)}`;
-const CONCLUDE = `\n\n[이번 출력] 아래 JSON만. **votes를 먼저 채우고, 그 표를 세어 direction을 정하고, verdict는 그 direction을 말로 옮긴다.** 결론을 먼저 정해두고 표를 맞추지 마라 — 순서가 곧 판결의 정직함이다.\n{"category":"A|B|C","scope":"S1|S2|S3","votes":[{"axis":"지표명","v":"GO|STOP|중립"}],"tone":"단호|격려|충고","direction":"GO|STOP|HOLD","verdict":"한 문장 단답"}\nvotes엔 이번 판결에 참여한 지표를 전부 넣는다(사주·달·별자리·MBTI·수비학·마야 + 제공된 경우 삼재·가치·주역·토정비결). against·total은 앱이 센다 — 쓰지 마라. reasons·subline·funLine도 이번엔 쓰지 마.`;
+const CONCLUDE = `\n\n[이번 출력] 아래 JSON만. **votes를 먼저 채우고, 그 표를 세어 direction을 정하고, verdict는 그 direction을 말로 옮긴다.** 결론을 먼저 정해두고 표를 맞추지 마라 — 순서가 곧 판결의 정직함이다.\n{"category":"A|B|C","scope":"S1|S2|S3","votes":[{"axis":"지표명","v":"GO|STOP|중립"}],"tone":"단호|격려|충고","direction":"GO|STOP|HOLD","verdict":"한 문장 단답"}\nvotes엔 이번 판결에 참여한 지표를 전부 넣는다(사주·달·별자리·수비학·마야 + 제공된 경우 삼재·주역·토정비결). against·total은 앱이 센다 — 쓰지 마라. reasons·subline·funLine도 이번엔 쓰지 마.`;
 // 되물음 태그 — App.jsx 의 reaskLine 과 문자열이 같아야 한다(다르면 하네스가 앱과 다른 것을 잰다).
 const reaskTag = (prev) => `\n[되물음] 유저가 방금 판결("${prev.dir} — ${prev.verdict}")을 못 알아들어 되묻고 있다. 새로 판정하지 말고 direction=${prev.dir}·category=${prev.cat || "A"}를 그대로 승계한 뒤, verdict 자리에 **되물은 그것의 답**을 맨말로 넣는다. 선택지를 줬으면 그중 하나를 고른다. 새 비유 금지.`;
 
@@ -192,7 +197,7 @@ function autoChecks(v, cat, q, r1, r2) {
 }
 const esc = (s) => `"${String(s == null ? "" : s).replace(/"/g, '""')}"`;
 
-const rows = [["persona", "mbti", "main", "qid", "cat", "mode", "question", "dir", "scope", "votes", "tone", "against/total", "verdict", "auto", "subline", "funLine", "사람평점(1-5)", "메모"]];
+const rows = [["persona", "노림수", "main", "qid", "cat", "mode", "question", "dir", "scope", "votes", "tone", "against/total", "verdict", "auto", "subline", "funLine", "사람평점(1-5)", "메모"]];
 let flags = 0, errors = 0, spend = { in: 0, out: 0 };
 const route = VIA ? `경유 ${VIA}/api/judge (모델은 서버가 정함${TIER ? " · tier=" + TIER : ""})` : `직접 api.anthropic.com · 모델 ${MODEL}`;
 console.log(`SYS 추출 OK (${SYS.length}자). ${route}. ${personas.length}인 × ${questions.length}문항 = ${personas.length * questions.length}판결${FULL ? " (+근거)" : ""}\n`);
@@ -210,18 +215,18 @@ for (const p of personas) {
       /* 자동검사는 뒷면까지 받고 나서 한 번에 돈다 — 앞면만 재면 모호함이 뒷면으로 숨는다(v121) */
       let sub = "", fun = "", r2full = null;
       if (FULL) {
-        const explain = `${u}${STAKE}${REASK}\n\n[이미 확정된 판결] direction=${r1.direction} / verdict="${r1.verdict}" / 총 ${r1.total} 중 반대 ${r1.against}. 이 판결을 절대 뒤집지 말고, 근거만 JSON으로: {"subline":"수호신의 한 줄","reasons":[{"axis":"사주|달|별자리|MBTI|수비학|주역|가치|삼재|토정비결|마야","vote":"GO|STOP|중립","text":"회상체 근거 1줄(60자 이내)"}],"funLine":"정령 한마디","disclaimer":""}. reasons엔 참여 지표 전부.`;
+        const explain = `${u}${STAKE}${REASK}\n\n[이미 확정된 판결] direction=${r1.direction} / verdict="${r1.verdict}" / 총 ${r1.total} 중 반대 ${r1.against}. 이 판결을 절대 뒤집지 말고, 근거만 JSON으로: {"subline":"수호신의 한 줄","reasons":[{"axis":"사주|달|별자리|수비학|주역|삼재|토정비결|마야","vote":"GO|STOP|중립","text":"회상체 근거 1줄(60자 이내)"}],"funLine":"정령 한마디","disclaimer":""}. reasons엔 참여 지표 전부.`;
         const { json: r2, usage: us2 } = await call(sys, explain, 2000);
         if (us2) { spend.in += us2.input_tokens || 0; spend.out += us2.output_tokens || 0; }
         sub = r2.subline || ""; fun = r2.funLine || ""; r2full = r2;
       }
       const auto = autoChecks(r1.verdict || "", q.cat, q, r1, r2full);
       if (auto !== "OK") flags++;
-      rows.push([p.id + (p.name ? "/" + p.name : ""), p.mbti, p.main, q.id, q.cat, q.mode, q.text, r1.direction, r1.scope || "", (Array.isArray(r1.votes) ? r1.votes.map((x) => `${x.axis}:${x.v || x.vote}`).join(" ") : ""), r1.tone, `${(r1.total || 0) - (r1.against || 0)}:${r1.against || 0}`, r1.verdict, auto, sub, fun, "", ""]);
+      rows.push([p.id + (p.name ? "/" + p.name : ""), p.노림수 || "", p.main, q.id, q.cat, q.mode, q.text, r1.direction, r1.scope || "", (Array.isArray(r1.votes) ? r1.votes.map((x) => `${x.axis}:${x.v || x.vote}`).join(" ") : ""), r1.tone, `${(r1.total || 0) - (r1.against || 0)}:${r1.against || 0}`, r1.verdict, auto, sub, fun, "", ""]);
       console.log(`${p.id} ${q.id} ${r1.direction}/${r1.scope || "?"} [${auto}] ${r1.verdict}`);
     } catch (e) {
       errors++;   // 실패도 세어야 한다 — 안 세면 '전부 실패한 실행'이 플래그 0 으로 깨끗해 보인다
-      rows.push([p.id, p.mbti, p.main, q.id, q.cat, q.mode, q.text, "ERR", "", "", "", "", e.message.slice(0, 160), "ERROR", "", "", "", ""]);
+      rows.push([p.id, p.노림수 || "", p.main, q.id, q.cat, q.mode, q.text, "ERR", "", "", "", "", e.message.slice(0, 160), "ERROR", "", "", "", ""]);
       console.log(`${p.id} ${q.id} ERROR ${e.message.slice(0, 160)}`);
     }
   }

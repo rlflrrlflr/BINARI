@@ -854,6 +854,15 @@ function wrap2(t, max = 9) {
    문서는 그냥 다 보인다 — 값을 치른 문서에서 "안 보임"은 최악의 실패다.
    ⚠ 되감기(이탈 시 .rvin 제거)는 **완전히 화면 밖으로 나갔을 때만** 한다.
    경계에서 떨면 그게 바로 창업자가 지적한 그 증상이 된다. */
+/* 표 한 줄 — 각인과 궁합이 **같은 표**를 쓴다.
+   ⚠ v128 에 이걸 ImprintDoc 안쪽에 두고 궁합에서 부르는 실수를 했다 — 궁합 결과 화면이 통째로 죽었다.
+     두 문서가 같이 쓰는 조각은 문서 밖에 둔다. 각주 토글은 문서마다 다르므로 Ref 를 받아 쓴다.
+   --i = 표 안에서의 줄 번호. 줄마다 차례로 채워지게 하는 데만 쓴다. */
+const DocRow = (Ref) => ([k, v, n], i) => (
+  <div className="impr" key={i} style={{ "--i": i }}><div className="impk">{k}</div>
+    <div className="impv"><span dangerouslySetInnerHTML={{ __html: v }} /><Ref n={n} /></div></div>
+);
+
 const REVEAL_SEL = ".impsvg,.impdom,.impsky,.impclash,.impband,.impck,.imptrig,.impch,.improws,.impmrows,.impyrs,.impcore";
 /* ⚠ **ref 를 새로 만들지 않고 받는다.** 각인·궁합 루트에는 이미 `useDocRead` 의 readRef 가 붙어 있고
    한 요소에 ref 는 하나뿐이다. 두 훅이 각자 ref 를 들면 나중에 붙는 쪽이 앞의 것을 조용히 덮는다 —
@@ -925,11 +934,7 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
     <button className="btn ghost mt" onClick={onClose}>닫을게</button></div>);
   const Ref = ({ n }) => (notesOn && n ? <sup className="impfx">{n}</sup> : null);
   const H = ({ t }) => <span dangerouslySetInnerHTML={{ __html: t }} />;
-  /* --i = 표 안에서의 줄 번호. 줄마다 차례로 채워지게 하는 데만 쓴다(v128) */
-  const Row = ([k, v, n], i) => (
-    <div className="impr" key={i} style={{ "--i": i }}><div className="impk">{k}</div>
-      <div className="impv"><H t={v} /><Ref n={n} /></div></div>
-  );
+  const Row = DocRow(Ref);
   /* ── 그래프 — 숫자가 눈에 보여야 문서가 값을 갖는다 ── */
   const W = 320;
   const LifeChart = () => {
@@ -1362,6 +1367,7 @@ function MatchDoc({ saju, birth, onClose }) {
   useReveal(readRef);            // v128 진입 모션 — 같은 ref 를 공유한다
   const Ref = ({ n }) => (notesOn && n ? <sup className="impfx">{n}</sup> : null);
   const H = ({ t }) => <span dangerouslySetInnerHTML={{ __html: t }} />;
+  const Row = DocRow(Ref);
 
   if (!done || !r) return (
     <div className="imp fade" ref={readRef}>
@@ -1441,6 +1447,19 @@ function MatchDoc({ saju, birth, onClose }) {
 
       <p className="imph">{r.clash.t}</p>
       <div className="impclash"><p><H t={r.clash.w} /><Ref n={r.clash.n} /></p></div>
+
+      {/* v128 — 궁합을 연애에만 쓰지 않게 하는 절. 진입 안내는 "동료·가족·동업자에게도 쓰라"고
+          말해 왔는데 정작 **일 축이 없었다.** 각인의 「같이 일하면 좋은 사람」이 오행 한 줄로 끝나던 것을
+          여기로 이어 붙인다 — 유저가 아는 건 오행이 아니라 사람이다. */}
+      {r.work && <>
+        <p className="imph">같이 일하면 어떤가 <i>연애 말고 일의 눈으로</i></p>
+        <p className="impp">위 아홉 축을 <b>일의 눈으로 다시 읽은 것</b>이야. 새로 계산한 건 없고
+          <b>총점에도 안 들어가</b> — 연애 궁합과 일 궁합을 한 숫자로 뭉개지 않으려고.</p>
+        <div className="improws">{r.work.rows.map(Row)}</div>
+        {r.work.care.map((c, i) => (<div className="imptrig" key={i}><p><H t={c} /></p></div>))}
+        <p className="impcap">이 절은 <b>동업하지 말라는 말을 하지 않아.</b> 관계와 같은 선이야 —
+          우리 몫은 <b>무엇을 조심하면 되는지</b>까지야.<Ref n={r.work.n} /></p>
+      </>}
 
       <p className="imph">조심할 것 <i>헤어지라는 말은 안 해</i></p>
       {r.care.map((c, i) => (<div className="imptrig" key={i}><p><H t={c} /></p></div>))}
@@ -2747,7 +2766,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v128.2 · 질감 재배선";
+const APP_VER = "v129.1 · 질감 재배선";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -3335,7 +3354,10 @@ const isReask = (s) => REASK_RE.test((s || "").trim());
    가중치를 여기서 다시 구현하면 진실이 프롬프트와 코드 두 곳에 살게 된다(이 리포가 제일 조심하는 것).
    접전 처리는 프롬프트의 '경험 편향'과 같은 규칙(동률이면 해보는 쪽 = GO)만 코드로 옮긴다. */
 /* v114: MBTI 축 제거 · v128: 가치 축 제거. 모델이 그래도 그 축을 실어 보내면
-   여기서 걸러져 분모에 안 들어간다 — 스키마에서 뺀 것과 집계에서 뺀 것이 짝을 이뤄야 한다 */
+   여기서 걸러져 분모에 안 들어간다 — 스키마에서 뺀 것과 집계에서 뺀 것이 짝을 이뤄야 한다.
+   ⚠ v129: **그 짝이 열네 판 동안 어긋나 있었다.** v114 에 MBTI 를 집계에서만 빼고 콜1 지시문은
+   그대로 둬서, 모델은 시킨 대로 MBTI 표를 보내고 이 줄이 조용히 버렸다(모델은 여섯 축, 앱은 다섯 축).
+   그래서 이제 **검진이 프롬프트의 축 나열과 이 Set 을 맞대어 본다** — 한쪽만 고치면 빨개진다. */
 const VOTE_AX = new Set(["사주", "달", "별자리", "수비학", "주역", "삼재", "토정비결", "마야"]);
 function tallyVotes(r1) {
   const raw = Array.isArray(r1?.votes) ? r1.votes : [];
@@ -4425,8 +4447,16 @@ export default function App() {
                   이 체크박스가 실제로 막는 게 하나도 없어졌기 때문이다.
                   아무것도 안 막는 동의 UI는 이용자를 오인시켜 없느니만 못하다. */}
               <div className="consent">
+                {/* ⚠ v129: 이 줄의 두 번째 문장이 **사실이 아니게 됐다.**
+                    2026-08-15 창업자 지시로 질문·답변을 **가명처리해서 남기게** 바뀌었는데
+                    (처리방침 §1 개정 · track 의 q_anon/v_anon) 동의 화면은 안 고쳐졌다.
+                    처리방침만 고치고 이 줄을 두면, 유저가 **실제로 보고 동의하는 문장**이 거짓이 된다 —
+                    고지의 무게는 문서보다 이 줄이 무겁다. 여기가 동의를 받는 자리다. */}
                 <p className="fine">네가 준 조각(나이·성별·직업·관계 같은 것)은 판결을 다듬는 데 써.
-                  <strong>네가 적은 질문은 보내지 않아.</strong><br />
+                  네가 적은 질문과 판결문은 <strong>이름·연락처 같은 걸 지운 뒤</strong> 품질 확인용으로 남겨.
+                  {/* ⚠ 거부 버튼은 이 화면이 아니라 **로비**에 있다(`!ritual && !res`). "아래"라고 쓰면
+                      또 없는 자리를 가리키게 된다 — A-1 이 정확히 그 사고였다. 자리를 정확히 적는다. */}
+                  싫으면 <strong>홈 화면 아래쪽 「사용 통계 수집을 끌래」</strong>로 통째로 끌 수 있어.<br />
                   ‘하늘을 열기’를 누르면 <a className="plink" href="/privacy.html" target="_blank" rel="noreferrer">개인정보처리방침</a>에 동의한 것으로 볼게.</p>
               </div>
               <button className="btn gold mt" onClick={doReveal}>하늘을 열기</button>
@@ -5440,4 +5470,10 @@ sup.impfx{font-size:9px;color:#c98f3d;vertical-align:super;margin-left:2px}
 @media(prefers-reduced-motion:reduce){.fade,.line,.spark,.mcard,.chip.on,.halo.busy,.forming,.persp.cardIn,.hline .mv,.rv,.gateflash{animation:none;transition:none;opacity:1;transform:none}}
 `;
 
-export { calcSaju, sunLongitude, equationOfTime, cityLon, moonLongitude, tzolkin, moonPlacements, lunar2solar, solar2lunar, daeun }; // 검증(e2e/mansae-test.mjs)용
+export { calcSaju, sunLongitude, equationOfTime, cityLon, cityLat, moonLongitude, tzolkin, moonPlacements,
+  lunar2solar, solar2lunar, daeun, moonPhase, lifePath, getZodiac, jdn };
+/* 검증·평가 하네스 전용 내보내기(e2e/mansae-test.mjs · eval/run-eval.mjs).
+   ⚠ v128: 평가 하네스가 **손으로 적은 명식 표**를 쓰고 있었다 — 그 표에 실인물(창업자)의
+   생년·생시가 사주 네 기둥 형태로 박혀 있었고, 엔진이 바뀌어도 표는 안 따라오는 구조였다.
+   그래서 하네스가 **가상 생년월일을 넣고 여기 있는 엔진으로 직접 뽑아 쓰게** 바꿨다.
+   진실이 한 곳에만 산다 — 이 리포가 제일 조심하는 것. */
