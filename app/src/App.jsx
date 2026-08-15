@@ -2053,7 +2053,7 @@ const GL_VERT = `
 precision highp float;
 attribute vec4 a_r0; // x:u y:v z:s w:size·위상
 attribute vec4 a_r1; // x:ph y:dly z:colorPick w:strandPick
-uniform float u_hold,u_beat,u_t,u_form,u_R,u_arms,u_strands,u_twist,u_speed,u_chaos,u_nayF,u_nayA,u_expand,u_agi,u_k,u_ps,u_lum,u_twk,u_psMul,u_focal,u_touchAmt,u_breath,u_trailLive,u_zodiac;
+uniform float u_hold,u_beat,u_t,u_form,u_R,u_arms,u_strands,u_twist,u_speed,u_chaos,u_nayF,u_nayA,u_expand,u_agi,u_k,u_ps,u_lum,u_twk,u_psMul,u_focal,u_touchAmt,u_breath,u_trailLive,u_zodiac,u_sink;
 uniform vec2 u_touch,u_touchVel;
 uniform vec4 u_trail[10];
 varying float v_a; varying float v_pick; varying float v_star;
@@ -2204,6 +2204,10 @@ void main(){
   vec2 spos=P.xy*sc*0.48;
   float ta=clamp(u_touchAmt,0.0,1.0);
   spos+=vec2(sin(t*0.11+1.3)*0.11, sin(t*0.17)*0.07+0.012*u_breath)*(1.0-ta)*smoothstep(0.0,3.5,u_t);   // 부유+호흡 — 터치 중엔 멈춤
+  /* v129.4 벼름(brood) — 판결을 기다리는 동안 가라앉았다가, 도착하면 솟구친다.
+     온보딩의 '흩어진 것이 모여 태어남'과 반대 방향으로 읽히게 하려는 것이다(같은 응집을 써도 뜻이 달라진다).
+     u_sink>0 = 하강 · <0 = 상승. 진폭을 작게 둔 이유는 형태(오행 5종)를 흐트러뜨리지 않기 위해서다. */
+  spos.y -= u_sink*0.26;   // 진폭 근거: 평상시 호흡만으로 무게중심이 0.030 흔들린다(실측) — 그보다 확실히 커야 '의도된 하강'으로 읽힌다
   float st=a_r1.z*${TUNE.stg};                                             // 입자별 시차(파도식 도착 순서)
   float g=clamp((ta-st)/0.28,0.0,1.0); g=g*g*(3.0-2.0*g);           // v66 고정 비행창 — 모임·풀림 모두 낱알 파도로
   // ── B상태: 중앙점으로 모여 빛이 방사로 발산 (문양·회전 없음 — 입자단위 재정렬) ──
@@ -2281,7 +2285,7 @@ function glDetect() {
     return !!(c.getContext("webgl") || c.getContext("experimental-webgl"));
   } catch (_) { return false; }
 }
-function GuardianCanvasGL({ saju, zo, num, moon, birth, agitateRef, reactRef, restRef, size = 340, onFail }) {
+function GuardianCanvasGL({ saju, zo, num, moon, birth, agitateRef, reactRef, restRef, broodRef, size = 340, onFail }) {
   const ref = useRef(null);
   useEffect(() => {
     const cv = ref.current; if (!cv) return;
@@ -2292,6 +2296,10 @@ function GuardianCanvasGL({ saju, zo, num, moon, birth, agitateRef, reactRef, re
     lostFn = (e) => { e.preventDefault(); fail(); };
     cv.addEventListener("webglcontextlost", lostFn);
     const touch = { x: 0, y: 0, amt: 0, target: 0, vx: 0, vy: 0, lx: 0, ly: 0, pressed: false };  // v59: 눌렀을 때만
+    /* v129.4 벼름 — 판결 대기 연출. 동전 의식을 끄면서 4~10초(실측 p50 4.4s)가 통째로 빈 화면이 됐다.
+       고정 길이 연출은 쓸 수 없다(언제 올지 모른다) → **끝이 없는 루프 + 도착 시 해소**로 짠다.
+       brood: 0→1 가라앉음(응집+어두워짐+하강) · burst: 도착 순간 솟구쳐 터짐. */
+    let brood = 0, burstT = -1, bAmt = 0;
     const setPos = (e) => { const r = cv.getBoundingClientRect(); const cx = e.clientX, cy = e.clientY; if (cx == null) return; touch.x = (cx - r.left) / r.width * 2 - 1; touch.y = -((cy - r.top) / r.height * 2 - 1); };
     const onDown = (e) => { touch.pressed = true; touch.t0 = performance.now(); setPos(e); touch.lx = touch.x; touch.ly = touch.y; touch.vx = 0; touch.vy = 0; touch.target = 1.15; };  // 눌러야 발동(데스크탑 호버 무시)
     const onMove = (e) => { if (!touch.pressed) return; setPos(e); touch.target = 1.15; };
@@ -2343,10 +2351,11 @@ function GuardianCanvasGL({ saju, zo, num, moon, birth, agitateRef, reactRef, re
       gl.useProgram(prog);
       const buf = (name, arr) => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, arr, gl.STATIC_DRAW); const loc = gl.getAttribLocation(prog, name); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 4, gl.FLOAT, false, 0, 0); return b; };
       buf("a_r0", r0); buf("a_r1", r1);
-      const L = {}; ["u_hold","u_beat","u_t","u_form","u_R","u_arms","u_strands","u_twist","u_speed","u_chaos","u_nayF","u_nayA","u_expand","u_agi","u_k","u_ps","u_lum","u_twk","u_psMul","u_focal","u_touch","u_touchVel","u_touchAmt","u_breath","u_trailLive","u_zodiac","u_c1","u_c2","u_acc","u_wispCol","u_bright","u_alpha"].forEach(k => { L[k] = gl.getUniformLocation(prog, k); });
+      const L = {}; ["u_hold","u_beat","u_t","u_form","u_R","u_arms","u_strands","u_twist","u_speed","u_chaos","u_nayF","u_nayA","u_expand","u_agi","u_k","u_ps","u_lum","u_twk","u_psMul","u_focal","u_touch","u_touchVel","u_touchAmt","u_breath","u_trailLive","u_zodiac","u_sink","u_c1","u_c2","u_acc","u_wispCol","u_bright","u_alpha"].forEach(k => { L[k] = gl.getUniformLocation(prog, k); });
       L.u_trail = gl.getUniformLocation(prog, "u_trail[0]");
       gl.uniform1f(L.u_form, FORM_I[saju.main] ?? 4);
-      gl.uniform1f(L.u_R, 0.8 * (E ? 1.0 : 0.9));
+      const R0 = 0.8 * (E ? 1.0 : 0.9);
+      gl.uniform1f(L.u_R, R0);
       gl.uniform1f(L.u_arms, arms); gl.uniform1f(L.u_strands, strands); gl.uniform1f(L.u_twist, twist);
       gl.uniform1f(L.u_speed, P ? 0.42 : 0.30); gl.uniform1f(L.u_chaos, T ? 0.6 : 1.35); gl.uniform1f(L.u_focal, E ? 0.12 : 0.88); // v65 명상 템포(2차 감속) // I=구심점·E=무구심점
       gl.uniform1f(L.u_nayF, nayF); gl.uniform1f(L.u_nayA, nayA);
@@ -2385,7 +2394,7 @@ function GuardianCanvasGL({ saju, zo, num, moon, birth, agitateRef, reactRef, re
           }
         }
         const restMs = restRef && restRef.current ? restRef.current : 0;
-        if (restMs && !agi && !reacting && touch.amt < 0.02 && now - lastHeavy < restMs) { raf = requestAnimationFrame(draw); return; }
+        if (restMs && !agi && !reacting && !(broodRef && broodRef.current) && brood < 0.02 && bAmt < 0.02 && touch.amt < 0.02 && now - lastHeavy < restMs) { raf = requestAnimationFrame(draw); return; }
         lastHeavy = now;
         const t = (now - born) / 1000;
         const dt = Math.min(0.05, Math.max(0.001, t - (draw._lt ?? t - 0.016))); draw._lt = t;  // v64 dt 기반(60/120Hz 동일 거동)
@@ -2393,6 +2402,23 @@ function GuardianCanvasGL({ saju, zo, num, moon, birth, agitateRef, reactRef, re
         gl.uniform1f(L.u_agi, agi); gl.uniform1f(L.u_expand, expand); gl.uniform1f(L.u_bright, bright);
         const bph = now * Math.PI * 2 / 9000;                                             // 9초 이완 호흡(들숨 짧고 날숨 긴 비대칭)
         gl.uniform1f(L.u_breath, Math.sin(bph - 0.35 * Math.sin(bph)));
+        /* 벼름 갱신 — 목표(broodRef)로 부드럽게 따라간다. 들어갈 땐 느리게(1.1s), 풀릴 땐 빠르게(0.35s):
+           기다림은 서서히 잠기고 해소는 단번이어야 '터졌다'로 읽힌다. */
+        const bWant = broodRef && broodRef.current ? 1 : 0;
+        brood += (bWant - brood) * (1 - Math.exp(-dt / (bWant > brood ? 1.1 : 0.35)));
+        if (bWant && brood > 0.98 && burstT < 0) burstT = -1;                 // 대기 중엔 터지지 않는다
+        if (!bWant && brood > 0.25 && burstT < 0) burstT = 0;                 // 벼름이 풀리는 순간 = 도착 = 발화
+        if (burstT >= 0) burstT += dt;
+        const bur = burstT >= 0 ? Math.max(0, 1 - burstT / 0.9) : 0;          // 0.9초에 걸쳐 사그라드는 발화
+        if (burstT > 1.2) burstT = -1;
+        /* 대기 중엔 0.66~0.74 사이를 느리게 호흡한다 — 완전히 멈춰 있으면 '멈춘 화면'으로 읽힌다.
+           발화 순간엔 1.0 까지 밀어 셰이더의 방사(B상태)를 끝까지 태운다. */
+        /* ⚠ 대기에는 u_touchAmt 를 쓰지 않는다. 그 값은 '중심으로 모았다가 방사로 터뜨리는' **시퀀스**라
+           중간값(0.7)에 붙잡아 두면 터지다 만 상태로 굳는다 — 화면엔 벼름이 아니라 **붕괴**로 보인다
+           (스크린샷으로 확인했다: 수호신이 오그라들기는커녕 퍼졌다).
+           대기의 응집은 형태 반지름(u_R)을 줄여서 만든다. touchAmt 는 **도착 순간의 방사**에만 쓴다 —
+           그게 원래 그 값의 용도다. */
+        bAmt += (bur - bAmt) * (1 - Math.exp(-dt / (bur > bAmt ? 0.10 : 0.45)));
         const tau = touch.target > touch.amt ? 0.55 : 1.60;                               // v66 모임 ~1.6s 파도·풀림 ~4.8s
         touch.amt += (touch.target - touch.amt) * (1 - Math.exp(-dt / tau));
         const dvx = touch.x - touch.lx, dvy = touch.y - touch.ly; touch.lx = touch.x; touch.ly = touch.y;
@@ -2405,7 +2431,14 @@ function GuardianCanvasGL({ saju, zo, num, moon, birth, agitateRef, reactRef, re
           trailHead = (trailHead + 1) % 10; lastDrop = now; live = 1;
         }
         gl.uniform4fv(L.u_trail, trailArr); gl.uniform1f(L.u_trailLive, live);
-        gl.uniform2f(L.u_touch, touch.x, touch.y); gl.uniform1f(L.u_touchAmt, touch.amt); gl.uniform2f(L.u_touchVel, touch.vx, touch.vy);
+        gl.uniform2f(L.u_touch, touch.x, touch.y); gl.uniform1f(L.u_touchAmt, Math.max(touch.amt, bAmt, bur)); gl.uniform2f(L.u_touchVel, touch.vx, touch.vy);
+        /* 가라앉을수록 어두워지고 내려간다. 발화하면 반대로 밝아지며 솟구친다(u_sink 음수).
+           온보딩은 '어둠→밝아지며 모임'이라, 방향을 뒤집는 것만으로 같은 응집이 다른 뜻이 된다. */
+        /* 감쇠 폭이 큰 이유: 중심으로 모이면 가산 블렌딩이 겹쳐 **가만 두면 오히려 밝아진다**(실측).
+           응집이 벌어들이는 밝기를 이겨야 '가라앉는다'로 읽힌다. */
+        gl.uniform1f(L.u_lum, lum * (1 - 0.45 * brood + 0.75 * bur));
+        gl.uniform1f(L.u_R, R0 * (1 - 0.26 * brood + 0.18 * bur));   // 오그라들었다가 도착에 펼쳐진다
+        gl.uniform1f(L.u_sink, brood * 1.0 - bur * 1.35);
         // v96 파면 확장: 누른 뒤 경과 시간(초) — 파동이 밀려나가며 끝이 형성되게. 떼면 touch.amt를 따라 사그라듦
         const _hold = touch.pressed ? Math.min(2.4, (now - (touch.t0 || now)) / 1000) : 0;
         gl.uniform1f(L.u_hold, _hold);
@@ -2766,7 +2799,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v129.3 · 공개 안전선";
+const APP_VER = "v129.4 · 벼름";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -3905,6 +3938,9 @@ export default function App() {
   const [streak, setStreak] = useState(mem?.streak || null);  // v16(B7): 연속 방문 {last, count}
   const [dailyOpen, setDailyOpen] = useState(false);          // v18: 아침 문안 노크형 — 청해야 펼친다
   const agitateRef = useRef(false);
+  /* v129.4 벼름 — 판결을 기다리는 동안 수호신이 가라앉는다. busy 를 그대로 따라간다.
+     ref 로 두는 이유: 상태로 두면 매 프레임 리렌더가 걸린다(캔버스는 rAF 로 스스로 돈다). */
+  const broodRef = useRef(false);
   const reactRef = useRef(null);                 // v28: 판결 방향(GO/STOP/HOLD) 반응
   const [introSeen, setIntroSeen] = useState(false); // v28: 수호신 자기소개는 첫 만남 1회만
   const [justBorn, setJustBorn] = useState(false); // v29: 자기소개는 탄생 순간에만 노출
@@ -3938,6 +3974,15 @@ export default function App() {
       saveMemory({ birth, saju, zo, moon, num, convo, records, streak });
     }
   }, [step, saju, convo, records, streak]);
+
+  /* 벼름을 busy 에 물린다. 판결이 성사되든 실패하든 busy 가 내려가면 자동으로 풀린다 —
+     실패 경로를 따로 안 챙겨도 '모인 채로 굳는' 상태가 생기지 않는다.
+     reduced-motion 이면 아예 켜지 않는다(가라앉음·솟구침이 그 설정이 피하려는 바로 그 움직임이다). */
+  useEffect(() => {
+    let reduce = false;
+    try { reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (_) {}
+    broodRef.current = busy && !reduce;
+  }, [busy]);
 
   const doReveal = () => {
     track("birth_submitted", demoProps(birth, { noHour: !!birth.noHour, cal: birth.cal, hasName: !!birth.name }));
@@ -4660,7 +4705,7 @@ export default function App() {
           <div className={`halo wide ${!awake && phase >= 1 && !res ? "lobbyscale" : ""} ${asking ? "asking" : ""} ${ritual ? "ritualfade" : ""} ${busy || (res && !cardOn) ? "busy" : ""} ${res && cardOn ? "dimmed" : ""}`}>
             {phase === 0
               ? <BirthCanvas tint={saju ? EL_COLOR[saju.main] : undefined} size={Math.min(typeof window !== "undefined" ? window.innerWidth * 1.1 : 400, typeof window !== "undefined" ? window.innerHeight * 0.57 : 400, 640)} />
-              : <div className="fade"><Guardian saju={saju} zo={zo} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} restRef={restRef} size={Math.min(typeof window !== "undefined" ? window.innerWidth * 1.1 : 400, typeof window !== "undefined" ? window.innerHeight * 0.57 : 400, 640)} /></div>}
+              : <div className="fade"><Guardian saju={saju} zo={zo} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} restRef={restRef} broodRef={broodRef} size={Math.min(typeof window !== "undefined" ? window.innerWidth * 1.1 : 400, typeof window !== "undefined" ? window.innerHeight * 0.57 : 400, 640)} /></div>}
             <div className="gtext up">
               {phase === 0 && <div className="formwrap"><p className="forming">{birth.name ? `${birth.name}, 흩어져 있던 조각들이` : "흩어져 있던 조각들이"}<br />너를 향해 모이고 있어…<br />너의 수호신이 돌아오는 중이야.</p><ul className="formsteps">{FORM_STEPS.map((s, i) => <li key={i} className={i < formStep ? "done" : i === formStep ? "now" : ""}>{i < formStep ? "✓" : i === formStep ? "✦" : "·"} {s}{i === formStep ? "…" : ""}</li>)}</ul></div>}
             </div>
@@ -4764,7 +4809,13 @@ export default function App() {
               )}
               {/* v103: 속결 제거 — 실측(question_asked)에서 내부 83건 중 0건, 외부도 90%가 의식이었다.
                   결정을 대신해주는 앱이 입구에서 또 결정을 시키던 구조라 버튼을 하나로 합쳤다. */}
-              {!ritual && (
+              {/* v129.4 대기 문구 — 예전엔 "조각들이 합의하는 중…"이 **의식 화면 안에** 있어서,
+                  동전을 끄자 조건이 영영 거짓이 되어 문구가 통째로 사라졌다(내가 v129.2 에서 만든 구멍).
+                  여기로 꺼내 의식과 무관하게 띄운다.
+                  ⚠ 진행률·남은 시간은 쓰지 않는다 — 콜1 은 한 덩어리라 단계를 알 수 없고,
+                    모르는 걸 아는 척 표시하면 그건 우리가 프롬프트에서 금지하는 '지어낸 숫자'와 같다. */}
+              {busy && !res && <p className="brooding">조각들이 합의하는 중…</p>}
+              {!ritual && !busy && (
                 <div className="w100">
                   <div className="row gap center">
                     <button className="btn gold" onClick={() => {
@@ -5285,6 +5336,8 @@ const CSS = `
 .payrow{display:flex;gap:10px;margin-top:14px;justify-content:center;flex-wrap:wrap}
 .memrow{display:flex;gap:18px;justify-content:center}
 .halo.busy{animation:haloPulse 1.4s ease-in-out infinite}
+/* v129.4 대기 문구 — 수호신이 가라앉는 동안 아래에 조용히 뜬다. 맥동은 느리게(숨 고르는 속도) */
+.brooding{font-size:13px;letter-spacing:.14em;color:#cfc4e2;margin:14px 0 0;text-align:center;animation:formPulse 2.4s ease-in-out infinite}
 @keyframes haloPulse{0%,100%{filter:drop-shadow(0 0 26px rgba(245,217,139,.14))}50%{filter:drop-shadow(0 0 46px rgba(245,217,139,.34))}}
 .halo.dimmed{opacity:.32;filter:blur(2px) drop-shadow(0 0 30px rgba(245,217,139,.2));transition:opacity .6s,filter .6s}
 .gintro{font-size:15px;line-height:1.8;margin:4px 0;color:#e0d6ef}.gintro.dim{color:#9d8fb5;font-size:14px;margin-bottom:14px}
@@ -5617,7 +5670,7 @@ sup.impfx{font-size:9px;color:#c98f3d;vertical-align:super;margin-left:2px}
 .vlogmeta b{font-weight:600}.lgo{color:#3dc98f}.lstop{color:#e05a5a}.lhold{color:#7f8fd4}
 .vlogrow{cursor:pointer;transition:border-color .2s}.vlogrow:hover{border-color:rgba(201,143,61,.4)}.vlogrow.open .vlogq{white-space:normal;overflow:visible}.vlogverdict{margin:5px 0 0;font-size:13px;color:#e7dcf5;line-height:1.55;border-top:1px solid rgba(255,255,255,.09);padding-top:5px}
 @media(max-width:520px){.stage{padding:20px 10px 72px}.scene{max-width:100%}.gpanel{width:95vw;padding:0}.grid16{gap:6px}}
-@media(prefers-reduced-motion:reduce){.fade,.line,.spark,.mcard,.chip.on,.halo.busy,.forming,.persp.cardIn,.hline .mv,.rv,.gateflash{animation:none;transition:none;opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.fade,.line,.spark,.mcard,.chip.on,.halo.busy,.brooding,.forming,.persp.cardIn,.hline .mv,.rv,.gateflash{animation:none;transition:none;opacity:1;transform:none}}
 `;
 
 export { calcSaju, sunLongitude, equationOfTime, cityLon, cityLat, moonLongitude, tzolkin, moonPlacements,
