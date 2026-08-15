@@ -2084,8 +2084,11 @@ attribute vec4 a_r1; // x:ph y:dly z:colorPick w:strandPick
 uniform float u_hold,u_beat,u_t,u_form,u_R,u_arms,u_strands,u_twist,u_speed,u_chaos,u_nayF,u_nayA,u_expand,u_agi,u_k,u_ps,u_lum,u_twk,u_psMul,u_focal,u_touchAmt,u_breath,u_trailLive,u_zodiac,u_sink;
 uniform vec2 u_touch,u_touchVel;
 uniform float u_orb;   // v133 응축(행성) 0→1
+uniform float u_gyN,u_gyTake,u_gyLum,u_gyBack;   // v134 곁
+uniform vec3 u_gc0,u_gc1,u_gc2; uniform float u_gr0,u_gr1,u_gr2,u_ga0,u_ga1,u_ga2;
 uniform vec4 u_trail[10];
 varying float v_a; varying float v_pick; varying float v_star;
+varying vec3 v_gc; varying float v_gon;
 float hash21(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
 float vnoise(vec2 p){ vec2 i=floor(p),f=fract(p); f=f*f*(3.0-2.0*f); float a=hash21(i),b=hash21(i+vec2(1.0,0.0)),c=hash21(i+vec2(0.0,1.0)),d=hash21(i+vec2(1.0,1.0)); return mix(mix(a,b,f.x),mix(c,d,f.x),f.y); }
 vec2 curl2(vec2 p){ float e=0.12; float x1=vnoise(p+vec2(0.0,e)),x2=vnoise(p-vec2(0.0,e)),y1=vnoise(p+vec2(e,0.0)),y2=vnoise(p-vec2(e,0.0)); return vec2(x1-x2,-(y1-y2))/(2.0*e); }
@@ -2288,6 +2291,7 @@ void main(){
      전부 이미 명식에서 계산돼 들어와 있는 값이다 — 새로 묻는 입력이 없다(헌장 §"이미 너를 안다").
      고리는 헤일로(위 halo, 입자 16%)를 재배정한다 — 입자 추가 0. */
   float orbK=1.0, orbPS=1.0;
+  v_gc=vec3(0.0); v_gon=0.0;
   if(u_orb>0.0005){
     float ospin = u_t*(0.05+0.06*u_focal);
     float otilt = 0.28+0.55*fract(u_zodiac*0.083+u_nayF);
@@ -2321,6 +2325,46 @@ void main(){
     orbK  = mix(1.0, otex*2.1, u_orb);
     orbPS = mix(1.0, 1.02, u_orb);
   }
+  /* ── v134 곁 — 궤도를 도는 빛 하나 = 사람 하나 ───────────────────────────
+     ⚠ **입자를 새로 만들지 않는다.** 위 헤일로(입자 16%)에서 앞쪽 일부를 떼어 쓴다.
+        u_gyTake 가 그 몫이고, 몇 명이 오든 렌더 비용은 그대로다.
+     관계는 흐름의 **방향**으로만 그린다(관계표현인계서 §3 원칙 3):
+       생=곁에서 본체로 흘러듦 / 극=반대로 돌며 가로지르고 스치는 지점에 마디 / 동=나란히 돌다 겹쳐 밝아짐.
+     밝기는 gyeotShares() 가 정한다 — 앞줄 1인분은 인원수와 무관한 상수라
+     둘째를 불러도 첫째가 안 어두워진다(v132.6 판정). */
+  /* ⚠ **곁은 곁 탭에서만 뜬다**(u_orb 에 매단다). 판결 국면은 사적·집중이고 "모를 권리" 자리라
+     옆에서 빛이 도는 게 방해다. 곁탭IA §5 "판결 탭을 건드리지 않는다"도 같은 말이다.
+     덤으로 탭 전환이 의미를 얻는다 — 응축하면서 곁이 함께 떠오른다. */
+  if(u_gyN>0.5 && u_orb>0.02 && halo>0.5 && (a_r1.y-0.84)/0.16 < u_gyTake){
+    float gi = floor(fract(a_r1.x*137.0)*u_gyN);
+    vec3  gcol; float grel, gang;
+    if(gi<0.5){ gcol=u_gc0; grel=u_gr0; gang=u_ga0; }
+    else if(gi<1.5){ gcol=u_gc1; grel=u_gr1; gang=u_ga1; }
+    else { gcol=u_gc2; grel=u_gr2; gang=u_ga2; }
+    float gdir  = grel<-0.5 ? -1.0 : 1.0;                       // 극이면 반대로 돈다
+    float gbase = gang + gdir*u_t*0.23;
+    float gtail = fract(a_r0.z*3.1+a_r1.w*2.7);
+    float ga    = gbase - gdir*gtail*0.5;
+    float grad  = 0.46;
+    vec2  gorb  = grel<-0.5 ? vec2(cos(ga)*0.60, sin(ga))*grad   // 극 — 가로지르는 궤도면
+                            : vec2(cos(ga), sin(ga)*0.60)*grad;
+    float gj = a_r0.x*6.2832, gjr = pow(a_r0.y,1.6)*(0.030+0.035*gtail);
+    vec2  gp = gorb + vec2(cos(gj),sin(gj))*gjr;                 // 둥근 빛덩이(막대 방지)
+    float gA = (1.0-gtail)*(1.0-gtail)*0.9+0.06;
+    if(grel>0.5){                                                // 생 — 본체로 흘러든다
+      float feed=step(0.55,a_r1.w), fk=fract(a_r0.y*7.31+u_t*0.22+a_r1.w*3.1);
+      gp = mix(gp, mix(gp, gp*0.12, fk*fk), feed);
+      gA = mix(gA, gA*(1.0-fk)*1.15, feed);
+    }
+    if(grel<-0.5) gA *= 1.0 + pow(max(0.0,cos(gbase)),14.0)*1.6;  // 극 — 스치는 마디
+    if(abs(grel)<0.5) gA *= 1.0 + 0.55*pow(max(0.0,cos(gbase)),4.0); // 동 — 겹치는 구간
+    /* 궤도 중심은 본체를 따라간다. 응축하면 행성이 부유를 안 하므로 중심도 0 으로 수렴한다. */
+    vec2 gctr = vec2(sin(t*0.11+1.3)*0.11, sin(t*0.17)*0.07+0.012*u_breath)*(1.0-ta)*smoothstep(0.0,3.5,u_t);
+    spos  = mix(gctr, vec2(0.0), u_orb) + gp;
+    v_gc  = gcol; v_gon = 1.0;
+    orbK  = gA*(0.45+u_gyLum*4.0)*smoothstep(0.05,0.55,u_orb);
+    orbPS = 1.15;
+  }
   gl_Position=vec4(spos,0.0,1.0);
   float star=step(0.87,fract(a_r1.w*61.7));                         // v64 13% 별·87% 먼지(알알이 위계)
   v_star=star;
@@ -2334,16 +2378,19 @@ void main(){
      *mix(1.0, 0.42+1.25*emit, g)                                   // B: 중심 밝고 바깥 감쇠(빛 발산)
      *(1.0-g*0.34*smoothstep(0.018,0.0,brad))                       // 극중심 화이트아웃만 억제
      *(1.0-0.26*g*(1.0-g)*4.0);                                     // 비행 중 감광(플래시 방지)
-  v_a*=orbK; gl_PointSize*=orbPS;
+  /* v134 곁 입자는 밝기를 **곱하지 않고 대입한다.** 본체용 감광 사슬(depth·twk·sc·life·k)을
+     그대로 타면 헤일로 밝기(≈0.1)에 곱해져 사실상 안 보인다 — 첫 시도가 그랬다. */
+  v_a = mix(v_a*orbK, orbK, v_gon); gl_PointSize*=orbPS;
   v_pick=a_r1.z;
 }`;
 const GL_FRAG = `
 precision mediump float;
 uniform vec3 u_c1,u_c2,u_acc,u_wispCol; uniform float u_bright,u_alpha;
 varying float v_a; varying float v_pick; varying float v_star;
+varying vec3 v_gc; varying float v_gon;
 void main(){
-  float m=smoothstep(0.5,mix(0.33,0.07,v_star),length(gl_PointCoord-0.5));   // 먼지=또렷한 알, 별=부드러운 헤일로
-  vec3 col=v_pick<0.0?u_wispCol:(v_pick>0.76?u_acc:(v_pick>0.38?u_c2:u_c1));
+  float m=smoothstep(0.5,mix(0.33,0.07,v_star),v_gon>0.5?length(gl_PointCoord-0.5)*1.6:length(gl_PointCoord-0.5));   // 먼지=또렷한 알, 별=부드러운 헤일로
+  vec3 col=v_gon>0.5?v_gc:(v_pick<0.0?u_wispCol:(v_pick>0.76?u_acc:(v_pick>0.38?u_c2:u_c1)));
   float a=m*v_a*u_alpha;
   gl_FragColor=vec4(col*a*u_bright,a);
 }`;
@@ -2384,7 +2431,7 @@ function glDetect() {
     return !!(c.getContext("webgl") || c.getContext("experimental-webgl"));
   } catch (_) { return false; }
 }
-function GuardianCanvasGL({ saju, zo, num, moon, birth, agitateRef, reactRef, restRef, broodRef, orbRef, size = 340, onFail }) {
+function GuardianCanvasGL({ saju, zo, num, moon, birth, agitateRef, reactRef, restRef, broodRef, orbRef, gyeotRef, size = 340, onFail }) {
   const ref = useRef(null);
   useEffect(() => {
     const cv = ref.current; if (!cv) return;
@@ -2451,7 +2498,7 @@ function GuardianCanvasGL({ saju, zo, num, moon, birth, agitateRef, reactRef, re
       gl.useProgram(prog);
       const buf = (name, arr) => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, arr, gl.STATIC_DRAW); const loc = gl.getAttribLocation(prog, name); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 4, gl.FLOAT, false, 0, 0); return b; };
       buf("a_r0", r0); buf("a_r1", r1);
-      const L = {}; ["u_hold","u_beat","u_t","u_form","u_R","u_arms","u_strands","u_twist","u_speed","u_chaos","u_nayF","u_nayA","u_expand","u_agi","u_k","u_ps","u_lum","u_twk","u_psMul","u_focal","u_touch","u_touchVel","u_touchAmt","u_breath","u_trailLive","u_zodiac","u_sink","u_orb","u_c1","u_c2","u_acc","u_wispCol","u_bright","u_alpha"].forEach(k => { L[k] = gl.getUniformLocation(prog, k); });
+      const L = {}; ["u_hold","u_beat","u_t","u_form","u_R","u_arms","u_strands","u_twist","u_speed","u_chaos","u_nayF","u_nayA","u_expand","u_agi","u_k","u_ps","u_lum","u_twk","u_psMul","u_focal","u_touch","u_touchVel","u_touchAmt","u_breath","u_trailLive","u_zodiac","u_sink","u_orb","u_gyN","u_gyTake","u_gyLum","u_gyBack","u_gc0","u_gc1","u_gc2","u_gr0","u_gr1","u_gr2","u_ga0","u_ga1","u_ga2","u_c1","u_c2","u_acc","u_wispCol","u_bright","u_alpha"].forEach(k => { L[k] = gl.getUniformLocation(prog, k); });
       L.u_trail = gl.getUniformLocation(prog, "u_trail[0]");
       gl.uniform1f(L.u_form, FORM_I[saju.main] ?? 4);
       const R0 = 0.8 * (E ? 1.0 : 0.9);
@@ -2504,6 +2551,20 @@ function GuardianCanvasGL({ saju, zo, num, moon, birth, agitateRef, reactRef, re
            그게 이 변화가 헌장(수호신 비주얼 교체 금지)을 안 어기는 조건이라 반드시 시간을 들여 넘긴다. */
         orb += ((orbRef && orbRef.current ? 1 : 0) - orb) * (1 - Math.exp(-dt / 0.75));
         gl.uniform1f(L.u_orb, orb < 0.0004 ? 0 : orb);
+        /* v134 곁 — ref 로 받은 목록을 그대로 셰이더에 넘긴다(리렌더 없음).
+           앞줄 셋까지만 궤도에 서고, 넷째부터는 뒤 성운이 짙어진다(§곁 예산). */
+        const gy = (gyeotRef && gyeotRef.current) || [];
+        const sh = gyeotShares(gy.length);
+        gl.uniform1f(L.u_gyN, Math.min(3, gy.length));
+        gl.uniform1f(L.u_gyTake, gy.length ? Math.min(0.72, 0.24 * Math.min(3, gy.length)) : 0);
+        gl.uniform1f(L.u_gyLum, sh.per);
+        gl.uniform1f(L.u_gyBack, sh.back);
+        for (let i = 0; i < 3; i++) {
+          const g = gy[i];
+          gl.uniform3fv(L["u_gc" + i], g ? g.col : [0, 0, 0]);
+          gl.uniform1f(L["u_gr" + i], g ? g.rel : 0);
+          gl.uniform1f(L["u_ga" + i], g ? g.ang : 0);
+        }
         const bph = now * Math.PI * 2 / 9000;                                             // 9초 이완 호흡(들숨 짧고 날숨 긴 비대칭)
         gl.uniform1f(L.u_breath, Math.sin(bph - 0.35 * Math.sin(bph)));
         /* 벼름 갱신 — 목표(broodRef)로 부드럽게 따라간다. 들어갈 땐 느리게(1.1s), 풀릴 땐 빠르게(0.35s):
@@ -2903,7 +2964,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v133 · 응축";
+const APP_VER = "v134 · 곁 렌더";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -4252,6 +4313,25 @@ export default function App() {
   /* v133 응축 — 곁 탭이면 행성, 판결 탭이면 펼친 형상. ref 로 넘겨 **리렌더 없이** 셰이더만 따라가게 한다
      (state 로 넘기면 size 처럼 deps 를 건드려 WebGL 컨텍스트가 재생성된다). */
   const orbRef = useRef(false);
+  /* v134 곁 목록 — 아직 **데이터가 없다.** 초대·저장 방식(서버냐 링크냐)이 미결이라
+     실제 곁은 다음 단계에서 붙는다. 지금은 렌더 경로만 살려 두고,
+     `?gyeot=1~3` 으로만 켠다 — `?r=sim` 과 같은 성격의 **디버그 진입**이다.
+     ⚠ 가짜 사람을 만들어 화면에 세우지 않는다. 색은 유저 자신의 오행에서 생/극/동으로 파생한
+        것이라 "이렇게 보인다"를 확인하는 용도지, 누군가를 나타내지 않는다. */
+  const gyeotRef = useRef([]);
+  useEffect(() => {
+    let n = 0;
+    try { n = Math.max(0, Math.min(3, parseInt((window.location.search.match(/[?&]gyeot=(\d)/) || [])[1] || "0", 10) || 0)); } catch (_) {}
+    if (!n || !saju) { gyeotRef.current = []; return; }
+    const SAENG = { 화: "목", 토: "화", 금: "토", 수: "금", 목: "수" };   // 나를 생하는 오행
+    const GEUK = { 화: "수", 금: "화", 목: "금", 토: "목", 수: "토" };    // 나를 극하는 오행
+    const rels = [1, -1, 0];                                              // 생 · 극 · 동
+    gyeotRef.current = Array.from({ length: n }, (_, i) => {
+      const rel = rels[i % 3];
+      const el = rel > 0 ? SAENG[saju.main] : rel < 0 ? GEUK[saju.main] : saju.main;
+      return { rel, ang: (i * 2.399) % 6.2832, col: hex2rgb((EL_COLOR[el] || EL_COLOR.토)[1]) };
+    });
+  }, [saju]);
   const [bujeok, setBujeok] = useState(false);  // v7: 부적
   const [convo, setConvo] = useState(mem?.convo || []); // v14: 대화 기억 — 이전 질문·판결 누적(최근 6턴)
   const [dailySeen, setDailySeen] = useState(() => { try { return store.getItem(DAILY_KEY) === todayStr(); } catch (_) { return true; } }); // v16(B2)
@@ -5061,7 +5141,7 @@ export default function App() {
           <div className="halo wide gyeotscale">
             {/* ⚠ 판결 탭과 **같은 size 식**을 쓴다. v132 에 여기만 0.5/600 으로 작게 잡고 확대율도 안 줘서
                 실측 466px — 판결(719px)의 65% 였다. 수호신이 탭마다 다른 크기로 보이면 같은 존재로 안 읽힌다. */}
-            <div className="fade"><Guardian saju={saju} zo={zo} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} restRef={restRef} orbRef={orbRef} size={guardianSize(vp)} /></div>
+            <div className="fade"><Guardian saju={saju} zo={zo} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} restRef={restRef} orbRef={orbRef} gyeotRef={gyeotRef} size={guardianSize(vp)} /></div>
           </div>
           <div className="gyeotpanel fade">
             <p className="gname under">곁</p>
@@ -5076,7 +5156,7 @@ export default function App() {
           <div className={`halo wide ${!awake && phase >= 1 && !res ? "lobbyscale" : ""} ${asking ? "asking" : ""} ${ritual ? "ritualfade" : ""} ${busy || (res && !cardOn) ? "busy" : ""} ${res && cardOn ? "dimmed" : ""}`}>
             {phase === 0
               ? <BirthCanvas tint={saju ? EL_COLOR[saju.main] : undefined} size={guardianSize(vp)} />
-              : <div className="fade"><Guardian saju={saju} zo={zo} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} restRef={restRef} orbRef={orbRef} broodRef={broodRef} size={guardianSize(vp)} /></div>}
+              : <div className="fade"><Guardian saju={saju} zo={zo} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} restRef={restRef} orbRef={orbRef} gyeotRef={gyeotRef} broodRef={broodRef} size={guardianSize(vp)} /></div>}
             <div className="gtext up">
               {phase === 0 && <div className="formwrap"><p className="forming">{birth.name ? `${birth.name}, 흩어져 있던 조각들이` : "흩어져 있던 조각들이"}<br />너를 향해 모이고 있어…<br />너의 수호신이 돌아오는 중이야.</p><ul className="formsteps">{FORM_STEPS.map((s, i) => <li key={i} className={i < formStep ? "done" : i === formStep ? "now" : ""}>{i < formStep ? "✓" : i === formStep ? "✦" : "·"} {s}{i === formStep ? "…" : ""}</li>)}</ul></div>}
             </div>
