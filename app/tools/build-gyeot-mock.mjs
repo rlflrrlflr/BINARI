@@ -134,6 +134,7 @@ const HTML = `<!doctype html><meta charset="utf-8">
   .els{display:flex;gap:6px}
   .els button{background:#12121f;color:var(--dim);border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:13px}
   .els button.on{background:#1e1b3a;color:#fff;border-color:#4a4380}
+  .hint{color:#6f6a82;font-size:10px}
   .panels{position:relative}
   canvas#gl{width:100%;display:block;border-radius:14px;background:#04040a}
   .heads{display:grid;grid-template-columns:repeat(6,1fr);gap:0;margin-bottom:8px}
@@ -155,6 +156,7 @@ const HTML = `<!doctype html><meta charset="utf-8">
 
   <div class="bar">
     <div class="fld"><label>본체 오행</label><div class="els" id="els"></div></div>
+    <div class="fld"><label>자세 <span class="hint">— 오가며 보라</span></label><div class="els" id="pose"></div></div>
     <div class="fld"><label>곁 밝기 <output id="oLum"></output></label><input type="range" id="lum" min="0" max="1.4" step="0.02" value="0.45"></div>
     <div class="fld"><label>궤도 반경 <output id="oRad"></output></label><input type="range" id="rad" min="0.5" max="2" step="0.02" value="1.05"></div>
     <div class="fld"><label>공전 속도 <output id="oSpd"></output></label><input type="range" id="spd" min="0" max="1.6" step="0.02" value="0.42"></div>
@@ -174,6 +176,10 @@ const HTML = `<!doctype html><meta charset="utf-8">
       <li><b>관계는 방향으로만</b> — 생이면 곁에서 본체로 알갱이가 흘러들고, 극이면 궤도가 <b>반대로 돌며 본체를 가로지르고</b> 스치는 지점에 마디 하나가 밝아진다. 동일이면 나란히 돌다 겹치는 구간에서 같이 밝아진다.</li>
       <li><b>숫자 없음</b> — 개수·점수·진행바를 쓰지 않는다. 곁이 0이어도 ①번 판처럼 화면이 완결된다(빈 슬롯 금지).</li>
       <li><b>친밀도</b>는 밝기와 거리로만 나타난다. 소원해져도 사라지지 않고 멀어질 뿐이다 — 슬라이더를 왼쪽 끝까지 내려 확인.</li>
+      <li><b>자세는 바뀌고 형태는 안 바뀐다</b> — 위 <b>자세</b> 토글을 오가며 보라. 달라지는 건 <b>이미 있는 uniform 넷</b>뿐이다:
+        구심점(<code>u_focal</code> 0.55→0.16 · 안으로 모임 ↔ 열려 있음) · 자전(0.30→0.42) · 아주 살짝 폄(<code>u_expand</code> 0→0.05) · 호흡 깊이.
+        <b>형태 축(<code>u_form</code>)과 색은 한 톨도 안 건드린다.</b> 실제 앱에선 이 값을 탭 전환 때 ~1초에 걸쳐 보간한다 —
+        <b>끊기면 '교체'로 읽히고, 이어지면 '자세'로 읽힌다.</b> 그게 이 변경이 헌장(수호신 비주얼 교체 금지)을 안 어기는 조건이다.</li>
       <li><b>많아져도 안 늘어난다</b> — 사람이 늘어도 곁이 쓰는 <b>입자 총량은 고정</b>이고, 궤도에 서는 건 <b>최근에 주고받은 셋까지</b>다. 나머지는 바깥으로 물러나 배경 성운이 된다 — 세어지지 않고, 사라지지도 않는다. ⑤(규칙 없음)와 ⑥(규칙 적용)을 나란히 보면 이 규칙이 왜 있어야 하는지가 보인다.</li>
       <li><b>비용</b> — 실제 앱에 넣을 땐 헤일로(<code>step(0.84,a_r1.y)</code>, 본체 입자의 16%) 전례대로 <b>기존 입자에서 떼어 재배정</b>한다. 렌더 비용 추가 0. 시안에서만 따로 그린다(슬라이더로 만져 보려고).</li>
     </ul>
@@ -199,7 +205,15 @@ const srnd = (seed) => { let h = seed >>> 0; return () => ((h = (h*1664525+10139
 const F_AL = { "화":0.36, "수":0.31, "목":0.32, "금":0.29, "토":0.26 };
 const F_PS = { "금":0.82, "토":0.9 };
 
-let elIdx = 0;
+let elIdx = 0, pose = "gyeot";
+/* 자세 — **형태 축(u_form)은 손대지 않는다.** 이미 있는 uniform 만 다르게 준다.
+   판결: 안으로 모인다(u_focal 높음 = 코어 발광·구심), 느리게, 팽창 없음.
+   곁  : 열려 있다(u_focal 낮음 = 중심 없이 벌어짐), 조금 더 돌고, 아주 살짝 편다.
+   실제 앱에서는 탭 전환 때 이 값들을 ~1초에 걸쳐 보간한다 — 그래야 '교체'가 아니라 '자세'로 읽힌다. */
+const POSE = {
+  judge: { focal:0.55, R:0.80, speed:0.30, expand:0.00, breathAmp:1.0 },
+  gyeot: { focal:0.16, R:0.87, speed:0.42, expand:0.05, breathAmp:1.6 },
+};
 const S = { lum:0.45, rad:1.05, spd:0.42, tail:0.5, close:1 };
 const relName = { "1":"생", "0":"동", "-1":"극" };
 function partnerEl(myKey, rel){
@@ -222,6 +236,12 @@ function paintCaps(){
 }
 document.getElementById("els").innerHTML = DATA.els
   .map((e,i) => '<button data-i="'+i+'" class="'+(i?"":"on")+'">'+e.key+'</button>').join("");
+document.getElementById("pose").innerHTML =
+  '<button data-p="judge">판결 자세</button><button data-p="gyeot" class="on">곁 자세</button>';
+document.querySelectorAll("#pose button").forEach(b => b.onclick = () => {
+  pose = b.dataset.p;
+  document.querySelectorAll("#pose button").forEach(x => x.classList.toggle("on", x===b));
+});
 document.querySelectorAll("#els button").forEach(b => b.onclick = () => {
   elIdx = +b.dataset.i;
   document.querySelectorAll("#els button").forEach(x => x.classList.toggle("on", x===b));
@@ -283,20 +303,21 @@ function init(){
     gl.useProgram(bodyP);
     gl.bindBuffer(gl.ARRAY_BUFFER,b0); gl.enableVertexAttribArray(A0); gl.vertexAttribPointer(A0,4,gl.FLOAT,false,0,0);
     gl.bindBuffer(gl.ARRAY_BUFFER,b1); gl.enableVertexAttribArray(A1); gl.vertexAttribPointer(A1,4,gl.FLOAT,false,0,0);
-    gl.uniform1f(L.u_R,0.8); gl.uniform1f(L.u_arms,5); gl.uniform1f(L.u_strands,5);
-    gl.uniform1f(L.u_twist,2.1); gl.uniform1f(L.u_speed,0.30); gl.uniform1f(L.u_chaos,0.9);
-    gl.uniform1f(L.u_focal,0.55); gl.uniform1f(L.u_nayF,0.58); gl.uniform1f(L.u_nayA,0.45);
+    const P = POSE[pose];
+    gl.uniform1f(L.u_R,P.R); gl.uniform1f(L.u_arms,5); gl.uniform1f(L.u_strands,5);
+    gl.uniform1f(L.u_twist,2.1); gl.uniform1f(L.u_speed,P.speed); gl.uniform1f(L.u_chaos,0.9);
+    gl.uniform1f(L.u_focal,P.focal); gl.uniform1f(L.u_nayF,0.58); gl.uniform1f(L.u_nayA,0.45);
     gl.uniform1f(L.u_lum,0.92); gl.uniform1f(L.u_twk,1); gl.uniform1f(L.u_beat,3);
     gl.uniform1f(L.u_k,1); gl.uniform1f(L.u_zodiac,4); gl.uniform2f(L.u_touchVel,0,0);
     gl.uniform2f(L.u_touch,0,0); gl.uniform1f(L.u_touchAmt,0); gl.uniform1f(L.u_hold,0);
-    gl.uniform1f(L.u_trailLive,0); gl.uniform1f(L.u_expand,0); gl.uniform1f(L.u_bright,1); gl.uniform1f(L.u_agi,0);
+    gl.uniform1f(L.u_trailLive,0); gl.uniform1f(L.u_expand,P.expand); gl.uniform1f(L.u_bright,1); gl.uniform1f(L.u_agi,0);
     gl.uniform4fv(L.u_trail,trail);
     const c1=hex2rgb(el.colors[0]), c2=hex2rgb(el.colors[1]);
     gl.uniform3fv(L.u_c1,c1); gl.uniform3fv(L.u_c2,c2); gl.uniform3fv(L.u_acc,hex2rgb(el.colors[2]));
     gl.uniform3fv(L.u_wispCol,[0.5+c1[0]*0.28,0.55+c1[1]*0.26,0.66+c1[2]*0.2]);
     gl.uniform1f(L.u_form,el.form);
     gl.uniform1f(L.u_ps,1.8*dpr*(F_PS[el.key]||1));
-    const bph=t*Math.PI*2/9; gl.uniform1f(L.u_breath, Math.sin(bph-0.35*Math.sin(bph)));
+    const bph=t*Math.PI*2/9; gl.uniform1f(L.u_breath, Math.sin(bph-0.35*Math.sin(bph))*P.breathAmp);
     const A=(F_AL[el.key]||0.31);
     gl.uniform1f(L.u_t,t);
     gl.uniform1f(L.u_psMul,3.6); gl.uniform1f(L.u_alpha,0.05*A); gl.drawArrays(gl.POINTS,0,n);
@@ -325,8 +346,10 @@ function init(){
     const col = hex2rgb(DATA.elColor[pk][1]);
     gl.uniform3fv(CL.u_col,col);
     gl.uniform1f(CL.u_t,t); gl.uniform1f(CL.u_ang,c.ang); gl.uniform1f(CL.u_rel,c.rel);
-    /* 친밀도가 낮을수록 멀어지고 어두워진다 — 사라지지는 않는다 */
-    gl.uniform1f(CL.u_rad,S.rad*(1+(1-S.close)*0.5)*radK); gl.uniform1f(CL.u_spd,S.spd); gl.uniform1f(CL.u_tail,S.tail);
+    /* 친밀도가 낮을수록 멀어지고 어두워진다 — 사라지지는 않는다.
+       자세로 본체가 펴지면 궤도도 같이 벌어져야 한다. 안 그러면 곁이 본체 안에 파묻힌다. */
+    const PZ = POSE[pose], poseK = (PZ.R/0.80)*(1+PZ.expand);
+    gl.uniform1f(CL.u_rad,S.rad*(1+(1-S.close)*0.5)*radK*poseK); gl.uniform1f(CL.u_spd,S.spd); gl.uniform1f(CL.u_tail,S.tail);
     gl.uniform1f(CL.u_lum,S.lum*lumK); gl.uniform1f(CL.u_close,S.close);
     gl.uniform2fv(CL.u_ctr, bodyCenter(t));
     gl.uniform1f(CL.u_ps,1.7*dpr); gl.uniform1f(CL.u_alpha,0.10); gl.drawArrays(gl.POINTS,0,budget);

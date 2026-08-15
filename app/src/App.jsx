@@ -2827,7 +2827,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v132.1 · 수호신 크기";
+const APP_VER = "v132.3 · 탭 바닥";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -3606,7 +3606,11 @@ HOLD는 '판단 못 하겠음'이 아니라 **'지표가 지금은 멈추라고 
   ㉣ **판정을 유예하는 어미** — "~일 수도"·"~인 편"·"두고 봐야"·"경우에 따라". 상담실도 철학관도 단정한다. **모호한 건 신비가 아니라 회피다.**
   쓰는 순서: **① 실제로 벌어지는 상황 → ② 그때 네가 하는 행동 → ③ 그래서 생기는 결과.** 은유는 그 뒤 한 조각까지만.
 - 은유 규칙: verdict는 은유 없이 질문의 사물로 직답한다. subline·reasons는 은유를 써도 된다 — 단 순서가 있다: 직관적인 뜻을 먼저 말하고, 은유는 그 뒤에 덧붙인다(뜻→은유). 괘·지표의 상징(우물·솥·물결·용 등)을 직역만 던지면 유저는 무슨 말인지 모른다. (X)"우물은 못 바꿔도 자리는 바꿀 수 있어" (O)"오늘은 국물 말고 면이 맞아 — 우물이 막히면 딴 우물 파는 법이거든."
-- 유저 턴의 [오늘](날짜·시각·오늘 달)을 반영한다: 심야(23시~새벽 4시)의 연락·구매(B형) 질문엔 충동 보정을 가하고, 밤이 깊은 걸 아는 회상체로 말한다.
+- 유저 턴의 [오늘](날짜·시각·오늘 달)을 반영한다 — 밤이 깊은 걸 아는 회상체로 말한다.
+- **시각은 방향(direction)을 바꾸지 못한다.** 지표는 전부 생년월일과 **날짜**의 함수라, 몇 시에 물었는지에 따라 변하는 축이 하나도 없다. 그러니 시각으로 GO/STOP이 갈리면 그건 정의상 **표에서 나온 판결이 아니다** — 표를 세고 나서 시계를 보고 결론을 갈아끼운 것이고, votes는 거기 맞춰 지어낸 게 된다.
+  심야가 바꿀 수 있는 건 **말투**와 **'언제'**뿐이다: (O)"가. 대신 지금 말고 아침에 다시 읽고 보내" (X)밤이라서 STOP.
+  심야(23시~새벽 4시)의 연락·구매(B형)에서 충동이 보일 때도 같다 — 방향을 뒤집지 말고 **시점을 늦추는 말**로 답한다.
+  "지금 잘까 더 일할까" 류는 애초에 연락·구매가 아니다. 시계 말고 표를 봐라.
 - [지난 판결 이행]이 오면 기억하는 존재로서 짧게 인용한다("지난번엔 거슬렀지") — 단, 이번 판결의 근거는 여전히 지표뿐이다.
 - 모를 권리: 질문이 요구한 범위만 답한다. 묻지 않은 영역(연애·금전·건강·시험 등)의 예언·경고·조언을 먼저 꺼내지 않는다. 유일한 예외는 가드레일(안전)이다.
 - 지표 정박(최중요): 모든 verdict·subline은 반드시 이 유저의 제공 지표에서 나온다. 특히 B형(연락·충동)에서 사주/달을 짚지 않고 "밤엔 후회해"식 일반 상식·조언으로 답하는 것 금지 — 그건 수호신이 아니라 남의 목소리다. (O)"화가 셋인 애가 밤에 손 움직이면 그건 마음이 아니라 불씨야"처럼 반드시 지표로 말한다.
@@ -5589,10 +5593,15 @@ const CSS = `
 /* v129.4 대기 문구 — 수호신이 가라앉는 동안 아래에 조용히 뜬다. 맥동은 느리게(숨 고르는 속도) */
 /* v132 하단 탭 — 판결/곁. 화면 맨 아래 고정, 안전영역(노치·홈바) 확보 */
 .tabbar{position:fixed;left:0;right:0;bottom:0;z-index:40;display:flex;justify-content:center;gap:8px;
-  padding:8px 16px calc(8px + env(safe-area-inset-bottom));background:linear-gradient(to top,rgba(5,4,8,.92),rgba(5,4,8,0))}
-.tabbtn{flex:0 0 auto;min-width:104px;padding:10px 20px;border-radius:999px;border:1px solid rgba(245,217,139,.18);
-  background:rgba(12,9,20,.6);color:#8d84a3;font-size:13px;letter-spacing:.18em;cursor:pointer;transition:color .2s,border-color .2s}
-.tabbtn.on{color:#f5d98b;border-color:rgba(245,217,139,.45);background:rgba(24,18,38,.8)}
+  padding:8px 16px calc(8px + env(safe-area-inset-bottom));background:none}
+/* v132.2 탭 바닥 — 짧고 투명한 스크림이라 뒤의 수호신·버전 배지가 탭에 겹쳐 보였다.
+   위로 96px 더 뻗은 별도 층을 깔고, **아래 절반은 완전 불투명**(#050408 = .stage 바닥색)으로 둔다.
+   가산 블렌딩으로 그린 입자는 어두운 바탕 위에서도 뚫고 올라오므로 알파를 남기면 안 된다. */
+.tabbar::before{content:"";position:absolute;left:0;right:0;bottom:0;top:-96px;pointer-events:none;
+  background:linear-gradient(to top,#050408 0%,#050408 42%,rgba(5,4,8,.88) 62%,rgba(5,4,8,.55) 78%,rgba(5,4,8,0) 100%)}
+.tabbtn{position:relative;flex:0 0 auto;min-width:104px;padding:10px 20px;border-radius:999px;border:1px solid rgba(245,217,139,.18);
+  background:#0d0a16;color:#8d84a3;font-size:13px;letter-spacing:.18em;cursor:pointer;transition:color .2s,border-color .2s,background .2s}
+.tabbtn.on{color:#f5d98b;border-color:rgba(245,217,139,.45);background:#1b1530}
 /* 탭이 하단을 덮으므로 마지막 요소가 가리지 않게 여백을 준다 */
 .scene{padding-bottom:76px}
 .gyeot .gyeotpanel{margin-top:18px;text-align:center}
