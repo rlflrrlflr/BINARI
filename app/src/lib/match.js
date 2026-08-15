@@ -65,7 +65,8 @@ const LP_TASK = { 1: "혼자 서는 법", 2: "둘 사이를 잇는 법", 3: "밖
   5: "한 자리에 묶이지 않는 법", 6: "떠맡되 짓눌리지 않는 법", 7: "혼자 깊이 파는 법",
   8: "돈과 힘을 다루는 법", 9: "놓아주는 법", 11: "남을 비추는 법", 22: "크게 짓는 법", 33: "가르치는 법" };
 
-/** 두 사람의 궁합. a·b 는 { saju:{idx}, birth:{y,m,d,h,min}, sex, name } */
+/** 두 사람의 궁합. a·b 는 { saju:{idx}, birth:{y,m,d,h,min} }
+    ⚠ sex 는 받지 않는다 — 이 엔진은 성별을 쓰지 않는다(2026-08-15에 화면 칩과 함께 걷어냄). */
 export function readMatch({ a, b, lat = 37.5665, lon = 126.978 } = {}) {
   if (!a?.saju?.idx || !b?.saju?.idx || !a?.birth?.y || !b?.birth?.y) return null;
   const notes = [];

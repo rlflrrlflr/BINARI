@@ -1368,16 +1368,16 @@ function MatchDoc({ saju, birth, onClose }) {
       const noH = !f.h && f.h !== 0;
       const bs = calcSaju(+f.y, +f.m, +f.d, noH ? 12 : +f.h, 0, noH, 126.978);
       if (!bs?.idx) return null;
-      return readMatch({ a: { saju, birth, sex: birth?.sex },
-        b: { saju: bs, birth: { y: +f.y, m: +f.m, d: +f.d, h: noH ? 12 : +f.h, min: 0 }, sex: f.sex || null } });
+      return readMatch({ a: { saju, birth },
+        b: { saju: bs, birth: { y: +f.y, m: +f.m, d: +f.d, h: noH ? 12 : +f.h, min: 0 } } });
     } catch (e) { return null; }
-  }, [done, f.y, f.m, f.d, f.h, f.sex, saju, birth]);
+  }, [done, f.y, f.m, f.d, f.h, saju, birth]);
   useEffect(() => { track("match_opened", { has_saju: !!saju?.idx }); }, []);
   /* 여기가 실제 사고 경로다: 입력 검증(ok)은 통과했는데 readMatch 가 null 을 돌려주면
      화면은 **아무 말 없이 입력 폼으로 되돌아간다.** 유저 눈에는 버튼이 안 먹는 걸로 보이고
      우리 쪽엔 match_run 만 남아서 "돌렸는데 왜 결과가 없지"가 영영 안 잡힌다. */
   const mfailed = done && !r;
-  useEffect(() => { if (mfailed) track("match_failed", { has_hour: f.h != null, has_sex: !!f.sex }); }, [mfailed]);
+  useEffect(() => { if (mfailed) track("match_failed", { has_hour: f.h != null }); }, [mfailed]);
   const readRef = useDocRead("match_read", { done });
   useReveal(readRef);            // v128 진입 모션 — 같은 ref 를 공유한다
   const Ref = ({ n }) => (notesOn && n ? <sup className="impfx">{n}</sup> : null);
@@ -1404,10 +1404,9 @@ function MatchDoc({ saju, birth, onClose }) {
           <input className="impnum w48" type="number" placeholder="시" min="0" max="23" value={f.h ?? ""} onChange={(e) => set("h", e.target.value === "" ? null : +e.target.value)} />
           <em className="impaskhint">모르면 비워 둬 — 그만큼만 얕게 읽어</em>
         </div>
-        <div className="impaskrow"><span>성별</span>
-          <button className={"impchip" + (f.sex === "M" ? " on" : "")} onClick={() => set("sex", "M")}>남</button>
-          <button className={"impchip" + (f.sex === "F" ? " on" : "")} onClick={() => set("sex", "F")}>여</button>
-        </div>
+        {/* 성별 칩 제거(2026-08-15) — readMatch 에 sex 를 넘기고는 있었지만 match.js 본문에서
+            **한 번도 읽지 않는다**(JSDoc 한 줄뿐). 안 쓰는 값을 위해 **남의 성별**을 묻고 있었다.
+            제3자 정보는 쓸 데가 분명할 때만 받는다 — 쓰지도 않으면서 받는 건 그냥 수집이다. */}
         <p className="impaskw">상대의 <b>이름도 연락처도 안 받아.</b> 생년월일은 이 기기에만 남고 서버로 안 보내.
           궁합은 <b>연인만이 아니야</b> — 같이 일하는 사람, 가족, 동업자에게도 그대로 써.</p>
         <button className="btn mt" disabled={!ok} onClick={() => { try { localStorage.setItem(MATCH_LAST_KEY, JSON.stringify(f)); } catch {} track("match_run", { has_hour: f.h != null }); setDone(true); }}>
@@ -2964,7 +2963,10 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v134 · 곁 렌더";
+/* 돌아올 주소 — 부적·각인 카드·공유 링크가 같은 값을 쓴다. 자체 도메인을 붙이는 날 **여기 한 곳만** 고친다.
+   예전엔 세 곳에 따로 박혀 있어서, 한 곳만 고치면 나머지가 옛 주소로 남는 종류의 사고가 예약돼 있었다. */
+const SHARE_HOST = "https://binari-sepia.vercel.app";
+const APP_VER = "v134.1 · 고지·서신·부적";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -3083,7 +3085,12 @@ direction=${dir} / verdict="${res?.verdict || ""}" / category=${res?.category ||
 1) "네가 망설인 자리" — 유저가 쓴 질문을 직접 인용하며 연다.${hesit ? ` 유저는 망설인 이유로 "${hesit}"를 골랐다 — 이걸 짚는다.` : ""} 그다음 **이 사람의 명식에서 이런 종류의 결정이 유독 어려운 이유**를 십성 분포로 진단한다(관성이 두터우면 남의 눈이 먼저 보이고, 비겁이 많으면 묻지 않고 밀어붙이고, 식상이 많으면 벌여놓고 못 거둔다 — 실제 분포대로). 위로가 아니라 진단이다.
 2) "여덟 글자가 이 일을 보는 눈" — 이 질문이 걸린 영역(돈·일·사람·몸)이 이 사람 명식에서 **두터운 자리인지 빈 자리인지**를 일간·오행 개수·십성으로 말한다. 카드 뒷면 근거를 반복하지 말고, 그 근거들이 왜 그렇게 갈렸는지 한 겹 아래로 내려간다.
 3) "언제 — 흐름과 움직일 날" — **이 서신에서 가장 중요한 장.** 지금 어느 열 해의 어디쯤인지, 올해의 결, 다음 석 달의 결. 그리고 **실제로 움직일 날을 프로필의 길일에서 골라 두셋 찍는다.** "때가 되면"은 금지. 날짜를 못 찍으면 "이달 하순"·"추석 전"처럼 폭을 주되 반드시 시점을 남긴다.
-4) "누구와 — 도울 사람, 피할 자리" — 프로필의 신살·합충으로 이번 일에서 **힘이 되는 띠·사람 유형**과 **부딪히는 띠·자리**를 짚는다. 방위·직업 오행이 이 질문에 걸리면 함께. 프로필에 없는 것은 지어내지 않는다 — 있는 것만 쓴다.
+4) "누구와 — 도울 사람, 피할 자리" — 프로필의 신살·합충으로 이번 일에서 **힘이 되는 띠·사람 유형**과 **조심할 자리**를 짚는다. 방위·직업 오행이 이 질문에 걸리면 함께. 프로필에 없는 것은 지어내지 않는다 — 있는 것만 쓴다.
+   **부딪히는 띠는 반드시 '쓸모'로 쓴다 — 사람을 미워할 이유로 주지 않는다.** 무료 명식 리포트는 이미 그렇게 쓰고 있다("미워하란 게 아니라, 큰돈·보증만 조심하란 뜻이야"). 값을 받는 서신이 그보다 험하면 안 된다.
+   반드시 **무엇을 조심하라는 것인지**를 붙인다 — 돈·보증·계약·약속 시점처럼 **행동**으로. 띠는 사람의 등급이 아니라 그 사람과 나 사이에서 조심할 **국면**의 이름이다.
+   (X)"소띠는 피해라" · "뱀띠와는 엮이지 마라" · "그 사람은 너를 해친다" — 사람 자체를 배제하는 말은 쓰지 않는다.
+   (O)"소띠와는 돈이 얽히면 말이 길어져 — 같이 일하는 건 괜찮고, 보증만 서지 마."
+   (O)"뱀띠 앞에서는 결정을 그 자리에서 내지 마. 하루 두고 답해."
 5) "무엇을 걸고" — 두 가지를 반드시 담는다. ①${cost}을 하나, 정직하게 명시한다(좋은 말만 하지 않는다). ②마지막 줄에 **반증 조건**: "이런 일이 벌어지면 이 판결을 뒤집어라". 조건은 감정이 아니라 **눈으로 확인되는 사건**이어야 한다.
 
 [정직성 — 이 넷은 형식이 아니라 상품의 본체다]
@@ -3385,11 +3392,19 @@ function buildBujeokPoster({ saju, direction, seed, tosses, hexInfo, category, a
   }
   const d = new Date();
   ctx.font = "400 30px sans-serif"; ctx.fillStyle = "#5f5670";
-  ctx.fillText(`${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")} · 수호신의 부적`, W / 2, 1810);
+  ctx.fillText(`${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")} · 수호신의 부적`, W / 2, 1772);
   /* A-5(작업지시 2026-08-14): 이미지는 앱 밖으로 나가서 혼자 돌아다닌다 —
      받은 사람은 우리 화면의 어떤 고지도 못 본다. 그림 안에 넣지 않으면 표시가 사라진다. */
   ctx.font = "400 26px sans-serif"; ctx.fillStyle = "#4e4660";
-  ctx.fillText("AI가 생성한 내용 · 재미로 보는 참고용", W / 2, 1858);
+  ctx.fillText("AI가 생성한 내용 · 재미로 보는 참고용", W / 2, 1820);
+  /* 돌아올 주소 — 이 그림은 앱 밖으로 나가는 **유일한** 자산인데 지금까지 주소가 없었다.
+     받은 사람이 좋게 봐도 어디로 가야 할지 알 수 없으니, 루프의 마지막 칸이 비어 있던 셈이다.
+     ⚠ 질문 원문·이름은 여전히 넣지 않는다(처리방침 5-1) — 넣는 건 도메인 하나뿐이다.
+     QR 은 넣지 않았다: 인코더를 직접 짜야 하고(외부 의존 금지), 1080폭에서 읽히려면
+     240px 이상을 먹어 판결 문구와 자리를 다툰다. 주소가 짧아 눈으로 옮겨 적을 수 있다. */
+  ctx.font = "500 30px sans-serif"; ctx.fillStyle = "#8d7fb0";
+  /* y=1906 은 캔버스(1920) 바닥에 붙어 글자가 잘렸다(렌더해서 확인). 세 줄을 위로 당겼다. */
+  ctx.fillText(SHARE_HOST.replace(/^https?:\/\//, ""), W / 2, 1874);
   return cv;
 }
 function dataUrlToFile(dataUrl, name) {                        // 동기 변환(제스처 보존용)
@@ -3555,7 +3570,7 @@ function cardBase(seed, tint) {
 function cardFoot(ctx) {
   ctx.textAlign = "center";
   ctx.font = "600 34px sans-serif"; ctx.fillStyle = "#c9b98f";
-  ctx.fillText("binari-sepia.vercel.app", CARD_W / 2, 1800);
+  ctx.fillText(SHARE_HOST.replace(/^https?:\/\//, ""), CARD_W / 2, 1800);
   ctx.font = "400 24px sans-serif"; ctx.fillStyle = "#463f56";
   ctx.fillText("생년월일로 계산한 전통 해석 · 재미로 보는 참고용", CARD_W / 2, 1858);
 }
@@ -4509,7 +4524,7 @@ export default function App() {
        곧 위조로 읽을 수 있다. 서명 없는 링크를 하나라도 흘리면 그 규칙이 깨진다. */
     const enc = encodeShare(payload);
     const sig = enc ? await signShare(enc) : "";
-    const url = (enc && sig) ? `https://binari-sepia.vercel.app/?v=${enc}.${sig}` : "https://binari-sepia.vercel.app/?ref=share";
+    const url = (enc && sig) ? `${SHARE_HOST}/?v=${enc}.${sig}` : `${SHARE_HOST}/?ref=share`;
     try {
       if (navigator.share) { await navigator.share({ title: "비나리 — 수호신의 판결", text, url }); return; }
     } catch (_) { return; } // 유저 취소 포함 — 조용히
