@@ -2647,7 +2647,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v127.2 · 부적";
+const APP_VER = "v127.4 · 오행 색";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -2994,6 +2994,15 @@ function buildBujeokPoster({ saju, direction, seed, tosses, hexInfo, category, a
   try {
     if (guardian && guardian.width) {
       ctx.save();
+      /* v127.3 정지 서명 — 움직일 땐 오행 5형태가 갈리는데 **멈춘 그림에서는 금·토·수가
+         비슷한 입자구름으로 읽힌다**(버전 보드 정지 캡처 실측). 형태는 건드리지 않는다(설계 헌장) —
+         대신 캡처본에만 그 사람의 오행 색 아우라를 뒤에 깔아 색으로 서명이 서게 한다.
+         라이브 화면은 그대로다: 실유저가 유일하게 무조건 호평한 대상이라 만지지 않는다. */
+      const elc = (EL_COLOR[saju?.main] || ["#f5d98b", "#ffe9ad"]);
+      const au = ctx.createRadialGradient(W / 2, 560, 40, W / 2, 560, 380);
+      au.addColorStop(0, elc[0] + "3a"); au.addColorStop(0.55, elc[0] + "16"); au.addColorStop(1, "transparent");
+      ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 1;
+      ctx.fillStyle = au; ctx.beginPath(); ctx.arc(W / 2, 560, 380, 0, 7); ctx.fill();
       ctx.globalAlpha = 0.95; ctx.globalCompositeOperation = "lighter";
       const gs = 620;
       /* 화면 캔버스는 가로가 긴 사각형이라 그대로 늘리면 수호신이 한쪽으로 쏠린다 —
@@ -4089,7 +4098,10 @@ export default function App() {
   const guardianIntro = saju && zo ? `나는 ${saju.nayin ? `'${saju.nayin.split("·")[1] || saju.nayin}'` : (saju.main === "수" ? "깊은 물결" : saju.main === "화" ? "꺼지지 않는 불꽃" : saju.main === "목" ? "자라나는 숲" : saju.main === "금" ? "벼려진 빛" : "단단한 대지")}의 기운을 두른, ${zo.el === "물" ? "안개처럼 흐르는" : zo.el === "불" ? "타오르는 형상의" : zo.el === "공기" ? "바람으로 된" : "산처럼 고요한"} 존재야.` : "";
 
   return (
-    <div className="stage">
+    /* v127.4 오행 색 연동 — 사람마다 다른 건 수호신뿐이고 화면 크롬은 전 유저 같은 금색이었다.
+       골드 기조는 그대로 두고(가독성) **글로우만** 그 사람의 오행 색으로 물들인다.
+       경쟁 8개사는 브랜드 컬러가 고정이라 구조적으로 못 하는 개인화다. */
+    <div className="stage" style={saju ? { "--elc": (EL_COLOR[saju.main] || [])[0] || "#f5d98b", "--elc2": (EL_COLOR[saju.main] || [])[1] || "#ffe9ad" } : undefined}>
       <style>{CSS}</style>
       <VerBadge />
 
@@ -4789,6 +4801,8 @@ const CSS = `
 .chk input{accent-color:#c98f3d}
 .btn{font-family:inherit;font-size:14px;font-weight:600;letter-spacing:.14em;padding:13px 28px;border-radius:999px;border:1px solid rgba(245,217,139,.4);background:transparent;color:#f0e2b8;cursor:pointer;transition:box-shadow .3s,border-color .3s,background .3s,transform .1s}
 .btn.gold{background:linear-gradient(180deg,#f5d98b,#c98f3d);color:#241a08;border:none;box-shadow:0 6px 22px rgba(201,143,61,.3)}
+/* v127.4: color-mix 미지원 브라우저는 위 금색 글로우를 그대로 쓴다(선언이 통째로 무시됨) */
+.btn.gold{box-shadow:0 6px 22px color-mix(in srgb,var(--elc,#c98f3d) 42%,transparent)}
 .btn.ghost{border-color:rgba(245,217,139,.32);background:rgba(245,217,139,.05);color:#d6c493;box-shadow:0 2px 14px rgba(0,0,0,.28)}.btn:hover{border-color:rgba(245,217,139,.7);box-shadow:0 0 16px rgba(245,217,139,.2)}.btn.gold:hover{box-shadow:0 8px 26px rgba(201,143,61,.45)}.btn:active{transform:translateY(1px)}.btn:disabled{opacity:.45;cursor:default}.mt{margin-top:18px}
 .fine{font-family:sans-serif;font-size:11px;color:#6b617d;margin-top:14px;line-height:1.6}
 /* AI기본법 제31조 — 생성형 AI 사전 고지·결과물 표시(별지 잔글씨, 판결문 형식 불변) */
@@ -4866,6 +4880,7 @@ const CSS = `
 .cell:hover{border-color:rgba(245,217,139,.5)}
 .cell.sel{border-color:#ffe9ad;color:#241a08;font-weight:600;background:linear-gradient(180deg,#f5d98b,#d9ad5c);box-shadow:0 0 16px rgba(245,217,139,.35)}
 .halo{position:relative;filter:drop-shadow(0 0 30px rgba(245,217,139,.15));margin:8px 0;transition:filter .6s}
+.halo{filter:drop-shadow(0 0 30px color-mix(in srgb,var(--elc,#f5d98b) 22%,transparent))}
 .halo.wide{width:100vw;margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);display:flex;justify-content:center;margin-top:calc(min(110vw,57vh,640px)*-0.09);margin-bottom:calc(min(110vw,57vh,640px)*-0.16);transition:filter .6s,transform .9s cubic-bezier(.2,.8,.2,1),opacity .8s ease}
 .halo.wide.lobbyscale{transform:translateY(7vh) scale(1.52)}
 .halo.wide.dissolved{opacity:0;transform:scale(1.7);filter:blur(7px);pointer-events:none}
