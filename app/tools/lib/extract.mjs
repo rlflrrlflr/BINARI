@@ -2,6 +2,16 @@
    손으로 베끼지 않는 것이 핵심 — 보드가 앱과 어긋나 거짓말하는 일을 막는다. */
 import { execSync } from "node:child_process";
 
+/* 셰이더 문자열은 TUNE 값을 보간해 쓴다(단일 진실 원천). 손으로 베끼면 또 어긋나므로
+   원본의 TUNE 블록을 그대로 평가해 같은 값으로 채운다. */
+export function readTune(src) {
+  const i = src.indexOf("const TUNE = {");
+  if (i < 0) return null;
+  const e = src.indexOf("};", i);
+  if (e < 0) return null;
+  try { return new Function(src.slice(i, e + 2) + "\nreturn TUNE;")(); } catch { return null; }
+}
+
 export function sliceConst(src, name) {
   const head = "const " + name + " = `";
   const i = src.indexOf(head);
@@ -9,8 +19,13 @@ export function sliceConst(src, name) {
   const s = i + head.length;
   const e = src.indexOf("`;", s);
   if (e < 0) throw new Error(`${name} 의 끝을 못 찾음`);
-  const body = src.slice(s, e);
-  if (body.includes("${")) throw new Error(`${name} 에 템플릿 보간이 있다 — 그대로 옮길 수 없음`);
+  let body = src.slice(s, e);
+  if (body.includes("${")) {
+    const tune = readTune(src);
+    if (tune) body = body.replace(/\$\{TUNE\.(\w+)\}/g, (m, k) =>
+      tune[k] === undefined ? m : String(tune[k]));
+  }
+  if (body.includes("${")) throw new Error(`${name} 에 풀 수 없는 템플릿 보간이 있다 — 그대로 옮길 수 없음`);
   return body;
 }
 

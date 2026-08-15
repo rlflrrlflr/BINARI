@@ -28,14 +28,6 @@ async function onboard(page) {
   await page.getByRole("button", { name: "다음" }).click();
   await page.getByRole("button", { name: "하늘을 열기" }).click();
   await page.getByRole("button", { name: "응, 기억나" }).click({ timeout: 12000 });
-  await page.waitForSelector("text=마음의 방", { timeout: 10000 });
-  
-  for (const v of ["안정", "성장", "자유", "인정", "관계", "성취"]) await page.getByRole("button", { name: v, exact: true }).click();
-  await page.getByRole("button", { name: "여섯 개 골랐어" }).click(); await page.waitForTimeout(300);
-  for (const v of ["안정", "성장", "자유"]) await page.getByRole("button", { name: v, exact: true }).click();
-  await page.getByRole("button", { name: "셋을 남겼어" }).click(); await page.waitForTimeout(300);
-  await page.getByRole("button", { name: "안정", exact: true }).click();
-  await page.getByRole("button", { name: "수호신 깨우기" }).click();
   await page.waitForSelector("text=두드려봐", { timeout: 12000 });
   await page.locator("canvas").first().dblclick();
   await page.waitForSelector("textarea.qbox", { timeout: 12000 }); await page.waitForTimeout(600);
@@ -111,7 +103,6 @@ await onboard(page);
   ck("각인 — 해마다 순역 막대가 그려진다", /위 = 움직이기 좋은 해/.test(it));
   ck("각인 — 좋은 해가 없으면 없다고 말한다", /옮기기 가장 좋은 해|자리가 열리는 해가 없어/.test(it));
 
-
   ck("각인 — 비문이 없다", !/(사람|문|손|틀)이 얇/.test(it), (it.match(/.{6}(사람|문|손|틀)이 얇.{6}/) || [""])[0]);
   ck("각인 — 뒤집히는 조건 셋", (await page.locator(".imptrig").count()) === 3);
   ck("각인 — 여든 해가 갈린다", (await page.locator(".impband").count()) >= 6, `${await page.locator(".impband").count()}구간`);
@@ -151,6 +142,59 @@ await onboard(page);
   const len = ((await page.locator(".imp").textContent()) || "").length;
   ck("각인 — 본문 4,000자 이상(값어치 두께)", len >= 4000, `${len}자`);
   ck("각주에는 기법 이름이 적힌다", /일간|하우스/.test((await page.locator(".impnotes").textContent()) || ""));
+
+  /* ── v128 진입 모션 ────────────────────────────────────────────────────────
+     창업자 지적: "그래프, 표가 나타나는 모션이 주기가 너무 짧아서 발작 일으키는 것처럼 느껴져."
+     원인은 속도가 아니라 **동시성**이었다 — 문서를 여는 순간 마흔 개 블록이 같이 움직였다.
+     그래서 이 검사가 지키는 건 넷이다:
+     ① 화면에 들어온 것만 움직인다(한 번에 켜지는 수에 상한)
+     ② 무한 반복 모션이 없다
+     ③ 표도 줄마다 채워지고 막대도 자라 오른다
+     ④ 벗어났다 돌아오면 다시 그려진다
+     ⚠ **계산된 스타일로 본다.** CSS 문자열만 보면 셀렉터가 안 맞아도 통과한다(v126에서 그랬다). */
+  {
+    const probe = () => ({
+      rv: document.querySelectorAll(".imp .rv").length,
+      on: document.querySelectorAll(".imp .rvin").length,
+      inf: [...document.querySelectorAll(".imp *")].filter((el) => {
+        const s = getComputedStyle(el);
+        return s.animationName !== "none" && s.animationIterationCount.includes("infinite");
+      }).length,
+      wipe: [...document.querySelectorAll(".imp *")].filter((el) => getComputedStyle(el).animationName.includes("impWipe")).length,
+      grow: [...document.querySelectorAll(".imp *")].filter((el) => getComputedStyle(el).animationName.includes("impGrow")).length,
+    });
+    const acc = { rv: 0, maxOn: 0, inf: 0, wipe: 0, grow: 0 };
+    for (const sel of [".imp .impcore", ".imp svg[aria-label='여정 지도']", ".imp .improws",
+                       ".imp .impmrows", ".imp .impyrs", ".imp .impband", ".imp .impck"]) {
+      await page.evaluate((s) => document.querySelector(s)?.scrollIntoView({ block: "center" }), sel);
+      await page.waitForTimeout(450);
+      const x = await page.evaluate(probe);
+      acc.rv = Math.max(acc.rv, x.rv); acc.maxOn = Math.max(acc.maxOn, x.on);
+      acc.inf += x.inf; acc.wipe = Math.max(acc.wipe, x.wipe); acc.grow = Math.max(acc.grow, x.grow);
+    }
+    ck("각인 — 블록이 뷰포트 진입 표식을 받는다", acc.rv >= 20, `${acc.rv}개`);
+    ck("각인 — 한 화면에 들어온 것만 움직인다(동시 진입 금지)", acc.maxOn >= 1 && acc.maxOn <= 14, `한번에 최대 ${acc.maxOn}개`);
+    ck("각인 — 무한 반복 모션이 없다", acc.inf === 0, `${acc.inf}개`);
+    ck("각인 — 표도 줄마다 채워진다", acc.wipe >= 5, `${acc.wipe}줄`);
+    ck("각인 — 막대가 축에서 자라 오른다", acc.grow >= 5, `${acc.grow}개`);
+    const rep = await page.evaluate(async () => {
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      const t = document.querySelector(".imp .impcore");
+      const far = document.querySelectorAll(".imp .impck");
+      if (!t || !far.length) return null;
+      t.scrollIntoView({ block: "center" }); await wait(500);
+      const a = t.classList.contains("rvin");
+      far[far.length - 1].scrollIntoView({ block: "center" }); await wait(650);
+      const b = t.classList.contains("rvin");
+      t.scrollIntoView({ block: "center" }); await wait(500);
+      return { a, b, c: t.classList.contains("rvin") };
+    });
+    ck("각인 — 화면에 들어오면 그려진다", !!rep && rep.a);
+    ck("각인 — 스크롤로 벗어나면 되감긴다", !!rep && !rep.b);
+    ck("각인 — 다시 오면 다시 그려진다", !!rep && rep.c);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(300);
+  }
   await page.getByRole("button", { name: "닫을게" }).click(); await page.waitForTimeout(500);
   ck("각인을 닫으면 로비로 돌아온다", (await page.locator(".imp").count()) === 0);
 
@@ -181,6 +225,12 @@ await onboard(page);
       ck("궁합 — 총점을 맨 뒤에만 둔다", /이 숫자를 먼저 보지 마/.test(mt));
       ck("궁합 — 헤어지라고 안 한다", !/(헤어져|정리해|만나지 마|그만 만나)/.test(mt));
       ck("궁합 — 다른 사람과 다시 볼 수 있다", /다른 사람과도 봐볼게/.test(mt));
+      /* v128 — 각인의 「같이 일하면 좋은 사람」(오행 한 줄)을 실제 사람으로 잇는 절 */
+      ck("궁합 — 같이 일하면 어떤가 절이 있다", /같이 일하면 어떤가/.test(mt) &&
+        ["둘의 역할", "누가 미나", "판은 누가 끄나", "말이 통하나", "얼마나 붙어 있어도 되나"].every((k) => mt.includes(k)),
+        ["둘의 역할", "누가 미나", "판은 누가 끄나", "말이 통하나", "얼마나 붙어 있어도 되나"].filter((k) => !mt.includes(k)).join(",") || "전부");
+      ck("궁합 — 일 절이 총점에 안 섞인다고 밝힌다", /총점에도 안 들어가/.test(mt));
+      ck("궁합 — 동업하지 말라고 안 한다", !/(동업하지 마|같이 일하지 마)/.test(mt));
     /* A-4: 궁합에도 고지가 붙는다 */
     ck("궁합 — 고지가 붙는다", /재미로 보는 참고용/.test(mt) && /관계를 끊거나 이으라는 판정이 아니고/.test(mt));
     }
@@ -190,8 +240,6 @@ await onboard(page);
 }
 await page.locator("textarea.qbox").fill("전남친에게 연락할까?"); await page.waitForTimeout(300);
 await page.getByRole("button", { name: "판결을 청한다" }).click();
-await page.waitForSelector("text=동전 셋", { timeout: 5000 });
-await page.getByRole("button", { name: "한 번에 던지기" }).click();
 let got = false;
 for (let i = 0; i < 40; i++) { if (((await page.locator(".vv").allTextContents())[0] || "").includes("보내지 마")) { got = true; break; } await page.waitForTimeout(300); }
 ck("판결 도착", got);
@@ -230,8 +278,6 @@ ck("각인 — 기운 개수 막대 5종", (await page.locator(".msrbody .bar").
 ck("계산 근거 고지(직접 계산·대조 검증)", /태양의 실제 위치를 직접 계산/.test(body) && /대조 검증 28건/.test(body));
 ck("시각 보정 분 공개", /[+−]\d+분 보정/.test(body), (body.match(/[+−]\d+분 보정/) || [])[0] || "");
 ck("자리 전량 공개(그 밖의 자리들)", /그 밖의 자리들/.test(body));
-
-
 
 // ── v110 정직성 4 (작명 구상 §3-8 차용). 리포트는 '알 권리' 국면이라 판결과 규칙이 반대다.
 // ① 판단마다 확신도 3단 — 계산값과 유파 해석과 곁가지를 같은 목소리로 말하면 전부가 헐거워진다
@@ -299,9 +345,7 @@ ck("평범한 말로 갈렸다(십성 자리 이름)",
 ck("확신도 꼬리표도 평범한 말", ["확실한 것", "갈리는 것", "곁들이는 것"].every((t) => cfs.includes(t)), [...new Set(cfs)].join("/"));
 ck("화면 오류 없음", errs.length === 0, errs.join(" / "));
 
-
 await b.close();
-
 
 const pass = R.filter(Boolean).length;
 console.log(`\n=== 리포트 체크: ${pass}/${R.length} PASS ===`);

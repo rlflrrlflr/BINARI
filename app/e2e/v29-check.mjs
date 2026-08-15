@@ -29,23 +29,14 @@ await page.getByRole("button", { name: "기억났어" }).click();
 await page.getByRole("button", { name: "다음" }).click();
 await page.getByRole("button", { name: "하늘을 열기" }).click();
 
-// ── ① 회상 나레이션 → "응, 기억나" → 곧장 마음의 방 (v114: 그 사이에 있던 4문항 제거) ──
+// ── ① 회상 나레이션 → "응, 기억나" → 곧장 수호신 형성 (v114 4문항 · v128 가치여정 제거) ──
 await page.waitForSelector("text=너였지", { timeout: 12000 });
 ck("① 회상 단계에서 나레이션 노출", await page.getByText("너였지", { exact: false }).isVisible().catch(() => false));
 await page.getByRole("button", { name: "응, 기억나" }).click();
-await page.waitForSelector("text=마음의 방", { timeout: 10000 });
 ck("① 나레이션이 사라진다", !(await page.getByText("너였지", { exact: false }).isVisible().catch(() => false)));
 // v114: "무슨 말인지 모르겠다"는 제보가 많아 4문항을 통째로 뺐다. 되돌아오면 이 검사가 운다.
 ck("① 성격 문항이 없다", (await page.getByText("기운을 어디서", { exact: false }).count()) === 0
   && (await page.getByRole("button", { name: "혼자일 때 차오르는 쪽" }).count()) === 0);
-ck("① 회상 다음이 곧장 마음의 방", await page.getByText("마음의 방", { exact: false }).isVisible());
-
-for (const v of ["안정", "성장", "자유", "인정", "관계", "성취"]) await page.getByRole("button", { name: v, exact: true }).click();
-await page.getByRole("button", { name: "여섯 개 골랐어" }).click(); await page.waitForTimeout(200);
-for (const v of ["안정", "성장", "자유"]) await page.getByRole("button", { name: v, exact: true }).click();
-await page.getByRole("button", { name: "셋을 남겼어" }).click(); await page.waitForTimeout(200);
-await page.getByRole("button", { name: "안정", exact: true }).click();
-await page.getByRole("button", { name: "수호신 깨우기" }).click();
 
 // ── ② 자기소개: 탄생(3.2s) 직후 로비에서 노출(v52) ──
 await page.waitForSelector("text=두드려봐", { timeout: 12000 });
@@ -60,8 +51,6 @@ await page.waitForTimeout(300);
 // ── ③ 정독 스로틀 하에서 판결 렌더 정상 ──
 await page.locator("textarea.qbox").fill("이 길로 가도 될까?"); await page.waitForTimeout(300);
 await page.getByRole("button", { name: "판결을 청한다" }).click();
-  await page.waitForSelector("text=동전 셋", { timeout: 5000 });
-  await page.getByRole("button", { name: "한 번에 던지기" }).click();
 let verdictOk = false;
 for (let i = 0; i < 40; i++) { if (((await page.locator(".vv").allTextContents())[0] || "").includes("망설이지 마")) { verdictOk = true; break; } await page.waitForTimeout(300); }
 ck("③ 스로틀 중에도 판결 L1 렌더", verdictOk);

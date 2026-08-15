@@ -835,7 +835,8 @@ export function readImprint({ saju, ladder, birth, sex, now = new Date(), lat = 
         ["잘 맞는 상사", `<b>${BOSS[bossKey].g}</b>. 반대로 ${BOSS[bossKey].b}.`,
           fn(`나를 누르는 자리에 ${bossKey === "없음" ? "아무것도 없다" : bossKey + "이 앉는다"} — 상사와의 결을 이 자리로 본다.`)],
         ["같이 일하면 좋은 사람", `<b>${EL_KO2[feeder]}의 기운을 가진 사람</b>이 너를 밀어 줘 — ${WORK_STYLE[feeder].w} 사람이야. 반대로 <b>${EL_KO2[drain]}</b> 쪽(${WORK_STYLE[drain].w} 사람)과 붙으면 네가 쏟기만 해. 나쁜 사이라는 게 아니라 <b>네가 더 지친다</b>는 뜻이야.`,
-          fn(`일간 ${me} 기준 상생 — ${feeder}가 ${me}를 낳고, ${me}는 ${drain}을 낳는다. 오행 생(生) 그대로다(변환 없음).`)],
+          fn(`일간 ${me} 기준 상생 — ${feeder}가 ${me}를 낳고, ${me}는 ${drain}을 낳는다. 오행 생(生) 그대로다(변환 없음). ` +
+             `<b>이 줄은 사람이 아니라 기운을 가리킨다</b> — 실제 상대를 확인하려면 궁합에 그 사람 생년월일을 넣어 봐. 같은 규칙을 그 사람에게 그대로 적용한다.`)],
         ["한 곳에 얼마나", `<b>${TENURE[tenKey].w}</b> 다니는 쪽이야. ${dot(TENURE[tenKey].d)}`,
           fn(`틀을 맡는 자리 ${gwan}개 · 혼자 미는 자리 ${bi}개 · 내 방식을 맡는 자리 ${sik}개 → ${tenKey}.`)],
         ["서양이 보는 네 자리", `<b>${MC_FIELD[mcSign] || "특별히 치우친 분야는 안 잡혀"}</b>${MC_FIELD[mcSign] ? (jong(MC_FIELD[mcSign]) ? "이야" : "야") : ""}. 사주가 <b>어떻게 일하나</b>를 말한다면 이건 <b>어디에서 이름이 나나</b>를 말해 — 축이 달라서 겹치지 않아.`,
