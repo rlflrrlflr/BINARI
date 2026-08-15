@@ -454,6 +454,39 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
     } else {
       add("정상", "평가 도구 정합", `앱과 하네스가 같은 프롬프트를 사용(${shared.length}개 대조)`, "");
     }
+    /* ⚠ 위 검사는 **한 방향만** 본다 — "앱에 있는데 하네스에 없는 것". 반대쪽은 못 잡았고,
+       실제로 하네스에만 `MBTI` 축이 남아 있었다(v128 발견). 축 목록은 양방향으로 대조한다. */
+    const axOf = (t) => { const m = t.match(/"axis":"(사주\|[^"]+)"/); return m ? m[1] : null; };
+    const aApp = axOf(src), aEv = axOf(ev);
+    if (aApp && aEv && aApp !== aEv) {
+      add("심각", "평가 도구와 앱의 지표 축이 다름", `앱 [${aApp}] · 하네스 [${aEv}]`,
+        "축이 다르면 채점표의 찬반 개수가 앱과 다른 분모로 계산됩니다. 두 곳의 축 열거를 같게 맞추세요.");
+    } else if (aApp) {
+      add("정상", "지표 축 일치", `앱·하네스 모두 ${aApp.split("|").length}축`, "");
+    }
+  }
+  /* ── 프롬프트가 시키는 축 == 앱이 세는 축인가 (v128) ──────────────────────
+     이게 오늘 잡은 진짜 버그다. v114 에 MBTI 축을 없애면서 **세는 쪽(VOTE_AX)만** 고치고
+     **시키는 쪽(콜1 지시문)은 열네 판 동안 안 고쳤다.** 모델은 시킨 대로 MBTI 표를 실어 보냈고
+     tallyVotes 가 그걸 조용히 버렸다 — 모델은 여섯 축으로 재고 앱은 다섯 축으로 센 셈이다.
+     둘을 맞대면 다음에 축을 더하거나 뺄 때 한쪽만 고치는 일이 안 생긴다. */
+  {
+    const setM = src.match(/const VOTE_AX = new Set\(\[([^\]]+)\]\)/);
+    const askM = src.match(/votes엔 이번 판결에 참여한 지표를 전부 넣는다\(([^)]*)\)/);
+    if (setM && askM) {
+      const counted = new Set(setM[1].match(/"([^"]+)"/g).map((x) => x.slice(1, -1)));
+      const asked = new Set(askM[1].replace(/\s*\+\s*제공된 경우\s*/, "·").split("·").map((x) => x.trim()).filter(Boolean));
+      const onlyAsked = [...asked].filter((a) => !counted.has(a));
+      const onlyCounted = [...counted].filter((c) => !asked.has(c));
+      if (onlyAsked.length || onlyCounted.length) {
+        add("심각", "모델에게 시키는 축과 앱이 세는 축이 다름",
+          [onlyAsked.length ? `시키는데 안 세는 축 — ${onlyAsked.join(",")}` : "",
+           onlyCounted.length ? `세는데 안 시키는 축 — ${onlyCounted.join(",")}` : ""].filter(Boolean).join(" · "),
+          "콜1 지시문의 지표 나열과 VOTE_AX 를 같게 맞추세요. 어긋나면 모델이 낸 표 중 일부가 조용히 버려져 찬반 개수가 왜곡됩니다.");
+      } else {
+        add("정상", "시키는 축 = 세는 축", `${counted.size}축이 프롬프트와 코드에서 일치`, "");
+      }
+    }
   }
 }
 
