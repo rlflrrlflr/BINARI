@@ -96,6 +96,17 @@ function _flush() {
   if (!_ph) return;
   while (_q.length) { const e = _q.shift(); try { _ph.capture(e.ev, _consent ? e.props : stripProfile(e.props), { timestamp: e.at }); } catch (_) {} }
 }
+/* 공유 페이로드(?v=)만 지운 URL 을 돌려준다. utm 등 유입 분석에 쓰는 값은 그대로 둔다. */
+function stripSharePayload(u) {
+  try {
+    const url = new URL(u, "https://x.invalid");
+    if (!url.searchParams.has("v")) return u;
+    url.searchParams.set("v", "1");        // 공유 유입이었다는 사실은 남긴다 — 바이럴 계수의 분모다
+    return u.startsWith("http") ? url.toString() : url.pathname + url.search + url.hash;
+  } catch (_) {
+    return String(u).replace(/([?&])v=[^&#]*/g, "$1v=1");   // URL 파서가 못 먹는 형태여도 값은 반드시 지운다
+  }
+}
 async function _initAnalytics() {
   if (_phInit || !AKEY || typeof window === "undefined") return; _phInit = true;
   try {
@@ -110,6 +121,20 @@ async function _initAnalytics() {
                                     //   verdict_shown.ms 로 이미 더 직접적으로 재고 있다.
       autocapture: false,
       persistence: "localStorage",
+      /* 공유 링크는 ?v=<base64> 이고 그 안에 질문 원문·판결문·이름이 평문으로 들어 있다.
+         PostHog SDK 는 모든 이벤트에 $current_url 을 붙이므로, 공유 링크로 들어온 사람이
+         무슨 이벤트를 찍든 '보낸 사람의 질문과 이름'이 통계로 딸려 나간다.
+         실제로 나갔다 — 2026-07-28 부터 22건·5명(2026-08-15 실측). track() 호출부만 보던
+         검사는 이걸 못 잡았다. SDK 가 스스로 붙이는 값이라 호출부에 안 나타나기 때문이다.
+         진입 화면에 "질문 원문은 통계에 기록하지 않아요"라고 적어 둔 이상 이건 거짓 표시였다.
+         v 파라미터를 지운 URL만 내보낸다. 유입 경로 분석에 쓰는 건 도메인·경로·utm 이지 이 값이 아니다. */
+      sanitize_properties: (props) => {
+        for (const k of ["$current_url", "$referrer", "$initial_current_url", "$initial_referrer", "$pathname"]) {
+          const v = props[k];
+          if (typeof v === "string" && v.includes("v=")) props[k] = stripSharePayload(v);
+        }
+        return props;
+      },
     });
     _ph = posthog;
     // 고정 속성을 posthog 자체에 등록한다. track()이 직접 얹는 값과 동일하지만,
@@ -3544,7 +3569,19 @@ export default function App() {
   const [addOpen, setAddOpen] = useState(false); const [addName, setAddName] = useState(""); const [addSex, setAddSex] = useState(""); // v26: 조각 보태기
   const [qhintI, setQhintI] = useState(0);   // v71 질문 힌트 롤링 인덱스
   const [agree, setAgree] = useState(() => readConsent());     // 분석 동의(선택) — 거부해도 모든 기능 정상 동작
-  const [sharedIn] = useState(() => { try { const sp = new URLSearchParams(window.location.search); const raw = sp.get("v"); return raw ? decodeShare(raw) : null; } catch (_) { return null; } }); // v75: 공유 링크로 유입 시 담긴 판결
+  /* v75: 공유 링크로 유입 시 담긴 판결.
+     읽자마자 주소창에서 페이로드를 지운다(v128) — 그 안에 보낸 사람의 질문 원문·판결문·이름이
+     평문으로 들어 있어서, 남겨두면 브라우저 기록·리퍼러·스크린샷·재공유로 계속 샌다.
+     계측 쪽은 sanitize_properties 가 따로 막지만, 그건 우리 통계만 막을 뿐 주소창은 못 지운다. */
+  const [sharedIn] = useState(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search); const raw = sp.get("v");
+      if (!raw) return null;
+      const dec = decodeShare(raw);
+      try { window.history.replaceState(null, "", stripSharePayload(window.location.href)); } catch (_) {}
+      return dec;
+    } catch (_) { return null; }
+  });
   const [sharedGone, setSharedGone] = useState(false);  // v75: '나도 물어볼래'로 공유 화면 닫음
   // 1단계 계측은 동의와 무관하게 항상 켠다(2단계 속성만 동의로 게이트)
   // 계측: 세션 시작. 유입은 first-touch(_superProps.ft_*)가 고정 부착하므로 여기선 이번 방문 경로(ref)만 참고용으로 남긴다.

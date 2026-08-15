@@ -183,11 +183,26 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
       add("심각", "신뢰 라인의 문항 수가 실제와 다름", `화면 표기 ${claimed}문항 vs 실제 ${real}문항`,
         "화면에 적은 숫자는 유저와의 약속입니다. App.jsx 의 문구를 실제 문항 수로 맞추거나, 검사가 세는 방식을 고치세요.");
     } else add("정상", "신뢰 라인 — 만세력 문항 수", `표기 ${claimed}문항 = 실제 ${real}문항`, "");
-    // "질문 원문은 통계에 기록하지 않아요" — track() 에 q 원문이 실리면 그 줄이 그 순간 거짓 표시가 된다
+    /* "질문 원문은 통계에 기록하지 않아요" — 원문이 계측으로 나가는 길은 **둘**이다.
+       ①우리가 track() 에 직접 싣는 길 ②SDK 가 $current_url 을 자동으로 붙이는 길.
+       ②를 놓쳤다가 실제로 샜다(2026-07-28~, 22건·5명). 공유 링크가 ?v=<base64> 인데
+       그 안에 질문 원문·판결문·이름이 평문으로 들어 있었고, 공유 링크로 들어온 사람이
+       무슨 이벤트를 찍든 URL 이 통째로 딸려 나갔다. 호출부만 뒤지는 검사는 SDK 가
+       스스로 붙이는 값을 영원히 못 본다 — 그래서 두 길을 각각 본다. */
     if (/track\([^)]*\{[^}]*\bq\b\s*[,:}]/.test(src)) {
-      add("심각", "질문 원문이 계측에 실림", "화면엔 '질문 원문은 기록하지 않아요'라고 적혀 있음",
+      add("심각", "질문 원문이 계측에 실림(직접)", "화면엔 '질문 원문은 기록하지 않아요'라고 적혀 있음",
         "track() 에서 질문 원문을 빼고 qlen(글자수)만 보내세요. 지금 상태면 화면 문구가 거짓입니다.");
-    } else add("정상", "신뢰 라인 — 질문 원문 미기록", "track() 에 q 원문 없음(qlen 만)", "");
+    } else add("정상", "신뢰 라인 — 질문 원문 미기록(직접)", "track() 에 q 원문 없음(qlen 만)", "");
+    const shareInUrl = /encodeShare\(/.test(src) && /\?v=\$\{|[?&]v=/.test(src);
+    if (shareInUrl && !/sanitize_properties/.test(src)) {
+      add("심각", "질문 원문이 계측에 실림($current_url)", "공유 페이로드가 URL 에 있는데 SDK URL 정화가 없음",
+        "posthog.init 에 sanitize_properties 를 넣어 $current_url·$referrer 의 v= 값을 지우세요. 실제로 22건이 이 경로로 샜습니다.");
+    } else if (shareInUrl) add("정상", "신뢰 라인 — 질문 원문 미기록($current_url)", "SDK URL 정화 있음", "");
+    // 주소창에 남은 페이로드는 브라우저 기록·리퍼러·스크린샷으로 계속 샌다 — 읽은 즉시 지워야 한다
+    if (shareInUrl && !/history\.replaceState\(null, "", stripSharePayload/.test(src)) {
+      add("주의", "공유 페이로드가 주소창에 남음", "읽은 뒤에도 ?v= 가 URL 에 그대로 있음",
+        "decodeShare 직후 history.replaceState 로 페이로드를 지우세요. 계측만 막으면 브라우저 기록·리퍼러로는 계속 샙니다.");
+    } else if (shareInUrl) add("정상", "공유 페이로드 주소창 정리", "읽은 즉시 URL 에서 제거", "");
   }
 
   // 티어 허용목록은 api/judge.js 에 있다 — 위 rules 루프는 App.jsx 만 보므로 여기서 따로 검사한다
