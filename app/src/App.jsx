@@ -2827,7 +2827,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v132 · 곁 탭";
+const APP_VER = "v132.1 · 수호신 크기";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -4931,8 +4931,10 @@ export default function App() {
 
       {step === 3 && tab === "gyeot" && phase >= 1 && (
         <section className="scene fade gyeot">
-          <div className="halo wide">
-            <div className="fade"><Guardian saju={saju} zo={zo} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} restRef={restRef} size={Math.min(typeof window !== "undefined" ? window.innerWidth * 1.1 : 400, typeof window !== "undefined" ? window.innerHeight * 0.5 : 400, 600)} /></div>
+          <div className="halo wide gyeotscale">
+            {/* ⚠ 판결 탭과 **같은 size 식**을 쓴다. v132 에 여기만 0.5/600 으로 작게 잡고 확대율도 안 줘서
+                실측 466px — 판결(719px)의 65% 였다. 수호신이 탭마다 다른 크기로 보이면 같은 존재로 안 읽힌다. */}
+            <div className="fade"><Guardian saju={saju} zo={zo} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} restRef={restRef} size={Math.min(typeof window !== "undefined" ? window.innerWidth * 1.1 : 400, typeof window !== "undefined" ? window.innerHeight * 0.57 : 400, 640)} /></div>
           </div>
           <div className="gyeotpanel fade">
             <p className="gname under">곁</p>
@@ -5546,7 +5548,13 @@ const CSS = `
 .halo{position:relative;filter:drop-shadow(0 0 30px rgba(245,217,139,.15));margin:8px 0;transition:filter .6s}
 .halo{filter:drop-shadow(0 0 30px color-mix(in srgb,var(--elc,#f5d98b) 22%,transparent))}
 .halo.wide{width:100vw;margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);display:flex;justify-content:center;margin-top:calc(min(110vw,57vh,640px)*-0.09);margin-bottom:calc(min(110vw,57vh,640px)*-0.16);transition:filter .6s,transform .9s cubic-bezier(.2,.8,.2,1),opacity .8s ease}
-.halo.wide.lobbyscale{transform:translateY(7vh) scale(1.52)}
+/* v132.1 로비 확대 — 캔버스 안에서 형상이 차지하는 비율은 약 40%다(셰이더의 u_R·0.48 스케일).
+   그래서 캔버스를 473px 잡아도 눈에 보이는 수호신은 화면폭의 2/3밖에 안 됐다. 확대율로만 키운다 —
+   backing 해상도(473×dpr)는 그대로라 **프래그먼트 비용이 안 늘어난다.** size 를 키우면 4배가 된다. */
+.halo.wide.lobbyscale{transform:translateY(5vh) scale(1.85)}
+/* 곁 탭 — 판결보다 아주 조금만 물러선다. 궤도 반경이 본체의 1.05배라 그 이상 물러날 이유가 없다
+   (곁 시안 실측). 단계 1엔 곁이 아직 없으므로 물러나면 손해만 본다. */
+.halo.wide.gyeotscale{transform:translateY(4vh) scale(1.72)}
 .halo.wide.dissolved{opacity:0;transform:scale(1.7);filter:blur(7px);pointer-events:none}
 .halo.wide.asking{transform:translateY(-5vh) scale(.82);opacity:.96}
 .halo.wide.ritualfade{opacity:.1;pointer-events:none;transition:opacity .8s ease}
