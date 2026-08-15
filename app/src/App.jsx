@@ -2707,31 +2707,6 @@ function GuardianCanvasSim({ saju, zo, tex, num, moon, birth, agitateRef, reactR
   return <canvas ref={ref} data-renderer="webgl" width={size} height={size} style={{ display: "block", width: size + "px", height: size + "px", touchAction: "none", cursor: "pointer", WebkitMaskImage: "radial-gradient(circle at 50% 50%, #000 74%, transparent 100%)", maskImage: "radial-gradient(circle at 50% 50%, #000 74%, transparent 100%)" }} />;
 }
 /* WebGL 우선: 상태보존 시뮬(v68) → stateless(v67) → Canvas2D. 각 단계 실패 시 자동 강등 */
-/* ── v124.1 인장 — 유료 문서(각인·서신)에 그 사람의 수호신을 찍는다 ─────────────
-   왜: 45일 계측 기준 판결 100회에 부적 4·공유 4. '시각적 소유물'이라 부르는 자산이
-       무료 화면에만 살아 있고, 값을 치른 문서에는 렌더가 0이었다(검토서 §2-2).
-       각인은 평생 한 번 사는 문서라 소장 가치가 곧 값어치다 — 누가 만든 문서인지 화면이 말해야 한다.
-   어떻게: 형태를 새로 그리지 않는다. **살아 있는 수호신을 그대로 작게 건다**(드리프트 0).
-       읽는 화면이므로 rest 스로틀을 크게 줘서 사실상 정지에 가깝게 돈다(배터리·메인스레드 보호). */
-const SEAL_REST = { current: 320 };     // ≈3fps — Guardian 의 restRef 규약을 그대로 쓴다
-function GuardianSeal({ saju, zo, tex, num, moon, birth, kind }) {
-  if (!saju || !zo) return null;
-  const el = EL_COLOR[saju.main] || ["#f5d98b", "#ffe9ad"];
-  const nay = saju.nayin ? (saju.nayin.split("·")[1] || saju.nayin) : null;
-  const who = (birth?.name || "").trim();
-  return (
-    <div className="gsealwrap">
-      <div className="gsealorb" style={{ borderColor: el[0] + "4d", boxShadow: `0 0 30px ${el[0]}2b` }}>
-        {/* 캔버스를 프레임보다 크게 잡고 축소해 넣는다 — 작은 캔버스에 그대로 그리면
-            입자 밀도가 올라가 가산 블렌딩이 흰 덩어리로 뭉친다(108px 실측). */}
-        <div className="gsealinner"><Guardian saju={saju} zo={zo} tex={tex} num={num} moon={moon} birth={birth} size={230} restRef={SEAL_REST} /></div>
-      </div>
-      <p className="gsealline">{who ? `${who}의 수호신` : "너의 수호신"}{nay ? ` · ${nay}` : ` · ${saju.main}의 기운`}</p>
-      <p className="gsealkind">{kind}</p>
-    </div>
-  );
-}
-
 function Guardian(props) {
   // v91: 기본 렌더러 = GL(v67 계열) — 무상태 직접계산이라 지연·링이 없고 중앙 발산 레이가 살아 있다.
   //      ?r=sim → 상태보존 FBO 엔진 / ?r=2d → Canvas2D (비교·폴백용)
@@ -4881,7 +4856,6 @@ export default function App() {
         <div className="readwrap">
           <button className="escx" onClick={() => setImprintOpen(false)} aria-label="닫기">✕</button>
           <div className="readbody">
-            <GuardianSeal saju={saju} zo={zo} tex={tex} num={num} moon={moon} birth={birth} kind="각인 — 사람 자체에 딸린 문서" />
             <ImprintDoc saju={saju} birth={birth} sex={birth?.sex} onClose={() => setImprintOpen(false)} />
           </div>
         </div>
@@ -4898,7 +4872,7 @@ export default function App() {
         <div className="readwrap">
           <button className="escx" onClick={() => setLetterOpen(false)} aria-label="닫기">✕</button>
           <div className="readbody">
-            <GuardianSeal saju={saju} zo={zo} tex={tex} num={num} moon={moon} birth={birth} kind={`서신 · ${letterNo(records[letterIdx] || {})}`} />
+            <p className="dtag center">수호신의 서신 · {letterNo(records[letterIdx] || {})}</p>
             {letterDoc.chapters.map((c, i) => (
               <div key={i} className="rchap">
                 <h3 className="rct"><span>{i + 1}</span>{c.t}</h3>
@@ -4965,12 +4939,6 @@ const CSS = `
 .knocklink{background:none;border:none;margin:-4px 0 0;padding:4px 6px;color:#8a819f;font-family:inherit;font-size:12px;letter-spacing:.04em;cursor:pointer;text-decoration:underline dotted;text-underline-offset:4px}
 .knocklink:hover{color:#cfc4de}
 .in.box.hanja{font-size:17px;letter-spacing:.12em}
-/* v124.1 인장 — 유료 문서 머리. 문서가 글이므로 인장은 조용해야 한다(오브 108px + 두 줄) */
-.gsealwrap{display:flex;flex-direction:column;align-items:center;gap:2px;margin:0 0 22px;padding-bottom:18px;border-bottom:1px solid rgba(245,217,139,.14)}
-.gsealorb{width:132px;height:132px;border-radius:50%;border:1px solid;display:flex;align-items:center;justify-content:center;overflow:hidden;background:radial-gradient(circle at 50% 50%,rgba(12,9,20,.55),rgba(5,4,8,.9))}
-.gsealinner{transform:scale(.58);transform-origin:center;opacity:.92}
-.gsealline{margin:10px 0 0;font-size:13.5px;color:#f0e2b8;letter-spacing:.04em}
-.gsealkind{margin:2px 0 0;font-family:sans-serif;font-size:10.5px;letter-spacing:.12em;color:#8a7f95;text-transform:none}
 /* v127.5 광고 유입 훅 — 세계관 문장 위에 한 줄. 본편 방문자에겐 렌더되지 않는다 */
 .adhook{font-size:15px;line-height:1.7;color:#ffe9ad;margin:0 0 14px;padding:10px 16px;border:1px solid rgba(245,217,139,.28);border-radius:14px;background:rgba(245,217,139,.06)}
 .adhook b{color:#fff3d4;font-weight:700}
