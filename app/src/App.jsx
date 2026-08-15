@@ -64,6 +64,21 @@ function _initSuperProps() {
   if (b) _superProps.belief = b;
 }
 
+/* ── A-1 (전략 세션 작업지시 2026-08-14) ─────────────────────────────────
+   처리방침이 두 곳에서 "온보딩의 분석 동의를 해제하는 것만으로 거부할 수 있다"고 안내한다.
+   그런데 v122 에서 그 체크박스를 화면에서 뺐고, PROFILE_KEYS 가 빈 집합이라
+   손으로 키를 0으로 바꿔도 **아무것도 안 막혔다.** 즉 문서가 약속한 절차가 코드에 없었다.
+   → **문서를 고치는 게 아니라 수단을 만든다.** ②(문서를 동작에 맞춤)는 거부권 자체를 없애는 방향이다.
+   OPTOUT_KEY 가 켜지면 track() 이 조기 반환한다 — 속성만 지우는 게 아니라 **전송 자체를 멈춘다**. */
+const OPTOUT_KEY = "binari.analytics_optout.v1";
+let _optout = false;
+function readOptout() { try { return window.localStorage.getItem(OPTOUT_KEY) === "1"; } catch (_) { return false; } }
+function setOptout(on) {
+  _optout = !!on;
+  try { window.localStorage.setItem(OPTOUT_KEY, on ? "1" : "0"); } catch (_) {}
+  /* 끌 때는 이미 쌓인 큐도 버린다 — 끄기 전에 대기하던 걸 나중에 보내면 거부가 무의미해진다 */
+  if (_optout) { _q.length = 0; try { _ph?.reset?.(); } catch (_) {} }
+}
 const CONSENT_KEY = "binari.analytics_consent.v1";
 let _consent = false;                                             // 2단계(프로파일) 동의 여부
 function readConsent() { try { return window.localStorage.getItem(CONSENT_KEY) === "1"; } catch (_) { return false; } }
@@ -114,12 +129,23 @@ async function _initAnalytics() {
    그게 없으면 하루 종일 탭을 열어둔 사람은 재방문이 영영 안 잡힌다. */
 const VISIT_KEY = "binari.lastvisit.v1";
 const VISIT_GAP_MS = 30 * 60 * 1000;
+/* v127.5 광고 유입 진입면 — 본편(…불렀어?)은 그대로 두고, **광고로 들어온 방문에만** 한 줄을 얹는다.
+   왜: 첫 화면 문구가 '…불렀어?' / '조각을 모으러 갈래' 둘뿐이라 3초 안에 "여기가 뭐 하는 곳인가"가 안 읽힌다
+       (팀 피드백 트리아지 §3-3 채택). 몰입 설계는 직접 들어온 사람에게 맞는 것이고,
+       광고 클릭은 맥락 없이 떨어지는 유입이라 같은 화면으로는 감당이 안 된다.
+   이번 방문의 URL 만 본다 — 저장된 first-touch 로 판단하면 재방문자에게도 광고 문구가 계속 뜬다. */
+function isAdEntry() {
+  try {
+    const sp = new URLSearchParams(window.location.search);
+    return !!(sp.get("utm_source") || sp.get("utm_medium") || sp.get("utm_campaign") || sp.get("fbclid") || sp.get("gclid") || sp.get("ad"));
+  } catch (_) { return false; }
+}
 function trackVisit(props) {
   let last = 0;
   try { last = +(window.localStorage.getItem(VISIT_KEY) || 0) || 0; } catch (_) {}
   if (Date.now() - last < VISIT_GAP_MS) return false;
   try { window.localStorage.setItem(VISIT_KEY, String(Date.now())); } catch (_) {}
-  track("app_open", props);
+  track("app_open", { ...props, landing: (typeof window !== "undefined" && isAdEntry()) ? "ad" : "direct" });   // v127.5: 진입면 구분 — 소재별 성과와 붙이려면 이 값이 있어야 한다
   return true;
 }
 /* 방문당 1회로 묶는 계측. '이번 방문에 일어났는가'만 남기고 횟수는 속성으로 따로 싣는다.
@@ -134,7 +160,47 @@ function trackVisitOnce(ev, props) {
   track(ev, props || {});
   return true;
 }
+/* ── 유료 문서를 '열었나'가 아니라 '읽었나' ────────────────────────────────
+   각인 9,900원 · 궁합 4,900원은 여는 것과 읽는 것이 완전히 다른 일이다.
+   지금은 열람 수만 세는데, **두 줄 보고 닫은 사람과 끝까지 내린 사람이 같은 1건**으로
+   잡힌다. 그래서 "이 문서가 값을 하는가"에 데이터로 답할 수가 없다.
+   → 스크롤 최대 도달률과 머문 시간을 **문서를 떠날 때 한 번만** 보낸다(열람당 1건).
+   별점 UI 를 새로 세우지 않는다 — 화면을 안 건드리고 얻히는 신호부터 쓴다(§모를 권리와 무관: 수집이지 노출이 아니다).
+   스크롤 컨테이너는 문서 자신이 아니라 바깥 .readwrap 이라 closest 로 올라가 붙인다. */
+function useDocRead(ev, props) {
+  const box = useRef(null);
+  const pr = useRef(props);
+  pr.current = props;
+  useEffect(() => {
+    const el = (box.current && box.current.closest(".readwrap")) || box.current;
+    const t0 = Date.now();
+    let deep = 0, sent = false;
+    const onScroll = () => {
+      if (!el || !el.scrollHeight) return;
+      const p = Math.round(((el.scrollTop + el.clientHeight) / el.scrollHeight) * 100);
+      if (p > deep) deep = Math.min(100, p);
+    };
+    onScroll();                                          // 문서가 한 화면에 다 들어오면 스크롤 이벤트가 안 온다 → 100%
+    if (el) el.addEventListener("scroll", onScroll, { passive: true });
+    const flush = () => {
+      if (sent) return;
+      sent = true;
+      track(ev, { ...(pr.current || {}), read_pct: deep, sec: Math.round((Date.now() - t0) / 1000) });
+    };
+    const onHide = () => { if (document.visibilityState === "hidden") flush(); };   // 모바일은 닫지 않고 떠난다
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      if (el) el.removeEventListener("scroll", onScroll);
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, []);
+  return box;
+}
 function track(ev, props) {
+  if (_optout) return;                                          // A-1: 거부하면 아무것도 안 보낸다(속성 제거가 아니라 전송 중단)
   try {
     const p = { ..._superProps, ...(props || {}) };               // 고정 속성(내부여부·first-touch·신념)을 먼저 깔고 개별 속성으로 덮는다
     const out = _consent ? p : stripProfile(p);                   // 미동의 → 2단계 속성만 제거, 이벤트는 전송
@@ -754,9 +820,9 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
   /* v115 선택 입력 — **각인을 열 때만** 묻는다. 무료 온보딩은 건드리지 않는다.
      없어도 문서는 나온다. 있으면 **틀린 말을 안 하게 된다** — 마흔 살 기혼자에게
      "서른에 짝을 만난다"고 쓰는 순간 문서 전체가 죽는다. 그 한 줄을 막으려고 받는다. */
-  const [extra, setExtra] = useState(() => { try { return JSON.parse(localStorage.getItem("binari_imprint_extra") || "{}"); } catch { return {}; } });
+  const [extra, setExtra] = useState(() => { try { return JSON.parse(localStorage.getItem(IMPRINT_EXTRA_KEY) || "{}"); } catch { return {}; } });
   const [askOpen, setAskOpen] = useState(extra.married == null && (new Date().getFullYear() - +(birth?.y || 0) + 1) >= 20);
-  const setEx = (k, v) => { const n = { ...extra, [k]: v }; setExtra(n); try { localStorage.setItem("binari_imprint_extra", JSON.stringify(n)); } catch {} };
+  const setEx = (k, v) => { const n = { ...extra, [k]: v }; setExtra(n); try { localStorage.setItem(IMPRINT_EXTRA_KEY, JSON.stringify(n)); } catch {} };
   const r = useMemo(() => {
     try {
       const ladder = [];
@@ -773,7 +839,15 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
     } catch (e) { return null; }
   }, [saju, birth, sex, extra.married, extra.kids, extra.timeAcc, extra.metAge]);
   useEffect(() => { track("imprint_opened", { has_sex: !!sex, has_hour: !!(saju?.idx && saju.idx.hG != null), has_extra: extra.married != null }); }, []);
-  if (!r) return (<div className="imp"><p className="impmsg">각인을 읽지 못했어. 생년월일을 다시 확인해 줄래?</p>
+  /* 9,900원짜리 문서가 안 나오는 사고가 지금은 화면에만 뜨고 우리한테는 안 온다.
+     유저는 "각인을 읽지 못했어"를 보고 나가는데 우리는 그런 일이 있었다는 것조차 모른다. */
+  const failed = !r;
+  useEffect(() => {
+    if (failed) track("imprint_failed", { has_sex: !!sex, has_hour: !!(saju?.idx && saju.idx.hG != null) });
+  }, [failed]);
+  /* 스크롤·체류를 붙일 자리. 실패 화면에도 붙여야 "열자마자 깨져서 3초 만에 나갔다"가 남는다 */
+  const readRef = useDocRead("imprint_read", { failed });
+  if (!r) return (<div className="imp" ref={readRef}><p className="impmsg">각인을 읽지 못했어. 생년월일을 다시 확인해 줄래?</p>
     <button className="btn ghost mt" onClick={onClose}>닫을게</button></div>);
   const Ref = ({ n }) => (notesOn && n ? <sup className="impfx">{n}</sup> : null);
   const H = ({ t }) => <span dangerouslySetInnerHTML={{ __html: t }} />;
@@ -970,7 +1044,7 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
     </svg>
   );
   return (
-    <div className="imp fade">
+    <div className="imp fade" ref={readRef}>
       <div className="imphead">
         <p className="impeyebrow">비 나 리 · 각 인</p>
         <p className="imptitle">네가 어떻게 만들어졌는지</p>
@@ -999,7 +1073,17 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
             <button className={"impchip" + (extra.kids === false ? " on" : "")} onClick={() => setEx("kids", false)}>없어</button>
           </div>
           <p className="impaskw">이걸 모르면 <b>이미 지난 일을 앞일처럼</b> 적게 돼. 안 알려줘도 문서는 나오지만, 그 부분이 헐거워져.</p>
-          <button className="btn ghost sm" onClick={() => setAskOpen(false)}>{extra.married != null || extra.kids != null ? "이대로 읽을게" : "안 알려줄래"}</button>
+          {/* 각인은 유일하게 문 앞에서 뭔가를 되묻는 자리다. 그걸 사람들이 참아주는지 아닌지가
+              앞으로 다른 상품에 입력을 붙일 수 있느냐를 가른다 — 지금은 전혀 안 잡히고 있었다.
+              ⚠ **답한 값은 절대 안 보낸다.** 처리방침에 이 세 항목은 "기기에만 저장"으로 고지돼 있다.
+                 보내는 건 '답했는가' 뿐이고, 그것만으로 응답률은 다 나온다. */}
+          <button className="btn ghost sm" onClick={() => {
+            track("imprint_extra_answered", {
+              answered: extra.married != null || extra.kids != null,
+              n: [extra.married, extra.kids, extra.metAge].filter((v) => v != null).length,
+            });
+            setAskOpen(false);
+          }}>{extra.married != null || extra.kids != null ? "이대로 읽을게" : "안 알려줄래"}</button>
         </div>
       )}
 
@@ -1133,6 +1217,16 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
       {r.noHour && <p className="impmsg">태어난 <b>시(時)를 몰라</b> 네 자리 중 하나가 비었어. 시에 걸린 건 못 읽었다고 봐야 해.</p>}
       {!r.given.city && <p className="impmsg">태어난 <b>도시를 몰라</b> 서울 기준으로 읽었어. 다른 지역이면 시(時)와 겉모습이 한 칸 옮겨갈 수 있어.</p>}
 
+      {/* ── A-4 (작업지시 2026-08-14) ──────────────────────────────────────────
+          각인은 LLM 을 안 타므로 판결의 S3 가드레일("병세·완치·수명을 점치는 문장 절대 금지")을
+          **구조적으로 통과하지 않는다.** 그런데 여섯 판 연속 문서만 넓어지고 고지는 0이었다.
+          ⚠ **절마다 붙이지 않는다.** 절마다 붙이면 다음 판에서 또 빠진다 — 문서 하단 고정 블록 하나로 둔다.
+          그리고 "AI가 생성"은 맞는 문구가 아니다(각인은 LLM 산출물이 아니다). 필요한 건
+          참고용 · 의료 조언 아님 · 진단과 치료는 전문가 쪽이다. */}
+      <p className="ainote docnote">이 문서는 <b>생년월일시로 계산한 전통 해석</b>이야 — 재미로 보는 참고용이고,
+        <b>의료·법률·재무 조언이 아니야.</b> 몸 이야기는 병을 점친 게 아니라 <b>어디를 더 살피라는 표시</b>일 뿐이야.
+        증상이 있으면 <b>병원에 가는 게 먼저</b>고, 큰 결정은 이 문서 말고 네 판단으로 해.
+        맞는지 안 맞는지는 위 <b>확인 문항</b>으로 네가 직접 재 보면 돼.</p>
       <div className="impfoot">
         <button className="btn ghost sm" onClick={() => { setNotesOn(v => !v); track("imprint_notes_toggled", { on: !notesOn }); }}>
           {notesOn ? "▴ 근거 접기" : `▾ 근거 보기 — ${r.notes.length}개`}</button>
@@ -1152,7 +1246,7 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
 const MATCH_PRICE = 4900;
 function MatchDoc({ saju, birth, onClose }) {
   const [notesOn, setNotesOn] = useState(false);
-  const [f, setF] = useState(() => { try { return JSON.parse(localStorage.getItem("binari_match_last") || "{}"); } catch { return {}; } });
+  const [f, setF] = useState(() => { try { return JSON.parse(localStorage.getItem(MATCH_LAST_KEY) || "{}"); } catch { return {}; } });
   const [done, setDone] = useState(false);
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const ok = /^\d{4}$/.test(String(f.y || "")) && +f.y >= 1900 && +f.y <= 2030
@@ -1168,11 +1262,17 @@ function MatchDoc({ saju, birth, onClose }) {
     } catch (e) { return null; }
   }, [done, f.y, f.m, f.d, f.h, f.sex, saju, birth]);
   useEffect(() => { track("match_opened", { has_saju: !!saju?.idx }); }, []);
+  /* 여기가 실제 사고 경로다: 입력 검증(ok)은 통과했는데 readMatch 가 null 을 돌려주면
+     화면은 **아무 말 없이 입력 폼으로 되돌아간다.** 유저 눈에는 버튼이 안 먹는 걸로 보이고
+     우리 쪽엔 match_run 만 남아서 "돌렸는데 왜 결과가 없지"가 영영 안 잡힌다. */
+  const mfailed = done && !r;
+  useEffect(() => { if (mfailed) track("match_failed", { has_hour: f.h != null, has_sex: !!f.sex }); }, [mfailed]);
+  const readRef = useDocRead("match_read", { done });
   const Ref = ({ n }) => (notesOn && n ? <sup className="impfx">{n}</sup> : null);
   const H = ({ t }) => <span dangerouslySetInnerHTML={{ __html: t }} />;
 
   if (!done || !r) return (
-    <div className="imp fade">
+    <div className="imp fade" ref={readRef}>
       <div className="imphead">
         <p className="impeyebrow">비 나 리 · 궁 합</p>
         <p className="imptitle">그 사람과 너</p>
@@ -1197,7 +1297,7 @@ function MatchDoc({ saju, birth, onClose }) {
         </div>
         <p className="impaskw">상대의 <b>이름도 연락처도 안 받아.</b> 생년월일은 이 기기에만 남고 서버로 안 보내.
           궁합은 <b>연인만이 아니야</b> — 같이 일하는 사람, 가족, 동업자에게도 그대로 써.</p>
-        <button className="btn mt" disabled={!ok} onClick={() => { try { localStorage.setItem("binari_match_last", JSON.stringify(f)); } catch {} track("match_run", { has_hour: f.h != null }); setDone(true); }}>
+        <button className="btn mt" disabled={!ok} onClick={() => { try { localStorage.setItem(MATCH_LAST_KEY, JSON.stringify(f)); } catch {} track("match_run", { has_hour: f.h != null }); setDone(true); }}>
           {ok ? "둘을 맞대 볼게" : "생년월일을 채워 줘"}
         </button>
         <button className="btn ghost mt" onClick={onClose}>닫을게</button>
@@ -1222,7 +1322,7 @@ function MatchDoc({ saju, birth, onClose }) {
   );
 
   return (
-    <div className="imp fade">
+    <div className="imp fade" ref={readRef}>
       <div className="imphead">
         <p className="impeyebrow">비 나 리 · 궁 합</p>
         <p className="imptitle">그 사람과 너</p>
@@ -1257,11 +1357,17 @@ function MatchDoc({ saju, birth, onClose }) {
       <p className="impepi">아홉 축 중 <b>{r.band}</b>. <b>다만 이 숫자를 먼저 보지 마</b> —
         궁합은 총점이 아니라 <b>어느 축이 어긋나는가</b>로 읽는 거야. 위를 다 읽고 나서 이 줄을 봐.<Ref n={r.n} /></p>
 
+      {/* A-4: 궁합도 같은 고지를 받는다 — 같은 엔진 계열이고 같은 성격의 문서다 */}
+      <p className="ainote docnote">이 문서는 <b>두 사람의 생년월일로 계산한 전통 해석</b>이야 — 재미로 보는 참고용이야.
+        <b>관계를 끊거나 이으라는 판정이 아니고</b>, 상대에 대한 사실 확인도 아니야.
+        여기 적힌 건 <b>무엇을 조심하면 되는지</b>까지고, 사람에 대한 결정은 네가 해.</p>
       <div className="impfoot">
-        <button className="btn ghost sm" onClick={() => setNotesOn((v) => !v)}>
+        <button className="btn ghost sm" onClick={() => { setNotesOn((v) => !v); track("match_notes_toggled", { on: !notesOn }); }}>
           {notesOn ? "▴ 근거 접기" : `▾ 근거 보기 — ${r.notes.length}개`}</button>
         {notesOn && (<ol className="impnotes">{r.notes.map((t, i) => <li key={i}><span>{i + 1}</span><span dangerouslySetInnerHTML={{ __html: t }} /></li>)}</ol>)}
-        <button className="btn ghost mt" onClick={() => setDone(false)}>다른 사람과도 봐볼게</button>
+        {/* 궁합의 존재 이유가 이 버튼이다 — "각인은 평생 한 번, 궁합은 사람 수만큼"(§1174 주석).
+            재구매 논리가 실제로 작동하는지는 이 클릭 말고 확인할 방법이 없는데 안 세고 있었다. */}
+        <button className="btn ghost mt" onClick={() => { track("match_again", {}); setDone(false); }}>다른 사람과도 봐볼게</button>
         <button className="btn ghost mt" onClick={onClose}>닫을게</button>
       </div>
     </div>
@@ -2510,6 +2616,31 @@ function GuardianCanvasSim({ saju, zo, mbti, num, moon, birth, agitateRef, react
   return <canvas ref={ref} data-renderer="webgl" width={size} height={size} style={{ display: "block", width: size + "px", height: size + "px", touchAction: "none", cursor: "pointer", WebkitMaskImage: "radial-gradient(circle at 50% 50%, #000 74%, transparent 100%)", maskImage: "radial-gradient(circle at 50% 50%, #000 74%, transparent 100%)" }} />;
 }
 /* WebGL 우선: 상태보존 시뮬(v68) → stateless(v67) → Canvas2D. 각 단계 실패 시 자동 강등 */
+/* ── v124.1 인장 — 유료 문서(각인·서신)에 그 사람의 수호신을 찍는다 ─────────────
+   왜: 45일 계측 기준 판결 100회에 부적 4·공유 4. '시각적 소유물'이라 부르는 자산이
+       무료 화면에만 살아 있고, 값을 치른 문서에는 렌더가 0이었다(검토서 §2-2).
+       각인은 평생 한 번 사는 문서라 소장 가치가 곧 값어치다 — 누가 만든 문서인지 화면이 말해야 한다.
+   어떻게: 형태를 새로 그리지 않는다. **살아 있는 수호신을 그대로 작게 건다**(드리프트 0).
+       읽는 화면이므로 rest 스로틀을 크게 줘서 사실상 정지에 가깝게 돈다(배터리·메인스레드 보호). */
+const SEAL_REST = { current: 320 };     // ≈3fps — Guardian 의 restRef 규약을 그대로 쓴다
+function GuardianSeal({ saju, zo, mbti, num, moon, birth, kind }) {
+  if (!saju || !zo) return null;
+  const el = EL_COLOR[saju.main] || ["#f5d98b", "#ffe9ad"];
+  const nay = saju.nayin ? (saju.nayin.split("·")[1] || saju.nayin) : null;
+  const who = (birth?.name || "").trim();
+  return (
+    <div className="gsealwrap">
+      <div className="gsealorb" style={{ borderColor: el[0] + "4d", boxShadow: `0 0 30px ${el[0]}2b` }}>
+        {/* 캔버스를 프레임보다 크게 잡고 축소해 넣는다 — 작은 캔버스에 그대로 그리면
+            입자 밀도가 올라가 가산 블렌딩이 흰 덩어리로 뭉친다(108px 실측). */}
+        <div className="gsealinner"><Guardian saju={saju} zo={zo} mbti={mbti} num={num} moon={moon} birth={birth} size={230} restRef={SEAL_REST} /></div>
+      </div>
+      <p className="gsealline">{who ? `${who}의 수호신` : "너의 수호신"}{nay ? ` · ${nay}` : ` · ${saju.main}의 기운`}</p>
+      <p className="gsealkind">{kind}</p>
+    </div>
+  );
+}
+
 function Guardian(props) {
   // v91: 기본 렌더러 = GL(v67 계열) — 무상태 직접계산이라 지연·링이 없고 중앙 발산 레이가 살아 있다.
   //      ?r=sim → 상태보존 FBO 엔진 / ?r=2d → Canvas2D (비교·폴백용)
@@ -2527,7 +2658,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v125 · 궁합";
+const APP_VER = "v127.5 · 진입면";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -2838,7 +2969,21 @@ function BujeokCanvas({ saju, direction, seed, size = 220 }) {
 
 /* v16(B4): 부적 포스터 — 1080×1920(인스타 스토리 규격). 질문 원문은 절대 넣지 않는다: 스포일러 없는 자랑 */
 const CAT_LABEL = { A: "인생의 물음", B: "마음의 물음", C: "오늘의 물음" };
-function buildBujeokPoster({ saju, direction, seed, tosses, hexInfo, category, against, total }) {
+/* v127.2: 부적에 **수호신 초상과 판결 한 줄**을 싣는다.
+   왜: 45일 계측에서 판결 100회에 부적 4·공유 4. 앱 밖으로 나가는 유일한 그림인데
+   정작 우리 얼굴(수호신)도, 무엇이라 답했는지도 없어서 받은 사람이 읽을 게 없었다.
+   질문 원문은 여전히 넣지 않는다(스포일러 없는 자랑) — 판결문은 우리 답이지 그 사람의 물음이 아니다. */
+/* v127.2: 화면에 살아 있는 수호신 캔버스에서 한 프레임을 뜬다.
+   렌더러가 gl/sim/2d 중 무엇이든 `data-renderer` 가 붙어 있어 그걸로 찾는다. */
+function grabGuardianFrame() {
+  try {
+    const list = document.querySelectorAll("canvas[data-renderer]");
+    let best = null;
+    list.forEach((c) => { if (c.width && (!best || c.width > best.width)) best = c; });
+    return best;
+  } catch (_) { return null; }
+}
+function buildBujeokPoster({ saju, direction, seed, tosses, hexInfo, category, against, total, verdict, guardian }) {
   const W = 1080, H = 1920;
   const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
   const ctx = cv.getContext("2d");
@@ -2854,6 +2999,31 @@ function buildBujeokPoster({ saju, direction, seed, tosses, hexInfo, category, a
   const bj = document.createElement("canvas"); bj.width = 640; bj.height = 640;
   drawBujeokInto(bj.getContext("2d"), saju, direction, seed, 640);
   ctx.drawImage(bj, (W - 640) / 2, 240);
+  /* 수호신 초상 — 화면에 살아 있는 그 캔버스를 그대로 한 장 떠서 문양 위에 겹친다.
+     GL/sim 은 preserveDrawingBuffer:true 라 프레임이 남아 있고, 2D 폴백도 그대로 읽힌다.
+     실패해도 부적은 나와야 하므로 통째로 try 로 감싼다. */
+  try {
+    if (guardian && guardian.width) {
+      ctx.save();
+      /* v127.3 정지 서명 — 움직일 땐 오행 5형태가 갈리는데 **멈춘 그림에서는 금·토·수가
+         비슷한 입자구름으로 읽힌다**(버전 보드 정지 캡처 실측). 형태는 건드리지 않는다(설계 헌장) —
+         대신 캡처본에만 그 사람의 오행 색 아우라를 뒤에 깔아 색으로 서명이 서게 한다.
+         라이브 화면은 그대로다: 실유저가 유일하게 무조건 호평한 대상이라 만지지 않는다. */
+      const elc = (EL_COLOR[saju?.main] || ["#f5d98b", "#ffe9ad"]);
+      const au = ctx.createRadialGradient(W / 2, 560, 40, W / 2, 560, 380);
+      au.addColorStop(0, elc[0] + "3a"); au.addColorStop(0.55, elc[0] + "16"); au.addColorStop(1, "transparent");
+      ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 1;
+      ctx.fillStyle = au; ctx.beginPath(); ctx.arc(W / 2, 560, 380, 0, 7); ctx.fill();
+      ctx.globalAlpha = 0.95; ctx.globalCompositeOperation = "lighter";
+      const gs = 620;
+      /* 화면 캔버스는 가로가 긴 사각형이라 그대로 늘리면 수호신이 한쪽으로 쏠린다 —
+         짧은 변 기준 정사각으로 중앙 크롭해서 넣는다(실측: 오른쪽 치우침). */
+      const side = Math.min(guardian.width, guardian.height);
+      const sx = (guardian.width - side) / 2, sy = (guardian.height - side) / 2;
+      ctx.drawImage(guardian, sx, sy, side, side, (W - gs) / 2, 250, gs, gs);
+      ctx.restore();
+    }
+  } catch (_) {}
   const SEAL = { GO: ["나아가라", "#3dc98f"], STOP: ["멈춰라", "#e05a5a"], HOLD: ["기다려라", "#7f8fd4"] };
   const [word, color] = SEAL[direction] || SEAL.HOLD;
   ctx.font = "900 130px 'Noto Serif KR', serif"; ctx.fillStyle = color;
@@ -2862,8 +3032,20 @@ function buildBujeokPoster({ saju, direction, seed, tosses, hexInfo, category, a
   ctx.shadowBlur = 0;
   ctx.font = "600 44px sans-serif"; ctx.fillStyle = "#c9b98f";
   ctx.fillText(direction, W / 2, 1150);
+  /* 판결 한 줄 — 한 장만 봐도 "무엇이라 답했는지"가 읽혀야 한다(45자 이내 일상어라 두 줄이면 충분) */
+  if (verdict) {
+    ctx.font = "600 46px 'Noto Serif KR', serif"; ctx.fillStyle = "#ede0c2";
+    const words = String(verdict).split(" ");
+    const lines = []; let cur = "";
+    for (const w of words) {
+      const t = cur ? cur + " " + w : w;
+      if (ctx.measureText(t).width > W - 200 && cur) { lines.push(cur); cur = w; } else cur = t;
+    }
+    if (cur) lines.push(cur);
+    lines.slice(0, 2).forEach((ln, i) => ctx.fillText(ln, W / 2, 1240 + i * 62));
+  }
   if (tosses && tosses.length === 6) {
-    const bw = 300, bh = 16, gap = 30, x0 = (W - bw) / 2, y0 = 1480;
+    const bw = 300, bh = 16, gap = 30, x0 = (W - bw) / 2, y0 = 1560;   // v127.2: 판결 한 줄이 들어와 아래로 밀었다
     tosses.forEach((t, i) => {
       const y = y0 - i * (bh + gap);
       ctx.fillStyle = "#e6d0a0";
@@ -2871,17 +3053,21 @@ function buildBujeokPoster({ saju, direction, seed, tosses, hexInfo, category, a
       else { ctx.fillRect(x0, y, bw * 0.42, bh); ctx.fillRect(x0 + bw * 0.58, y, bw * 0.42, bh); }
       if (t.v === 6 || t.v === 9) { ctx.fillStyle = "#ffe9ad"; ctx.beginPath(); ctx.arc(x0 + bw + 26, y + bh / 2, 6, 0, 7); ctx.fill(); }
     });
-    if (hexInfo) { ctx.font = "500 36px 'Noto Serif KR', serif"; ctx.fillStyle = "#c9b98f"; ctx.fillText(`卦 ${hexInfo.name}${hexInfo.moving && hexInfo.moving.length ? " → " + hexInfo.toName : ""}`, W / 2, 1560); }
+    if (hexInfo) { ctx.font = "500 36px 'Noto Serif KR', serif"; ctx.fillStyle = "#c9b98f"; ctx.fillText(`卦 ${hexInfo.name}${hexInfo.moving && hexInfo.moving.length ? " → " + hexInfo.toName : ""}`, W / 2, 1636); }
   }
   ctx.font = "500 38px 'Noto Serif KR', serif"; ctx.fillStyle = "#9d8fb5";
-  ctx.fillText(CAT_LABEL[category] || "어느 물음", W / 2, 1650);
+  ctx.fillText(CAT_LABEL[category] || "어느 물음", W / 2, 1706);
   if (total > 0 && against > 0 && against / total >= 0.4) {
     ctx.font = "600 34px sans-serif"; ctx.fillStyle = "#e5b96b";
-    ctx.fillText(`지표가 갈라섰다 · ${total - against} : ${against}`, W / 2, 1710);
+    ctx.fillText(`지표가 갈라섰다 · ${total - against} : ${against}`, W / 2, 1758);
   }
   const d = new Date();
   ctx.font = "400 30px sans-serif"; ctx.fillStyle = "#5f5670";
   ctx.fillText(`${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")} · 수호신의 부적`, W / 2, 1810);
+  /* A-5(작업지시 2026-08-14): 이미지는 앱 밖으로 나가서 혼자 돌아다닌다 —
+     받은 사람은 우리 화면의 어떤 고지도 못 본다. 그림 안에 넣지 않으면 표시가 사라진다. */
+  ctx.font = "400 26px sans-serif"; ctx.fillStyle = "#4e4660";
+  ctx.fillText("AI가 생성한 내용 · 재미로 보는 참고용", W / 2, 1858);
   return cv;
 }
 function dataUrlToFile(dataUrl, name) {                        // 동기 변환(제스처 보존용)
@@ -3089,6 +3275,26 @@ function todayIlju() { const d = new Date(); const g = (jdn(d.getFullYear(), d.g
 
 /* v16(B1): 수호신의 기억 — localStorage 영속화. "수호신은 이미 너를 안다"를 처음으로 사실로 만든다 */
 const STORE_KEY = "binari.v1";
+/* ── A-6 (전략 세션 작업지시 2026-08-14) ─────────────────────────────────────
+   저장 키에 **점(`.`) 접두 = 관리 대상**이라는 암묵 규칙이 있었다.
+   `clearMemory` 도, 내보내기/불러오기 스윕도 `binari.` 만 본다.
+   그런데 새 기능은 계속 **밑줄**로 키를 만들었다 — v115 각인 선택 입력, v125 궁합 상대 생년월일.
+   결과: **"다른 사람이야? — 처음부터 다시"를 눌러도 안 지워지고 다음 사람에게 넘어간다.**
+   궁합 쪽이 특히 무겁다 — **상대는 이 앱을 쓴 적도 동의한 적도 없는 제3자**다.
+   암묵 규칙을 명시 규칙으로 올린다: **저장 키는 전부 `binari.` 로 시작한다.**
+   health-check 가 `localStorage.*Item("binari_` 패턴으로 재발을 잡는다
+   (`binari_bujeok` 은 다운로드 파일명, `__binari_t` 는 가용성 프로브라 오탐하면 안 되므로 패턴을 좁혔다). */
+const IMPRINT_EXTRA_KEY = "binari.imprint_extra.v1";
+const MATCH_LAST_KEY = "binari.match_last.v1";
+/* 구키에서 한 번만 옮겨 오고 지운다. 이미 쓰던 사람의 값을 잃지 않으면서 규칙 밖 키를 없앤다 */
+(function migrateUnderscoreKeys() {
+  try {
+    for (const [oldK, newK] of [["binari_imprint_extra", IMPRINT_EXTRA_KEY], ["binari_match_last", MATCH_LAST_KEY]]) {
+      const v = localStorage.getItem(oldK);
+      if (v != null) { if (localStorage.getItem(newK) == null) localStorage.setItem(newK, v); localStorage.removeItem(oldK); }
+    }
+  } catch (_) {}
+})();
 function loadMemory() {
   try {
     const raw = store.getItem(STORE_KEY);
@@ -3106,7 +3312,23 @@ function loadMemory() {
   } catch (_) { return null; }
 }
 function saveMemory(m) { try { store.setItem(STORE_KEY, JSON.stringify(m)); } catch (_) {} }
-function clearMemory() { try { store.removeItem(STORE_KEY); } catch (_) {} }
+/* A-6 ②: 키 하나만 지우면 "처음부터 다시"가 거짓말이 된다.
+   `binari.` 전량을 쓸되 **팀 플래그(INTERNAL_KEY)는 남긴다** — 그게 날아가면 계측이 팀 유입으로 오염되고,
+   그건 D7 게이트를 무의미하게 만든다(CLAUDE.md §계측 주의). 지운 목록은 개수만 계측한다. */
+function clearMemory() {
+  let n = 0;
+  try { store.removeItem(STORE_KEY); } catch (_) {}
+  try {
+    const ks = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.indexOf("binari.") === 0 && k !== INTERNAL_KEY) ks.push(k);
+    }
+    for (const k of ks) { localStorage.removeItem(k); n++; }
+  } catch (_) {}
+  try { _ph?.reset?.(); } catch (_) {}      // 앞사람의 distinct_id 를 물려주지 않는다
+  return n;
+}
 
 /* v15: 강건 JSON 파서 (끝 잘림·트레일링 콤마 복구) — 2콜 공용 */
 function repairJSON(txt) {
@@ -3232,6 +3454,36 @@ function exactAge(y, m, d) {
   return a >= 0 && a < 130 ? a : null;
 }
 const ageBand = (a) => (a == null ? null : a < 20 ? "10대 이하" : a >= 70 ? "70대 이상" : `${Math.floor(a / 10) * 10}대`);
+/* v99: 입력 확인 한 줄 — 만세력은 생시·경도까지 쓰는데 사용자는 자기가 뭘 넣었는지 확인할 곳이 없었다.
+   정확도가 이 서비스의 최대 강점이므로, 넣은 값을 사람 말로 되읽어 준다. */
+/* v105.5 성명학(소리오행) — 훈민정음 오음 배속으로 이름 각 글자의 초성을 오행에 건다.
+   아음(ㄱㅋㄲ)=목 · 설음(ㄴㄷㄹㅌㄸ)=화 · 순음(ㅁㅂㅍㅃ)=수 · 치음(ㅅㅈㅊㅆㅉ)=금 · 후음(ㅇㅎ)=토.
+   ※ 획수(수리)성명학은 강희자전 획수 사전이 필요해 여기서 계산하지 않는다 —
+      계산 못 하는 것을 계산한 척하지 않는다는 원칙(만세력과 같은 기준). 한자는 참고 재료로만 넘긴다. */
+const CHO_TABLE = { "ㄱ":"목","ㄲ":"목","ㅋ":"목", "ㄴ":"화","ㄷ":"화","ㄸ":"화","ㄹ":"화","ㅌ":"화",
+  "ㅁ":"수","ㅂ":"수","ㅃ":"수","ㅍ":"수", "ㅅ":"금","ㅆ":"금","ㅈ":"금","ㅉ":"금","ㅊ":"금", "ㅇ":"토","ㅎ":"토" };
+const CHO_LIST = ["ㄱ","ㄲ","ㄴ","ㄷ","ㄸ","ㄹ","ㅁ","ㅂ","ㅃ","ㅅ","ㅆ","ㅇ","ㅈ","ㅉ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"];
+function soundElements(name) {
+  const out = [];
+  for (const ch of String(name || "")) {
+    const code = ch.charCodeAt(0) - 0xac00;
+    if (code < 0 || code > 11171) continue;                 // 한글 음절만
+    const el = CHO_TABLE[CHO_LIST[Math.floor(code / 588)]];
+    if (el) out.push(el);
+  }
+  return out;
+}
+function bornSummary(b) {
+  const y = +b.y, m = +b.m, d = +b.d;
+  if (!y || !m || !d) return "";
+  const cal = b.cal === "lunar" ? `음력${b.leap ? " 윤달" : ""} ` : "";
+  let t = "태어난 시각은 흐릿한 채로";
+  if (!b.noHour && b.h !== "" && b.h != null) {
+    const h = +b.h, mi = b.min === "" || b.min == null ? 0 : +b.min;
+    t = `${h < 12 ? "오전" : "오후"} ${h % 12 === 0 ? 12 : h % 12}시${mi ? ` ${mi}분` : ""}`;
+  }
+  return `${cal}${y}년 ${m}월 ${d}일 · ${t}${b.city && b.city.trim() ? ` · ${b.city.trim()}` : ""}`;
+}
 /* 판결 품질을 세그먼트별로 보기 위한 공통 속성 — 질문 원문·이름·생일 원값은 제외 */
 function demoProps(birth, extra) {
   const a = exactAge(birth.y, birth.m, birth.d);
@@ -3258,10 +3510,38 @@ function axisMap(list, pick) {
   return Object.keys(o).length ? o : null;
 }
 const voteMap = (votes) => axisMap(votes, (v) => v.v ?? v.vote);
-const reasonMap = (reasons) => axisMap(reasons, (r) => r.text);
+/* A-3: 근거 **전문**을 계측에 실으면 실명·질문 원문이 그대로 나간다.
+   축 이름과 길이만 남긴다 — "어느 축이 얼마나 길게 나왔나"는 이걸로도 재진다. */
+const reasonMap = (reasons) => axisMap(reasons, (r) => String(r.text || "").length);
 
 const encodeShare = (o) => { try { return _b64e(JSON.stringify(o)); } catch (_) { return ""; } };
-const decodeShare = (s) => { try { const o = JSON.parse(_b64d(s)); return o && o.v && o.d ? o : null; } catch (_) { return null; } };
+/* ── A-2 (작업지시 2026-08-14) ────────────────────────────────────────────
+   `?v=` 는 base64 인코딩만 거친 **평문**이라 링크를 받은 사람도, 링크가 남는 곳도 다 읽는다.
+   설계 헌장: "공유 링크·이미지 — 실명은 절대 싣지 않는다."
+   ⚠ **payload 의 n 만 지우면 부족하다.** SYS 프롬프트가 판결문 안에서 이름을 부르게 하고 있어
+     실명이 verdict/subline **본문 문자열**에 실려 나간다. 둘 다 걷어내야 한다.
+   ⚠ 그리고 경계를 봐야 한다 — 이름이 "지원"일 때 "지원 아끼지"가 깨지면 안 된다.
+     그래서 **호격 조사가 붙은 형태**(지원아/지원야/지원님/지원 씨)와 문장 첫머리 호명만 지운다. */
+const stripName = (t, name) => {
+  const n = String(name || "").trim();
+  if (!n || n.length < 2 || !t) return t || "";
+  const e = n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  let o = String(t)
+    /* ① 호격 — "지원아," "지원님" "지원 씨." 뒤가 문장부호나 끝일 때만 지운다 */
+    .replace(new RegExp(`${e}\\s*(아|야|님|씨)(?=[\\s,.…!?"'\u2014-]|$)`, "g"), "")
+    /* ② 문장 첫머리 호명 — "지원, 오늘은" */
+    .replace(new RegExp(`(^|[.!?…]\\s*)${e}(?=[\\s]*[,、])`, "g"), "$1");
+  /* ③ 그래도 남으면 **'너'로 갈아 끼운다.**
+     ⚠ 트레이드오프를 알고 고른 것이다 — 이름이 흔한 명사와 겹치면(지원·하늘·사랑) 뜻이 살짝 틀어진다.
+        "지원 아끼지 마" → "너 아끼지 마". 어색해도 말은 된다.
+        반대로 안 지우면 **실명이 링크에 그대로 실린다.** 설계 헌장은 후자를 금지한다.
+        어색한 문장과 새는 실명 중에 어색한 쪽을 고른다. */
+  if (new RegExp(e).test(o)) o = o.replace(new RegExp(e, "g"), "너");
+  /* ④ 지우고 남은 부스러기 정리 — "보내지 마. ." 가 실제로 나왔다 */
+  return o.replace(/\s{2,}/g, " ").replace(/([.!?…])\s*[.,、]/g, "$1")
+    .replace(/^\s*[,、.]\s*/, "").trim();
+};
+const decodeShare = (s) => { try { const o = JSON.parse(_b64d(s)); if (!o || !o.v || !o.d) return null; delete o.n; return o; } catch (_) { return null; } };
 
 /* ═══════════════ 앱 ═══════════════ */
 export default function App() {
@@ -3269,8 +3549,11 @@ export default function App() {
   const returning = !!mem;                        // 재회 여부 — 인사·연출 분기
   const [step, setStep] = useState(mem ? 3 : 0);  // 기억이 있으면 온보딩 전체 생략
   const [birth, setBirth] = useState(mem?.birth || { y: "", m: "", d: "", h: "", min: "", city: "", noHour: false, cal: "solar", leap: false, name: "", sex: "", job: "", rel: "" });
-  if (birth.name === undefined) birth.name = ""; if (birth.sex === undefined) birth.sex = ""; // v26: 구버전 저장 호환
+  if (birth.name === undefined) birth.name = ""; if (birth.sex === undefined) birth.sex = ""; if (birth.hanja === undefined) birth.hanja = ""; // v26·v105.5: 구버전 저장 호환
   const [bstep, setBstep] = useState(0);                      // v26: 동화 도입부 장면 인덱스
+  const [hanjaOpen, setHanjaOpen] = useState(false);   // v105.5: 한자 이름 노크
+  const [adEntry] = useState(() => (typeof window === "undefined" ? false : isAdEntry()));   // v127.5: 광고 유입 진입면
+
   const [addOpen, setAddOpen] = useState(false); const [addName, setAddName] = useState(""); const [addSex, setAddSex] = useState(""); // v26: 조각 보태기
   const [qhintI, setQhintI] = useState(0);   // v71 질문 힌트 롤링 인덱스
   const [agree, setAgree] = useState(() => readConsent());     // 분석 동의(선택) — 거부해도 모든 기능 정상 동작
@@ -3278,7 +3561,7 @@ export default function App() {
   const [sharedGone, setSharedGone] = useState(false);  // v75: '나도 물어볼래'로 공유 화면 닫음
   // 1단계 계측은 동의와 무관하게 항상 켠다(2단계 속성만 동의로 게이트)
   // 계측: 세션 시작. 유입은 first-touch(_superProps.ft_*)가 고정 부착하므로 여기선 이번 방문 경로(ref)만 참고용으로 남긴다.
-  useEffect(() => { _consent = readConsent(); _initAnalytics(); let ref = "direct"; try { const sp = new URLSearchParams(window.location.search); ref = sp.get("ref") || sp.get("utm_source") || (sp.get("v") ? "share" : "direct"); } catch (_) {} trackVisit({ returning, ref }); if (sharedIn) track("shared_verdict_view", { dir: sharedIn.d }); }, []);
+  useEffect(() => { _optout = readOptout(); _consent = readConsent(); _initAnalytics(); let ref = "direct"; try { const sp = new URLSearchParams(window.location.search); ref = sp.get("ref") || sp.get("utm_source") || (sp.get("v") ? "share" : "direct"); } catch (_) {} trackVisit({ returning, ref }); if (sharedIn) track("shared_verdict_view", { dir: sharedIn.d }); }, []);
   const [saju, setSaju] = useState(mem?.saju || null);
   const [zo, setZo] = useState(mem?.zo || null);
   const [moon, setMoon] = useState(mem?.moon || null);
@@ -3315,6 +3598,7 @@ export default function App() {
   const [logOpen, setLogOpen] = useState(false);              // v16(B6): 판결록 펼침
   const [imprintOpen, setImprintOpen] = useState(false);      // v113: 각인 전문 — 판결 밖의 문서
   const [matchOpen, setMatchOpen] = useState(false);          // v125: 궁합 — 각인의 애드온
+  const [optOut, setOptOut] = useState(() => readOptout());   // A-1: 분석 수집 거부(처리방침이 약속한 수단)
   const [openRec, setOpenRec] = useState(-1);                 // 판결록 행 클릭 → 다시 읽기
   const [streak, setStreak] = useState(mem?.streak || null);  // v16(B7): 연속 방문 {last, count}
   const [dailyOpen, setDailyOpen] = useState(false);          // v18: 아침 문안 노크형 — 청해야 펼친다
@@ -3416,9 +3700,14 @@ export default function App() {
       setDetail(r2);
       // L3(지표별 근거)는 제품의 핵심 차별점이다. 실패율과 소요시간을 모르면 개선 근거가 없다.
       track("detail_shown", { ms: Math.round(performance.now() - _t0), dir: r1?.direction || null, retry: !!isRetry, axes: Array.isArray(r2?.reasons) ? r2.reasons.length : 0,
-        subline: r2?.subline || null,        // 카드 앞면 설명 한 줄
-        funline: r2?.funLine || null,        // 정령 멘트 — 톤 개선의 유일한 측정 대상
-        reasons: reasonMap(r2?.reasons),     // 지표별 근거 전문(축별)
+        /* A-3(작업지시 2026-08-14): 원문 대신 파생값만. 처리방침 §9 가 "분석 도구에는 질문 원문·이름·
+           생년월일 원값을 전송하지 않는다"고 적어 두었는데 뒷면 원문이 그대로 나가고 있었다.
+           ⚠ 뒷면이 더 위험했다 — 콜2 에 이름 금지 지시가 붙는 조건이 "앞면에서 이미 이름을 부른 경우"뿐이라,
+              **앞면이 이름을 안 부른 경우에만 뒷면이 이름을 부르는** 구조였다. 그 문자열이 그대로 갔다.
+           톤 개선 측정은 길이·존재 여부로도 된다. 원문이 필요하면 평가 하네스(eval/)로 재는 게 맞다. */
+        sublen: (r2?.subline || "").length || 0,
+        funlen: (r2?.funLine || "").length || 0,
+        reasons: reasonMap(r2?.reasons),     // A-3: 축별 **길이**만(전문 금지)
         disclaimer: r2?.disclaimer || null,
         tok_in: _u2 ? _u2.in : null, tok_out: _u2 ? _u2.out : null });
     } catch (e) {
@@ -3452,7 +3741,9 @@ export default function App() {
     track("verdict_shared", { dir: res.direction, mode: "ritual" });
     const text = `"${q}"\n→ ${res.direction}. ${res.verdict}\n\n— 내 수호신의 판결, 비나리`;
     // v75: 판결을 링크에 실어 보낸다 — 받은 사람이 홈이 아니라 이 판결을 먼저 보게
-    const payload = { q, d: res.direction, v: res.verdict, s: (detail && !detail._err ? detail.subline : "") || "", n: (birth.name || "").trim(), a: res.against || 0, t: res.total || 0, c: res.category || "", hx: hexInfo ? { n: hexInfo.name, t: (hexInfo.moving && hexInfo.moving.length ? hexInfo.toName : "") } : null };
+    /* A-2: n 필드 제거 + 본문에서 호칭 제거. 둘 다 해야 실명이 안 나간다 */
+    const _nm = (birth.name || "").trim();
+    const payload = { q, d: res.direction, v: stripName(res.verdict, _nm), s: stripName((detail && !detail._err ? detail.subline : "") || "", _nm), a: res.against || 0, t: res.total || 0, c: res.category || "", hx: hexInfo ? { n: hexInfo.name, t: (hexInfo.moving && hexInfo.moving.length ? hexInfo.toName : "") } : null };
     const enc = encodeShare(payload);
     const url = enc ? `https://binari-sepia.vercel.app/?v=${enc}` : "https://binari-sepia.vercel.app/?ref=share";
     try {
@@ -3650,7 +3941,11 @@ export default function App() {
     const du = birth.sex ? daeun(+birth.y, +birth.m, +birth.d, birth.noHour ? 12 : +birth.h, birth.noHour || birth.min === "" ? 0 : +birth.min, !!birth.noHour, cityLon(birth.city), birth.sex === "M", new Date().getFullYear()) : null; // v25: 대운
     // v14: 세션 내내 고정인 프로필(주역 제외)은 system에 담아 프롬프트 캐싱 → 2번째 질문부터 빨라짐
     const _ms = myeongsikText(saju, birth.sex, new Date());   // v101: 십성·신살·세운·길일·직업 — 문자열 확장(구조 불변)
-    const profile = `${birth.name ? `호칭: ${birth.name}\n` : ""}${birth.sex ? `성별: ${birth.sex === "M" ? "남" : "여"}\n` : ""}사주: ${saju.pillars.년}년 ${saju.pillars.월}월 ${saju.pillars.일}일 ${saju.pillars.시}시 / 오행 ${Object.entries(saju.counts).map(([k, v]) => k + v).join(" ")} / 일간(나) ${saju.dayGan || "?"}·오행중심 ${saju.main}${saju.nayin ? ` / 납음 ${saju.nayin}` : ""}
+    const _snd = soundElements(birth.name);
+    const _nameLine = birth.name
+      ? `호칭: ${birth.name}${birth.hanja ? ` (한자 ${birth.hanja})` : ""}${_snd.length ? ` / 이름 소리오행 ${_snd.join("·")}` : ""}\n`
+      : "";
+    const profile = `${_nameLine}${birth.sex ? `성별: ${birth.sex === "M" ? "남" : "여"}\n` : ""}사주: ${saju.pillars.년}년 ${saju.pillars.월}월 ${saju.pillars.일}일 ${saju.pillars.시}시 / 오행 ${Object.entries(saju.counts).map(([k, v]) => k + v).join(" ")} / 일간(나) ${saju.dayGan || "?"}·오행중심 ${saju.main}${saju.nayin ? ` / 납음 ${saju.nayin}` : ""}
 별자리: ${zo.name}(${zo.el}) / 달: 태어난 밤의 위상 ${moon.name} · 달 별자리 ${mp.moonSign}(정서·내면) · 나크샤트라 ${mp.nakshatra}(베다 27수)
 마야 촐킨: ${tzk.tone}의 톤 · ${tzk.sign}
 수비학 라이프패스: ${num}${du ? (du.pre ? `\n대운: 아직 첫 대운 전 — 대운수 ${du.num}세부터 ${du.dir}(지금은 월주 기운이 지배)` : `\n대운(현재 인생 시기): ${du.ganji}(${du.el}) 대운 · ${du.startAge}~${du.endAge}세 · ${du.dir} — 10년 단위 큰 흐름`) : ""}${sj ? `\n삼재: 올해 ${sj} (입춘 경계 근사)` : ""}${tj ? `\n토정비결(당년 신수): 괘상수 ${tj.code} (상${tj.sang} 중${tj.jung} 하${tj.ha}), 음력 생일 ${tj.lunar}` : ""}${core ? `\n가치여정(워드소팅 16→6→3→1): 핵심 ${core} / 지킨 가치 ${vals4.filter(v => v !== core).join("·")} / 마지막에 내려놓은 ${vals8.filter(v => !vals4.includes(v)).join("·")}` : ""}${birth.job || birth.rel ? `\n요즘 삶의 국면(맥락): ${[birth.job, birth.rel].filter(Boolean).join(" · ")} — 질문의 무게·의미를 이 맥락에 비춰 읽되, 판결 근거는 지표다` : ""}${_ms}`;
@@ -3697,7 +3992,7 @@ export default function App() {
       agitateRef.current = true; setRes(r1);
       // scope_level(모델 판정) vs scope_hint(규칙) — 둘이 어긋난 건이 경계 케이스다. 그 목록이 다음 규칙 개정의 근거가 된다.
       const _sLevel = ["S1", "S2", "S3"].includes(r1.scope) ? r1.scope : null;
-      track("verdict_shown", demoProps(birth, { dir: r1.direction, cat: r1.category, tone: r1.tone, against: r1.against, total: r1.total, mode: "ritual", lean: lean || "skip", verdict: r1.verdict || null, mbti: mbti || null, element: saju?.main || null, ms: Math.round(performance.now() - _jt0),
+      track("verdict_shown", demoProps(birth, { dir: r1.direction, cat: r1.category, tone: r1.tone, against: r1.against, total: r1.total, mode: "ritual", lean: lean || "skip", vlen: (r1.verdict || "").length || 0, mbti: mbti || null, element: saju?.main || null, ms: Math.round(performance.now() - _jt0),
         scope_level: _sLevel, scope_hint: _sHint, scope_agree: _sLevel ? _sLevel === _sHint : null, handoff_triggered: _sLevel === "S3", reask: _reask,
         // 표가 없거나(votes_ok=false) 표와 결론이 어긋난(dir_overridden) 비율이 곧 '판결이 지표에서 나오는가'의 지표다
         votes_ok: !!_tally, votes_n: _tally ? _tally.total : 0, dir_overridden: _tally ? _tally.overridden : null,
@@ -3816,7 +4111,10 @@ export default function App() {
   const guardianIntro = saju && zo ? `나는 ${saju.nayin ? `'${saju.nayin.split("·")[1] || saju.nayin}'` : (saju.main === "수" ? "깊은 물결" : saju.main === "화" ? "꺼지지 않는 불꽃" : saju.main === "목" ? "자라나는 숲" : saju.main === "금" ? "벼려진 빛" : "단단한 대지")}의 기운을 두른, ${zo.el === "물" ? "안개처럼 흐르는" : zo.el === "불" ? "타오르는 형상의" : zo.el === "공기" ? "바람으로 된" : "산처럼 고요한"} 존재야.` : "";
 
   return (
-    <div className="stage">
+    /* v127.4 오행 색 연동 — 사람마다 다른 건 수호신뿐이고 화면 크롬은 전 유저 같은 금색이었다.
+       골드 기조는 그대로 두고(가독성) **글로우만** 그 사람의 오행 색으로 물들인다.
+       경쟁 8개사는 브랜드 컬러가 고정이라 구조적으로 못 하는 개인화다. */
+    <div className="stage" style={saju ? { "--elc": (EL_COLOR[saju.main] || [])[0] || "#f5d98b", "--elc2": (EL_COLOR[saju.main] || [])[1] || "#ffe9ad" } : undefined}>
       <style>{CSS}</style>
       <VerBadge />
 
@@ -3828,7 +4126,7 @@ export default function App() {
         const vv = sharedIn.v || "";
         return (
           <section className="scene fade sharedwrap">
-            <p className="sharedeyebrow">{sharedIn.n ? `${sharedIn.n}의 수호신이 이렇게 판결했어` : "어떤 이의 수호신이 이렇게 판결했어"}</p>
+            <p className="sharedeyebrow">어떤 이의 수호신이 이렇게 판결했어</p>
             <div className="persp sharedcard">
               <div className="vcard">
                 <div className="vface">
@@ -3846,6 +4144,10 @@ export default function App() {
               </div>
             </div>
             <button className="btn gold sharedcta" onClick={dismiss}>나도 내 수호신에게 물어볼래</button>
+            {/* A-5(작업지시 2026-08-14): 이 화면은 position:fixed 로 뷰포트를 덮어서
+                아래 깔린 온보딩 ainote 가 **물리적으로 안 보인다.** 링크로 처음 들어온 사람에게는
+                여기가 비나리의 첫 화면이므로, AI 표시가 여기 없으면 어디에도 없는 것과 같다. */}
+            <p className="ainote">이 판결은 AI가 생성한 내용입니다 · 재미로 보는 참고예요</p>
             <p className="sharedfoot">비나리 — 답은 거기에 있어</p>
           </section>
         );
@@ -3854,6 +4156,7 @@ export default function App() {
       {step === 0 && (
         <section className="scene fade">
           <div className="orb"><DustOrb size={170} stage={0} /></div>
+          {adEntry && <p className="adhook">망설이는 일에 <b>판결</b>을 내려주는 곳이야 — 가라 · 멈춰라 · 기다려라, 셋 중 하나로.</p>}
           <p className="line">…불렀어?</p>
           <p className="line d1">어른이 된다는 건, 나를 이루던 것들이 조금씩 흩어지는 일이야.</p>
           <p className="line d2">나는 그 흩어진 조각들이야. 네가 모아주면, 다시 너의 곁이 될 수 있어.</p>
@@ -3871,14 +4174,23 @@ export default function App() {
       )}
 
       {step === 1 && (
-        <section className="scene fade">
+        <section className="scene stepv fade">
           <div className="orb"><DustOrb size={170} stage={0} /></div>
           {bstep === 0 && (
             <div className="bscene" key={0}>
               <p className="line">네 이름을 다시 들려줄래.</p>
               <p className="sub2">어릴 적 내가 부르던 그 이름. 부르고 싶은 이름이면 뭐든 좋아.</p>
-              <input className="in wide center" lang="ko" placeholder="…" maxLength={12} value={birth.name} onChange={e => setBirth({ ...birth, name: e.target.value })} />
-              <button className="btn gold mt" onClick={() => { setBirth({ ...birth, name: birth.name.trim() }); setBstep(1); }}>{birth.name.trim() ? birth.name.trim() + " — 그래, 기억했어" : "이름 없이 갈래"}</button>
+              <input className="in wide center box" lang="ko" placeholder="예: 서연" maxLength={12} value={birth.name} onChange={e => setBirth({ ...birth, name: e.target.value })} />
+              {/* v105.5 성명학 — 이름으로 사주를 보완해 온 사람이 적지 않다. 묻지 않으면 그 사람의 절반만 아는 셈.
+                     다만 온보딩을 늘리지 않도록 '노크형'으로 — 청하는 사람에게만 열린다(v18 모를 권리와 같은 방식). */}
+              {hanjaOpen
+                ? <input className="in wide center box hanja" lang="ko" placeholder="한자 이름 (예: 徐娟)" maxLength={8} value={birth.hanja || ""} onChange={e => setBirth({ ...birth, hanja: e.target.value })} />
+                : <button className="knocklink" onClick={() => setHanjaOpen(true)}>한자 이름도 있어 — 이름의 기운까지 볼래</button>}
+              {/* v99·v105.5: 위계 교정 — 이름을 적었을 때만 금색(주경로).
+                     비었을 땐 색을 뺀 조용한 버튼으로 둔다. 눌리긴 하되 권하지는 않는다. */}
+              {birth.name.trim()
+                ? <button className="btn gold mt" onClick={() => { setBirth({ ...birth, name: birth.name.trim(), hanja: (birth.hanja || "").trim() }); setBstep(1); }}>{birth.name.trim()} — 그래, 기억했어</button>
+                : <button className="btn ghost quiet mt" onClick={() => setBstep(1)}>이름 없이 갈래</button>}
             </div>
           )}
           {bstep === 1 && (
@@ -3905,9 +4217,11 @@ export default function App() {
               <div className="row gap center">
                 <input className="in sm" placeholder="14" inputMode="numeric" maxLength={2} disabled={birth.noHour} value={birth.h} onChange={e => setBirth({ ...birth, h: e.target.value })} /><span className="unit">시</span>
                 <input className="in sm" placeholder="30" inputMode="numeric" maxLength={2} disabled={birth.noHour} value={birth.min} onChange={e => setBirth({ ...birth, min: e.target.value })} /><span className="unit">분</span>
-                <label className="chk"><input type="checkbox" checked={birth.noHour} onChange={e => setBirth({ ...birth, noHour: e.target.checked })} /> 모름 <em>(괜찮아, 조금 흐리게 보일 뿐이야)</em></label>
               </div>
-              <input className="in wide center" lang="ko" placeholder="태어난 도시 (건너뛰어도 돼)" value={birth.city} onChange={e => setBirth({ ...birth, city: e.target.value })} />
+              {/* v99: '모름'을 시·분 옆에서 아래 줄로 — 부연이 옆으로 삐져나와 행이 어수선했다 */}
+              <label className="chk"><input type="checkbox" checked={birth.noHour} onChange={e => setBirth({ ...birth, noHour: e.target.checked })} /> 모름 <em>(괜찮아, 조금 흐리게 보일 뿐이야)</em></label>
+              <input className="in wide center box" lang="ko" placeholder="태어난 도시 (건너뛰어도 돼)" value={birth.city} onChange={e => setBirth({ ...birth, city: e.target.value })} />
+              {bornSummary(birth) && <p className="confirmline">{bornSummary(birth)} — 맞아?</p>}
               {err && <p className="err">{err}</p>}
               <button className="btn gold mt" onClick={() => { if (!birth.noHour) { const h = +birth.h; if (birth.h === "" || h < 0 || h > 23) { setErr("태어난 시(0~23시)를 알려주거나 '모름'을 선택해줘."); return; } if (birth.min !== "" && (+birth.min < 0 || +birth.min > 59)) { setErr("분은 0~59 사이로 알려줘."); return; } } setErr(""); setBstep(3); }}>기억났어</button>
             </div>
@@ -3995,13 +4309,12 @@ export default function App() {
       )}
 
       {step === 25 && (
-        <section className="scene fade">
+        <section className="scene stepv fade">
           <div className="halo">
             <DustOrb size={210} stage={vstage > 0 ? 3 : 2} tint={saju ? EL_COLOR[saju.main] : undefined} />
-            <div className="gtext">
-              <p className="gname" key={vstage}>{vstage === 0 ? "마음의 방" : vstage === 1 ? "포기의 방" : "단 하나"}</p>
-            </div>
           </div>
+          {/* v99: 방 이름을 오브 위 겹침 → 아래로. v22 '장면 분리(수호신 영역/대화 영역 겹침 제로)' 원칙의 마지막 예외를 정리 */}
+          <p className="gname under">{vstage === 0 ? "마음의 방" : vstage === 1 ? "포기의 방" : "단 하나"}</p>
           <div key={vstage} className="fade">
           <p className="sub2">{vstage === 0 ? "너를 움직이는 말들이야. 생각 말고, 손이 가는 대로 여섯 개." : vstage === 1 ? "여섯 중 셋만 지킬 수 있어. 무엇을 내려놓는지가 진짜 너야." : "마지막이야 — 단 하나만 지킬 수 있다면."}</p>
           <div className="grid16">{(vstage === 0 ? VALUES16 : vstage === 1 ? vals8 : vals4).map(v => (
@@ -4195,6 +4508,12 @@ export default function App() {
               ) : (
                 <button className="resetlink" onClick={() => setResetAsk(true)}>다른 사람이야? — 처음부터 다시</button>
               ))}
+              {/* A-1: 처리방침이 "해제하면 수집이 중단됩니다"라고 두 번 안내하는 그 수단. 여기가 그 자리다. */}
+              {!ritual && !res && (
+                <button className="resetlink optout" onClick={() => { const on = !optOut; if (!on) track("analytics_optout_off", {}); setOptOut(on); setOptout(on); }}>
+                  {optOut ? "사용 통계 수집 — 꺼짐 · 다시 켤래" : "사용 통계 수집을 끌래"}
+                </button>
+              )}
               {!ritual && returning && !res && (
                 <div className="memrow">
                   <button className="resetlink" onClick={exportMemory}>수호신 기억 보관하기</button>
@@ -4322,6 +4641,10 @@ export default function App() {
             </div>
           )}
           {res && cardOn && <button className="btn gold mt" onClick={shareVerdict}>{shared ? "복사했어 — 붙여넣으면 돼" : "카톡·라인으로 판결 보내기"}</button>}
+          {/* v127.2: 부적을 서신(유료) 위로 올린다. 이 화면에서 앱 밖으로 나갈 수 있는 그림은 이것뿐인데
+              지금까지 맨 아래 ghost 한 줄이라 판결 100회에 4번 열렸다(45일 계측).
+              자동으로 펼치지는 않는다 — 판결 국면의 push 금지(설계 헌장)는 그대로 지킨다. */}
+          {res && cardOn && !bujeok && <button className="btn ghost mt" onClick={() => { track("bujeok_opened"); setBujeok(true); }}>수호신이 찍힌 한 장 — 부적으로 간직하기</button>}
           {/* D4: 결제 fake-door — 지불 의사만 잰다. 결제 인프라는 만들지 않는다. */}
           {res && cardOn && letterOk && (
             !letter ? (
@@ -4340,13 +4663,12 @@ export default function App() {
               </div>
             )
           )}
-          {res && cardOn && !bujeok && <button className="btn ghost mt" onClick={() => { track("bujeok_opened"); setBujeok(true); }}>수호신의 부적 받기</button>}
           {res && cardOn && bujeok && (
             <div className="fade bwrap">
               <BujeokCanvas saju={saju} direction={res.direction} seed={q + (res.verdict || "")} />
               <p className="fine">오늘의 판결을 지키는 부적 — 같은 질문·같은 판결에서만 같은 문양이 나와.</p>
-              <button className="btn ghost sm" onClick={() => saveOrShareBujeok({ saju, direction: res.direction, seed: q + (res.verdict || ""), tosses, hexInfo, category: res.category, against: res.against || 0, total: res.total || 0 })}>부적 간직하기 — 이미지로</button>
-              <p className="fine">질문은 이미지에 담기지 않아 — 문양과 판결의 방향만.</p>
+              <button className="btn ghost sm" onClick={() => saveOrShareBujeok({ saju, direction: res.direction, seed: q + (res.verdict || ""), tosses, hexInfo, category: res.category, against: res.against || 0, total: res.total || 0, verdict: res.verdict || "", guardian: grabGuardianFrame() })}>부적 간직하기 — 이미지로</button>
+              <p className="fine">질문은 이미지에 담기지 않아 — 수호신과 판결만.</p>
             </div>
           )}
           {res && cardOn && <button className="btn ghost mt" onClick={backToLobby}>다른 걸 물어볼래</button>}
@@ -4373,6 +4695,7 @@ export default function App() {
         <div className="readwrap">
           <button className="escx" onClick={() => setImprintOpen(false)} aria-label="닫기">✕</button>
           <div className="readbody">
+            <GuardianSeal saju={saju} zo={zo} mbti={mbti} num={num} moon={moon} birth={birth} kind="각인 — 사람 자체에 딸린 문서" />
             <ImprintDoc saju={saju} birth={birth} sex={birth?.sex} onClose={() => setImprintOpen(false)} />
           </div>
         </div>
@@ -4389,7 +4712,7 @@ export default function App() {
         <div className="readwrap">
           <button className="escx" onClick={() => setLetterOpen(false)} aria-label="닫기">✕</button>
           <div className="readbody">
-            <p className="dtag center">수호신의 서신 · {letterNo(records[letterIdx] || {})}</p>
+            <GuardianSeal saju={saju} zo={zo} mbti={mbti} num={num} moon={moon} birth={birth} kind={`서신 · ${letterNo(records[letterIdx] || {})}`} />
             {letterDoc.chapters.map((c, i) => (
               <div key={i} className="rchap">
                 <h3 className="rct"><span>{i + 1}</span>{c.t}</h3>
@@ -4429,9 +4752,11 @@ const CSS = `
 .stage::before{content:"";position:absolute;inset:0;pointer-events:none;background-image:radial-gradient(1px 1px at 12% 22%,#ffffff55,transparent),radial-gradient(1px 1px at 78% 14%,#ffe9ad44,transparent),radial-gradient(1.5px 1.5px at 62% 68%,#ffffff33,transparent),radial-gradient(1px 1px at 30% 84%,#ffe9ad33,transparent),radial-gradient(1px 1px at 88% 48%,#ffffff40,transparent),radial-gradient(1.5px 1.5px at 8% 58%,#ffe9ad2e,transparent);animation:twk 6s ease-in-out infinite alternate}
 @keyframes twk{to{opacity:.45}}
 .scene{width:100%;max-width:400px;display:flex;flex-direction:column;align-items:center;text-align:center;position:relative;word-break:keep-all}
+/* v99: 스텝형 화면은 세로 중앙 정렬 — 하단 35~45%가 비고 CTA가 화면 중앙에 뜨던 것을 정리 */
+.scene.stepv{justify-content:center;min-height:calc(100dvh - 96px)}
 .line,.sub2,.mention,.dimq,.gsay,.gintro,.forming,.vv,.vs,.vq,.qquote,.dmain,.gname,.vlogverdict{text-wrap:balance}
 .fade{animation:fd 1.15s cubic-bezier(.22,.7,.25,1) both}@keyframes fd{from{opacity:0;transform:translateY(14px) scale(.985);filter:blur(7px)}to{opacity:1;transform:none;filter:blur(0)}}
-.orb{position:relative;width:170px;height:170px;margin:48px 0 36px;filter:drop-shadow(0 0 24px rgba(245,217,139,.2))}
+.orb{position:relative;width:170px;height:170px;margin:20px 0 28px;filter:drop-shadow(0 0 24px rgba(245,217,139,.2))}
 .line{font-size:17px;line-height:1.8;margin:8px 0;opacity:0;animation:fd 1.6s cubic-bezier(.22,.7,.25,1) forwards}.d1{animation-delay:1.4s}.d2{animation-delay:3s}
 .brand-mark{margin-top:56px;font-size:11px;letter-spacing:.4em;color:#8a7f95;font-family:sans-serif}
 .verbadge{position:fixed;right:9px;bottom:7px;z-index:70;font-family:sans-serif;font-size:9px;letter-spacing:.08em;color:#575070;pointer-events:none;user-select:none}
@@ -4439,12 +4764,34 @@ const CSS = `
 .sub2{font-size:14px;color:#9d8fb5;line-height:1.7;margin:6px 0 18px}
 .form{display:flex;flex-direction:column;gap:12px;width:100%;margin-bottom:14px}
 .row{display:flex;align-items:center;justify-content:center}.gap{gap:8px}.center{justify-content:center}
-.in{background:transparent;border:none;border-bottom:1px solid rgba(245,217,139,.35);color:#f0e2b8;padding:10px 4px;font-size:19px;width:96px;text-align:center;font-family:inherit;letter-spacing:.06em;transition:border-color .3s, box-shadow .3s}
+.in{background:transparent;border:none;border-bottom:1px solid rgba(245,217,139,.45);color:#fff3d4;font-weight:600;padding:10px 4px;font-size:19px;width:96px;text-align:center;font-family:inherit;letter-spacing:.06em;transition:border-color .3s, box-shadow .3s}
+.in::placeholder{color:#5c5470;font-weight:400}
+/* v99: 이름·도시처럼 자유입력 칸은 밑줄이 아니라 박스로(질문칸과 같은 어포던스) */
+.in.box{background:rgba(16,12,26,.72);border:1px solid rgba(245,217,139,.34);border-radius:12px;padding:13px 14px;box-shadow:0 6px 20px rgba(0,0,0,.4)}
+.in.box:focus{outline:none;border-color:rgba(245,217,139,.7);box-shadow:0 6px 24px rgba(0,0,0,.45),0 0 16px rgba(245,217,139,.18)}
+/* v99: 넣은 값을 사람 말로 되읽어 준다 — 만세력 정확도가 화면에서 보이게 */
+/* v105.5: 스킵은 눌리되 권하지 않는다 — 색을 빼 '아직 차례가 아닌' 상태로 보이게 */
+.btn.ghost.quiet{border-color:rgba(140,132,158,.24);background:rgba(255,255,255,.015);color:#7c7590;box-shadow:none;font-weight:500}
+.btn.ghost.quiet:hover{border-color:rgba(190,182,205,.4);color:#a9a2bd;box-shadow:none}
+/* 한자 이름 노크 — 청하는 사람에게만 열린다 */
+.knocklink{background:none;border:none;margin:-4px 0 0;padding:4px 6px;color:#8a819f;font-family:inherit;font-size:12px;letter-spacing:.04em;cursor:pointer;text-decoration:underline dotted;text-underline-offset:4px}
+.knocklink:hover{color:#cfc4de}
+.in.box.hanja{font-size:17px;letter-spacing:.12em}
+/* v124.1 인장 — 유료 문서 머리. 문서가 글이므로 인장은 조용해야 한다(오브 108px + 두 줄) */
+.gsealwrap{display:flex;flex-direction:column;align-items:center;gap:2px;margin:0 0 22px;padding-bottom:18px;border-bottom:1px solid rgba(245,217,139,.14)}
+.gsealorb{width:132px;height:132px;border-radius:50%;border:1px solid;display:flex;align-items:center;justify-content:center;overflow:hidden;background:radial-gradient(circle at 50% 50%,rgba(12,9,20,.55),rgba(5,4,8,.9))}
+.gsealinner{transform:scale(.58);transform-origin:center;opacity:.92}
+.gsealline{margin:10px 0 0;font-size:13.5px;color:#f0e2b8;letter-spacing:.04em}
+.gsealkind{margin:2px 0 0;font-family:sans-serif;font-size:10.5px;letter-spacing:.12em;color:#8a7f95;text-transform:none}
+/* v127.5 광고 유입 훅 — 세계관 문장 위에 한 줄. 본편 방문자에겐 렌더되지 않는다 */
+.adhook{font-size:15px;line-height:1.7;color:#ffe9ad;margin:0 0 14px;padding:10px 16px;border:1px solid rgba(245,217,139,.28);border-radius:14px;background:rgba(245,217,139,.06)}
+.adhook b{color:#fff3d4;font-weight:700}
+.confirmline{font-size:12.5px;color:#c9bb96;letter-spacing:.02em;margin:2px 0 0;padding:7px 14px;border:1px dashed rgba(245,217,139,.28);border-radius:10px;background:rgba(245,217,139,.045)}
 .in::placeholder{color:#4d445f}
 .in.sm{width:60px}.in.wide{width:100%;text-align:center;font-size:15px}
 .in:focus{outline:none;border-bottom-color:#ffe9ad;box-shadow:0 12px 18px -14px rgba(245,217,139,.6)}
 .in:disabled{opacity:.35}
-.unit{color:#8a7f95;font-size:13px}
+.unit{color:#6f6580;font-size:12.5px}
 .chk{font-family:sans-serif;font-size:12px;color:#c9b98f;display:flex;align-items:center;gap:6px}.chk em{color:#8a7f95;font-style:normal}
 .caltoggle{align-items:center}
 .calbtn{font-family:inherit;font-size:13px;padding:7px 18px;border-radius:999px;border:1px solid rgba(138,127,149,.35);background:transparent;color:#9d8fb5;cursor:pointer;transition:all .2s}
@@ -4471,6 +4818,8 @@ const CSS = `
 .chk input{accent-color:#c98f3d}
 .btn{font-family:inherit;font-size:14px;font-weight:600;letter-spacing:.14em;padding:13px 28px;border-radius:999px;border:1px solid rgba(245,217,139,.4);background:transparent;color:#f0e2b8;cursor:pointer;transition:box-shadow .3s,border-color .3s,background .3s,transform .1s}
 .btn.gold{background:linear-gradient(180deg,#f5d98b,#c98f3d);color:#241a08;border:none;box-shadow:0 6px 22px rgba(201,143,61,.3)}
+/* v127.4: color-mix 미지원 브라우저는 위 금색 글로우를 그대로 쓴다(선언이 통째로 무시됨) */
+.btn.gold{box-shadow:0 6px 22px color-mix(in srgb,var(--elc,#c98f3d) 42%,transparent)}
 .btn.ghost{border-color:rgba(245,217,139,.32);background:rgba(245,217,139,.05);color:#d6c493;box-shadow:0 2px 14px rgba(0,0,0,.28)}.btn:hover{border-color:rgba(245,217,139,.7);box-shadow:0 0 16px rgba(245,217,139,.2)}.btn.gold:hover{box-shadow:0 8px 26px rgba(201,143,61,.45)}.btn:active{transform:translateY(1px)}.btn:disabled{opacity:.45;cursor:default}.mt{margin-top:18px}
 .fine{font-family:sans-serif;font-size:11px;color:#6b617d;margin-top:14px;line-height:1.6}
 /* AI기본법 제31조 — 생성형 AI 사전 고지·결과물 표시(별지 잔글씨, 판결문 형식 불변) */
@@ -4519,6 +4868,8 @@ const CSS = `
 .rclose{margin:32px 0 0;font-size:14.5px;line-height:1.9;color:#ffe9ad;letter-spacing:.03em;text-shadow:0 0 20px rgba(245,217,139,.35)}
 .readbody .raterow{margin-top:34px}
 .readbody .ainote{margin-top:26px}
+.ainote.docnote{text-align:left;margin:22px 0 4px;padding:12px 13px;border:1px solid #6f658044;border-radius:9px;background:#1a152455;font-size:10.5px;line-height:1.8}
+.ainote.docnote b{color:#9d8fb5}
 .ainote.card{margin-top:18px;opacity:.85}
 .err{color:#e58a8a;font-size:13px;font-family:sans-serif;margin:10px 0}
 .cards{display:flex;flex-direction:column;gap:14px;width:100%;margin-top:10px}
@@ -4542,10 +4893,11 @@ const CSS = `
 .bar i{height:6px;border-radius:3px;display:block;min-width:4px}.bar b{color:#c9b98f}
 .mread{font-size:13.5px;line-height:1.75;color:#cbc0dd;text-align:left;margin:6px 0 0}
 .grid16{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;width:100%}
-.cell{font-family:inherit;font-size:12px;letter-spacing:.08em;padding:10px 0;border-radius:999px;border:1px solid rgba(138,127,149,.35);background:transparent;color:#9d8fb5;cursor:pointer;transition:all .25s}
+.cell{font-family:inherit;font-size:12.5px;letter-spacing:.08em;padding:11px 0;border-radius:999px;border:1px solid rgba(168,158,185,.55);background:rgba(255,255,255,.02);color:#cfc4de;cursor:pointer;transition:all .25s}
 .cell:hover{border-color:rgba(245,217,139,.5)}
-.cell.sel{border-color:#ffe9ad;color:#ffe9ad;box-shadow:0 0 14px rgba(245,217,139,.3),inset 0 0 10px rgba(245,217,139,.08)}
+.cell.sel{border-color:#ffe9ad;color:#241a08;font-weight:600;background:linear-gradient(180deg,#f5d98b,#d9ad5c);box-shadow:0 0 16px rgba(245,217,139,.35)}
 .halo{position:relative;filter:drop-shadow(0 0 30px rgba(245,217,139,.15));margin:8px 0;transition:filter .6s}
+.halo{filter:drop-shadow(0 0 30px color-mix(in srgb,var(--elc,#f5d98b) 22%,transparent))}
 .halo.wide{width:100vw;margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);display:flex;justify-content:center;margin-top:calc(min(110vw,57vh,640px)*-0.09);margin-bottom:calc(min(110vw,57vh,640px)*-0.16);transition:filter .6s,transform .9s cubic-bezier(.2,.8,.2,1),opacity .8s ease}
 .halo.wide.lobbyscale{transform:translateY(7vh) scale(1.52)}
 .halo.wide.dissolved{opacity:0;transform:scale(1.7);filter:blur(7px);pointer-events:none}
@@ -4598,6 +4950,7 @@ const CSS = `
 .formsteps li.now{color:#f5d98b;text-shadow:0 0 12px rgba(245,217,139,.5);transform:translateY(0)}
 @keyframes formPulse{0%,100%{opacity:.5}50%{opacity:1}}
 .gname{font-size:14px;line-height:1.9;color:#f0e2b8;margin:0;text-shadow:0 2px 18px rgba(5,4,8,.95),0 0 26px rgba(245,217,139,.28);background:rgba(5,4,8,.5);padding:8px 16px;border-radius:14px}
+.gname.under{background:none;padding:0;margin:2px 0 4px;font-size:15px;letter-spacing:.06em;color:#ffe9ad;text-shadow:0 0 20px rgba(245,217,139,.3)}
 .gsay{font-size:14.5px;line-height:1.8;color:#f0e2b8;margin:2px 0 10px;text-align:center;text-shadow:0 1px 12px rgba(4,3,10,.8)}
 .gsay.sprite{font-size:12.5px;color:#9d8fb5;margin:-4px 0 10px}
 .gsay.born{font-weight:600;color:#ffe9ad;text-shadow:0 0 18px rgba(245,217,139,.35)}
@@ -4865,6 +5218,7 @@ sup.impfx{font-size:9px;color:#c98f3d;vertical-align:super;margin-left:2px}
 .split{font-family:sans-serif;font-size:10.5px;letter-spacing:.22em;color:#e5b96b;margin:0 0 6px;animation:formPulse 1.8s ease-in-out infinite}
 .retrybtn{background:transparent;border:1px solid #c98f3d66;color:#e6d6a8;font-size:11px;padding:3px 12px;border-radius:14px;cursor:pointer;font-family:sans-serif;margin-left:8px}
 .retrybtn:hover{border-color:#f5d98b}
+.resetlink.optout{opacity:.72}
 .resetlink{background:none;border:none;margin-top:18px;color:#5f5670;font-family:sans-serif;font-size:10.5px;letter-spacing:.06em;cursor:pointer;text-decoration:underline dotted}
 .resetlink:hover{color:#9d8fb5}
 .daily{width:100%;border:1px solid rgba(245,217,139,.28);border-radius:14px;padding:14px 16px;margin:2px 0 14px;background:linear-gradient(160deg,#1c173066,#120e1e88)}

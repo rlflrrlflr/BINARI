@@ -41,7 +41,9 @@ async function onboard(page) {
   await page.waitForSelector("textarea.qbox", { timeout: 12000 }); await page.waitForTimeout(600);
 }
 
-const b = await chromium.launch((process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}));
+// PW_CHROMIUM: playwright 번들 버전과 설치된 크로미움이 어긋나는 환경(CI·클라우드)에서 경로를 직접 준다
+const b = await chromium.launch((process.env.CHROME_PATH || process.env.PW_CHROMIUM)
+  ? { executablePath: process.env.CHROME_PATH || process.env.PW_CHROMIUM } : {});
 const page = await b.newPage({ viewport: { width: 430, height: 932 } });
 page.setDefaultTimeout(9000);
 const errs = [];
@@ -56,7 +58,7 @@ await onboard(page);
   const ib = page.getByRole("button", { name: /각인 — 네가 어떻게/ });
   ck("각인 진입점이 로비에 있다", (await ib.count()) === 1);
   await ib.click(); await page.waitForTimeout(900);
-  ck("각인이 실제로 발행된다(결제 없이)", (await page.locator(".imp").count()) === 1);
+  ck("각인이 실제로 발행된다(결제 없이)", (await page.locator(".imp").count()) === 1, `.imp=${await page.locator(".imp").count()}`);
   const it = (await page.locator(".imp").textContent()) || "";
   ck("각인 — 겉과 속을 갈라 말한다", /너는 .{4,}(이야|야)/.test(it) && /네 속은 다르다/.test(it));
   ck("각인 — 생김새·짝 표가 채워진다", (await page.locator(".imp .impr").count()) >= 5, `${await page.locator(".imp .impr").count()}행`);
@@ -88,6 +90,12 @@ await onboard(page);
     return /@keyframes impRise/.test(css) && /prefers-reduced-motion/.test(css);
   });
   ck("각인 — 모션이 있고 접근성 설정을 존중한다", motionOk);
+  /* ── A-4 (작업지시 2026-08-14): 각인은 LLM 을 안 타서 판결의 S3 가드레일을 구조적으로 통과하지 않는다.
+     여섯 판 연속 문서만 넓어지고 고지는 0이었다 — **하단 고정 블록**으로 붙였는지 화면에서 확인한다. */
+  ck("각인 — 하단에 고지가 붙는다", (await page.locator(".imp .ainote.docnote").count()) === 1);
+  ck("각인 — 의료 조언이 아니라고 명시한다", /의료·법률·재무 조언이 아니야/.test(it) && /병원에 가는 게 먼저/.test(it));
+  ck("각인 — 발병을 단정하지 않는다", !/크게 앓을 수 있어/.test(it),
+    (it.match(/.{0,12}크게 앓을 수 있어.{0,12}/) || [""])[0]);
   /* v123 — 같은 값을 서사로도 읽힌다. 단 모호함으로 되돌아가면 안 된다 */
   ck("각인 — 이야기 절이 있다", /너의 이야기/.test(it) && (await page.locator(".impch").count()) >= 6,
     `${await page.locator(".impch").count()}장`);
@@ -173,6 +181,8 @@ await onboard(page);
       ck("궁합 — 총점을 맨 뒤에만 둔다", /이 숫자를 먼저 보지 마/.test(mt));
       ck("궁합 — 헤어지라고 안 한다", !/(헤어져|정리해|만나지 마|그만 만나)/.test(mt));
       ck("궁합 — 다른 사람과 다시 볼 수 있다", /다른 사람과도 봐볼게/.test(mt));
+    /* A-4: 궁합에도 고지가 붙는다 */
+    ck("궁합 — 고지가 붙는다", /재미로 보는 참고용/.test(mt) && /관계를 끊거나 이으라는 판정이 아니고/.test(mt));
     }
   }
   await page.getByRole("button", { name: /^닫을게$/ }).last().click().catch(() => {});

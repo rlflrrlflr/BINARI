@@ -6,8 +6,10 @@ import { dirname, join } from "node:path";
 
 const appDir = join(dirname(fileURLToPath(import.meta.url)), "..");
 // import.meta.env는 Node ESM엔 없으므로 스텁 주입(휴면 계측: AKEY=undefined → 완전 무동작)
-execSync("npx esbuild src/App.jsx --format=esm --jsx=automatic --define:import.meta.env={} --outfile=.mansae-test.tmp.mjs", { cwd: appDir });
-const { calcSaju, sunLongitude, equationOfTime, cityLon, moonLongitude, tzolkin, lunar2solar, solar2lunar, daeun } = await import(join(appDir, ".mansae-test.tmp.mjs"));
+/* v124.1: 임시 번들을 src/ 안에 떨군다 — App.jsx 가 v113부터 `./lib/imprint.js` 를 임포트하는데
+   app 루트에 떨구면 그 상대경로가 깨져 이 검증 자체가 통째로 못 돌았다(ERR_MODULE_NOT_FOUND). */
+execSync("npx esbuild src/App.jsx --format=esm --jsx=automatic --define:import.meta.env={} --outfile=src/.mansae-test.tmp.mjs", { cwd: appDir });
+const { calcSaju, sunLongitude, equationOfTime, cityLon, moonLongitude, tzolkin, lunar2solar, solar2lunar, daeun } = await import(join(appDir, "src/.mansae-test.tmp.mjs"));
 
 const results = [];
 const check = (name, pass, note = "") => { results.push(pass); console.log(`${pass ? "PASS" : "FAIL"} — ${name}${note ? " · " + note : ""}`); };
@@ -114,7 +116,7 @@ check("연지 오행: 목1 화3 토3 금0 수1", yj.counts.목 === 1 && yj.count
 check("연지 일간(나) = 기", yj.dayGan === "기", yj.dayGan);
 check("주기운=일간 오행: 화3=토3 동점이어도 己土 → main=토(최다카운트 아님)", yj.main === "토", `main=${yj.main}`);
 
-execSync("rm -f .mansae-test.tmp.mjs", { cwd: appDir });
+execSync("rm -f src/.mansae-test.tmp.mjs", { cwd: appDir });
 const fails = results.filter(r => !r).length;
 console.log(`\n=== 만세력 검증: ${results.length - fails}/${results.length} PASS ===`);
 if (fails) process.exit(1);
