@@ -1498,9 +1498,9 @@ function MatchDoc({ saju, birth, onClose }) {
             상대는 이 앱을 쓴 적도 동의한 적도 없는 제3자이므로 **상대 값은 0개**로 간다. */}
         <button className="btn gold mt" onClick={() => saveOrShareCard({
           build: () => buildMatchCard({
-            headline: r.clash.t, care: r.care[0] || "",
+            head: r.card.head, line: r.card.line, ask: r.card.ask,
             tint: (EL_COLOR[saju?.main] || [])[0], guardian: grabGuardianFrame(),
-            seed: `${r.clash.t}${r.care[0] || ""}` }),
+            seed: `${r.card.head}${r.card.line}` }),
           cardKind: "match", skyKinds: [],   // 파생 이름 0개 — 축 이름도 총점도 안 싣는다
           fileBase: "binari_gunghap", title: "비나리 궁합",
         })}>이미지로 간직하기 — 한 장</button>
@@ -2827,7 +2827,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v130 · 각인·궁합 카드";
+const APP_VER = "v131 · 카드 되묻기";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -3377,78 +3377,143 @@ function cardBase(seed, tint) {
     ctx.beginPath(); ctx.arc(rnd() * CARD_W, rnd() * CARD_H, 0.8 + rnd() * 1.6, 0, 7); ctx.fill();
   }
   ctx.globalAlpha = 1;
-  if (tint) {   // 오행 색 아우라 — 정지 그림에서 사람마다 다르게 읽히는 유일한 축(v127.3 판단과 같은 이유)
-    const au = ctx.createRadialGradient(CARD_W / 2, 620, 40, CARD_W / 2, 620, 460);
-    au.addColorStop(0, tint + "30"); au.addColorStop(0.6, tint + "12"); au.addColorStop(1, "transparent");
-    ctx.fillStyle = au; ctx.beginPath(); ctx.arc(CARD_W / 2, 620, 460, 0, 7); ctx.fill();
-  }
   ctx.textAlign = "center"; ctx.fillStyle = "#8a7f95"; ctx.font = "500 34px sans-serif";
   ctx.fillText("비 나 리  ·  B I N A R I", CARD_W / 2, 150);
   return { cv, ctx };
 }
-/** 카드 아래쪽 공통 — 고지와 **주소**. 주소가 없으면 그림이 퍼져도 아무도 못 찾아온다. */
-function cardFoot(ctx, label) {
+/** 카드 발치 — **주소와 법정 고지만.** 그 밖의 말은 안 적는다.
+   ⚠ v130 은 여기에 "총점은 안 실어 — 궁합은 어디가 갈리는가로 읽는 거야"를 적었다.
+     그건 **우리 설계 원칙**이지 받은 사람이 궁금한 게 아니다. 창업자 지적 그대로다 —
+     "AI 특유의 설명적인 부분, 안 알려줘도 되는 어노잉한 것으로 정보를 채웠어."
+     카드에서 우리가 우리 규칙을 해설하면, 그 자리는 훅이 들어갔어야 할 자리다. */
+function cardFoot(ctx) {
   ctx.textAlign = "center";
-  ctx.font = "500 34px sans-serif"; ctx.fillStyle = "#9d8fb5";
-  ctx.fillText(label, CARD_W / 2, 1746);
-  ctx.font = "600 32px sans-serif"; ctx.fillStyle = "#c9b98f";
-  ctx.fillText("binari-sepia.vercel.app", CARD_W / 2, 1806);
-  ctx.font = "400 26px sans-serif"; ctx.fillStyle = "#4e4660";
+  ctx.font = "600 34px sans-serif"; ctx.fillStyle = "#c9b98f";
+  ctx.fillText("binari-sepia.vercel.app", CARD_W / 2, 1800);
+  ctx.font = "400 24px sans-serif"; ctx.fillStyle = "#463f56";
   ctx.fillText("생년월일로 계산한 전통 해석 · 재미로 보는 참고용", CARD_W / 2, 1858);
 }
-/** 여러 줄 그리기 — 캔버스엔 줄바꿈이 없다. 넘치면 자른다(카드는 다 담는 자리가 아니다). */
-function cardLines(ctx, text, y, { size = 46, color = "#ede0c2", weight = 600, max = 3, lh = 66, pad = 200 } = {}) {
-  ctx.font = `${weight} ${size}px 'Noto Serif KR', serif`; ctx.fillStyle = color;
-  const words = String(text || "").replace(/<[^>]+>/g, "").split(" ");
-  const lines = []; let cur = "";
-  for (const w of words) {
+/** 여러 줄 그리기 — 캔버스엔 줄바꿈이 없다. `\n` 은 강제 줄바꿈으로 받는다.
+   ⚠ 그리디로만 감으면 마지막 줄에 어절 하나가 떨어진다 — 실측에서 "…안 바꾸는 / **사람**",
+     "저절로는 안 굴러가는 / **둘**" 이 나왔다. 큰 글씨에서 고아 한 어절은 눈에 제일 먼저 걸린다.
+     그래서 ①줄 수가 넘치면 **글자를 줄이고** ②마지막 줄이 한 어절이면 **앞 줄에서 하나 내린다.** */
+function wrapLines(ctx, para, maxW) {
+  const out = []; let cur = "";
+  for (const w of para.split(" ")) {
     const t = cur ? cur + " " + w : w;
-    if (ctx.measureText(t).width > CARD_W - pad && cur) { lines.push(cur); cur = w; } else cur = t;
+    if (ctx.measureText(t).width > maxW && cur) { out.push(cur); cur = w; } else cur = t;
   }
-  if (cur) lines.push(cur);
-  lines.slice(0, max).forEach((ln, i) => ctx.fillText(ln, CARD_W / 2, y + i * lh));
-  return Math.min(lines.length, max) * lh;
+  if (cur) out.push(cur);
+  /* 고아 어절 구제 — 마지막 줄이 한 어절이고, 앞 줄에서 하나 내려도 폭이 남으면 내린다 */
+  if (out.length >= 2 && out[out.length - 1].split(" ").length === 1) {
+    const prev = out[out.length - 2].split(" ");
+    if (prev.length >= 2) {
+      const moved = prev.pop();
+      const a = prev.join(" "), b = moved + " " + out[out.length - 1];
+      if (ctx.measureText(b).width <= maxW) { out[out.length - 2] = a; out[out.length - 1] = b; }
+    }
+  }
+  return out;
 }
-function drawGuardianOn(ctx, guardian, cy = 620, size = 560) {
+function cardLines(ctx, text, y, { size = 46, color = "#ede0c2", weight = 600, max = 3, lh = 66, pad = 140 } = {}) {
+  const maxW = CARD_W - pad;
+  const paras = String(text || "").replace(/<[^>]+>/g, "").split("\n");
+  let fs = size, out = [];
+  for (let i = 0; i < 8; i++) {          // 줄 수가 넘치면 글자를 줄여 가며 다시 잰다
+    ctx.font = `${weight} ${fs}px 'Noto Serif KR', serif`;
+    out = paras.flatMap((pp) => wrapLines(ctx, pp, maxW));
+    if (out.length <= max) break;
+    fs = Math.round(fs * 0.9);
+  }
+  ctx.fillStyle = color;
+  const step = Math.round(lh * (fs / size));
+  out.slice(0, max).forEach((ln, i) => ctx.fillText(ln, CARD_W / 2, y + i * step));
+  return out.length * step;
+}
+/** 수호신 + **그 뒤의 오행 아우라**.
+   ⚠ v130 은 아우라를 cardBase 가 y=620 고정으로 깔고, 그림은 카드마다 다른 자리에 그렸다 —
+     **빛이 그림 밑에 안 깔려서** 수호신이 납작하고 흐리게 나왔다(실측). 둘은 같이 움직여야 한다.
+   아우라는 정지 그림에서 사람마다 다르게 읽히는 유일한 축이다(v127.3 판단과 같은 이유). */
+function drawGuardianOn(ctx, guardian, cy = 620, size = 560, tint) {
   try {
+    if (tint) {
+      const R = size * 0.86;
+      const au = ctx.createRadialGradient(CARD_W / 2, cy, 30, CARD_W / 2, cy, R);
+      au.addColorStop(0, tint + "3a"); au.addColorStop(0.55, tint + "18"); au.addColorStop(1, "transparent");
+      ctx.save(); ctx.fillStyle = au; ctx.beginPath(); ctx.arc(CARD_W / 2, cy, R, 0, 7); ctx.fill(); ctx.restore();
+    }
     if (!guardian || !guardian.width) return;
+    /* ⚠ 화면 캔버스는 수호신 둘레에 **여백이 넓다.** 가운데 정사각으로만 잘라 넣으면
+       1080 카드에서 그림이 손톱만 하게 들어간다(실측). 그래서 **실제로 그려진 데까지**를 찾아 자른다 —
+       알파가 있는 픽셀의 경계 상자. 못 읽으면(오염된 캔버스 등) 가운데 정사각으로 되돌아간다. */
+    let sx = 0, sy = 0, sw = Math.min(guardian.width, guardian.height), sh = sw;
+    sx = (guardian.width - sw) / 2; sy = (guardian.height - sh) / 2;
+    try {
+      const g = guardian.getContext("2d") || guardian.getContext("webgl") ? null : null;
+      const tmp = document.createElement("canvas");
+      const N = 160;                                   // 축소해서 훑는다 — 경계만 알면 되므로 정밀도가 필요 없다
+      tmp.width = N; tmp.height = N;
+      const tc = tmp.getContext("2d");
+      tc.drawImage(guardian, 0, 0, guardian.width, guardian.height, 0, 0, N, N);
+      const d = tc.getImageData(0, 0, N, N).data;
+      let x0 = N, y0 = N, x1 = -1, y1 = -1;
+      for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+        const i = (y * N + x) * 4;
+        if (d[i + 3] > 18 && (d[i] + d[i + 1] + d[i + 2]) > 24) {
+          if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+        }
+      }
+      if (x1 > x0 + 4 && y1 > y0 + 4) {
+        const kx = guardian.width / N, ky = guardian.height / N;
+        const pad = 6;
+        const bx = Math.max(0, (x0 - pad) * kx), by = Math.max(0, (y0 - pad) * ky);
+        const bw = Math.min(guardian.width - bx, (x1 - x0 + pad * 2) * kx);
+        const bh = Math.min(guardian.height - by, (y1 - y0 + pad * 2) * ky);
+        const side2 = Math.max(bw, bh);               // 정사각으로 맞춰 비율을 안 깬다
+        sx = bx + bw / 2 - side2 / 2; sy = by + bh / 2 - side2 / 2; sw = side2; sh = side2;
+      }
+    } catch (_) { /* 못 읽으면 가운데 정사각 그대로 */ }
     ctx.save(); ctx.globalAlpha = 0.95; ctx.globalCompositeOperation = "lighter";
-    const side = Math.min(guardian.width, guardian.height);
-    ctx.drawImage(guardian, (guardian.width - side) / 2, (guardian.height - side) / 2, side, side,
-      (CARD_W - size) / 2, cy - size / 2, size, size);
+    ctx.drawImage(guardian, sx, sy, sw, sh, (CARD_W - size) / 2, cy - size / 2, size, size);
     ctx.restore();
   } catch (_) {}
 }
-/** 각인 카드 — 파생 이름은 **납음 하나뿐**(skyKinds:["납음"]). */
+/** 되묻는 줄 — 카드가 **답이 아니라 미끼**가 되는 자리. 이 한 줄이 없으면 받은 사람은 안 온다. */
+function cardAsk(ctx, text, y) {
+  ctx.strokeStyle = "#6f658055"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(CARD_W / 2 - 120, y - 74); ctx.lineTo(CARD_W / 2 + 120, y - 74); ctx.stroke();
+  cardLines(ctx, text, y, { size: 50, color: "#e8a06a", weight: 600, max: 3, lh: 68 });
+}
+/** 각인 카드 — 겉과 속의 **대비 하나**에 다 건다. 라벨도 해설도 없다. */
 function buildImprintCard({ surface, inner, nayin, tint, guardian, seed }) {
   const { cv, ctx } = cardBase(seed || surface || "imprint", tint);
-  ctx.font = "500 30px sans-serif"; ctx.fillStyle = "#6f6580";
-  ctx.fillText("각 인 — 네가 어떻게 만들어졌는지", CARD_W / 2, 210);
-  drawGuardianOn(ctx, guardian, 600, 520);
-  ctx.font = "500 34px sans-serif"; ctx.fillStyle = "#8a7f95";
-  ctx.fillText("겉", CARD_W / 2, 990);
-  cardLines(ctx, surface, 1060, { size: 62, color: "#f0e2b8", weight: 700, max: 2, lh: 76 });
-  ctx.font = "500 34px sans-serif"; ctx.fillStyle = "#8a7f95";
-  ctx.fillText("그 런 데   속 은", CARD_W / 2, 1250);
-  cardLines(ctx, inner, 1320, { size: 62, color: "#f0b6ab", weight: 700, max: 2, lh: 76 });
-  if (nayin) {   // 파생 이름 하나 — 60년 주기라 단독이면 날짜를 못 좁힌다
-    ctx.font = "500 38px 'Noto Serif KR', serif"; ctx.fillStyle = "#c9b98f";
-    ctx.fillText(`태어난 해의 이름 · ${nayin}`, CARD_W / 2, 1560);
+  drawGuardianOn(ctx, guardian, 450, 490, tint);
+  ctx.textAlign = "center";
+  ctx.font = "500 38px sans-serif"; ctx.fillStyle = "#8a7f95";
+  ctx.fillText("남들이 아는 나는", CARD_W / 2, 830);
+  cardLines(ctx, surface, 920, { size: 76, color: "#f0e2b8", weight: 700, max: 2, lh: 92 });
+  ctx.font = "500 38px sans-serif"; ctx.fillStyle = "#8a7f95";
+  ctx.fillText("그런데 안에 있는 건", CARD_W / 2, 1150);
+  cardLines(ctx, inner, 1240, { size: 76, color: "#f0b6ab", weight: 700, max: 2, lh: 92 });
+  /* 파생 이름 하나 — **라벨을 안 붙인다.** "태어난 해의 이름 ·"을 붙이는 순간 설명이 된다.
+     이름만 놓으면 "저게 뭐야"가 되는데, 우리가 노리는 게 그거다. */
+  if (nayin) {
+    ctx.font = "500 34px 'Noto Serif KR', serif"; ctx.fillStyle = "#7d7290";
+    ctx.fillText(`— ${nayin} —`, CARD_W / 2, 1430);
   }
-  cardFoot(ctx, "수호신이 읽은 나");
+  cardAsk(ctx, "너는 겉과 속이 같은 사람일까?", 1590);
+  cardFoot(ctx);
   return cv;
 }
-/** 궁합 카드 — 파생 이름 0개, 총점 0개, 상대 값 0개. */
-function buildMatchCard({ headline, care, tint, guardian, seed }) {
-  const { cv, ctx } = cardBase(seed || headline || "match", tint);
-  ctx.font = "500 30px sans-serif"; ctx.fillStyle = "#6f6580";
-  ctx.fillText("궁 합 — 그 사람과 나", CARD_W / 2, 210);
-  drawGuardianOn(ctx, guardian, 580, 460);
-  cardLines(ctx, headline, 1010, { size: 58, color: "#f0e2b8", weight: 700, max: 3, lh: 74 });
-  ctx.font = "500 34px sans-serif"; ctx.fillStyle = "#8a7f95";
-  ctx.fillText("조 심 할 것", CARD_W / 2, 1330);
-  cardLines(ctx, care, 1400, { size: 44, color: "#c8bcd8", weight: 500, max: 4, lh: 62 });
-  cardFoot(ctx, "총점은 안 실어 — 궁합은 어디가 갈리는가로 읽는 거야");
+/** 궁합 카드 — 관계 **장면** 하나 + 조심할 것 한 줄 + 되묻기. 축·글자·총점은 안 싣는다. */
+function buildMatchCard({ head, line, ask, tint, guardian, seed }) {
+  const { cv, ctx } = cardBase(seed || head || "match", tint);
+  drawGuardianOn(ctx, guardian, 460, 500, tint);
+  ctx.textAlign = "center";
+  cardLines(ctx, head, 880, { size: 84, color: "#f0e2b8", weight: 700, max: 2, lh: 102 });
+  cardLines(ctx, line, 1120, { size: 48, color: "#b9aecb", weight: 500, max: 3, lh: 68 });
+  cardAsk(ctx, ask, 1450);
+  cardFoot(ctx);
   return cv;
 }
 
