@@ -2766,7 +2766,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v129.2 · 동전 없이·서명";
+const APP_VER = "v129.3 · 공개 안전선";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -3200,24 +3200,86 @@ function dataUrlToFile(dataUrl, name) {                        // 동기 변환(
   for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
   return new File([arr], name, { type: "image/png" });
 }
+/* ── 공개 표면 안전 판정 (바이럴루프판단 v01 §2) ────────────────────────────
+   아홉 하늘 값은 각각 **서로 다른 주기의 나머지**다. 중국인의 나머지 정리 그대로,
+   주기가 서로 소일수록 조합의 유일성이 급격히 올라간다 — 즉 **몇 개만 모여도 생년월일이 복원된다.**
+     촐킨(260일) × 웨톤(35일) = LCM 1,820일 ≈ 5년 창에서 유일. 나이대만 알면 생일이 좁혀진다.
+     여기에 납음(60년)·혼메이세이(9년) 같은 연 주기가 더해지면 연도까지 특정된다.
+   "아홉 이름을 한 장에 다 싣는다"는 생년월일을 공개하는 것과 실질적으로 같다.
+
+   그래서 화이트리스트(목록)가 아니라 **계산**으로 막는다. 목록은 값이 늘어날 때마다 사람이
+   갱신해야 하고, 갱신을 잊으면 조용히 뚫린다. 주기를 적어 두면 새 값이 들어와도 자동으로 판정된다.
+
+   판정 규칙(설계 기본값 — 법무 판단이 아니라 안전한 출발점):
+     ① 날짜 주기 값들의 LCM 이 400일을 넘으면 위험. 그 이상이면 몇 년 창 안에서 날짜가 유일해진다.
+     ② 연 주기 값은 최대 1개. 둘이면 연도가 교차 확정된다.
+     ③ ①과 ②가 동시에 걸리면 생년월일 완전 특정 — 최고 위험.
+     ④ 파생 이름은 한 장에 최대 2개(문서 규칙). 가장 안전한 형태는 한 장에 하나.
+   오행 형상·수호신 색·판결 방향은 주기가 없어(파생 이름이 아니라 해석 결과) 이 계산에 안 들어간다. */
+const SKY_CYCLE = {
+  촐킨: { day: 260 },        // 마야 20날개 × 13톤
+  웨톤: { day: 35 },         // 자바 7요일 × 5파사란
+  나크샤트라: { day: 27 },   // 인도 달자리 27분할
+  달위상: { day: 30 },       // 삭망월 ≈ 29.5 → 안전 쪽으로 올림
+  아칸: { day: 7 },          // 가나 요일이름
+  하압: { day: 365 },        // 마야 태양력
+  납음: { year: 60 },        // 년 갑자
+  혼메이세이: { year: 9 },   // 일본 구성
+  띠: { year: 12 },
+};
+const _gcd = (a, b) => (b ? _gcd(b, a % b) : a);
+const _lcm = (a, b) => (a / _gcd(a, b)) * b;
+/** 공개 이미지 한 장에 이 값들을 함께 실어도 되는가. kinds 는 SKY_CYCLE 의 키 배열. */
+function shareRisk(kinds) {
+  const named = (kinds || []).filter((k) => SKY_CYCLE[k]);
+  const days = named.filter((k) => SKY_CYCLE[k].day).map((k) => SKY_CYCLE[k].day);
+  const years = named.filter((k) => SKY_CYCLE[k].year);
+  const dayLcm = days.length ? days.reduce(_lcm, 1) : 0;
+  const why = [];
+  if (dayLcm > 400) why.push(`날짜 주기 LCM ${dayLcm}일 — 몇 년 창에서 날짜가 유일해진다`);
+  if (years.length > 1) why.push(`연 주기 값 ${years.length}개 — 연도가 교차 확정된다`);
+  if (named.length > 2) why.push(`파생 이름 ${named.length}개 — 한 장에 둘까지`);
+  const worst = dayLcm > 400 && years.length >= 1;
+  if (worst) why.push("날짜와 연도가 함께 있다 — 생년월일이 사실상 공개된다");
+  return { ok: why.length === 0, level: worst ? "위험" : why.length ? "주의" : "안전", dayLcm, years: years.length, n: named.length, why };
+}
+
 async function saveOrShareBujeok(args) {
+  /* 부적은 앱 밖으로 나가는 유일한 그림이다 — 실을 값이 늘어날 때 여기서 한 번 걸러진다.
+     지금은 오행 문양·수호신 색·판결만 실어서 파생 이름이 0개다(안전). */
+  const risk = shareRisk(args.skyKinds || []);
+  if (!risk.ok) {
+    track("share_card_blocked", { level: risk.level, n: risk.n, day_lcm: risk.dayLcm });
+    console.warn("[비나리] 공개 이미지에 실을 수 없는 조합:", risk.why.join(" / "));
+    if (risk.level === "위험") return;      // 생년월일이 복원되는 조합은 만들지 않는다
+  }
   const cv = buildBujeokPoster(args);
   const dataUrl = cv.toDataURL("image/png");                   // 동기 → iOS 사용자 제스처 유지(share를 await 없이 즉시 호출)
   const iOS = /iP(hone|ad|od)/.test(navigator.userAgent);
+  /* 바이럴루프판단 v01 §4 — 루프가 도는지 재려면 '카드가 실제로 나갔나'를 세야 한다.
+     bujeok_opened(열었다)만 있어서 여는 것과 내보내는 것을 구분할 수 없었다.
+     card_kind 는 어떤 단위가 나갔는지 — 새 공유 단위를 붙일 때 무엇이 먹히는지 이 값으로 가른다.
+     way 는 나간 경로(공유시트/다운로드/새 탭) — 경로별로 성공률이 크게 다르다. */
+  const kind = args.cardKind || "bujeok";
+  const done = (way) => track("card_saved", { card_kind: kind, way, sky_n: (args.skyKinds || []).length });
   try {
     const file = dataUrlToFile(dataUrl, "binari_bujeok.png");
-    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file] }); return; } // iOS 공유시트(사진에 저장)
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file] }); done("share_sheet"); return;   // iOS 공유시트(사진에 저장)
+    }
   } catch (e) {
-    if (e && e.name === "AbortError") return;                  // 공유 취소 → 조용히
+    if (e && e.name === "AbortError") { track("card_share_cancelled", { card_kind: kind }); return; }   // 취소는 실패가 아니다 — 따로 센다
     /* 그 외 실패 → 폴백 */
   }
   if (!iOS) {                                                  // 데스크톱: 파일 다운로드
     const a = document.createElement("a"); a.href = dataUrl; a.download = "binari_bujeok.png";
     document.body.appendChild(a); a.click(); a.remove();
+    done("download");
   } else {                                                     // iOS Safari: download 속성 무시 → 새 탭 이미지(길게 눌러 저장)
     const w = window.open("", "_blank");
     if (w) w.document.write(`<title>비나리 부적</title><body style="margin:0;background:#050408;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="${dataUrl}" style="max-width:100%" alt="길게 눌러 사진에 저장"></body>`);
     else location.href = dataUrl;
+    done("new_tab");
   }
 }
 

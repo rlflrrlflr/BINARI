@@ -280,6 +280,18 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
     } else if (signs) add("정상", "검증된 공유 판결만 렌더", "객체일 때만 그림", "");
   }
 
+  /* 공개 표면 안전 — 아홉 하늘 값은 몇 개만 모이면 생년월일이 복원된다(바이럴루프판단 v01 §2).
+     눈으로는 안 보이는 종류의 사고라 계산으로 잡는다. 브라우저가 필요 없어 검진에서 같이 돌린다. */
+  try {
+    execFileSync("node", ["e2e/sharerisk-check.mjs"], { stdio: "pipe", timeout: 60000 });
+    add("정상", "공개 이미지 안전 판정", "파생 이름 조합이 규칙을 지킴", "");
+  } catch (e) {
+    const out = String(e.stdout || "") + String(e.stderr || "");
+    const bad = (out.match(/^FAIL — .*/gm) || []).map((l) => l.replace("FAIL — ", "")).join(" / ");
+    add("심각", "공개 이미지에 생년월일 복원 위험", bad || "sharerisk-check 실패",
+      "아홉 하늘 값 몇 개면 생년월일이 역산됩니다. `node e2e/sharerisk-check.mjs` 로 어느 조합인지 보세요.");
+  }
+
   // 티어 허용목록은 api/judge.js 에 있다 — 위 rules 루프는 App.jsx 만 보므로 여기서 따로 검사한다
   try {
     const api = readFileSync("api/judge.js", "utf8");
