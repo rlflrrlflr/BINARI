@@ -1317,6 +1317,21 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
         {notesOn && (<ol className="impnotes">
           {r.notes.map((t, i) => <li key={i}><span>{i + 1}</span><span dangerouslySetInnerHTML={{ __html: t }} /></li>)}
         </ol>)}
+        {/* v130 — 바이럴루프판단 v01 §3: 루프의 1차 단위는 **1인 완결형**이어야 한다.
+            각인은 혼자서 완결되고, 자랑이 아니라 소지에 가깝다. 그 조건에 맞는 첫 물건이다. */}
+        <button className="btn gold mt" onClick={() => saveOrShareCard({
+          build: () => buildImprintCard({
+            surface: r.core.surface.w, inner: r.core.inner.w, nayin: saju?.nayin || "",
+            tint: (EL_COLOR[saju?.main] || [])[0], guardian: grabGuardianFrame(),
+            seed: `${r.core.surface.w}${r.core.inner.w}` }),
+          cardKind: "imprint",
+          /* 정책(§2): 파생 이름은 **납음 하나뿐**. 촐킨·웨톤을 같이 실으면 LCM 1,820일이라
+             5년 창에서 날짜가 유일해진다 — shareRisk 가 막지만, 애초에 안 싣는다. */
+          skyKinds: ["납음"],
+          fileBase: "binari_gakin", title: "비나리 각인",
+        })}>이미지로 간직하기 — 겉과 속 한 장</button>
+        <p className="fine">그림엔 <b>생년월일·이름·건강·짝 이야기가 안 담겨.</b> 겉·속 한 줄과
+          태어난 해의 이름까지야 — <b>날짜가 역산되지 않게</b> 파생 이름은 한 장에 하나만 실어.</p>
         <button className="btn ghost mt" onClick={onClose}>닫을게</button>
       </div>
     </div>
@@ -1478,6 +1493,19 @@ function MatchDoc({ saju, birth, onClose }) {
         {notesOn && (<ol className="impnotes">{r.notes.map((t, i) => <li key={i}><span>{i + 1}</span><span dangerouslySetInnerHTML={{ __html: t }} /></li>)}</ol>)}
         {/* 궁합의 존재 이유가 이 버튼이다 — "각인은 평생 한 번, 궁합은 사람 수만큼"(§1174 주석).
             재구매 논리가 실제로 작동하는지는 이 클릭 말고 확인할 방법이 없는데 안 세고 있었다. */}
+        {/* v130 — 궁합은 **2인 완결형**이라 루프 1순위가 아니다(§3). 그래도 만들어 두는 이유는
+            "관계는 자랑거리"라서다. 대신 실을 수 있는 게 각인보다 훨씬 좁다 —
+            상대는 이 앱을 쓴 적도 동의한 적도 없는 제3자이므로 **상대 값은 0개**로 간다. */}
+        <button className="btn gold mt" onClick={() => saveOrShareCard({
+          build: () => buildMatchCard({
+            headline: r.clash.t, care: r.care[0] || "",
+            tint: (EL_COLOR[saju?.main] || [])[0], guardian: grabGuardianFrame(),
+            seed: `${r.clash.t}${r.care[0] || ""}` }),
+          cardKind: "match", skyKinds: [],   // 파생 이름 0개 — 축 이름도 총점도 안 싣는다
+          fileBase: "binari_gunghap", title: "비나리 궁합",
+        })}>이미지로 간직하기 — 한 장</button>
+        <p className="fine">그림엔 <b>둘의 생년월일도, 어느 축이 갈렸는지도, 총점도 안 담겨.</b>
+          상대는 이 앱을 쓴 적이 없는 사람이야 — <b>보내기 전에 한 번 더 생각해 줘.</b></p>
         <button className="btn ghost mt" onClick={() => { track("match_again", {}); setDone(false); }}>다른 사람과도 봐볼게</button>
         <button className="btn ghost mt" onClick={onClose}>닫을게</button>
       </div>
@@ -2799,7 +2827,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v129.4 · 벼름";
+const APP_VER = "v130 · 각인·궁합 카드";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -3277,16 +3305,19 @@ function shareRisk(kinds) {
   return { ok: why.length === 0, level: worst ? "위험" : why.length ? "주의" : "안전", dayLcm, years: years.length, n: named.length, why };
 }
 
-async function saveOrShareBujeok(args) {
-  /* 부적은 앱 밖으로 나가는 유일한 그림이다 — 실을 값이 늘어날 때 여기서 한 번 걸러진다.
-     지금은 오행 문양·수호신 색·판결만 실어서 파생 이름이 0개다(안전). */
-  const risk = shareRisk(args.skyKinds || []);
+/* 카드가 앱 밖으로 나가는 **하나뿐인 문**. 부적·각인·궁합이 전부 이 함수를 지난다.
+   ⚠ 새 카드를 만들 때 이 문을 우회하면 shareRisk 검사도 card_saved 계측도 통째로 빠진다.
+   ⚠ 그림 자체는 `build` 콜백이 만든다 — 위험 판정을 **그리기 전에** 하려는 것이다.
+      그려 놓고 버리면 "위험"인데도 캔버스에 이미 다 그려진 상태가 된다. */
+async function saveOrShareCard({ build, cardKind, skyKinds, fileBase, title }) {
+  const risk = shareRisk(skyKinds || []);
   if (!risk.ok) {
-    track("share_card_blocked", { level: risk.level, n: risk.n, day_lcm: risk.dayLcm });
+    track("share_card_blocked", { level: risk.level, n: risk.n, day_lcm: risk.dayLcm, card_kind: cardKind || "bujeok" });
     console.warn("[비나리] 공개 이미지에 실을 수 없는 조합:", risk.why.join(" / "));
     if (risk.level === "위험") return;      // 생년월일이 복원되는 조합은 만들지 않는다
   }
-  const cv = buildBujeokPoster(args);
+  const args = { cardKind, skyKinds, fileBase, title, build };
+  const cv = build();
   const dataUrl = cv.toDataURL("image/png");                   // 동기 → iOS 사용자 제스처 유지(share를 await 없이 즉시 호출)
   const iOS = /iP(hone|ad|od)/.test(navigator.userAgent);
   /* 바이럴루프판단 v01 §4 — 루프가 도는지 재려면 '카드가 실제로 나갔나'를 세야 한다.
@@ -3296,7 +3327,7 @@ async function saveOrShareBujeok(args) {
   const kind = args.cardKind || "bujeok";
   const done = (way) => track("card_saved", { card_kind: kind, way, sky_n: (args.skyKinds || []).length });
   try {
-    const file = dataUrlToFile(dataUrl, "binari_bujeok.png");
+    const file = dataUrlToFile(dataUrl, `${args.fileBase || "binari_bujeok"}.png`);
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       await navigator.share({ files: [file] }); done("share_sheet"); return;   // iOS 공유시트(사진에 저장)
     }
@@ -3305,16 +3336,127 @@ async function saveOrShareBujeok(args) {
     /* 그 외 실패 → 폴백 */
   }
   if (!iOS) {                                                  // 데스크톱: 파일 다운로드
-    const a = document.createElement("a"); a.href = dataUrl; a.download = "binari_bujeok.png";
+    const a = document.createElement("a"); a.href = dataUrl; a.download = `${args.fileBase || "binari_bujeok"}.png`;
     document.body.appendChild(a); a.click(); a.remove();
     done("download");
   } else {                                                     // iOS Safari: download 속성 무시 → 새 탭 이미지(길게 눌러 저장)
     const w = window.open("", "_blank");
-    if (w) w.document.write(`<title>비나리 부적</title><body style="margin:0;background:#050408;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="${dataUrl}" style="max-width:100%" alt="길게 눌러 사진에 저장"></body>`);
+    if (w) w.document.write(`<title>${args.title || "비나리 부적"}</title><body style="margin:0;background:#050408;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="${dataUrl}" style="max-width:100%" alt="길게 눌러 사진에 저장"></body>`);
     else location.href = dataUrl;
     done("new_tab");
   }
 }
+/* ── 각인·궁합 공유 카드 (v130) ─────────────────────────────────────────────
+   창업자 제안: "각인 궁합도 공유 가능하게 하면 좋지 않을까."
+   바이럴루프판단 v01 이 이미 정책을 세워 놨다 — 결과 공개는 허용하되 **선별**하고,
+   선별 기준은 취향이 아니라 **역산 가능성**이다. 그 위에 얹는다.
+
+   ⚠ **문서 전체를 링크에 싣는 안은 기각했다.** 각인은 4,000자가 넘어 URL 에 안 들어가고,
+     넣을 수 있는 건 결국 **입력(생년월일시·도시)** 인데 그건 설계 헌장이 금지하는 바로 그 세 값이다
+     ("생일+생시+지역 세 값이 함께 적히면 그것만으로 한 사람이 특정된다"). 그래서 **그림 한 장**으로 간다.
+
+   ⚠ 실을 값 고르기 — 정책 §2 를 그대로 적용했다.
+     · 각인: 겉·속(일간 파생 — 10일 주기라 날짜를 못 좁힌다) + **파생 이름 딱 하나**(납음, 60년 주기).
+       촐킨·웨톤·나크샤트라는 **안 싣는다.** 촐킨×웨톤만으로 LCM 1,820일이라 5년 창에서 날짜가 유일해진다.
+     · 궁합: **파생 이름 0개.** 관계 서술과 조심할 것만 싣는다.
+       "우리는 충이야" 같은 축 이름조차 안 싣는다 — 한쪽을 아는 사람에게 **상대의 자리 글자**가 좁혀진다.
+       상대는 이 앱을 쓴 적도 동의한 적도 없는 제3자다(A-6 과 같은 무게).
+   ⚠ 총점은 안 싣는다. 화면에서 "총점을 앞세우지 않는다"고 해 놓고 카드 한복판에 숫자를 박으면
+     그 원칙이 밖에서 무너진다. */
+const CARD_W = 1080, CARD_H = 1920;
+function cardBase(seed, tint) {
+  const cv = document.createElement("canvas"); cv.width = CARD_W; cv.height = CARD_H;
+  const ctx = cv.getContext("2d");
+  const bg = ctx.createLinearGradient(0, 0, 0, CARD_H);
+  bg.addColorStop(0, "#141021"); bg.addColorStop(0.55, "#0a0812"); bg.addColorStop(1, "#050408");
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, CARD_W, CARD_H);
+  let h7 = 7; for (const c of String(seed)) h7 = (h7 * 31 + c.charCodeAt(0)) >>> 0;
+  const rnd = () => ((h7 = (h7 * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+  for (let i = 0; i < 90; i++) {
+    ctx.globalAlpha = 0.12 + rnd() * 0.3; ctx.fillStyle = rnd() < 0.5 ? "#ffe9ad" : "#cdd6ff";
+    ctx.beginPath(); ctx.arc(rnd() * CARD_W, rnd() * CARD_H, 0.8 + rnd() * 1.6, 0, 7); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  if (tint) {   // 오행 색 아우라 — 정지 그림에서 사람마다 다르게 읽히는 유일한 축(v127.3 판단과 같은 이유)
+    const au = ctx.createRadialGradient(CARD_W / 2, 620, 40, CARD_W / 2, 620, 460);
+    au.addColorStop(0, tint + "30"); au.addColorStop(0.6, tint + "12"); au.addColorStop(1, "transparent");
+    ctx.fillStyle = au; ctx.beginPath(); ctx.arc(CARD_W / 2, 620, 460, 0, 7); ctx.fill();
+  }
+  ctx.textAlign = "center"; ctx.fillStyle = "#8a7f95"; ctx.font = "500 34px sans-serif";
+  ctx.fillText("비 나 리  ·  B I N A R I", CARD_W / 2, 150);
+  return { cv, ctx };
+}
+/** 카드 아래쪽 공통 — 고지와 **주소**. 주소가 없으면 그림이 퍼져도 아무도 못 찾아온다. */
+function cardFoot(ctx, label) {
+  ctx.textAlign = "center";
+  ctx.font = "500 34px sans-serif"; ctx.fillStyle = "#9d8fb5";
+  ctx.fillText(label, CARD_W / 2, 1746);
+  ctx.font = "600 32px sans-serif"; ctx.fillStyle = "#c9b98f";
+  ctx.fillText("binari-sepia.vercel.app", CARD_W / 2, 1806);
+  ctx.font = "400 26px sans-serif"; ctx.fillStyle = "#4e4660";
+  ctx.fillText("생년월일로 계산한 전통 해석 · 재미로 보는 참고용", CARD_W / 2, 1858);
+}
+/** 여러 줄 그리기 — 캔버스엔 줄바꿈이 없다. 넘치면 자른다(카드는 다 담는 자리가 아니다). */
+function cardLines(ctx, text, y, { size = 46, color = "#ede0c2", weight = 600, max = 3, lh = 66, pad = 200 } = {}) {
+  ctx.font = `${weight} ${size}px 'Noto Serif KR', serif`; ctx.fillStyle = color;
+  const words = String(text || "").replace(/<[^>]+>/g, "").split(" ");
+  const lines = []; let cur = "";
+  for (const w of words) {
+    const t = cur ? cur + " " + w : w;
+    if (ctx.measureText(t).width > CARD_W - pad && cur) { lines.push(cur); cur = w; } else cur = t;
+  }
+  if (cur) lines.push(cur);
+  lines.slice(0, max).forEach((ln, i) => ctx.fillText(ln, CARD_W / 2, y + i * lh));
+  return Math.min(lines.length, max) * lh;
+}
+function drawGuardianOn(ctx, guardian, cy = 620, size = 560) {
+  try {
+    if (!guardian || !guardian.width) return;
+    ctx.save(); ctx.globalAlpha = 0.95; ctx.globalCompositeOperation = "lighter";
+    const side = Math.min(guardian.width, guardian.height);
+    ctx.drawImage(guardian, (guardian.width - side) / 2, (guardian.height - side) / 2, side, side,
+      (CARD_W - size) / 2, cy - size / 2, size, size);
+    ctx.restore();
+  } catch (_) {}
+}
+/** 각인 카드 — 파생 이름은 **납음 하나뿐**(skyKinds:["납음"]). */
+function buildImprintCard({ surface, inner, nayin, tint, guardian, seed }) {
+  const { cv, ctx } = cardBase(seed || surface || "imprint", tint);
+  ctx.font = "500 30px sans-serif"; ctx.fillStyle = "#6f6580";
+  ctx.fillText("각 인 — 네가 어떻게 만들어졌는지", CARD_W / 2, 210);
+  drawGuardianOn(ctx, guardian, 600, 520);
+  ctx.font = "500 34px sans-serif"; ctx.fillStyle = "#8a7f95";
+  ctx.fillText("겉", CARD_W / 2, 990);
+  cardLines(ctx, surface, 1060, { size: 62, color: "#f0e2b8", weight: 700, max: 2, lh: 76 });
+  ctx.font = "500 34px sans-serif"; ctx.fillStyle = "#8a7f95";
+  ctx.fillText("그 런 데   속 은", CARD_W / 2, 1250);
+  cardLines(ctx, inner, 1320, { size: 62, color: "#f0b6ab", weight: 700, max: 2, lh: 76 });
+  if (nayin) {   // 파생 이름 하나 — 60년 주기라 단독이면 날짜를 못 좁힌다
+    ctx.font = "500 38px 'Noto Serif KR', serif"; ctx.fillStyle = "#c9b98f";
+    ctx.fillText(`태어난 해의 이름 · ${nayin}`, CARD_W / 2, 1560);
+  }
+  cardFoot(ctx, "수호신이 읽은 나");
+  return cv;
+}
+/** 궁합 카드 — 파생 이름 0개, 총점 0개, 상대 값 0개. */
+function buildMatchCard({ headline, care, tint, guardian, seed }) {
+  const { cv, ctx } = cardBase(seed || headline || "match", tint);
+  ctx.font = "500 30px sans-serif"; ctx.fillStyle = "#6f6580";
+  ctx.fillText("궁 합 — 그 사람과 나", CARD_W / 2, 210);
+  drawGuardianOn(ctx, guardian, 580, 460);
+  cardLines(ctx, headline, 1010, { size: 58, color: "#f0e2b8", weight: 700, max: 3, lh: 74 });
+  ctx.font = "500 34px sans-serif"; ctx.fillStyle = "#8a7f95";
+  ctx.fillText("조 심 할 것", CARD_W / 2, 1330);
+  cardLines(ctx, care, 1400, { size: 44, color: "#c8bcd8", weight: 500, max: 4, lh: 62 });
+  cardFoot(ctx, "총점은 안 실어 — 궁합은 어디가 갈리는가로 읽는 거야");
+  return cv;
+}
+
+/* 부적은 그대로 이 문을 지난다 — 호출부를 안 바꾸려고 이름을 남겨 둔다 */
+const saveOrShareBujeok = (args) => saveOrShareCard({
+  build: () => buildBujeokPoster(args), cardKind: args.cardKind || "bujeok",
+  skyKinds: args.skyKinds || [], fileBase: "binari_bujeok", title: "비나리 부적",
+});
 
 /* ───── AI 판결 프롬프트 (v2 수호신) ───── */
 const SYS = `당신은 유저의 '수호신' 비나리다. 어릴 때 곁에 있었지만 유저가 어른이 되며 잊었고, 이제 돌아왔다. 아래 데이터로 유저를 오래 지켜봐온 존재로서, 결정을 못 하는 순간에 대신 판결을 내린다.
