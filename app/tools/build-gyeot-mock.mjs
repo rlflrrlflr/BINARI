@@ -21,9 +21,71 @@ import { sliceConst } from "./lib/extract.mjs";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const APP = readFileSync(resolve(ROOT, "app/src/App.jsx"), "utf8");
 
-/* 본체 렌더 코드 — 원본 그대로 */
-const GL_VERT = sliceConst(APP, "GL_VERT");
+/* 본체 렌더 코드 — 원본에서 뽑아 쓰되, '응축(행성)' 구간만 끼워 넣는다.
+   ⚠ 베껴서 새로 쓰지 않는다. 앵커 세 곳이 원본에 그대로 있어야 하고, 없으면 여기서 터진다 —
+      App.jsx 가 바뀌었는데 시안만 옛 코드로 도는 상황을 막는 유일한 방법이다. */
+const GL_VERT_RAW = sliceConst(APP, "GL_VERT");
 const GL_FRAG = sliceConst(APP, "GL_FRAG");
+
+/* ── 응축 = 행성 ───────────────────────────────────────────────────────
+   창업자 지시(2026-08-15): "탭을 변경하면 수호신이 응축되어 구체로 보이게 하자. 행성처럼.
+   수금지화목토천해명이 다 다르게 생겼잖아 — 같은 구체더라도 운세의 특성을 반영해 다 다르게."
+
+   설계: **오행이 종(種)을 정하고, 명식 값이 개체를 정한다.**
+     종  ← u_form (화·수·목·금·토 다섯 과)
+     개체← u_strands(띠 개수) · u_chaos(폭풍) · u_nayF/u_nayA(대적점 위치·크기) ·
+           u_zodiac(자전축 기울기) · u_focal(자전 속도·극지)
+   전부 **이미 명식에서 계산돼 셰이더에 들어와 있는 값**이다. 새 입력을 안 받는다.
+   고리는 헤일로(step(0.84,a_r1.y), 입자 16%)를 재배정해 만든다 — 입자 추가 0. */
+const ORB_BLOCK = `
+  float orbK=1.0, orbPS=1.0;
+  if(u_orb>0.0005){
+    float spin = u_t*(0.05+0.06*u_focal);
+    float tilt = 0.28+0.55*fract(u_zodiac*0.083+u_nayF);          // 자전축 ← 띠·납음
+    float th   = a_r1.x*6.2832 + spin;
+    float ph   = acos(clamp(2.0*a_r0.z-1.0,-1.0,1.0));
+    vec3  sp   = vec3(sin(ph)*cos(th), cos(ph), sin(ph)*sin(th));  // 고른 구면 분포
+    float lat  = sp.y;
+    float bandN= 3.0+u_strands;                                    // 띠 개수 ← 갈래 수
+    float tex;
+    if(u_form<0.5)      tex=0.50+0.50*sin(lat*bandN*1.7+0.7*sin(th*2.0+u_t*0.25));         // 화 — 가로 폭풍대
+    else if(u_form<1.5) tex=0.58+0.42*sin(lat*bandN*0.8);                                   // 수 — 넓고 매끈한 띠
+    else if(u_form<2.5) tex=0.52+0.48*sin(th*(2.0+u_strands)+lat*2.2);                      // 목 — 세로 맥
+    else if(u_form<3.5) tex=0.44+1.00*pow(max(0.0,dot(sp,normalize(vec3(0.30,0.48,0.82)))),2.2); // 금 — 금속 반사(광원을 보는 쪽으로)
+    else                tex=0.46+0.54*sin(lat*bandN*2.3+u_chaos*3.2*sin(th*3.0));           // 토 — 거친 대기
+    vec3  spot = normalize(vec3(sin(u_nayF*9.0), 0.42*sin(u_zodiac), cos(u_nayF*7.0)));
+    tex += pow(max(0.0,dot(sp,spot)), 42.0-26.0*u_chaos)*1.6*u_nayA;                        // 대적점 — 명식마다 다른 자리
+    float R = 0.42*(1.0+0.03*u_breath);
+    vec3  q = sp*R;
+    q.yz = mat2(cos(tilt),-sin(tilt),sin(tilt),cos(tilt))*q.yz;
+    /* 공으로 읽히게 하는 두 가지. ①앞면만 밝힌다(뒷면은 거의 끈다) ②가장자리를 죽인다 —
+       구면 위 균일 분포를 정사영하면 **테두리에 밀도가 몰려** 그냥 링으로 보인다(첫 시도가 그랬다).
+       앞을 향할수록 밝게 주면 그 밀도 편중이 상쇄되고 비로소 '면'이 생긴다. */
+    float front = smoothstep(-0.25*R, R, q.z);
+    tex *= 0.10+1.15*pow(front,0.75);
+    float dc=2.4, psc=dc/(dc+q.z);
+    vec2 ppos = q.xy*psc*0.96;
+    if(halo>0.5){                                                                            // 고리 — 헤일로 재배정
+      float rr = 0.66+0.34*a_r0.z, ra = a_r0.x*6.2832 + u_t*0.045;
+      vec3 rq = vec3(cos(ra)*rr, 0.0, sin(ra)*rr)*R*1.7;
+      rq.yz = mat2(cos(tilt),-sin(tilt),sin(tilt),cos(tilt))*rq.yz;
+      float rpsc=dc/(dc+rq.z);
+      ppos = rq.xy*rpsc*0.96;
+      tex  = (0.22+0.40*abs(sin(rr*23.0)))*(0.45+0.55*smoothstep(-R,R,rq.z))*(0.30+0.75*u_nayA)*0.62; // 간극 있는 고리(본체보다 어둡게)
+    }
+    spos  = mix(spos, ppos, u_orb);
+    orbK  = mix(1.0, tex*2.1, u_orb);         // 응축분 보정 — 첫 시도(0.62)는 행성이 아니라 비눗방울이 됐다
+    orbPS = mix(1.0, 1.02, u_orb);
+  }
+`;
+const inj = (src, anchor, add, where = "before") => {
+  if (!src.includes(anchor)) throw new Error("앵커를 못 찾음 — App.jsx 가 바뀌었다: " + anchor.slice(0, 40));
+  return src.replace(anchor, where === "before" ? add + anchor : anchor + add);
+};
+let GL_VERT = GL_VERT_RAW;
+GL_VERT = inj(GL_VERT, "uniform vec2 u_touch,u_touchVel;", "\nuniform float u_orb;", "after");
+GL_VERT = inj(GL_VERT, "  gl_Position=vec4(spos,0.0,1.0);", ORB_BLOCK);
+GL_VERT = inj(GL_VERT, "  v_pick=a_r1.z;", "\n  v_a*=orbK; gl_PointSize*=orbPS;", "before");
 
 /* 오행 색도 원본에서 뽑는다(EL_COLOR 한 줄) */
 const elLine = APP.match(/const EL_COLOR = (\{[\s\S]*?\});/);
@@ -162,6 +224,7 @@ const HTML = `<!doctype html><meta charset="utf-8">
     <div class="fld"><label>공전 속도 <output id="oSpd"></output></label><input type="range" id="spd" min="0" max="1.6" step="0.02" value="0.42"></div>
     <div class="fld"><label>꼬리 길이 <output id="oTail"></output></label><input type="range" id="tail" min="0" max="1.6" step="0.02" value="0.5"></div>
     <div class="fld"><label>친밀도 <output id="oClose"></output></label><input type="range" id="close" min="0.25" max="1" step="0.01" value="1"></div>
+    <div class="fld"><label>응축(행성) <output id="oOrb"></output></label><input type="range" id="orb" min="0" max="1" step="0.02" value="0"></div>
   </div>
 
   <div class="heads" id="heads"></div>
@@ -214,7 +277,7 @@ const POSE = {
   judge: { focal:0.55, R:0.80, speed:0.30, expand:0.00, breathAmp:1.0 },
   gyeot: { focal:0.16, R:0.87, speed:0.42, expand:0.05, breathAmp:1.6 },
 };
-const S = { lum:0.45, rad:1.05, spd:0.42, tail:0.5, close:1 };
+const S = { lum:0.45, rad:1.05, spd:0.42, tail:0.5, close:1, orb:0 };
 const relName = { "1":"생", "0":"동", "-1":"극" };
 function partnerEl(myKey, rel){
   return rel > 0 ? DATA.saeng[myKey] : rel < 0 ? DATA.geuk[myKey] : myKey;
@@ -237,9 +300,10 @@ function paintCaps(){
 document.getElementById("els").innerHTML = DATA.els
   .map((e,i) => '<button data-i="'+i+'" class="'+(i?"":"on")+'">'+e.key+'</button>').join("");
 document.getElementById("pose").innerHTML =
-  '<button data-p="judge">판결 자세</button><button data-p="gyeot" class="on">곁 자세</button>';
+  '<button data-p="judge">판결 자세</button><button data-p="gyeot" class="on">곁 자세</button><button data-p="orb">행성(응축)</button>';
 document.querySelectorAll("#pose button").forEach(b => b.onclick = () => {
-  pose = b.dataset.p;
+  pose = b.dataset.p === "orb" ? "gyeot" : b.dataset.p;
+  const o = document.getElementById("orb"); o.value = b.dataset.p === "orb" ? 1 : 0; o.dispatchEvent(new Event("input"));
   document.querySelectorAll("#pose button").forEach(x => x.classList.toggle("on", x===b));
 });
 document.querySelectorAll("#els button").forEach(b => b.onclick = () => {
@@ -247,7 +311,7 @@ document.querySelectorAll("#els button").forEach(b => b.onclick = () => {
   document.querySelectorAll("#els button").forEach(x => x.classList.toggle("on", x===b));
   paintCaps();
 });
-["lum","rad","spd","tail","close"].forEach(k => {
+["lum","rad","spd","tail","close","orb"].forEach(k => {
   const el = document.getElementById(k), out = document.getElementById("o"+k[0].toUpperCase()+k.slice(1));
   const sync = () => { S[k] = +el.value; out.textContent = (+el.value).toFixed(2); };
   el.oninput = sync; sync();
@@ -281,7 +345,7 @@ function init(){
   const L = {};
   ["u_hold","u_beat","u_t","u_form","u_R","u_arms","u_strands","u_twist","u_speed","u_chaos","u_nayF","u_nayA",
    "u_expand","u_agi","u_k","u_ps","u_lum","u_twk","u_psMul","u_focal","u_touch","u_touchVel","u_touchAmt",
-   "u_breath","u_trailLive","u_zodiac","u_c1","u_c2","u_acc","u_wispCol","u_bright","u_alpha"]
+   "u_breath","u_trailLive","u_zodiac","u_c1","u_c2","u_acc","u_wispCol","u_bright","u_alpha","u_orb"]
    .forEach(k => L[k]=gl.getUniformLocation(bodyP,k));
   L.u_trail = gl.getUniformLocation(bodyP,"u_trail[0]");
   const trail = new Float32Array(40);
@@ -315,7 +379,7 @@ function init(){
     const c1=hex2rgb(el.colors[0]), c2=hex2rgb(el.colors[1]);
     gl.uniform3fv(L.u_c1,c1); gl.uniform3fv(L.u_c2,c2); gl.uniform3fv(L.u_acc,hex2rgb(el.colors[2]));
     gl.uniform3fv(L.u_wispCol,[0.5+c1[0]*0.28,0.55+c1[1]*0.26,0.66+c1[2]*0.2]);
-    gl.uniform1f(L.u_form,el.form);
+    gl.uniform1f(L.u_form,el.form); gl.uniform1f(L.u_orb,S.orb);
     gl.uniform1f(L.u_ps,1.8*dpr*(F_PS[el.key]||1));
     const bph=t*Math.PI*2/9; gl.uniform1f(L.u_breath, Math.sin(bph-0.35*Math.sin(bph))*P.breathAmp);
     const A=(F_AL[el.key]||0.31);
@@ -348,7 +412,7 @@ function init(){
     gl.uniform1f(CL.u_t,t); gl.uniform1f(CL.u_ang,c.ang); gl.uniform1f(CL.u_rel,c.rel);
     /* 친밀도가 낮을수록 멀어지고 어두워진다 — 사라지지는 않는다.
        자세로 본체가 펴지면 궤도도 같이 벌어져야 한다. 안 그러면 곁이 본체 안에 파묻힌다. */
-    const PZ = POSE[pose], poseK = (PZ.R/0.80)*(1+PZ.expand);
+    const PZ = POSE[pose], poseK = ((PZ.R/0.80)*(1+PZ.expand))*(1-S.orb) + 1.28*S.orb;
     gl.uniform1f(CL.u_rad,S.rad*(1+(1-S.close)*0.5)*radK*poseK); gl.uniform1f(CL.u_spd,S.spd); gl.uniform1f(CL.u_tail,S.tail);
     gl.uniform1f(CL.u_lum,S.lum*lumK); gl.uniform1f(CL.u_close,S.close);
     gl.uniform2fv(CL.u_ctr, bodyCenter(t));
