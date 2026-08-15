@@ -1317,6 +1317,21 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
         {notesOn && (<ol className="impnotes">
           {r.notes.map((t, i) => <li key={i}><span>{i + 1}</span><span dangerouslySetInnerHTML={{ __html: t }} /></li>)}
         </ol>)}
+        {/* v130 — 바이럴루프판단 v01 §3: 루프의 1차 단위는 **1인 완결형**이어야 한다.
+            각인은 혼자서 완결되고, 자랑이 아니라 소지에 가깝다. 그 조건에 맞는 첫 물건이다. */}
+        <button className="btn gold mt" onClick={() => saveOrShareCard({
+          build: () => buildImprintCard({
+            surface: r.core.surface.w, inner: r.core.inner.w, nayin: saju?.nayin || "",
+            tint: (EL_COLOR[saju?.main] || [])[0], guardian: grabGuardianFrame(),
+            seed: `${r.core.surface.w}${r.core.inner.w}` }),
+          cardKind: "imprint",
+          /* 정책(§2): 파생 이름은 **납음 하나뿐**. 촐킨·웨톤을 같이 실으면 LCM 1,820일이라
+             5년 창에서 날짜가 유일해진다 — shareRisk 가 막지만, 애초에 안 싣는다. */
+          skyKinds: ["납음"],
+          fileBase: "binari_gakin", title: "비나리 각인",
+        })}>이미지로 간직하기 — 겉과 속 한 장</button>
+        <p className="fine">그림엔 <b>생년월일·이름·건강·짝 이야기가 안 담겨.</b> 겉·속 한 줄과
+          태어난 해의 이름까지야 — <b>날짜가 역산되지 않게</b> 파생 이름은 한 장에 하나만 실어.</p>
         <button className="btn ghost mt" onClick={onClose}>닫을게</button>
       </div>
     </div>
@@ -1478,6 +1493,19 @@ function MatchDoc({ saju, birth, onClose }) {
         {notesOn && (<ol className="impnotes">{r.notes.map((t, i) => <li key={i}><span>{i + 1}</span><span dangerouslySetInnerHTML={{ __html: t }} /></li>)}</ol>)}
         {/* 궁합의 존재 이유가 이 버튼이다 — "각인은 평생 한 번, 궁합은 사람 수만큼"(§1174 주석).
             재구매 논리가 실제로 작동하는지는 이 클릭 말고 확인할 방법이 없는데 안 세고 있었다. */}
+        {/* v130 — 궁합은 **2인 완결형**이라 루프 1순위가 아니다(§3). 그래도 만들어 두는 이유는
+            "관계는 자랑거리"라서다. 대신 실을 수 있는 게 각인보다 훨씬 좁다 —
+            상대는 이 앱을 쓴 적도 동의한 적도 없는 제3자이므로 **상대 값은 0개**로 간다. */}
+        <button className="btn gold mt" onClick={() => saveOrShareCard({
+          build: () => buildMatchCard({
+            head: r.card.head, line: r.card.line, ask: r.card.ask,
+            tint: (EL_COLOR[saju?.main] || [])[0], guardian: grabGuardianFrame(),
+            seed: `${r.card.head}${r.card.line}` }),
+          cardKind: "match", skyKinds: [],   // 파생 이름 0개 — 축 이름도 총점도 안 싣는다
+          fileBase: "binari_gunghap", title: "비나리 궁합",
+        })}>이미지로 간직하기 — 한 장</button>
+        <p className="fine">그림엔 <b>둘의 생년월일도, 어느 축이 갈렸는지도, 총점도 안 담겨.</b>
+          상대는 이 앱을 쓴 적이 없는 사람이야 — <b>보내기 전에 한 번 더 생각해 줘.</b></p>
         <button className="btn ghost mt" onClick={() => { track("match_again", {}); setDone(false); }}>다른 사람과도 봐볼게</button>
         <button className="btn ghost mt" onClick={onClose}>닫을게</button>
       </div>
@@ -2799,7 +2827,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v129.4 · 벼름";
+const APP_VER = "v132.1 · 수호신 크기";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -3277,16 +3305,19 @@ function shareRisk(kinds) {
   return { ok: why.length === 0, level: worst ? "위험" : why.length ? "주의" : "안전", dayLcm, years: years.length, n: named.length, why };
 }
 
-async function saveOrShareBujeok(args) {
-  /* 부적은 앱 밖으로 나가는 유일한 그림이다 — 실을 값이 늘어날 때 여기서 한 번 걸러진다.
-     지금은 오행 문양·수호신 색·판결만 실어서 파생 이름이 0개다(안전). */
-  const risk = shareRisk(args.skyKinds || []);
+/* 카드가 앱 밖으로 나가는 **하나뿐인 문**. 부적·각인·궁합이 전부 이 함수를 지난다.
+   ⚠ 새 카드를 만들 때 이 문을 우회하면 shareRisk 검사도 card_saved 계측도 통째로 빠진다.
+   ⚠ 그림 자체는 `build` 콜백이 만든다 — 위험 판정을 **그리기 전에** 하려는 것이다.
+      그려 놓고 버리면 "위험"인데도 캔버스에 이미 다 그려진 상태가 된다. */
+async function saveOrShareCard({ build, cardKind, skyKinds, fileBase, title }) {
+  const risk = shareRisk(skyKinds || []);
   if (!risk.ok) {
-    track("share_card_blocked", { level: risk.level, n: risk.n, day_lcm: risk.dayLcm });
+    track("share_card_blocked", { level: risk.level, n: risk.n, day_lcm: risk.dayLcm, card_kind: cardKind || "bujeok" });
     console.warn("[비나리] 공개 이미지에 실을 수 없는 조합:", risk.why.join(" / "));
     if (risk.level === "위험") return;      // 생년월일이 복원되는 조합은 만들지 않는다
   }
-  const cv = buildBujeokPoster(args);
+  const args = { cardKind, skyKinds, fileBase, title, build };
+  const cv = build();
   const dataUrl = cv.toDataURL("image/png");                   // 동기 → iOS 사용자 제스처 유지(share를 await 없이 즉시 호출)
   const iOS = /iP(hone|ad|od)/.test(navigator.userAgent);
   /* 바이럴루프판단 v01 §4 — 루프가 도는지 재려면 '카드가 실제로 나갔나'를 세야 한다.
@@ -3296,7 +3327,7 @@ async function saveOrShareBujeok(args) {
   const kind = args.cardKind || "bujeok";
   const done = (way) => track("card_saved", { card_kind: kind, way, sky_n: (args.skyKinds || []).length });
   try {
-    const file = dataUrlToFile(dataUrl, "binari_bujeok.png");
+    const file = dataUrlToFile(dataUrl, `${args.fileBase || "binari_bujeok"}.png`);
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       await navigator.share({ files: [file] }); done("share_sheet"); return;   // iOS 공유시트(사진에 저장)
     }
@@ -3305,16 +3336,192 @@ async function saveOrShareBujeok(args) {
     /* 그 외 실패 → 폴백 */
   }
   if (!iOS) {                                                  // 데스크톱: 파일 다운로드
-    const a = document.createElement("a"); a.href = dataUrl; a.download = "binari_bujeok.png";
+    const a = document.createElement("a"); a.href = dataUrl; a.download = `${args.fileBase || "binari_bujeok"}.png`;
     document.body.appendChild(a); a.click(); a.remove();
     done("download");
   } else {                                                     // iOS Safari: download 속성 무시 → 새 탭 이미지(길게 눌러 저장)
     const w = window.open("", "_blank");
-    if (w) w.document.write(`<title>비나리 부적</title><body style="margin:0;background:#050408;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="${dataUrl}" style="max-width:100%" alt="길게 눌러 사진에 저장"></body>`);
+    if (w) w.document.write(`<title>${args.title || "비나리 부적"}</title><body style="margin:0;background:#050408;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="${dataUrl}" style="max-width:100%" alt="길게 눌러 사진에 저장"></body>`);
     else location.href = dataUrl;
     done("new_tab");
   }
 }
+/* ── 각인·궁합 공유 카드 (v130) ─────────────────────────────────────────────
+   창업자 제안: "각인 궁합도 공유 가능하게 하면 좋지 않을까."
+   바이럴루프판단 v01 이 이미 정책을 세워 놨다 — 결과 공개는 허용하되 **선별**하고,
+   선별 기준은 취향이 아니라 **역산 가능성**이다. 그 위에 얹는다.
+
+   ⚠ **문서 전체를 링크에 싣는 안은 기각했다.** 각인은 4,000자가 넘어 URL 에 안 들어가고,
+     넣을 수 있는 건 결국 **입력(생년월일시·도시)** 인데 그건 설계 헌장이 금지하는 바로 그 세 값이다
+     ("생일+생시+지역 세 값이 함께 적히면 그것만으로 한 사람이 특정된다"). 그래서 **그림 한 장**으로 간다.
+
+   ⚠ 실을 값 고르기 — 정책 §2 를 그대로 적용했다.
+     · 각인: 겉·속(일간 파생 — 10일 주기라 날짜를 못 좁힌다) + **파생 이름 딱 하나**(납음, 60년 주기).
+       촐킨·웨톤·나크샤트라는 **안 싣는다.** 촐킨×웨톤만으로 LCM 1,820일이라 5년 창에서 날짜가 유일해진다.
+     · 궁합: **파생 이름 0개.** 관계 서술과 조심할 것만 싣는다.
+       "우리는 충이야" 같은 축 이름조차 안 싣는다 — 한쪽을 아는 사람에게 **상대의 자리 글자**가 좁혀진다.
+       상대는 이 앱을 쓴 적도 동의한 적도 없는 제3자다(A-6 과 같은 무게).
+   ⚠ 총점은 안 싣는다. 화면에서 "총점을 앞세우지 않는다"고 해 놓고 카드 한복판에 숫자를 박으면
+     그 원칙이 밖에서 무너진다. */
+const CARD_W = 1080, CARD_H = 1920;
+function cardBase(seed, tint) {
+  const cv = document.createElement("canvas"); cv.width = CARD_W; cv.height = CARD_H;
+  const ctx = cv.getContext("2d");
+  const bg = ctx.createLinearGradient(0, 0, 0, CARD_H);
+  bg.addColorStop(0, "#141021"); bg.addColorStop(0.55, "#0a0812"); bg.addColorStop(1, "#050408");
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, CARD_W, CARD_H);
+  let h7 = 7; for (const c of String(seed)) h7 = (h7 * 31 + c.charCodeAt(0)) >>> 0;
+  const rnd = () => ((h7 = (h7 * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+  for (let i = 0; i < 90; i++) {
+    ctx.globalAlpha = 0.12 + rnd() * 0.3; ctx.fillStyle = rnd() < 0.5 ? "#ffe9ad" : "#cdd6ff";
+    ctx.beginPath(); ctx.arc(rnd() * CARD_W, rnd() * CARD_H, 0.8 + rnd() * 1.6, 0, 7); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  ctx.textAlign = "center"; ctx.fillStyle = "#8a7f95"; ctx.font = "500 34px sans-serif";
+  ctx.fillText("비 나 리  ·  B I N A R I", CARD_W / 2, 150);
+  return { cv, ctx };
+}
+/** 카드 발치 — **주소와 법정 고지만.** 그 밖의 말은 안 적는다.
+   ⚠ v130 은 여기에 "총점은 안 실어 — 궁합은 어디가 갈리는가로 읽는 거야"를 적었다.
+     그건 **우리 설계 원칙**이지 받은 사람이 궁금한 게 아니다. 창업자 지적 그대로다 —
+     "AI 특유의 설명적인 부분, 안 알려줘도 되는 어노잉한 것으로 정보를 채웠어."
+     카드에서 우리가 우리 규칙을 해설하면, 그 자리는 훅이 들어갔어야 할 자리다. */
+function cardFoot(ctx) {
+  ctx.textAlign = "center";
+  ctx.font = "600 34px sans-serif"; ctx.fillStyle = "#c9b98f";
+  ctx.fillText("binari-sepia.vercel.app", CARD_W / 2, 1800);
+  ctx.font = "400 24px sans-serif"; ctx.fillStyle = "#463f56";
+  ctx.fillText("생년월일로 계산한 전통 해석 · 재미로 보는 참고용", CARD_W / 2, 1858);
+}
+/** 여러 줄 그리기 — 캔버스엔 줄바꿈이 없다. `\n` 은 강제 줄바꿈으로 받는다.
+   ⚠ 그리디로만 감으면 마지막 줄에 어절 하나가 떨어진다 — 실측에서 "…안 바꾸는 / **사람**",
+     "저절로는 안 굴러가는 / **둘**" 이 나왔다. 큰 글씨에서 고아 한 어절은 눈에 제일 먼저 걸린다.
+     그래서 ①줄 수가 넘치면 **글자를 줄이고** ②마지막 줄이 한 어절이면 **앞 줄에서 하나 내린다.** */
+function wrapLines(ctx, para, maxW) {
+  const out = []; let cur = "";
+  for (const w of para.split(" ")) {
+    const t = cur ? cur + " " + w : w;
+    if (ctx.measureText(t).width > maxW && cur) { out.push(cur); cur = w; } else cur = t;
+  }
+  if (cur) out.push(cur);
+  /* 고아 어절 구제 — 마지막 줄이 한 어절이고, 앞 줄에서 하나 내려도 폭이 남으면 내린다 */
+  if (out.length >= 2 && out[out.length - 1].split(" ").length === 1) {
+    const prev = out[out.length - 2].split(" ");
+    if (prev.length >= 2) {
+      const moved = prev.pop();
+      const a = prev.join(" "), b = moved + " " + out[out.length - 1];
+      if (ctx.measureText(b).width <= maxW) { out[out.length - 2] = a; out[out.length - 1] = b; }
+    }
+  }
+  return out;
+}
+function cardLines(ctx, text, y, { size = 46, color = "#ede0c2", weight = 600, max = 3, lh = 66, pad = 140 } = {}) {
+  const maxW = CARD_W - pad;
+  const paras = String(text || "").replace(/<[^>]+>/g, "").split("\n");
+  let fs = size, out = [];
+  for (let i = 0; i < 8; i++) {          // 줄 수가 넘치면 글자를 줄여 가며 다시 잰다
+    ctx.font = `${weight} ${fs}px 'Noto Serif KR', serif`;
+    out = paras.flatMap((pp) => wrapLines(ctx, pp, maxW));
+    if (out.length <= max) break;
+    fs = Math.round(fs * 0.9);
+  }
+  ctx.fillStyle = color;
+  const step = Math.round(lh * (fs / size));
+  out.slice(0, max).forEach((ln, i) => ctx.fillText(ln, CARD_W / 2, y + i * step));
+  return out.length * step;
+}
+/** 수호신 + **그 뒤의 오행 아우라**.
+   ⚠ v130 은 아우라를 cardBase 가 y=620 고정으로 깔고, 그림은 카드마다 다른 자리에 그렸다 —
+     **빛이 그림 밑에 안 깔려서** 수호신이 납작하고 흐리게 나왔다(실측). 둘은 같이 움직여야 한다.
+   아우라는 정지 그림에서 사람마다 다르게 읽히는 유일한 축이다(v127.3 판단과 같은 이유). */
+function drawGuardianOn(ctx, guardian, cy = 620, size = 560, tint) {
+  try {
+    if (tint) {
+      const R = size * 0.86;
+      const au = ctx.createRadialGradient(CARD_W / 2, cy, 30, CARD_W / 2, cy, R);
+      au.addColorStop(0, tint + "3a"); au.addColorStop(0.55, tint + "18"); au.addColorStop(1, "transparent");
+      ctx.save(); ctx.fillStyle = au; ctx.beginPath(); ctx.arc(CARD_W / 2, cy, R, 0, 7); ctx.fill(); ctx.restore();
+    }
+    if (!guardian || !guardian.width) return;
+    /* ⚠ 화면 캔버스는 수호신 둘레에 **여백이 넓다.** 가운데 정사각으로만 잘라 넣으면
+       1080 카드에서 그림이 손톱만 하게 들어간다(실측). 그래서 **실제로 그려진 데까지**를 찾아 자른다 —
+       알파가 있는 픽셀의 경계 상자. 못 읽으면(오염된 캔버스 등) 가운데 정사각으로 되돌아간다. */
+    let sx = 0, sy = 0, sw = Math.min(guardian.width, guardian.height), sh = sw;
+    sx = (guardian.width - sw) / 2; sy = (guardian.height - sh) / 2;
+    try {
+      const g = guardian.getContext("2d") || guardian.getContext("webgl") ? null : null;
+      const tmp = document.createElement("canvas");
+      const N = 160;                                   // 축소해서 훑는다 — 경계만 알면 되므로 정밀도가 필요 없다
+      tmp.width = N; tmp.height = N;
+      const tc = tmp.getContext("2d");
+      tc.drawImage(guardian, 0, 0, guardian.width, guardian.height, 0, 0, N, N);
+      const d = tc.getImageData(0, 0, N, N).data;
+      let x0 = N, y0 = N, x1 = -1, y1 = -1;
+      for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+        const i = (y * N + x) * 4;
+        if (d[i + 3] > 18 && (d[i] + d[i + 1] + d[i + 2]) > 24) {
+          if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+        }
+      }
+      if (x1 > x0 + 4 && y1 > y0 + 4) {
+        const kx = guardian.width / N, ky = guardian.height / N;
+        const pad = 6;
+        const bx = Math.max(0, (x0 - pad) * kx), by = Math.max(0, (y0 - pad) * ky);
+        const bw = Math.min(guardian.width - bx, (x1 - x0 + pad * 2) * kx);
+        const bh = Math.min(guardian.height - by, (y1 - y0 + pad * 2) * ky);
+        const side2 = Math.max(bw, bh);               // 정사각으로 맞춰 비율을 안 깬다
+        sx = bx + bw / 2 - side2 / 2; sy = by + bh / 2 - side2 / 2; sw = side2; sh = side2;
+      }
+    } catch (_) { /* 못 읽으면 가운데 정사각 그대로 */ }
+    ctx.save(); ctx.globalAlpha = 0.95; ctx.globalCompositeOperation = "lighter";
+    ctx.drawImage(guardian, sx, sy, sw, sh, (CARD_W - size) / 2, cy - size / 2, size, size);
+    ctx.restore();
+  } catch (_) {}
+}
+/** 되묻는 줄 — 카드가 **답이 아니라 미끼**가 되는 자리. 이 한 줄이 없으면 받은 사람은 안 온다. */
+function cardAsk(ctx, text, y) {
+  ctx.strokeStyle = "#6f658055"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(CARD_W / 2 - 120, y - 74); ctx.lineTo(CARD_W / 2 + 120, y - 74); ctx.stroke();
+  cardLines(ctx, text, y, { size: 50, color: "#e8a06a", weight: 600, max: 3, lh: 68 });
+}
+/** 각인 카드 — 겉과 속의 **대비 하나**에 다 건다. 라벨도 해설도 없다. */
+function buildImprintCard({ surface, inner, nayin, tint, guardian, seed }) {
+  const { cv, ctx } = cardBase(seed || surface || "imprint", tint);
+  drawGuardianOn(ctx, guardian, 450, 490, tint);
+  ctx.textAlign = "center";
+  ctx.font = "500 38px sans-serif"; ctx.fillStyle = "#8a7f95";
+  ctx.fillText("남들이 아는 나는", CARD_W / 2, 830);
+  cardLines(ctx, surface, 920, { size: 76, color: "#f0e2b8", weight: 700, max: 2, lh: 92 });
+  ctx.font = "500 38px sans-serif"; ctx.fillStyle = "#8a7f95";
+  ctx.fillText("그런데 안에 있는 건", CARD_W / 2, 1150);
+  cardLines(ctx, inner, 1240, { size: 76, color: "#f0b6ab", weight: 700, max: 2, lh: 92 });
+  /* 파생 이름 하나 — **라벨을 안 붙인다.** "태어난 해의 이름 ·"을 붙이는 순간 설명이 된다.
+     이름만 놓으면 "저게 뭐야"가 되는데, 우리가 노리는 게 그거다. */
+  if (nayin) {
+    ctx.font = "500 34px 'Noto Serif KR', serif"; ctx.fillStyle = "#7d7290";
+    ctx.fillText(`— ${nayin} —`, CARD_W / 2, 1430);
+  }
+  cardAsk(ctx, "너는 겉과 속이 같은 사람일까?", 1590);
+  cardFoot(ctx);
+  return cv;
+}
+/** 궁합 카드 — 관계 **장면** 하나 + 조심할 것 한 줄 + 되묻기. 축·글자·총점은 안 싣는다. */
+function buildMatchCard({ head, line, ask, tint, guardian, seed }) {
+  const { cv, ctx } = cardBase(seed || head || "match", tint);
+  drawGuardianOn(ctx, guardian, 460, 500, tint);
+  ctx.textAlign = "center";
+  cardLines(ctx, head, 880, { size: 84, color: "#f0e2b8", weight: 700, max: 2, lh: 102 });
+  cardLines(ctx, line, 1120, { size: 48, color: "#b9aecb", weight: 500, max: 3, lh: 68 });
+  cardAsk(ctx, ask, 1450);
+  cardFoot(ctx);
+  return cv;
+}
+
+/* 부적은 그대로 이 문을 지난다 — 호출부를 안 바꾸려고 이름을 남겨 둔다 */
+const saveOrShareBujeok = (args) => saveOrShareCard({
+  build: () => buildBujeokPoster(args), cardKind: args.cardKind || "bujeok",
+  skyKinds: args.skyKinds || [], fileBase: "binari_bujeok", title: "비나리 부적",
+});
 
 /* ───── AI 판결 프롬프트 (v2 수호신) ───── */
 const SYS = `당신은 유저의 '수호신' 비나리다. 어릴 때 곁에 있었지만 유저가 어른이 되며 잊었고, 이제 돌아왔다. 아래 데이터로 유저를 오래 지켜봐온 존재로서, 결정을 못 하는 순간에 대신 판결을 내린다.
@@ -3924,6 +4131,10 @@ export default function App() {
   const [tosses, setTosses] = useState([]);
   const [hexInfo, setHexInfo] = useState(null);
   const [tossing, setTossing] = useState(false);   // v22: 동전이 공중에 떠 있는 0.75초
+  /* v132 곁 탭 (곁탭IA v01 §6 단계 1) — 하단 탭 둘. 판결 탭은 **문구 하나도 안 바꾼다**, 껍데기만 씌운다.
+     탭 도입은 이 리포에서 충돌면이 제일 넓은 변경이라(App.jsx 렌더 루트) 단계를 쪼개 올린다.
+     지금 단계는 껍데기 + 곁 탭 1층(내 수호신)까지다. 곁 목록·부르기·궁합 이동은 다음 단계. */
+  const [tab, setTab] = useState("judge");
   const [bujeok, setBujeok] = useState(false);  // v7: 부적
   const [convo, setConvo] = useState(mem?.convo || []); // v14: 대화 기억 — 이전 질문·판결 누적(최근 6턴)
   const [dailySeen, setDailySeen] = useState(() => { try { return store.getItem(DAILY_KEY) === todayStr(); } catch (_) { return true; } }); // v16(B2)
@@ -4700,7 +4911,40 @@ export default function App() {
           16개 중 6개 → 3개 → 1개를 고르게 하는 3화면짜리 워드소팅이었는데, 온보딩에서 가장 오래
           붙잡아 두면서 판결 기여는 '가치' 축 한 표뿐이었다. 유료 상품(각인·궁합)은 아예 안 썼다. */}
 
-      {step === 3 && (
+      {/* ── 곁 탭 · 1층: 내 수호신 (곁탭IA v01 §4) ────────────────────────────
+         곁이 0이어도 **이 층이 화면을 완결시킨다.** 빈 슬롯·진행바·"0명" 표기는 금지다 —
+         비어 있음을 세는 순간 이 탭은 '아직 못 채운 것'이 되고, 그러면 안 여는 게 낫다.
+         그래서 여기 있는 건 오늘의 네 수호신 하나뿐이고, 그건 결핍이 아니라 사실이다.
+         ⚠ 다음 단계(곁 목록·부르기·궁합 이동)가 오기 전까지 여기에 상품을 놓지 않는다(§5). */}
+      {/* ── 하단 탭 (곁탭IA v01 §4) ────────────────────────────────────────────
+         **집중 국면에서는 숨긴다.** 판결 카드가 떠 있을 때·문서를 읽는 중일 때·부적을 볼 때
+         탭이 깔려 있으면 "지금 이걸 봐라"라는 화면 위에 "다른 데로 가라"를 겹쳐 놓는 꼴이다.
+         온보딩(step<3)과 수호신 형성(phase 0)에도 안 띄운다 — 아직 갈 곳이 하나뿐이다. */}
+      {step === 3 && phase >= 1 && !res && !imprintOpen && !matchOpen && !letterOpen && !bujeok && (
+        <nav className="tabbar" aria-label="화면 전환">
+          {[["judge", "판결"], ["gyeot", "곁"]].map(([k, label]) => (
+            <button key={k} className={`tabbtn ${tab === k ? "on" : ""}`} aria-current={tab === k ? "page" : undefined}
+              onClick={() => { if (tab !== k) { setTab(k); track("tab_switched", { to: k }); } }}>{label}</button>
+          ))}
+        </nav>
+      )}
+
+      {step === 3 && tab === "gyeot" && phase >= 1 && (
+        <section className="scene fade gyeot">
+          <div className="halo wide gyeotscale">
+            {/* ⚠ 판결 탭과 **같은 size 식**을 쓴다. v132 에 여기만 0.5/600 으로 작게 잡고 확대율도 안 줘서
+                실측 466px — 판결(719px)의 65% 였다. 수호신이 탭마다 다른 크기로 보이면 같은 존재로 안 읽힌다. */}
+            <div className="fade"><Guardian saju={saju} zo={zo} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} restRef={restRef} size={Math.min(typeof window !== "undefined" ? window.innerWidth * 1.1 : 400, typeof window !== "undefined" ? window.innerHeight * 0.57 : 400, 640)} /></div>
+          </div>
+          <div className="gyeotpanel fade">
+            <p className="gname under">곁</p>
+            {saju && <p className="gsay">{EL_TRAIT[saju.main]} 네 곁에, 오늘도 이렇게 서 있어.</p>}
+            <p className="fine">여기는 네 옆자리야. 누가 서게 되면 이 자리에 같이 보일 거야.</p>
+          </div>
+        </section>
+      )}
+
+      {step === 3 && tab === "judge" && (
         <section className={`scene fade ${phase >= 1 && !res && !awake ? "lobby" : ""}`} onClick={phase >= 1 && !res && !awake ? tryWake : undefined}>
           <div className={`halo wide ${!awake && phase >= 1 && !res ? "lobbyscale" : ""} ${asking ? "asking" : ""} ${ritual ? "ritualfade" : ""} ${busy || (res && !cardOn) ? "busy" : ""} ${res && cardOn ? "dimmed" : ""}`}>
             {phase === 0
@@ -5170,7 +5414,7 @@ const CSS = `
 .orb{position:relative;width:170px;height:170px;margin:20px 0 28px;filter:drop-shadow(0 0 24px rgba(245,217,139,.2))}
 .line{font-size:17px;line-height:1.8;margin:8px 0;opacity:0;animation:fd 1.6s cubic-bezier(.22,.7,.25,1) forwards}.d1{animation-delay:1.4s}.d2{animation-delay:3s}
 .brand-mark{margin-top:56px;font-size:11px;letter-spacing:.4em;color:#8a7f95;font-family:sans-serif}
-.verbadge{position:fixed;right:9px;bottom:7px;z-index:70;font-family:sans-serif;font-size:9px;letter-spacing:.08em;color:#575070;pointer-events:none;user-select:none}
+.verbadge{position:fixed;right:9px;bottom:calc(58px + env(safe-area-inset-bottom));z-index:70;font-family:sans-serif;font-size:9px;letter-spacing:.08em;color:#575070;pointer-events:none;user-select:none}
 .title{font-size:20px;font-weight:600;color:#f0e2b8;margin:6px 0 4px}
 .sub2{font-size:14px;color:#9d8fb5;line-height:1.7;margin:6px 0 18px}
 .form{display:flex;flex-direction:column;gap:12px;width:100%;margin-bottom:14px}
@@ -5304,7 +5548,13 @@ const CSS = `
 .halo{position:relative;filter:drop-shadow(0 0 30px rgba(245,217,139,.15));margin:8px 0;transition:filter .6s}
 .halo{filter:drop-shadow(0 0 30px color-mix(in srgb,var(--elc,#f5d98b) 22%,transparent))}
 .halo.wide{width:100vw;margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);display:flex;justify-content:center;margin-top:calc(min(110vw,57vh,640px)*-0.09);margin-bottom:calc(min(110vw,57vh,640px)*-0.16);transition:filter .6s,transform .9s cubic-bezier(.2,.8,.2,1),opacity .8s ease}
-.halo.wide.lobbyscale{transform:translateY(7vh) scale(1.52)}
+/* v132.1 로비 확대 — 캔버스 안에서 형상이 차지하는 비율은 약 40%다(셰이더의 u_R·0.48 스케일).
+   그래서 캔버스를 473px 잡아도 눈에 보이는 수호신은 화면폭의 2/3밖에 안 됐다. 확대율로만 키운다 —
+   backing 해상도(473×dpr)는 그대로라 **프래그먼트 비용이 안 늘어난다.** size 를 키우면 4배가 된다. */
+.halo.wide.lobbyscale{transform:translateY(5vh) scale(1.85)}
+/* 곁 탭 — 판결보다 아주 조금만 물러선다. 궤도 반경이 본체의 1.05배라 그 이상 물러날 이유가 없다
+   (곁 시안 실측). 단계 1엔 곁이 아직 없으므로 물러나면 손해만 본다. */
+.halo.wide.gyeotscale{transform:translateY(4vh) scale(1.72)}
 .halo.wide.dissolved{opacity:0;transform:scale(1.7);filter:blur(7px);pointer-events:none}
 .halo.wide.asking{transform:translateY(-5vh) scale(.82);opacity:.96}
 .halo.wide.ritualfade{opacity:.1;pointer-events:none;transition:opacity .8s ease}
@@ -5337,6 +5587,15 @@ const CSS = `
 .memrow{display:flex;gap:18px;justify-content:center}
 .halo.busy{animation:haloPulse 1.4s ease-in-out infinite}
 /* v129.4 대기 문구 — 수호신이 가라앉는 동안 아래에 조용히 뜬다. 맥동은 느리게(숨 고르는 속도) */
+/* v132 하단 탭 — 판결/곁. 화면 맨 아래 고정, 안전영역(노치·홈바) 확보 */
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:40;display:flex;justify-content:center;gap:8px;
+  padding:8px 16px calc(8px + env(safe-area-inset-bottom));background:linear-gradient(to top,rgba(5,4,8,.92),rgba(5,4,8,0))}
+.tabbtn{flex:0 0 auto;min-width:104px;padding:10px 20px;border-radius:999px;border:1px solid rgba(245,217,139,.18);
+  background:rgba(12,9,20,.6);color:#8d84a3;font-size:13px;letter-spacing:.18em;cursor:pointer;transition:color .2s,border-color .2s}
+.tabbtn.on{color:#f5d98b;border-color:rgba(245,217,139,.45);background:rgba(24,18,38,.8)}
+/* 탭이 하단을 덮으므로 마지막 요소가 가리지 않게 여백을 준다 */
+.scene{padding-bottom:76px}
+.gyeot .gyeotpanel{margin-top:18px;text-align:center}
 .brooding{font-size:13px;letter-spacing:.14em;color:#cfc4e2;margin:14px 0 0;text-align:center;animation:formPulse 2.4s ease-in-out infinite}
 @keyframes haloPulse{0%,100%{filter:drop-shadow(0 0 26px rgba(245,217,139,.14))}50%{filter:drop-shadow(0 0 46px rgba(245,217,139,.34))}}
 .halo.dimmed{opacity:.32;filter:blur(2px) drop-shadow(0 0 30px rgba(245,217,139,.2));transition:opacity .6s,filter .6s}

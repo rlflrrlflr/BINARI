@@ -18,9 +18,17 @@ const grab = (name, kind = "function") => {
   const i = src.indexOf(needle);
   if (i < 0) throw new Error(`${name} 을 App.jsx 에서 찾지 못했습니다 — 이름이 바뀌었는지 확인하세요`);
   if (kind !== "function") { const e = src.indexOf("\n", i); return src.slice(i, e); }
+  /* ⚠ 본문의 여는 중괄호를 찾을 때 **인자 목록을 먼저 건너뛴다.**
+     v130 까지는 이름 뒤 첫 `{` 부터 짝을 맞췄는데, 인자가 구조분해면(`function f({ a, b })`)
+     그 `{` 가 인자 패턴이라 **인자 목록만 잘라 내고 본문은 통째로 놓쳤다.**
+     그러면 "본문에 X 가 없다" 류 검사가 전부 **거짓 통과**한다 — 실제로 그렇게 통과하고 있었다. */
+  let pd = 0, k = src.indexOf("(", i);
+  for (; k < src.length; k++) {
+    if (src[k] === "(") pd++; else if (src[k] === ")") { pd--; if (pd === 0) break; }
+  }
   let d = 0;
-  for (let k = src.indexOf("{", i); k < src.length; k++) {
-    if (src[k] === "{") d++; else if (src[k] === "}") { d--; if (d === 0) return src.slice(i, k + 1); }
+  for (let j = src.indexOf("{", k); j < src.length; j++) {
+    if (src[j] === "{") d++; else if (src[j] === "}") { d--; if (d === 0) return src.slice(i, j + 1); }
   }
   throw new Error(`${name} 본문이 닫히지 않았습니다`);
 };
@@ -81,9 +89,44 @@ for (const k of Object.keys(SKY_CYCLE)) {
   const payload = (src.match(/const payload = \{ q,[^;]*;/) || [""])[0];
   const inLink = Object.keys(SKY_CYCLE).filter((k) => payload.includes(k));
   ck("⑤ 공유 링크 payload 에 파생 이름이 없다", inLink.length === 0, inLink.join(", ") || "0개");
-  // 그리고 공유 경로가 실제로 이 판정을 통과하도록 배선돼 있어야 한다
-  ck("⑤ 부적 저장이 shareRisk 를 거친다", /const risk = shareRisk\(args\.skyKinds \|\| \[\]\)/.test(src));
-  ck("⑤ '위험'이면 이미지를 아예 안 만든다", /if \(risk\.level === "위험"\) return;/.test(src));
+  /* 그리고 공유 경로가 실제로 이 판정을 통과하도록 배선돼 있어야 한다.
+     ⚠ v130: 여기를 `const risk = shareRisk(args.skyKinds…)` 라는 **문자열 앵커**로 잡고 있었는데,
+        각인·궁합 카드를 붙이며 그 배관을 공용 함수로 뽑자 앵커가 어긋나 빨개졌다. 배선은 멀쩡했다.
+        그래서 **모양이 아니라 성질**을 본다: 카드가 나가는 문이 하나이고, 그 문이 판정을 거치는가. */
+  const gate = grab("saveOrShareCard");
+  ck("⑤ 카드가 나가는 문이 있다", !!gate && gate.length > 200);
+  ck("⑤ 그 문이 shareRisk 를 거친다", /shareRisk\(/.test(gate));
+  ck("⑤ '위험'이면 이미지를 아예 안 만든다", /if \(risk\.level === "위험"\) return;/.test(gate));
+  ck("⑤ 위험 판정이 **그리기 전에** 난다(그려 놓고 버리지 않는다)",
+     gate.indexOf("shareRisk(") < gate.indexOf("build()"), "shareRisk → build 순서");
+  /* 문을 우회하는 경로가 없는가 — 캔버스를 이미지로 바꾸는 곳은 그 문 하나뿐이어야 한다.
+     새 카드를 만들며 toDataURL 을 따로 부르면 검사도 계측도 통째로 빠진다. */
+  const outs = (src.match(/\.toDataURL\(/g) || []).length;
+  ck("⑤ 이미지로 내보내는 곳이 그 문 하나뿐이다", outs === 1, `toDataURL ${outs}곳`);
+  /* 각인·궁합 카드가 정책대로 실었는가 (바이럴루프판단 v01 §2) */
+  const impCard = grab("buildImprintCard"), matCard = grab("buildMatchCard");
+  const impNames = Object.keys(SKY_CYCLE).filter((k) => impCard.includes(k));
+  ck("⑤ 각인 카드의 파생 이름은 하나뿐", impNames.length <= 1, impNames.join(",") || "0개");
+  const matNames = Object.keys(SKY_CYCLE).filter((k) => matCard.includes(k));
+  ck("⑤ 궁합 카드엔 파생 이름이 없다(상대는 제3자다)", matNames.length === 0, matNames.join(",") || "0개");
+  ck("⑤ 각인 카드가 생년월일·건강·짝을 안 싣는다",
+     !/birth\.|생년월일|약한 곳|짝 자리/.test(impCard));
+  /* ⚠ "총점"이라는 **낱말**로 잡으면 안 된다 — 카드 발치에 "총점은 안 실어"라고 적혀 있어서
+     자기 자신을 잡는다(실제로 잡았다). 막아야 하는 건 **값이 실리는 것**이므로 인자와 호출부를 본다. */
+  const matArgs = (matCard.match(/^function buildMatchCard\(\{([^}]*)\}/) || ["", ""])[1];
+  ck("⑤ 궁합 카드가 총점을 받지도 않는다", !/score|band|akRows|rows/.test(matArgs), matArgs.trim());
+  const matCall = (src.match(/build: \(\) => buildMatchCard\(\{[\s\S]*?\}\),/) || [""])[0];
+  ck("⑤ 궁합 카드 호출부가 총점·축을 안 넘긴다",
+     !!matCall && !/r\.score|r\.band|r\.rows|r\.akRows/.test(matCall),
+     matCall ? "깨끗" : "호출부를 못 찾음");
+  /* 호출부가 선언한 skyKinds 도 규칙을 지켜야 한다 — 그림은 안 실어도 인자로 위험 조합을 넘기면 막힌다 */
+  for (const [kind, m] of [["imprint", /cardKind: "imprint",[\s\S]{0,400}?skyKinds: \[([^\]]*)\]/],
+                           ["match", /cardKind: "match", skyKinds: \[([^\]]*)\]/]]) {
+    const mm = src.match(m);
+    const kinds = mm ? (mm[1].match(/"[^"]+"/g) || []).map((x) => x.slice(1, -1)) : null;
+    ck(`⑤ ${kind} 호출부의 skyKinds 가 안전 판정을 받는다`, !!kinds && risk(kinds).ok,
+       kinds ? `[${kinds.join(",")}] → ${risk(kinds).level}` : "호출부를 못 찾음");
+  }
 }
 
 const f = R.filter((x) => !x).length;
