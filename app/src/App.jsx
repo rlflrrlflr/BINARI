@@ -2827,7 +2827,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v132.1 · 수호신 크기";
+const APP_VER = "v132.2 · 탭 바닥";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -5589,10 +5589,15 @@ const CSS = `
 /* v129.4 대기 문구 — 수호신이 가라앉는 동안 아래에 조용히 뜬다. 맥동은 느리게(숨 고르는 속도) */
 /* v132 하단 탭 — 판결/곁. 화면 맨 아래 고정, 안전영역(노치·홈바) 확보 */
 .tabbar{position:fixed;left:0;right:0;bottom:0;z-index:40;display:flex;justify-content:center;gap:8px;
-  padding:8px 16px calc(8px + env(safe-area-inset-bottom));background:linear-gradient(to top,rgba(5,4,8,.92),rgba(5,4,8,0))}
-.tabbtn{flex:0 0 auto;min-width:104px;padding:10px 20px;border-radius:999px;border:1px solid rgba(245,217,139,.18);
-  background:rgba(12,9,20,.6);color:#8d84a3;font-size:13px;letter-spacing:.18em;cursor:pointer;transition:color .2s,border-color .2s}
-.tabbtn.on{color:#f5d98b;border-color:rgba(245,217,139,.45);background:rgba(24,18,38,.8)}
+  padding:8px 16px calc(8px + env(safe-area-inset-bottom));background:none}
+/* v132.2 탭 바닥 — 짧고 투명한 스크림이라 뒤의 수호신·버전 배지가 탭에 겹쳐 보였다.
+   위로 96px 더 뻗은 별도 층을 깔고, **아래 절반은 완전 불투명**(#050408 = .stage 바닥색)으로 둔다.
+   가산 블렌딩으로 그린 입자는 어두운 바탕 위에서도 뚫고 올라오므로 알파를 남기면 안 된다. */
+.tabbar::before{content:"";position:absolute;left:0;right:0;bottom:0;top:-96px;pointer-events:none;
+  background:linear-gradient(to top,#050408 0%,#050408 42%,rgba(5,4,8,.88) 62%,rgba(5,4,8,.55) 78%,rgba(5,4,8,0) 100%)}
+.tabbtn{position:relative;flex:0 0 auto;min-width:104px;padding:10px 20px;border-radius:999px;border:1px solid rgba(245,217,139,.18);
+  background:#0d0a16;color:#8d84a3;font-size:13px;letter-spacing:.18em;cursor:pointer;transition:color .2s,border-color .2s,background .2s}
+.tabbtn.on{color:#f5d98b;border-color:rgba(245,217,139,.45);background:#1b1530}
 /* 탭이 하단을 덮으므로 마지막 요소가 가리지 않게 여백을 준다 */
 .scene{padding-bottom:76px}
 .gyeot .gyeotpanel{margin-top:18px;text-align:center}
