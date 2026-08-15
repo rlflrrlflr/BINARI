@@ -815,6 +815,54 @@ function wrap2(t, max = 9) {
   return b ? [a, b] : [a];
 }
 
+/* ── 진입 모션 (v128) ──────────────────────────────────────────────────────
+   창업자 지적: "그래프, 표가 나타나는 모션이 주기가 너무 짧아서 발작 일으키는 것처럼 느껴져."
+   원인은 속도가 아니라 **동시성**이었다. 40여 개 블록이 페이지 로드 한 번에 0.5초짜리
+   같은 애니메이션을 동시에 시작하니 화면 전체가 한꺼번에 떨렸다.
+
+   고치는 방식 셋:
+   ① **뷰포트에 들어온 것만** 움직인다 — 한 번에 움직이는 건 화면에 담기는 몇 개뿐이다.
+   ② 같은 프레임에 여러 개가 들어오면 **80ms씩 어긋내** 계단으로 만든다(최대 여섯 칸).
+   ③ **무한 반복을 없앤다** — 계속 뛰는 점 하나가 문서 전체를 불안하게 만든다.
+
+   ⚠ **숨기는 초기 상태(.rv)를 CSS가 아니라 이 훅이 붙인다.** 스크립트가 죽으면
+   문서는 그냥 다 보인다 — 값을 치른 문서에서 "안 보임"은 최악의 실패다.
+   ⚠ 되감기(이탈 시 .rvin 제거)는 **완전히 화면 밖으로 나갔을 때만** 한다.
+   경계에서 떨면 그게 바로 창업자가 지적한 그 증상이 된다. */
+const REVEAL_SEL = ".impsvg,.impdom,.impsky,.impclash,.impband,.impck,.imptrig,.impch,.improws,.impmrows,.impyrs,.impcore";
+/* ⚠ **ref 를 새로 만들지 않고 받는다.** 각인·궁합 루트에는 이미 `useDocRead` 의 readRef 가 붙어 있고
+   한 요소에 ref 는 하나뿐이다. 두 훅이 각자 ref 를 들면 나중에 붙는 쪽이 앞의 것을 조용히 덮는다 —
+   그러면 읽기 계측이나 모션 둘 중 하나가 소리 없이 죽는다. */
+function useReveal(ref) {
+  useEffect(() => {
+    const root = ref.current;
+    if (!root || typeof IntersectionObserver === "undefined") return;
+    const seen = new WeakSet();
+    const io = new IntersectionObserver((ents) => {
+      const inn = ents.filter((e) => e.intersectionRatio >= 0.12)
+        .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+      inn.forEach((e, i) => {
+        e.target.style.setProperty("--d", `${Math.min(i, 6) * 80}ms`);
+        e.target.classList.add("rvin");
+      });
+      /* 되감기는 ratio 0 — 15%에서 켜고 0에서만 끄니 경계에 히스테리시스가 생긴다 */
+      for (const e of ents) if (e.intersectionRatio === 0) e.target.classList.remove("rvin");
+    }, { threshold: [0, 0.12], rootMargin: "0px 0px -6% 0px" });
+    const scan = () => {
+      for (const el of root.querySelectorAll(REVEAL_SEL)) {
+        if (seen.has(el)) continue;
+        seen.add(el); el.classList.add("rv"); io.observe(el);
+      }
+    };
+    scan();
+    /* 근거 펼치기·선택 입력 닫기처럼 **나중에 생기는 블록**도 같은 규칙을 받는다 */
+    const mo = new MutationObserver(scan);
+    mo.observe(root, { childList: true, subtree: true });
+    return () => { io.disconnect(); mo.disconnect(); };
+  }, []);
+  return ref;
+}
+
 function ImprintDoc({ saju, birth, sex, onClose }) {
   const [notesOn, setNotesOn] = useState(false);
   /* v115 선택 입력 — **각인을 열 때만** 묻는다. 무료 온보딩은 건드리지 않는다.
@@ -847,12 +895,14 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
   }, [failed]);
   /* 스크롤·체류를 붙일 자리. 실패 화면에도 붙여야 "열자마자 깨져서 3초 만에 나갔다"가 남는다 */
   const readRef = useDocRead("imprint_read", { failed });
+  useReveal(readRef);            // v128 진입 모션 — 같은 ref 를 공유한다(위 ⚠ 참고)
   if (!r) return (<div className="imp" ref={readRef}><p className="impmsg">각인을 읽지 못했어. 생년월일을 다시 확인해 줄래?</p>
     <button className="btn ghost mt" onClick={onClose}>닫을게</button></div>);
   const Ref = ({ n }) => (notesOn && n ? <sup className="impfx">{n}</sup> : null);
   const H = ({ t }) => <span dangerouslySetInnerHTML={{ __html: t }} />;
+  /* --i = 표 안에서의 줄 번호. 줄마다 차례로 채워지게 하는 데만 쓴다(v128) */
   const Row = ([k, v, n], i) => (
-    <div className="impr" key={i}><div className="impk">{k}</div>
+    <div className="impr" key={i} style={{ "--i": i }}><div className="impk">{k}</div>
       <div className="impv"><H t={v} /><Ref n={n} /></div></div>
   );
   /* ── 그래프 — 숫자가 눈에 보여야 문서가 값을 갖는다 ── */
@@ -867,7 +917,8 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
           const f = F[b.ss] ?? 0, h = 8 + Math.abs(f) * 13, y = f >= 0 ? 58 - h : 58;
           const on = r.cur && b.from === r.cur.from;
           return <g key={i}>
-            <rect x={10 + i * bw + 2} y={y} width={bw - 4} height={h} rx="2"
+            <rect x={10 + i * bw + 2} y={y} width={bw - 4} height={h} rx="2" className="bargrow"
+              style={{ "--i": i, transformOrigin: f >= 0 ? "center bottom" : "center top" }}
               fill={f >= 2 ? "#5b8fd4" : f === 1 ? "#4a6f9e" : f === 0 ? "#6f6580" : f === -1 ? "#a8674f" : "#a83229"} opacity={on ? 1 : 0.75} />
             <text x={10 + i * bw + bw / 2} y={96} fontSize="7.5" fill={on ? "#f5d98b" : "#8a7f95"} textAnchor="middle">{b.from}</text>
           </g>;
@@ -886,7 +937,9 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
         {[...Array(12)].map((_, i) => {
           const m = i + 1, f = (ms.find((x) => x[0] === m) || [0, 0])[1], h = 6 + Math.abs(f) * 26;
           return <g key={m}>
-            <rect x={10 + i * bw + 2} y={f >= 0 ? 50 - h : 50} width={bw - 4} height={h} rx="2" fill={f > 0 ? "#5b8fd4" : f < 0 ? "#a83229" : "#6f6580"} opacity="0.85" />
+            <rect x={10 + i * bw + 2} y={f >= 0 ? 50 - h : 50} width={bw - 4} height={h} rx="2" className="bargrow"
+              style={{ "--i": i, transformOrigin: f >= 0 ? "center bottom" : "center top" }}
+              fill={f > 0 ? "#5b8fd4" : f < 0 ? "#a83229" : "#6f6580"} opacity="0.85" />
             <text x={10 + i * bw + bw / 2} y={70} fontSize="7.5" fill="#8a7f95" textAnchor="middle">{m}</text>
           </g>;
         })}
@@ -1015,7 +1068,8 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
         {ys.map((y, i) => {
           const h = 6 + Math.abs(y.f) * 16;
           return <g key={i}>
-            <rect x={10 + i * bw + 3} y={y.f >= 0 ? 44 - h : 44} width={bw - 6} height={h} rx="2"
+            <rect x={10 + i * bw + 3} y={y.f >= 0 ? 44 - h : 44} width={bw - 6} height={h} rx="2" className="bargrow"
+              style={{ "--i": i, transformOrigin: y.f >= 0 ? "center bottom" : "center top" }}
               fill={y.f > 0 ? "#5b8fd4" : y.f < 0 ? "#a83229" : "#6f6580"} opacity={i === 0 ? 1 : 0.82} />
             <text x={10 + i * bw + bw / 2} y={66} fontSize="8" fill={i === 0 ? "#f5d98b" : "#8a7f95"} textAnchor="middle">{y.year}</text>
           </g>;
@@ -1136,7 +1190,7 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
       ))}
 
       <p className="imph">생김새 <i>거울 앞에서 바로 확인돼</i></p>
-      {r.body.map(Row)}
+      <div className="improws">{r.body.map(Row)}</div>
 
       <p className="imph">언제 네가 너 같지 않은가</p>
       <p className="impp">사람은 늘 같지 않아. <b>차분한 사람도 무너질 때가 있고, 순한 사람도 사나워질 때가 있어.</b> 네 곁에 있을 사람들이 알아야 할 건 네가 어떤 사람인지가 아니라 <b>언제 네가 달라지는지</b>야.</p>
@@ -1159,7 +1213,7 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
               {r.money.trough ? <> 가장 얇은 때는 <b>{r.money.trough.from}~{r.money.trough.to}세</b>야.</> : null}
               <Ref n={r.money.n} /></p>
             <div className="impmrows">{r.money.path.filter((x) => !x.young).map((x, i) => (
-              <div className={"impmrow" + (x.now ? " on" : "")} key={i}>
+              <div className={"impmrow" + (x.now ? " on" : "")} key={i} style={{ "--i": i }}>
                 <b>{x.from}~{x.to}</b><span>{x.how}</span></div>))}</div></>}
         </div>
       ))}
@@ -1168,12 +1222,12 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
         <p className="imph">직장생활 <i>어떤 일이 맞나가 아니라, 조직에서 어떻게 굴러가나</i></p>
         <p className="impp">맞는 직업을 골라도 <b>조직에서 못 버티는 사람</b>이 있어. 축이 다르거든.
           여긴 <b>네가 어떻게 일하고, 누구랑 맞고, 어디까지 가고, 언제 움직이나</b>를 봐.</p>
-        {r.work.rows.map(Row)}
+        <div className="improws">{r.work.rows.map(Row)}</div>
         <p className="imph2">언제 움직이나 <i>여섯 해</i></p>
         <YearBar />
         <div className="impyrs">
           {r.work.years.map((y, i) => (
-            <div className={"impyr" + (y.f > 0 ? " up" : y.f < 0 ? " dn" : "")} key={i}>
+            <div className={"impyr" + (y.f > 0 ? " up" : y.f < 0 ? " dn" : "")} key={i} style={{ "--i": i }}>
               <b>{y.year}</b><span>{y.w}</span></div>
           ))}
         </div>
@@ -1190,7 +1244,7 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
       {r.mate && <>
         <p className="imph">{r.mateMode === "wed" ? "짝 — 이미 곁에 있는 사람" : "짝 — 누구를 만나나"}
           {r.mateMode === "wed" ? <i>생김새는 네가 더 잘 알아</i> : null}</p>
-        {r.mate.map(Row)}
+        <div className="improws">{r.mate.map(Row)}</div>
       </>}
       {!r.mate && <p className="impmsg">짝 자리는 <b>성별이 있어야</b> 어느 글자가 그 인연인지 갈려 — 프로필에 더하면 열려.</p>}
 
@@ -1244,6 +1298,18 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
    각인의 최대 약점(평생 1회)을 메운다: 궁합은 **사람 수만큼 다시 산다.**
    상대 생년월일만 받는다. 이름·연락처는 안 받는다 — 남의 개인정보를 우리가 들고 있을 이유가 없다. */
 const MATCH_PRICE = 4900;
+
+/* D-3: 각인·궁합의 **분모**. 서신은 `verdict_shown` 이 노출이라 클릭률이 계산됐는데
+   로비의 두 상품은 대응 이벤트가 없어 분자만 쌓이고 있었다.
+   방문당 1회로 묶는다 — 로비를 오갈 때마다 세면 노출이 부풀어 클릭률이 실제보다 낮게 나온다. */
+function OfferShown({ records }) {
+  useEffect(() => {
+    trackVisitOnce("imprint_offer_shown", { price: IMPRINT_PRICE, nth_verdict: records.length });
+    trackVisitOnce("match_offer_shown", { price: MATCH_PRICE, nth_verdict: records.length });
+  }, []);
+  return null;
+}
+
 function MatchDoc({ saju, birth, onClose }) {
   const [notesOn, setNotesOn] = useState(false);
   const [f, setF] = useState(() => { try { return JSON.parse(localStorage.getItem(MATCH_LAST_KEY) || "{}"); } catch { return {}; } });
@@ -1268,6 +1334,7 @@ function MatchDoc({ saju, birth, onClose }) {
   const mfailed = done && !r;
   useEffect(() => { if (mfailed) track("match_failed", { has_hour: f.h != null, has_sex: !!f.sex }); }, [mfailed]);
   const readRef = useDocRead("match_read", { done });
+  useReveal(readRef);            // v128 진입 모션 — 같은 ref 를 공유한다
   const Ref = ({ n }) => (notesOn && n ? <sup className="impfx">{n}</sup> : null);
   const H = ({ t }) => <span dangerouslySetInnerHTML={{ __html: t }} />;
 
@@ -1312,7 +1379,7 @@ function MatchDoc({ saju, birth, onClose }) {
         return <g key={i}>
           <text x="96" y={y + 8} fontSize="9" fill="#8a7f95" textAnchor="end">{x.label}</text>
           <rect x="102" y={y} width="168" height="10" rx="2" fill="#6f658022" />
-          <rect x="102" y={y} width={Math.max(w, 1.5)} height="10" rx="2"
+          <rect x="102" y={y} width={Math.max(w, 1.5)} height="10" rx="2" className="akfill" style={{ "--i": i }}
             fill={x.ratio >= 0.8 ? "#5b8fd4" : x.ratio <= 0.34 ? "#a83229" : "#6f6580"} />
           <text x="276" y={y + 8} fontSize="8" fill="#6f6580">{x.sc}/{x.max}</text>
         </g>;
@@ -1342,7 +1409,7 @@ function MatchDoc({ saju, birth, onClose }) {
       <AkBar />
       <div className="impmrows">
         {r.akRows.map((x, i) => (
-          <div className={"impmrow" + (x.ratio <= 0.34 ? " dn" : x.ratio >= 0.8 ? " on" : "")} key={i}>
+          <div className={"impmrow" + (x.ratio <= 0.34 ? " dn" : x.ratio >= 0.8 ? " on" : "")} key={i} style={{ "--i": i }}>
             <b>{x.label}</b><span><H t={x.w} /></span></div>
         ))}
       </div>
@@ -2658,7 +2725,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v127.5 · 진입면";
+const APP_VER = "v128 · 진입 모션·결제 전 정직화";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -3300,7 +3367,11 @@ function loadMemory() {
     const raw = store.getItem(STORE_KEY);
     if (!raw) return null;
     const m = JSON.parse(raw);
-    /* v114: mbti 를 필수에서 뺐다 — 안 물으니 새 유저에겐 없다. 있으면 계속 쓴다(옛 수호신 얼굴 보존) */
+    /* v114: mbti 를 필수에서 뺐다 — 안 물으니 새 유저에겐 없다. 있으면 계속 쓴다(옛 수호신 얼굴 보존)
+       v128(D-1): 계측 속성에서도 뺐다. **묻지 않는 값을 계속 실어 보내고 있었다** —
+       새 유저는 영구히 null 이고 옛 유저 것만 나갔다. 처리방침은 그걸 "수집 항목"으로 적고 있었고,
+       그래서 화면·코드·문서 셋이 서로 다른 말을 했다. 남은 쓰임은 **수호신 얼굴 시드 하나뿐**이고
+       그건 기기 밖으로 안 나간다. */
     if (!(m && m.saju && m.core)) return null;   // 필수 조각 검증 — 손상 시 새 출발
     // v51: 주기운 기준을 '최다 오행'→'일간(나)'으로 교정 — 저장된 dayGan으로 소급 보정(멱등)
     if (m.saju.dayGan) { const _di = GAN.indexOf(m.saju.dayGan); if (_di >= 0) m.saju.main = GAN_EL[_di]; }
@@ -3848,7 +3919,7 @@ export default function App() {
   const rateVerdict = (score) => {                          // v75: 판결 평가 — 정확도 피드백 수집(계측 + 기록에 부착)
     if (rated) return;
     setRated(score);
-    track("verdict_rated", demoProps(birth, { score, dir: res?.direction, mode: "ritual", cat: res?.category || null, tone: res?.tone || null, mbti: mbti || null, element: saju?.main || null }));
+    track("verdict_rated", demoProps(birth, { score, dir: res?.direction, mode: "ritual", cat: res?.category || null, tone: res?.tone || null, element: saju?.main || null }));
     setRecords(prev => { if (!prev.length) return prev; const nx = prev.slice(); nx[nx.length - 1] = { ...nx[nx.length - 1], rating: score }; return nx; });
   };
 
@@ -4029,7 +4100,7 @@ export default function App() {
     /* 창업자 지시(2026-08-15) "질문과 답변은 다 남기자. 다만 개인 식별 불가능하게 해"
        → 원문이 아니라 anon() 을 통과한 가명본을 싣는다. 길이(qlen)는 그대로 둔다 —
          가명본은 자리표 때문에 길이가 달라지므로 길이 지표를 여기서 재면 안 된다. */
-    track("question_asked", demoProps(birth, { mode: "ritual", qlen: q.trim().length, q_anon: anon(q, birth.name), ritual: !!hi, lean: lean || "skip", hesit: hesit || null, mbti: mbti || null, core_value: core || null, element: saju?.main || null, zodiac: zo?.name || null, scope_hint: _sHint, reask: _reask, reask_depth: _reask ? records.filter(r => isReask(r.q)).length + 1 : 0, after_letter: letterSent }));   // v104 after_letter: 서신 대기 중에 한 번 더 물었는가
+    track("question_asked", demoProps(birth, { mode: "ritual", qlen: q.trim().length, q_anon: anon(q, birth.name), ritual: !!hi, lean: lean || "skip", hesit: hesit || null, core_value: core || null, element: saju?.main || null, zodiac: zo?.name || null, scope_hint: _sHint, reask: _reask, reask_depth: _reask ? records.filter(r => isReask(r.q)).length + 1 : 0, after_letter: letterSent }));   // v104 after_letter: 서신 대기 중에 한 번 더 물었는가
     setBusy(true); setErr(""); setRes(null); setDetail(null); setWhy(false); setFlip(false); setCardOn(false); setRated(0); setLetter(false); setLetterIntent(false); setLetterStage(""); setLetterSent(false); setLetterDoc(null); setLetterOpen(false); setLetterRated(0); setBoxOpen(false); reactRef.current = null; setIntroSeen(true);
     try {
       // 주역 괘는 질문마다 달라지므로 유저 턴에
@@ -4061,7 +4132,7 @@ export default function App() {
       agitateRef.current = true; setRes(r1);
       // scope_level(모델 판정) vs scope_hint(규칙) — 둘이 어긋난 건이 경계 케이스다. 그 목록이 다음 규칙 개정의 근거가 된다.
       const _sLevel = ["S1", "S2", "S3"].includes(r1.scope) ? r1.scope : null;
-      track("verdict_shown", demoProps(birth, { dir: r1.direction, cat: r1.category, tone: r1.tone, against: r1.against, total: r1.total, mode: "ritual", lean: lean || "skip", vlen: (r1.verdict || "").length || 0, mbti: mbti || null, element: saju?.main || null, ms: Math.round(performance.now() - _jt0),
+      track("verdict_shown", demoProps(birth, { dir: r1.direction, cat: r1.category, tone: r1.tone, against: r1.against, total: r1.total, mode: "ritual", lean: lean || "skip", vlen: (r1.verdict || "").length || 0, element: saju?.main || null, ms: Math.round(performance.now() - _jt0),
         scope_level: _sLevel, scope_hint: _sHint, scope_agree: _sLevel ? _sLevel === _sHint : null, handoff_triggered: _sLevel === "S3", reask: _reask,
         // 표가 없거나(votes_ok=false) 표와 결론이 어긋난(dir_overridden) 비율이 곧 '판결이 지표에서 나오는가'의 지표다
         votes_ok: !!_tally, votes_n: _tally ? _tally.total : 0, dir_overridden: _tally ? _tally.overridden : null,
@@ -4541,18 +4612,34 @@ export default function App() {
                       </button>
                     </div>
                   ))}
-                  <p className="fine">서신은 이 기기에 보관돼. 기기를 바꾸거나 지워졌다면 <b>번호를 대고 다시 받으면</b> 돼 — 값은 다시 안 받아.</p>
+                  {/* C-2(작업지시 2026-08-14): "번호를 대고 다시 받으면 돼"는 **이행할 수 없는 약속**이었다.
+                      letterNo 는 기록에서 계산해 낸 비가역 해시라 열쇠가 아니고, 계정도 서버 주문 기록도 없다.
+                      기기를 바꾸면 우리도 못 되살린다. 그러니 사실대로 적고, 실제로 듣는 대책을 준다. */}
+                  <p className="fine">서신은 <b>이 기기에만</b> 있어. 계정이 없어서 기기를 바꾸거나 브라우저 데이터를 지우면
+                    <b> 우리도 되살릴 수 없어</b> — 번호는 이 기기에서 계산한 표식이지 열쇠가 아니야.
+                    남기고 싶으면 서신을 열어 <b>「서신 간직하기 — 파일로」</b>를 눌러 둬.</p>
                 </div>
               )}
               {/* v113 각인 진입점 — 판결 흐름 밖이다. 서신은 질문 하나에 딸리고, 각인은 사람 자체에 딸린다.
-                  결제 전이라 지금은 무료로 열린다(실물이 나와야 값을 매길 수 있다). 연 시점만 계측한다. */}
+                  결제 전이라 지금은 무료로 열린다(실물이 나와야 값을 매길 수 있다).
+                  ── D-3 (작업지시 2026-08-14) ─────────────────────────────────────
+                  ROADMAP 은 `imprint_clicked` 와 `letter_clicked` 를 나란히 놓고 값을 정하겠다고 적었는데
+                  **두 클릭이 같은 종류가 아니었다.** 서신 버튼은 4,900원을 보여주고 누른 것이고,
+                  각인·궁합 버튼은 **가격이 안 보이는 채로** 누른 것이다 — 원 지시서 §5가 경고한 그대로
+                  "가격 없는 버튼을 누르는 건 호기심이지 돈 낼 의사가 아니다". 분모도 없었다:
+                  서신 노출은 `verdict_shown` 인데 각인·궁합은 로비에 그냥 있어서 대응 노출 이벤트가 없었다.
+                  그래서 둘을 맞춘다 — ①버튼에 값을 적고 ②노출을 방문당 1회 이벤트로 남긴다.
+                  이제 클릭률 = *_clicked / *_offer_shown 으로 세 상품을 같은 자로 잰다. */}
               {!ritual && !res && saju && (<>
+                <OfferShown records={records} />
                 <button className="btn ghost mt w100" onClick={() => { track("imprint_clicked", { price: IMPRINT_PRICE, nth_verdict: records.length }); setImprintOpen(true); }}>
-                  각인 — 네가 어떻게 만들어졌는지 <span className="impbadge">시험 발행</span>
+                  각인 — 네가 어떻게 만들어졌는지 · {IMPRINT_PRICE.toLocaleString()}원 <span className="impbadge">시험 발행</span>
                 </button>
                 <button className="btn ghost mt w100" onClick={() => { track("match_clicked", { price: MATCH_PRICE, nth_verdict: records.length }); setMatchOpen(true); }}>
-                  궁합 — 그 사람과 너 <span className="impbadge">시험 발행</span>
+                  궁합 — 그 사람과 너 · {MATCH_PRICE.toLocaleString()}원 <span className="impbadge">시험 발행</span>
                 </button>
+                <p className="fine">둘 다 <b>지금은 값을 안 받아.</b> 결제는 아직 연결돼 있지 않고, 적힌 값은
+                  <b> "이만하면 받겠어?"</b>를 묻는 표시야.</p>
               </>)}
               {!ritual && !res && records.length > 0 && (
                 <button className="resetlink" onClick={() => { setLogOpen(o => !o); setOpenRec(-1); }}>{logOpen ? "판결록 접기" : `판결록 — ${records.length}번의 판결`}</button>
@@ -4723,7 +4810,7 @@ export default function App() {
           {/* D4: 결제 fake-door — 지불 의사만 잰다. 결제 인프라는 만들지 않는다. */}
           {res && cardOn && letterOk && (
             !letter ? (
-              <button className="btn ghost mt" onClick={openLetter}>수호신의 서신 — 이 판결의 깊은 풀이 · {LETTER_PRICE.toLocaleString()}원</button>
+              <button className="btn ghost mt" onClick={openLetter}>수호신의 서신 — 이 판결의 깊은 풀이 · {LETTER_PRICE.toLocaleString()}원 <span className="impbadge">시험 발행</span></button>
             ) : letterIntent ? (
               <p className="ratedone">서신을 맡겼어 — 수호신이 쓰기 시작했어.</p>
             ) : (
@@ -4732,8 +4819,15 @@ export default function App() {
                 <ul className="letterlist">{LETTER_SECTIONS.map((t, i) => <li key={i}>{t}</li>)}</ul>
                 <p className="letterprev">{letterPreview(saju, hesit)}</p>
                 <p className="letterprevtag">— 여기까지가 미리보기야</p>
-                {/* 전상법 제17조⑥: 미리보기 제공 + 철회 배제 고지를 '알아보기 쉬운 곳'에 함께 둔다 */}
-                <p className="refundnote">서신은 열어보는 순간 전해지는 글이라, 열람 후에는 환불되지 않아요. 위 미리보기로 먼저 확인해 주세요.</p>
+                {/* ── C-1 (작업지시 2026-08-14) ────────────────────────────────
+                    v122까지 여기에 "열람 후에는 환불되지 않아요"가 적혀 있었다.
+                    **결제가 없는데 청약철회를 배제하는 고지**였다 — 존재하지 않는 거래의 조건을
+                    먼저 못 박은 셈이고, 유저 눈에는 실제 판매로 보인다. 각인·궁합은 「시험 발행」
+                    배지로 정직하게 표시했는데 서신만 안 했다.
+                    ⚠ **결제를 붙이는 날 원래 문구를 되살린다** — 전상법 제17조⑥은 미리보기와
+                    철회 배제 고지를 알아보기 쉬운 곳에 함께 두라고 한다. 지금은 그 대상이 없다. */}
+                <p className="refundnote"><b>지금은 시험 발행이라 값을 받지 않아.</b> 결제는 아직 연결돼 있지 않아 —
+                  위 가격은 <b>"이만한 값이면 받겠어?"</b>를 묻는 표시야. 미리보기로 먼저 확인하고 눌러 줘.</p>
                 <button className="btn gold mt" onClick={confirmLetterIntent}>받을게</button>
               </div>
             )
@@ -4810,7 +4904,9 @@ export default function App() {
             </div>
             {/* 유료 물건은 기기 하나에만 맡기지 않는다 — iOS 는 7일이면 저장소를 지울 수 있다 */}
             <button className="btn ghost mt" onClick={saveLetterFile}>서신 간직하기 — 파일로</button>
-            <p className="fine">서신함(홈)에서 언제든 다시 열려. 기기가 바뀌어도 번호 <b>{letterNo(records[letterIdx] || {})}</b>로 다시 받을 수 있어.</p>
+            {/* C-2: 같은 약속이 여기에도 있었다("기기가 바뀌어도 번호로 다시 받을 수 있어"). 사실이 아니다. */}
+            <p className="fine">서신함(홈)에서 언제든 다시 열려 — 다만 <b>이 기기 안에서만</b>이야.
+              기기를 바꾸거나 브라우저 데이터를 지우면 사라져. 남기려면 위의 <b>「파일로」</b>를 눌러 둬.</p>
             <p className="ainote">이 서신은 AI가 생성한 내용입니다 · 재미로 보는 참고용이야</p>
             <button className="btn ghost mt" onClick={() => setLetterOpen(false)}>접어둘게</button>
           </div>
@@ -5148,23 +5244,48 @@ const CSS = `
 .impaskrow span{font-size:11.5px;color:#9d8fb5;flex:0 0 72px}
 .impchip{background:none;border:1px solid #c9b98f3d;border-radius:14px;color:#bfb6cc;font-size:11.5px;padding:4px 13px;cursor:pointer}
 .impchip.on{border-color:#f5d98b;color:#f5d98b;background:#c98f3d1f}
-@keyframes impRise{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:none}}
+/* ── 진입 모션 (v128) ─────────────────────────────────────────────────────────
+   v127까지는 **문서가 열리는 순간 마흔 개 블록이 한꺼번에** 0.5초 애니메이션을 시작했다.
+   창업자 지적("발작 일으키는 것처럼 느껴져")의 원인은 속도가 아니라 그 동시성이었다.
+   .rv  = 아직 화면에 안 들어온 상태. **이 클래스는 JS(useReveal)가 붙인다** —
+          스크립트가 죽으면 문서는 그냥 다 보인다. 값을 치른 문서에서 "안 보임"은 최악이다.
+   .rvin = 화면에 들어옴. --d 는 같은 프레임에 여럿이 들어올 때의 계단 간격(훅이 넣는다).
+   --i   = 표 안에서의 줄 번호. 줄이 차례로 채워지게 한다.
+   ⚠ **무한 반복 금지.** 눈이 머무는 문서에서 계속 뛰는 요소 하나가 문서 전체를 불안하게 만든다. */
+@keyframes impRise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 @keyframes impDraw{from{stroke-dashoffset:1400}to{stroke-dashoffset:0}}
 @keyframes impFill{from{opacity:0}to{opacity:1}}
-.imp .impdom,.imp .impsky,.imp .impclash,.imp .impband,.imp .impck{animation:impRise .5s cubic-bezier(.22,.8,.28,1) both}
-.imp .impsvg{animation:impRise .55s cubic-bezier(.22,.8,.28,1) both}
-.drawin .mline{stroke-dasharray:1400;animation:impDraw 1.5s cubic-bezier(.3,.7,.3,1) .15s both}
-.drawin .jline{animation:impFill .6s ease both}
-.drawin .jline:nth-of-type(1){animation-delay:.1s}.drawin .jline:nth-of-type(2){animation-delay:.22s}
-.drawin .jline:nth-of-type(3){animation-delay:.34s}.drawin .jline:nth-of-type(4){animation-delay:.46s}
-.drawin .jline:nth-of-type(5){animation-delay:.58s}.drawin .jline:nth-of-type(6){animation-delay:.7s}
-.drawin .jline:nth-of-type(7){animation-delay:.82s}
-.drawin .mfill{animation:impFill 1s ease .9s both}
-.drawin line,.drawin circle,.drawin text{animation:impFill .7s ease .5s both}
-@media (prefers-reduced-motion:reduce){.imp .impdom,.imp .impsky,.imp .impclash,.imp .impband,.imp .impck,.imp .impsvg,.drawin .mline,.drawin .jline,.drawin .mfill,.drawin line,.drawin circle,.drawin text{animation:none}}
-@keyframes impPulse{0%,100%{opacity:.14;r:9}50%{opacity:.3;r:13}}
-.drawin .pulse{animation:impPulse 2.6s ease-in-out infinite}
-@media (prefers-reduced-motion:reduce){.drawin .pulse{animation:none}}
+@keyframes impWipe{from{opacity:0;clip-path:inset(0 100% 0 0)}to{opacity:1;clip-path:inset(0 0 0 0)}}
+@keyframes impGrowY{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+@keyframes impGrowX{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+.imp .rv{opacity:0}
+.imp .rvin{animation:impRise .72s cubic-bezier(.22,.8,.28,1) var(--d,0ms) both}
+/* 표 — "그래프가 그려지듯 표도 채워져야 한다"(창업자). 칸은 가만히 있고 줄이 왼쪽부터 찬다 */
+.imp .improws.rvin,.imp .impmrows.rvin,.imp .impyrs.rvin{animation:none;opacity:1}
+.imp .improws.rv .impr,.imp .impmrows.rv .impmrow,.imp .impyrs.rv .impyr{opacity:0}
+.imp .improws.rvin .impr,.imp .impmrows.rvin .impmrow,.imp .impyrs.rvin .impyr{
+  animation:impWipe .5s cubic-bezier(.3,.75,.35,1) calc(var(--d,0ms) + var(--i,0) * 70ms) both}
+/* 막대 — 축에서 자라 오른다(위 막대는 아래에서, 아래 막대는 위에서). 원점은 JSX가 준다 */
+.imp .impsvg.rvin .bargrow{transform-box:fill-box;animation:impGrowY .55s cubic-bezier(.22,.8,.28,1) calc(var(--d,0ms) + var(--i,0) * 45ms) both}
+.imp .impsvg.rvin .akfill{transform-box:fill-box;transform-origin:left center;animation:impGrowX .6s cubic-bezier(.22,.8,.28,1) calc(var(--d,0ms) + var(--i,0) * 60ms) both}
+.drawin.rvin .mline{stroke-dasharray:1400;animation:impDraw 1.5s cubic-bezier(.3,.7,.3,1) calc(var(--d,0ms) + .15s) both}
+.drawin.rvin .jline{animation:impFill .6s ease both}
+.drawin.rvin .jline:nth-of-type(1){animation-delay:.1s}.drawin.rvin .jline:nth-of-type(2){animation-delay:.22s}
+.drawin.rvin .jline:nth-of-type(3){animation-delay:.34s}.drawin.rvin .jline:nth-of-type(4){animation-delay:.46s}
+.drawin.rvin .jline:nth-of-type(5){animation-delay:.58s}.drawin.rvin .jline:nth-of-type(6){animation-delay:.7s}
+.drawin.rvin .jline:nth-of-type(7){animation-delay:.82s}
+.drawin.rvin .mfill{animation:impFill 1s ease calc(var(--d,0ms) + .9s) both}
+.drawin.rvin line,.drawin.rvin circle,.drawin.rvin text{animation:impFill .7s ease calc(var(--d,0ms) + .5s) both}
+/* 「여기」 표식 — v127의 infinite 를 걷어냈다. 두 번 숨 쉬고 멎는다 */
+@keyframes impPulse{0%,100%{opacity:.18;r:10}50%{opacity:.34;r:14}}
+.drawin.rvin .pulse{animation:impPulse 3.2s ease-in-out .4s 2 both}
+/* 움직임을 줄여 달라고 한 사람에게는 **모션만** 끈다.
+   ⚠ opacity 를 통째로 1로 밀면 막대의 강약(SVG opacity 속성)까지 뭉개진다 —
+   우리가 0으로 만든 것만 되돌린다. */
+@media (prefers-reduced-motion:reduce){
+  .imp .rv,.imp .rv *,.imp .rvin,.imp .rvin *{animation:none!important}
+  .imp .rv,.imp .rv .impr,.imp .rv .impmrow,.imp .rv .impyr{opacity:1!important}
+}
 .impsaga{font-size:14px;line-height:1.95;color:#d8cfe8;margin:0 0 12px;letter-spacing:-.01em}
 .impsaga b{color:#f0e2b8}
 .impch{margin:0 0 2px;padding:11px 12px;border-left:2px solid #6f658044}

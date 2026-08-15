@@ -419,13 +419,41 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
     const payWired = /toss|portone|iamport|stripe|paypal/i.test(pkg);
     const api = readFileSync("api/judge.js", "utf8");
     const verified = /tier[\s\S]{0,400}(영수증|receipt|verify|검증)/.test(api) && !/클라이언트 말을 그대로 믿는다/.test(api);
-    if (payWired && !verified) {
-      add("심각", "결제가 붙었는데 유료 티어를 클라이언트 말만 믿음", "api/judge.js 의 tier 가 서버 검증 없이 통과됨",
-        "결제 영수증·토큰으로 tier='paid' 를 서버에서 검증하세요. 지금 상태면 누구나 유료 모델을 무료로 씁니다.");
+    /* C-3-② — 재발행이 지불 여부를 안 본다. 본문이 있으면 캐시를 여니 지금은 무해하지만,
+       재료(lmat)만 있고 본문이 없는 기록은 tier="paid" 로 다시 돌린다 → 결제일에 무료 재생성 경로가 된다. */
+    const reissuePaid = /reissueLetter[\s\S]{0,900}rec\.paid/.test(src);
+    /* C-4 — Permissions-Policy 가 payment 을 막고 있다. 지금은 무해하고 옳지만,
+       PG(Payment Request·애플페이 계열)를 붙이는 날 "원인 못 찾는 실패"로 나타난다. */
+    let payBlocked = false;
+    try { payBlocked = /Permissions-Policy[\s\S]{0,300}payment=\(\)/.test(readFileSync("vercel.json", "utf8")); } catch (_) {}
+    const gaps = [];
+    if (!verified) gaps.push("api/judge.js 의 tier 가 서버 검증 없이 통과됨");
+    if (!reissuePaid) gaps.push("reissueLetter 가 rec.paid 를 안 봄(무료 재생성 경로)");
+    if (payBlocked) gaps.push("vercel.json 의 Permissions-Policy 가 payment=() 로 결제 API를 차단 중");
+    if (payWired && gaps.length) {
+      add("심각", "결제가 붙었는데 결제 전 전제가 그대로 남음", gaps.join(" · "),
+        "①결제 영수증·토큰으로 tier='paid' 를 서버에서 검증 ②서신 재발행 전에 rec.paid 확인 ③Permissions-Policy 의 payment 를 self 로 여세요. 지금 상태면 누구나 유료 모델을 무료로 씁니다.");
     } else if (payWired) {
-      add("정상", "유료 티어 서버 검증", "결제 연동 + tier 검증 있음", "");
+      add("정상", "유료 티어 서버 검증", "결제 연동 + tier 검증 + 재발행 지불 확인 + payment 정책 열림", "");
     } else {
-      add("정상", "유료 티어(대기)", "결제 미연동 — tier 는 아직 클라이언트 신뢰로 충분. 결제 붙는 날 이 검사가 깨어남", "");
+      add("정상", "유료 티어(대기)",
+        `결제 미연동 — tier·재발행·payment 정책 모두 지금은 무해. 결제 붙는 날 이 검사가 셋을 한꺼번에 깨움(대기 중 ${gaps.length}건)`, "");
+    }
+    /* C-1 — 결제가 없는 동안 **판매처럼 보이는 표시**가 있으면 안 된다.
+       v122 는 청약철회 배제 고지("열람 후에는 환불되지 않아요")를 존재하지 않는 거래에 걸어 두었다.
+       뒤집어서, 결제가 붙으면 그 고지가 **반드시 있어야** 한다(전상법 제17조⑥). 양쪽을 다 본다. */
+    /* ⚠ 주석은 걷어내고 본다. 이 규칙의 **왜**를 코드 옆에 적어 두는 순간 그 주석이 스스로를 잡는다(실측). */
+    const view = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+    const refundNote = /환불되지 않아|청약\s*철회/.test(view);
+    const trialBadge = /시험 발행/.test(view);
+    if (!payWired && refundNote) {
+      add("심각", "결제가 없는데 청약철회 배제 고지가 붙어 있음", "존재하지 않는 거래의 환불 조건을 먼저 못 박은 상태",
+        "결제를 붙이기 전까지는 「시험 발행 · 값을 받지 않아」로 표시하세요. 지금 문구는 실제 판매로 읽힙니다.");
+    } else if (payWired && !refundNote) {
+      add("심각", "결제가 붙었는데 청약철회 배제 고지가 없음", "전자상거래법 제17조⑥ — 미리보기와 함께 알아보기 쉬운 곳에 둬야 함",
+        "서신 구매 화면에 '열람 후 환불 불가' 고지를 미리보기 옆에 되살리세요.");
+    } else if (!payWired) {
+      add("정상", "결제 전 표시(대기)", `시험 발행 배지 ${trialBadge ? "있음" : "없음"} · 청약철회 배제 고지 없음(옳음)`, "");
     }
   } catch (_) { /* 구조가 바뀌면 조용히 넘어간다 */ }
 }
@@ -709,6 +737,39 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
     bad.length ? "저장 키가 규칙 밖으로 샘 — 리셋에도 안 지워짐" : "저장 키 규칙 — 전부 binari. 접두 · 리셋이 전량 스윕",
     bad.length ? bad.join(" · ") : "밑줄 저장 키 0 · clearMemory 전량스윕(팀 플래그 보존) · 구키 마이그레이션 · 처리방침 제3자 항목",
     "저장 키는 전부 `binari.` 로 시작해야 리셋·내보내기 스윕에 걸립니다. 밑줄로 만들면 \"처음부터 다시\"를 눌러도 남아서 다음 사람에게 넘어갑니다 — 궁합의 상대방 생년월일은 제3자 정보라 특히 무겁습니다.");
+}
+
+/* ── 검사 5-k. 진입 모션이 다시 한꺼번에 터지지 않는가 (v128) ────────────
+   창업자 지적: "그래프, 표가 나타나는 모션이 주기가 너무 짧아서 발작 일으키는 것처럼 느껴져."
+   원인은 속도가 아니라 **동시성**이었다 — 문서를 여는 순간 마흔 개 블록이 같은 애니메이션을 같이 시작했다.
+   다음 판에서 절 하나를 더 붙이면서 `.imp .impXXX{animation:…}` 를 그대로 따라 쓰면 증상이 그대로 돌아온다.
+   그래서 **모양이 아니라 규칙을 못 박는다**: 진입 애니메이션은 뷰포트 표식(.rvin)을 거쳐야 하고,
+   각인 문서 안에 무한 반복은 없어야 한다.
+   ⚠ 초기 숨김(.rv)은 **JS 가 붙인다.** CSS 로 숨기면 스크립트가 죽는 순간 값을 치른 문서가 백지가 된다. */
+{
+  const app = readFileSync(APP, "utf8");
+  const bad = [];
+  const css = (app.match(/@keyframes impRise[\s\S]{0,3200}?prefers-reduced-motion[\s\S]{0,400}?\n\}/) || [""])[0];
+  if (!css) bad.push("각인 모션 블록을 못 찾음");
+  else {
+    /* 뷰포트 표식을 안 거치고 바로 도는 진입 애니메이션이 있는가 */
+    for (const m of css.matchAll(/^([^\n{]*)\{[^}]*animation:\s*imp(Rise|Wipe|Grow|Draw|Fill|Pulse)[^}]*\}/gm)) {
+      const sel = m[1].trim();
+      if (!/\.rvin\b/.test(sel)) bad.push(`뷰포트 표식 없이 도는 진입 모션 — ${sel.slice(0, 46)}`);
+    }
+    if (/animation:[^;}]*\binfinite\b/.test(css)) bad.push("각인에 무한 반복 모션이 있음");
+    if (!/\.imp \.rvin\b/.test(css)) bad.push("진입 표식(.rvin) 규칙이 없음");
+    if (/^\s*\.imp \.rv\s*\{[^}]*\}/m.test(css) === false) bad.push("초기 숨김(.rv) 규칙이 없음");
+    if (!/prefers-reduced-motion/.test(css)) bad.push("움직임 줄이기 대응 없음");
+  }
+  /* .rv 는 JS 가 붙여야 한다 — CSS 만으로 숨기면 스크립트가 죽을 때 문서가 사라진다 */
+  if (!/classList\.add\("rv"\)/.test(app)) bad.push("초기 숨김을 JS 가 안 붙임(스크립트 죽으면 백지)");
+  if (!/IntersectionObserver/.test(app)) bad.push("뷰포트 관찰자 없음");
+
+  add(bad.length ? "주의" : "정상",
+    bad.length ? "각인 진입 모션이 한꺼번에 터질 수 있음" : "각인 진입 모션 — 화면에 들어온 것만 · 무한 반복 없음",
+    bad.length ? bad.join(" · ") : "모든 진입 모션이 .rvin 을 거침 · infinite 0 · 초기 숨김은 JS · 움직임 줄이기 대응",
+    "리포트 모션은 **화면에 들어온 블록만** 움직여야 합니다. `.imp .impXXX{animation:…}` 처럼 표식 없이 걸면 문서를 여는 순간 수십 개가 동시에 떨립니다.");
 }
 
 /* ── 검사 6. 의존성 취약점 (npm audit) ───────────────────────────────────

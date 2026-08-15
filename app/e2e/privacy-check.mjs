@@ -221,6 +221,62 @@ return anon;`)();
      !/질문 원문[^。.]{0,40}전송하지 않습니다/.test(pv4.replace(/<[^>]+>/g, "")));
 }
 
+/* ── B-3. 공유 링크 고지 ────────────────────────────────────────────────
+   처리방침 전문에 '공유/SNS/share' 언급이 0건이었다. 실명은 A-2 로 걷어냈지만
+   **질문 원문은 여전히 링크에 실려 나간다** — 그걸 안 적으면 유저는 모르고 보낸다.
+   ⚠ 문구는 **코드를 읽고** 써야 한다. 앞서 코드를 안 보고 쓴 초안은 3줄 중 2줄이 사실과 달랐고
+      둘 다 우리에게 유리한 방향이었다. 그래서 검사도 payload 와 문서를 **맞대어** 본다. */
+{
+  const pv = readFileSync(new URL("../public/privacy.html", import.meta.url), "utf8");
+  ck("처리방침에 공유 링크 절이 있다", /공유 링크와 부적 이미지에 담기는 정보/.test(pv));
+  ck("공유 링크가 질문 원문을 싣는다고 적는다", /질문 원문<\/strong>, 판결 방향|질문 원문<\/strong>/.test(pv) && /담깁니다/.test(pv));
+  ck("암호화가 아니라고 밝힌다", /암호화되어 있지 않습니다/.test(pv));
+  ck("링크가 남는 곳도 읽는다고 밝힌다", /메신저 대화방|브라우저 기록/.test(pv));
+  ck("회수 불가를 밝힌다", /회수하는 기능은 제공하지 않습니다/.test(pv));
+  ck("이름이 안 실린다고 밝힌다", /담기지 않습니다[\s\S]{0,120}이름 또는 별명/.test(pv));
+  ck("부적 이미지에 질문 원문이 없다고 밝힌다", /질문 원문과 이름은 그림에 들어가지 않습니다/.test(pv));
+  /* 문서와 코드가 어긋나면 문서가 거짓말이 된다 — payload 필드를 실제로 맞대어 본다 */
+  const pay = (src.match(/const payload = \{[^\n]*\}/) || [""])[0];
+  /* ⚠ `hx: { n: hexInfo.name }` 은 **괘 이름**이다. "n: 이 있으면 실패"로 걸면 그걸 잡는다(실측).
+     막아야 하는 건 **사람 이름이 실리는 것**이므로 값 쪽을 본다. */
+  ck("payload 에 이름 필드가 없다", !!pay && !/\bn:\s*(_nm|birth\.name|name\b)/.test(pay),
+     pay ? (pay.match(/\bn:\s*[^,}]*/) || ["n 없음"])[0] : "payload 를 못 찾음");
+  ck("payload 가 질문 원문을 싣는 게 맞다(문서와 일치)", /\{ q,/.test(pay));
+  ck("판결문·보조문장은 이름을 지운 뒤 싣는다", /v: stripName\(/.test(pay) && /s: stripName\(/.test(pay));
+}
+
+/* ── C-1·C-2. 결제가 없는데 판매처럼 보이는 표시 / 이행 못 할 약속 ────────
+   ⚠ 주석은 걷어내고 본다 — 규칙의 '왜'를 코드 옆에 적으면 그 주석이 스스로를 잡는다. */
+{
+  const view = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  ck("C-1 결제 전엔 청약철회 배제 고지를 안 건다", !/환불되지 않아|청약\s*철회/.test(view));
+  ck("C-1 서신도 시험 발행으로 표시한다", /수호신의 서신[\s\S]{0,160}시험 발행/.test(view));
+  ck("C-1 값을 안 받는다고 적는다", /지금은 시험 발행이라 값을 받지 않아/.test(view));
+  ck("C-2 번호로 복원해 준다는 약속이 없다", !/번호를 대고 다시 받으면|번호 <b>\{letterNo[\s\S]{0,80}다시 받을 수 있어/.test(view));
+  ck("C-2 기기 밖에선 못 되살린다고 밝힌다", /우리도 되살릴 수 없어/.test(view));
+  ck("C-2 대신 실제로 듣는 대책을 준다(파일 저장)", /서신 간직하기 — 파일로/.test(view));
+}
+
+/* ── D-1·D-3. 문서가 코드를 따라왔는가 ──────────────────────────────────
+   D-1: 온보딩에서 MBTI를 안 묻게 된 지 열네 판이 지났는데 처리방침은 계속 수집 항목으로 적고 있었다.
+   D-3: 서신 클릭은 **가격을 보고** 누른 것이고 각인·궁합 클릭은 가격이 안 보인 채 누른 것이었다 —
+        나란히 놓고 값을 정할 수 없는 두 숫자였다. 분모(노출 이벤트)도 한쪽에만 있었다. */
+{
+  const pv = readFileSync(new URL("../public/privacy.html", import.meta.url), "utf8");
+  /* 변경 안내(회색 각주)에는 "MBTI를 삭제했습니다"라고 적혀 있어야 하므로 각주는 빼고 본문만 본다 */
+  const pvBody = pv.replace(/<span style="color:#777[\s\S]*?<\/span>/g, "");
+  ck("D-1 처리방침 본문에 MBTI 수집 기재가 없다", !/MBTI/.test(pvBody),
+     (pvBody.match(/.{0,24}MBTI.{0,24}/) || ["본문 깨끗"])[0]);
+  ck("D-1 뺐다는 사실은 각주로 남긴다", /MBTI를 삭제했습니다/.test(pv));
+  ck("D-1 계측 속성에서도 MBTI를 뺐다", !/mbti: mbti/.test(src));
+  ck("D-1 수호신 얼굴 시드로는 계속 쓴다(옛 유저 얼굴 보존)", /mbti \|\| texture\(/.test(src));
+  ck("D-3 각인 버튼이 값을 보여준다", /각인 — 네가 어떻게 만들어졌는지 · \{IMPRINT_PRICE/.test(src));
+  ck("D-3 궁합 버튼이 값을 보여준다", /궁합 — 그 사람과 너 · \{MATCH_PRICE/.test(src));
+  ck("D-3 세 상품 모두 노출 이벤트가 있다",
+     /imprint_offer_shown/.test(src) && /match_offer_shown/.test(src) && /letter_price_shown/.test(src));
+  ck("D-3 노출은 방문당 1회로 묶는다(분모가 안 부푼다)", /trackVisitOnce\("imprint_offer_shown"/.test(src));
+}
+
 const pass = R.filter(Boolean).length;
 console.log(`\n=== 개인정보·법정고지: ${pass}/${R.length} PASS ===`);
 process.exit(pass === R.length ? 0 : 1);
