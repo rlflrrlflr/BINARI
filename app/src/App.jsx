@@ -1805,37 +1805,60 @@ function _hslToHex(h,s,l){h=(((h%360)+360)%360)/360;const q=l<0.5?l*(1+s):l+s-l*
 const rotHue=(hex,deg)=>{const[h,s,l]=_hexToHsl(hex);return _hslToHex(h+deg,s,l);};
 const seedRnd=(str)=>{let h=7;for(const c of String(str))h=(h*31+c.charCodeAt(0))>>>0;return()=>((h=(h*1664525+1013904223)>>>0)/2**32);};
 
-/* ── v114: MBTI 문항 제거 (창업자 지시 2026-08-12) ─────────────────────────
-   "판결에 영향도 크지 않을 뿐더러 무슨 말인지 모르겠다는 사용자들이 많다."
-   그런데 MBTI 는 수호신 비주얼의 축 하나(밀도·속도·질서·반짝임)를 맡고 있었다. 그냥 지우면
-   모든 새 유저의 수호신이 같은 질감이 된다 — v27~v28 이 공들여 만든 다양성이 통째로 죽는다.
+/* ── 수호신 질감 — 네 축을 명식에서 뽑는다 (v114 문항 폐지 → v128.1 방법론 재배선) ──
+   이 네 글자는 MBTI 가 아니라 **화면의 물리량 넷**이다. 글자는 옛 인코딩이 남은 것뿐이고,
+   실제로 조종하는 건 이것이다:
+     E/I → 입자 수·반지름·구심점   = 퍼지느냐 응축되느냐
+     N/S → twinkle on/off          = 명멸하느냐 고르게 빛나느냐
+     T/F → chaos 0.6↔1.35·입자 크기 = 정연하냐 유동적이냐
+     P/J → speed 0.42↔0.30         = 빠르냐 느리냐
+   넷 다 명리·점성에 이미 정통 어휘가 있는 성질이라, 축마다 **그 성질을 말하는 방법론**을 붙였다.
+   v114 판(오행 양/음 · 별자리 원소 · 오행 금토 · 라이프패스 홀짝)은 자리를 채우려고 급히 붙인
+   매핑이었다 — 특히 '라이프패스 홀짝으로 속도를 정한다'는 어느 유파에도 근거가 없다.
 
-   그래서 **묻지 않고 뽑는다.** 설계 헌장 그대로다 — "수호신은 이미 너를 안다.
-   자동 파생 가능한 값은 손으로 되묻지 않는다." 사주·별자리·수비학에서 네 축을 만든다.
-
-   ⚠ 이미 저장된 질감 코드(tex, 옛 이름 mbti)는 그대로 쓴다. 안 그러면 시드가 바뀌어
-     **쓰던 수호신 얼굴이 달라진다.** 묻는 것만 없애고, 이미 받은 값은 버리지 않는다. */
-function texture(saju, zo, num) {
+   지표가 없을 때(시 미상·구버전 저장분)를 대비해 축마다 폴백을 둔다. 폴백은 v114 판 그대로라,
+   재료가 없으면 예전과 같은 값이 나온다 — 조용히 다른 얼굴이 되지 않는다. */
+function texture(saju, zo, num, moon) {
   if (!saju) return "ISFJ";
   const c = saju.counts || {};
-  const yang = (c.목 || 0) + (c.화 || 0);                    // 뻗는 기운
-  const eum = (c.금 || 0) + (c.수 || 0);                     // 거두는 기운
-  const E = yang >= eum ? "E" : "I";                         // 확장이냐 응축이냐
-  const N = ["공기", "불"].includes(zo?.el) ? "N" : "S";      // 별의 원소 — 반짝임
-  const T = saju.main === "금" || saju.main === "토" ? "T" : "F";   // 날카로움이냐 부드러움이냐
-  const P = ((num || 5) % 2) ? "P" : "J";                    // 라이프패스 홀짝 — 속도
+  const ss = saju.idx ? sipseongDist(saju.idx) : null;
+  const sum = (...k) => k.reduce((t, x) => t + ((ss && ss[x]) || 0), 0);
+
+  // ① 퍼짐 — 십성의 발산(비겁·식상) vs 수렴(인성·관성). 명리가 '기운이 나가느냐 들어오느냐'를
+  //    말하는 자리가 정확히 여기다. 재성은 나가되 취하는 것이라 어느 쪽에도 넣지 않는다.
+  const out = sum("비견", "겁재", "식신", "상관"), inw = sum("정인", "편인", "정관", "편관");
+  const E = (ss && (out !== inw)) ? (out > inw ? "E" : "I")
+    : ((c.목 || 0) + (c.화 || 0) >= (c.금 || 0) + (c.수 || 0) ? "E" : "I");   // 폴백: 오행 양/음
+
+  // ② 명멸 — 태어난 밤의 달. 빛이 가늘수록 반짝이고, 가득 찰수록 고르게 빛난다.
+  //    '빛이 일정한가'를 말하는 지표는 달 위상뿐이라 여기에 붙인다.
+  const MP = { 새달: 0, 초승달: 1, 상현달: 2, "차오르는 달": 3, 보름달: 4, "기우는 달": 3, 하현달: 2, 그믐달: 1 };
+  const mp = moon && moon.name != null ? MP[moon.name] : undefined;
+  const N = mp !== undefined ? (mp <= 2 ? "N" : "S")
+    : (["공기", "불"].includes(zo?.el) ? "N" : "S");                          // 폴백: 별자리 원소
+
+  // ③ 정연함 — 십성의 관성(틀·규율) vs 식상(내키는 대로). 명리에서 '짜여 있느냐 풀려 있느냐'다.
+  const ord = sum("정관", "편관"), free = sum("식신", "상관");
+  const T = (ss && (ord !== free)) ? (ord > free ? "T" : "F")
+    : (saju.main === "금" || saju.main === "토" ? "T" : "F");                 // 폴백: 오행 금·토
+
+  // ④ 속도 — 일간의 양간/음간. 양간(갑병무경임)은 곧게 빨리 가고 음간(을정기신계)은 돌아서 오래 간다.
+  //    라이프패스 홀짝을 쓰던 자리인데, 홀짝에는 어떤 유파에도 속도 해석이 없다.
+  const dgi = saju.dayGan ? GAN.indexOf(saju.dayGan) : -1;
+  const P = dgi >= 0 ? (dgi % 2 === 0 ? "P" : "J") : (((num || 5) % 2) ? "P" : "J");   // 폴백: 라이프패스
+
   return E + N + T + P;
 }
-function GuardianCanvas({ saju, zo, tex, num, moon, birth, agitateRef, reactRef, restRef, size = 340 }) {
+function GuardianCanvas({ saju, zo, num, moon, birth, agitateRef, reactRef, restRef, size = 340 }) {
   const ref = useRef(null);
   useEffect(() => {
     const cv = ref.current; if (!cv) return;
     const ctx = cv.getContext("2d");
     // ── v14: 지표 → 독립 시각축 매핑 (개인마다 고유한 지문) ──
-    const tx = tex || texture(saju, zo, num);   // 저장된 값이 있으면 그대로 — 쓰던 수호신 얼굴을 안 바꾼다
+    const tx = texture(saju, zo, num, moon);   // 질감은 명식에서 뽑는다 — 저장해 둔 코드를 쓰지 않는다
     const E = tx[0] === "E", N = tx[1] === "N", T = tx[2] === "T", P = tx[3] === "P";
     // 개인 시드: 생일·성격·별자리 전체에서 파생 → 입자 배치·hue 지터가 사람마다 고정
-    const seedStr = `${saju.main}${zo?.name || ""}${tex || ""}${num || ""}${saju.pillars?.일 || ""}`;
+    const seedStr = `${saju.main}${zo?.name || ""}${num || ""}${saju.pillars?.일 || ""}`;
     const srnd = seedRnd(seedStr);
     // ── v28: 심화 지표 → 서로 다른 시각 채널 (사주 5형태 안에서 사람마다 유일해지도록) ──
     const _b = birth || {};
@@ -1985,7 +2008,7 @@ function GuardianCanvas({ saju, zo, tex, num, moon, birth, agitateRef, reactRef,
     };
     draw();
     return () => cancelAnimationFrame(raf);
-  }, [saju, zo, tex, size, birth && birth.y, birth && birth.sex, birth && birth.name]);
+  }, [saju, zo, size, birth && birth.y, birth && birth.sex, birth && birth.name]);
   return <canvas ref={ref} data-renderer="2d" width={size} height={size} style={{ display: "block", WebkitMaskImage: "radial-gradient(circle at 50% 50%, #000 58%, transparent 88%)", maskImage: "radial-gradient(circle at 50% 50%, #000 58%, transparent 88%)" }} />;
 }
 
@@ -2239,7 +2262,7 @@ function glDetect() {
     return !!(c.getContext("webgl") || c.getContext("experimental-webgl"));
   } catch (_) { return false; }
 }
-function GuardianCanvasGL({ saju, zo, tex, num, moon, birth, agitateRef, reactRef, restRef, size = 340, onFail }) {
+function GuardianCanvasGL({ saju, zo, num, moon, birth, agitateRef, reactRef, restRef, size = 340, onFail }) {
   const ref = useRef(null);
   useEffect(() => {
     const cv = ref.current; if (!cv) return;
@@ -2258,9 +2281,9 @@ function GuardianCanvasGL({ saju, zo, tex, num, moon, birth, agitateRef, reactRe
     cv.addEventListener("pointerup", onUp); cv.addEventListener("pointerleave", onUp); cv.addEventListener("pointercancel", onUp);
     try {
       // ── 지표 → 지문 (Canvas2D와 동일 파생, 시드 재현) ──
-      const tx = tex || texture(saju, zo, num);   // 저장된 값이 있으면 그대로 — 쓰던 수호신 얼굴을 안 바꾼다
+      const tx = texture(saju, zo, num, moon);   // 질감은 명식에서 뽑는다 — 저장해 둔 코드를 쓰지 않는다
       const E = tx[0] === "E", N = tx[1] === "N", T = tx[2] === "T", P = tx[3] === "P";
-      const seedStr = `${saju.main}${zo?.name || ""}${tex || ""}${num || ""}${saju.pillars?.일 || ""}`;
+      const seedStr = `${saju.main}${zo?.name || ""}${num || ""}${saju.pillars?.일 || ""}`;
       const srnd = seedRnd(seedStr);
       const _b = birth || {};
       const _jd = _b.y ? jdn(+_b.y, +_b.m, +_b.d) : 0, _nn = _jd - 584283;
@@ -2384,7 +2407,7 @@ function GuardianCanvasGL({ saju, zo, tex, num, moon, birth, agitateRef, reactRe
       cv.removeEventListener("pointerup", onUp); cv.removeEventListener("pointerleave", onUp); cv.removeEventListener("pointercancel", onUp);
       try { const ext = gl.getExtension("WEBGL_lose_context"); ext && ext.loseContext(); } catch (_) {}
     };
-  }, [saju, zo, tex, size, birth && birth.y, birth && birth.sex, birth && birth.name]);
+  }, [saju, zo, size, birth && birth.y, birth && birth.sex, birth && birth.name]);
   return <canvas ref={ref} data-renderer="webgl" width={size} height={size} style={{ display: "block", width: size + "px", height: size + "px", touchAction: "none", cursor: "pointer", WebkitMaskImage: "radial-gradient(circle at 50% 50%, #000 74%, transparent 100%)", maskImage: "radial-gradient(circle at 50% 50%, #000 74%, transparent 100%)" }} />;
 }
 /* ══ v68 상태 보존형 파티클 시뮬레이션 (핑퐁 FBO) ══
@@ -2543,7 +2566,7 @@ void main(){
   float a=m*v_a*u_alpha;
   gl_FragColor=vec4(col*a*u_bright,a);
 }`;
-function GuardianCanvasSim({ saju, zo, tex, num, moon, birth, agitateRef, reactRef, restRef, size = 340, onFail }) {
+function GuardianCanvasSim({ saju, zo, num, moon, birth, agitateRef, reactRef, restRef, size = 340, onFail }) {
   const ref = useRef(null);
   useEffect(() => {
     const cv = ref.current; if (!cv) return;
@@ -2563,9 +2586,9 @@ function GuardianCanvasSim({ saju, zo, tex, num, moon, birth, agitateRef, reactR
     cv.addEventListener("pointerdown", onDown); cv.addEventListener("pointermove", onMove);
     cv.addEventListener("pointerup", onUp); cv.addEventListener("pointerleave", onUp); cv.addEventListener("pointercancel", onUp);
     try {
-      const tx = tex || texture(saju, zo, num);   // 저장된 값이 있으면 그대로 — 쓰던 수호신 얼굴을 안 바꾼다
+      const tx = texture(saju, zo, num, moon);   // 질감은 명식에서 뽑는다 — 저장해 둔 코드를 쓰지 않는다
       const E = tx[0] === "E", N = tx[1] === "N", T = tx[2] === "T", P = tx[3] === "P";
-      const seedStr = `${saju.main}${zo?.name || ""}${tex || ""}${num || ""}${saju.pillars?.일 || ""}`;
+      const seedStr = `${saju.main}${zo?.name || ""}${num || ""}${saju.pillars?.일 || ""}`;
       const srnd = seedRnd(seedStr);
       const _b = birth || {};
       const _jd = _b.y ? jdn(+_b.y, +_b.m, +_b.d) : 0, _nn = _jd - 584283;
@@ -2703,7 +2726,7 @@ function GuardianCanvasSim({ saju, zo, tex, num, moon, birth, agitateRef, reactR
       cv.removeEventListener("pointerup", onUp); cv.removeEventListener("pointerleave", onUp); cv.removeEventListener("pointercancel", onUp);
       try { const ext = gl.getExtension("WEBGL_lose_context"); ext && ext.loseContext(); } catch (_) {}
     };
-  }, [saju, zo, tex, size, birth && birth.y, birth && birth.sex, birth && birth.name]);
+  }, [saju, zo, size, birth && birth.y, birth && birth.sex, birth && birth.name]);
   return <canvas ref={ref} data-renderer="webgl" width={size} height={size} style={{ display: "block", width: size + "px", height: size + "px", touchAction: "none", cursor: "pointer", WebkitMaskImage: "radial-gradient(circle at 50% 50%, #000 74%, transparent 100%)", maskImage: "radial-gradient(circle at 50% 50%, #000 74%, transparent 100%)" }} />;
 }
 /* WebGL 우선: 상태보존 시뮬(v68) → stateless(v67) → Canvas2D. 각 단계 실패 시 자동 강등 */
@@ -3704,11 +3727,6 @@ export default function App() {
   const [zo, setZo] = useState(mem?.zo || null);
   const [moon, setMoon] = useState(mem?.moon || null);
   const [num, setNum] = useState(mem?.num || null);
-  /* v128: MBTI 를 개념째로 걷어냈다 — 묻지도, 프로필에 넣지도, 계측하지도 않는다.
-     남은 건 **수호신 질감 코드 4글자**뿐이라 중립 이름(tex)으로 이관했다. 이름만 바뀌고 값은 그대로다.
-     이걸 버리면 시드가 바뀌어 이미 쓰던 사람의 수호신 얼굴이 달라진다(실측: 16명 중 14명이 값을 갖고 있다).
-     새 유저는 예나 지금이나 texture()가 사주·별자리·수비학에서 뽑는다 — 그쪽은 아무 변화 없다. */
-  const [tex] = useState(mem?.tex || mem?.mbti || null);
   const [reveal, setReveal] = useState(0);
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
@@ -3770,7 +3788,7 @@ export default function App() {
        그 값이 null 이라 메모리가 통째로 저장되지 않는다(v114 mbti 에서 실측). v128: core(가치)도 뺐다.
        위 loadMemory 의 필수 조각 검증과 짝이다 — 한쪽만 고치면 조용히 리셋된다. */
     if (step === 3 && saju) {
-      saveMemory({ birth, saju, zo, moon, num, tex, convo, records, streak });
+      saveMemory({ birth, saju, zo, moon, num, convo, records, streak });
     }
   }, [step, saju, convo, records, streak]);
 
@@ -4471,7 +4489,7 @@ export default function App() {
           <div className={`halo wide ${!awake && phase >= 1 && !res ? "lobbyscale" : ""} ${asking ? "asking" : ""} ${ritual ? "ritualfade" : ""} ${busy || (res && !cardOn) ? "busy" : ""} ${res && cardOn ? "dimmed" : ""}`}>
             {phase === 0
               ? <BirthCanvas tint={saju ? EL_COLOR[saju.main] : undefined} size={Math.min(typeof window !== "undefined" ? window.innerWidth * 1.1 : 400, typeof window !== "undefined" ? window.innerHeight * 0.57 : 400, 640)} />
-              : <div className="fade"><Guardian saju={saju} zo={zo} tex={tex} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} restRef={restRef} size={Math.min(typeof window !== "undefined" ? window.innerWidth * 1.1 : 400, typeof window !== "undefined" ? window.innerHeight * 0.57 : 400, 640)} /></div>}
+              : <div className="fade"><Guardian saju={saju} zo={zo} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} restRef={restRef} size={Math.min(typeof window !== "undefined" ? window.innerWidth * 1.1 : 400, typeof window !== "undefined" ? window.innerHeight * 0.57 : 400, 640)} /></div>}
             <div className="gtext up">
               {phase === 0 && <div className="formwrap"><p className="forming">{birth.name ? `${birth.name}, 흩어져 있던 조각들이` : "흩어져 있던 조각들이"}<br />너를 향해 모이고 있어…<br />너의 수호신이 돌아오는 중이야.</p><ul className="formsteps">{FORM_STEPS.map((s, i) => <li key={i} className={i < formStep ? "done" : i === formStep ? "now" : ""}>{i < formStep ? "✓" : i === formStep ? "✦" : "·"} {s}{i === formStep ? "…" : ""}</li>)}</ul></div>}
             </div>
@@ -4520,7 +4538,7 @@ export default function App() {
                     <span className="chk"><em>인생의 계절(대운)을 읽는 열쇠</em></span>
                   </div>}
                   <div className="row gap center">
-                    <button className="btn gold" onClick={() => { const nb = { ...birth, name: birth.name || addName.trim(), sex: birth.sex || addSex }; setBirth(nb); saveMemory({ birth: nb, saju, zo, moon, num, tex, convo, records, streak }); setAddOpen(false); }}>조각을 보탤게</button>
+                    <button className="btn gold" onClick={() => { const nb = { ...birth, name: birth.name || addName.trim(), sex: birth.sex || addSex }; setBirth(nb); saveMemory({ birth: nb, saju, zo, moon, num, convo, records, streak }); setAddOpen(false); }}>조각을 보탤게</button>
                     <button className="btn ghost" onClick={() => setAddOpen(false)}>다음에</button>
                   </div>
                 </div>

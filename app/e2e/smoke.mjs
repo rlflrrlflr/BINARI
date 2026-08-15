@@ -161,7 +161,7 @@ try {
   const btxt = await page.locator("body").innerText();
   check("v128 이관: 옛 저장분이 온보딩을 다시 요구하지 않음", !btxt.includes("조각을 모으러 갈래"));
   const mig = await page.evaluate(() => JSON.parse(localStorage.getItem("binari.v1") || "{}"));
-  check("v128 이관: 수호신 질감 코드 보존(mbti→tex)", mig.tex === "ENTJ", `tex=${mig.tex}`);
+  check("v128.1: 질감 코드를 더는 저장하지 않는다(명식에서 파생)", mig.tex === undefined && mig.mbti === undefined, `tex=${mig.tex} mbti=${mig.mbti}`);
   check("v128 이관: 가치 필드는 정리됨", mig.core === undefined && mig.vals8 === undefined);
   check("v128 이관: 기억 본체 생존", !!mig.saju);
 } catch (e) {
