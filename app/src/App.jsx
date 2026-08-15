@@ -3435,7 +3435,9 @@ function demoProps(birth, extra) {
      · 근거가 없으면 평가(딱이야/빗나갔어)와 묶어 "어떤 근거가 잘 맞았나"를 낼 수 없다
    질문 원문은 여기에도 절대 넣지 않는다. 축 수·글자 수를 잘라 값이 무한정 커지지 않게 한다.
    축을 키로 쓰는 객체로 담는 이유: PostHog 에서 properties.votes.삼재 처럼 축 하나만 바로 물을 수 있다. */
-const AX_MAX = 12, TXT_MAX = 140;
+/* TXT_MAX: 축별 값의 상한. 찬반 표시(GO/STOP)일 땐 남아돌고, 판단근거 본문일 땐 잘리면 안 된다.
+   실측 근거 문장이 40~120자라 400 이면 통째로 들어간다(2026-08-15 본문 복원). */
+const AX_MAX = 12, TXT_MAX = 400;
 function axisMap(list, pick) {
   if (!Array.isArray(list)) return null;
   const o = {};
@@ -3451,6 +3453,9 @@ const voteMap = (votes) => axisMap(votes, (v) => v.v ?? v.vote);
 /* A-3: 근거 **전문**을 계측에 실으면 실명·질문 원문이 그대로 나간다.
    축 이름과 길이만 남긴다 — "어느 축이 얼마나 길게 나왔나"는 이걸로도 재진다. */
 const reasonMap = (reasons) => axisMap(reasons, (r) => String(r.text || "").length);
+/* 축별 판단근거 **본문**(가명본). 위 reasonMap 은 길이 지표라 그대로 두고 따로 싣는다 —
+   자리표([메일] 등)가 섞이면 가명본의 길이는 원문 길이가 아니게 되기 때문이다. */
+const reasonTextMap = (reasons, name) => axisMap(reasons, (r) => anon(r.text, name));
 
 const encodeShare = (o) => { try { return _b64e(JSON.stringify(o)); } catch (_) { return ""; } };
 /* ── A-2 (작업지시 2026-08-14) ────────────────────────────────────────────
@@ -3480,6 +3485,55 @@ const stripName = (t, name) => {
     .replace(/^\s*[,、.]\s*/, "").trim();
 };
 const decodeShare = (s) => { try { const o = JSON.parse(_b64d(s)); if (!o || !o.v || !o.d) return null; delete o.n; return o; } catch (_) { return null; } };
+
+/* ── 가명처리 — 자유 서술이 계측으로 나가기 전 통과하는 유일한 문 ──────────
+   창업자 지시(2026-08-15): "질문과 답변은 다 남기자. 다만 개인 식별 불가능하게 해"
+
+   ⚠ **한계를 먼저 적는다. 규칙으로 '완전 익명화'는 되지 않는다.**
+     지워지는 것 — 본인 이름 · 이메일 · 링크 · 전화 · 주민번호 · 카드/계좌 · SNS 계정 ·
+                  연월일 · 호칭이 붙은 남의 이름("민준씨" · "박부장")
+     안 지워지는 것 — **맥락으로 사람이 좁혀지는 서술**("3층 팀장이 어제 회식에서…").
+                    이건 어떤 정규식으로도 못 잡는다. 사람이 읽으면 특정될 수 있다.
+     그래서 이 산출물은 익명정보가 아니라 **가명정보**다(개인정보보호법 §28-2).
+     통계 목적 한정 · 접근 통제 · 보관 기간이 함께 서야만 성립한다 — 처리방침 1·2·4조와 한 몸이다.
+
+   ⚠ 지우고 비우지 않고 **무엇을 지웠는지 자리표를 남긴다**([메일]·[전화]…).
+     통째로 지우면 나중에 "이 판결이 왜 이상한가"를 읽을 수 없게 된다.
+   ⚠ 상한을 둔다. 서술이 길수록 특정 위험이 올라가고, 길이는 어차피 별도로 재고 있다. */
+const ANON_MAX = 600;
+/* 뒤에 씨/님이 붙어도 사람 이름이 아닌 말. 이게 없으면 "선생님"이 "○○님"이 된다.
+   완전한 목록일 수 없다 — 빠진 게 나오면 여기 추가한다(검사: e2e/privacy-check.mjs). */
+const NOT_NAME = new Set(["선생", "사장", "고객", "회원", "어머", "아버", "부모", "누나", "오빠", "언니",
+  "동생", "엄마", "아빠", "할머", "할아", "사모", "기사", "손님", "여러", "아기", "애기", "대표", "작가",
+  "기자", "목사", "원장", "실장", "국장", "팀장", "부장", "과장", "차장", "대리", "이사", "교수", "박사",
+  "변호", "의사", "간호", "스승", "제자", "남편", "아내", "자기", "그대", "당신", "여기", "저기", "이분",
+  "그분", "저분", "우리", "저희", "모두", "다들", "새댁", "아드", "따님", "형님", "누님",
+  "아가", "총각", "아저", "아줌", "언니", "이모", "고모", "삼촌", "며느", "사위", "장모", "장인"]);
+function anon(t, name) {
+  let s = stripName(String(t == null ? "" : t), name);
+  if (!s) return "";
+  s = s
+    .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, "[메일]")
+    .replace(/(?:https?:\/\/|www\.)\S+/gi, "[링크]")
+    .replace(/\d{6}\s*[-–]\s*[1-4]\d{6}/g, "[주민번호]")
+    .replace(/\d{4}[-\s]\d{4}[-\s]\d{4}[-\s]\d{4}/g, "[카드]")
+    .replace(/0\d{1,2}[-.)\s]?\s?\d{3,4}[-.\s]?\d{4}(?!\d)/g, "[전화]")   // "02)555-1234" 처럼 괄호로 닫는 표기도 실제로 들어온다
+    .replace(/\d{2,6}-\d{2,6}-\d{2,8}/g, "[계좌]")
+    .replace(/(^|[\s([])@[A-Za-z0-9._]{2,}/g, "$1[계정]")
+    .replace(/(19|20)\d{2}\s*[.\-/년]\s*\d{1,2}\s*[.\-/월]\s*\d{1,2}\s*일?/g, "[날짜]")
+    /* 성 + 직함 — **직함은 남기고 성만 지운다.** 직함이 사라지면 문장 뜻이 무너진다("부장이 뭐래").
+       성과 직함이 붙어 쓰인 경우만 잡는다("박부장"). "우리 팀장"처럼 띄면 안 잡히고, 그게 맞다 —
+       띄어쓰기를 허용하면 "우리 팀장"의 '리'를 성으로 오인해 "우리"가 깨진다. */
+    .replace(/(^|[\s"'“([])([가-힣])(부장|차장|과장|팀장|대리|사원|이사|본부장|실장|점장|원장|교수|박사|변호사|쌤|선배|후배)(님)?/g,
+             (m, pre, _sn, title, h) => pre + "○" + title + (h || ""))
+    /* 이름 + 씨/님/양/군 — 일반명사는 위 목록으로 뺀다.
+       뒤 조사까지 허용해야 한다("민준씨가", "민준님한테"). 조사 없이 딱 끊길 때만 잡으면
+       실제 문장의 대부분을 놓친다 — 한국어에서 이름 뒤엔 거의 항상 조사가 붙는다. */
+    .replace(/(^|[\s"'“([])([가-힣]{2,3})(씨|님|양|군)(?=[가-힣]{0,4}(?:[\s,.…!?"'”」)\]]|$))/g,
+             (m, pre, w, h) => (NOT_NAME.has(w) || NOT_NAME.has(w.slice(-2)) ? m : pre + "○○" + h));
+  if (s.length > ANON_MAX) s = s.slice(0, ANON_MAX) + "…";
+  return s.replace(/[ \t]{2,}/g, " ").trim();
+}
 
 /* ═══════════════ 앱 ═══════════════ */
 export default function App() {
@@ -3636,14 +3690,18 @@ export default function App() {
       setDetail(r2);
       // L3(지표별 근거)는 제품의 핵심 차별점이다. 실패율과 소요시간을 모르면 개선 근거가 없다.
       track("detail_shown", { ms: Math.round(performance.now() - _t0), dir: r1?.direction || null, retry: !!isRetry, axes: Array.isArray(r2?.reasons) ? r2.reasons.length : 0,
-        /* A-3(작업지시 2026-08-14): 원문 대신 파생값만. 처리방침 §9 가 "분석 도구에는 질문 원문·이름·
-           생년월일 원값을 전송하지 않는다"고 적어 두었는데 뒷면 원문이 그대로 나가고 있었다.
-           ⚠ 뒷면이 더 위험했다 — 콜2 에 이름 금지 지시가 붙는 조건이 "앞면에서 이미 이름을 부른 경우"뿐이라,
-              **앞면이 이름을 안 부른 경우에만 뒷면이 이름을 부르는** 구조였다. 그 문자열이 그대로 갔다.
-           톤 개선 측정은 길이·존재 여부로도 된다. 원문이 필요하면 평가 하네스(eval/)로 재는 게 맞다. */
+        /* 2026-08-15 재판정(창업자): "질문과 답변은 다 남기자. 다만 개인 식별 불가능하게 해"
+           → 08-14 에 길이만 남기도록 잘라냈던 것을 **가명본으로 되돌린다.**
+           08-14 의 우려는 사실이었다 — 콜2 에 이름 금지 지시가 붙는 조건이 "앞면에서 이미 이름을 부른
+           경우"뿐이라, **앞면이 이름을 안 부른 경우에만 뒷면이 이름을 부르는** 구조다. 그래서 뒷면은
+           특히 anon() 을 반드시 통과시킨다(stripName 이 그 안에 들어 있다). 길이는 길이대로 남긴다 —
+           자리표가 섞이면 가명본의 길이는 원문 길이가 아니게 되기 때문이다. */
         sublen: (r2?.subline || "").length || 0,
         funlen: (r2?.funLine || "").length || 0,
-        reasons: reasonMap(r2?.reasons),     // A-3: 축별 **길이**만(전문 금지)
+        sub_anon: anon(r2?.subline, birth.name),      // 정령 멘트
+        fun_anon: anon(r2?.funLine, birth.name),      // 곁들이는 한 줄
+        reasons_len: reasonMap(r2?.reasons),          // 축별 길이(기존 지표 유지)
+        reasons: reasonTextMap(r2?.reasons, birth.name),   // 축별 판단근거 본문(가명본)
         disclaimer: r2?.disclaimer || null,
         tok_in: _u2 ? _u2.in : null, tok_out: _u2 ? _u2.out : null });
     } catch (e) {
@@ -3795,7 +3853,15 @@ export default function App() {
       // 판결 기록에 붙여 둔다 — 홈 서신함에서 언제든 다시 열 수 있고, 새로고침에도 살아남는다
       setRecords((prev) => { if (!prev.length) return prev; const nx = prev.slice(); nx[nx.length - 1] = { ...nx[nx.length - 1], letter: doc }; return nx; });
       track("letter_written", { ..._base(), ms: Math.round(performance.now() - t0), chapters: doc.chapters.length, chars: doc.chapters.reduce((a, c) => a + c.body.length, 0),
-        price: LETTER_PRICE, tok_in: doc.tok ? doc.tok.in : null, tok_out: doc.tok ? doc.tok.out : null });   // 4,900원짜리 한 통의 원가
+        price: LETTER_PRICE, tok_in: doc.tok ? doc.tok.in : null, tok_out: doc.tok ? doc.tok.out : null,   // 4,900원짜리 한 통의 원가
+        /* 서신도 '답변'이다(창업자 지시 2026-08-15). 장(章)마다 가명본으로 싣는다 —
+           통째로 한 문자열로 만들면 "어느 장이 약한가"를 못 가른다. 제목은 모델이 지은 것이라 그대로. */
+        letter: doc.chapters.slice(0, 8).reduce((o, c, i) => {
+          const k = String(c.t || `장${i + 1}`).trim().slice(0, 24);
+          const v = anon(c.body, birth.name);
+          if (v) o[k] = v;
+          return o;
+        }, {}) });
     } catch (e) {
       setLetterDoc({ _err: true });
       // shape: 응답이 오긴 왔는데 못 읽은 경우 '어떤 키로 왔나'를 남긴다(본문은 담지 않는다).
@@ -3896,7 +3962,10 @@ export default function App() {
     // 되물음은 '앞선 판결이 있을 때'만 성립한다 — 첫 질문의 "어떤 사람이 좋을까"는 되물음이 아니라 그냥 질문이다.
     const _reask = !!_prevRec && isReask(q);
     const _sHint = scopeHint(q);
-    track("question_asked", demoProps(birth, { mode: "ritual", qlen: q.trim().length, ritual: !!hi, lean: lean || "skip", hesit: hesit || null, mbti: mbti || null, core_value: core || null, element: saju?.main || null, zodiac: zo?.name || null, scope_hint: _sHint, reask: _reask, reask_depth: _reask ? records.filter(r => isReask(r.q)).length + 1 : 0, after_letter: letterSent }));   // v104 after_letter: 서신 대기 중에 한 번 더 물었는가
+    /* 창업자 지시(2026-08-15) "질문과 답변은 다 남기자. 다만 개인 식별 불가능하게 해"
+       → 원문이 아니라 anon() 을 통과한 가명본을 싣는다. 길이(qlen)는 그대로 둔다 —
+         가명본은 자리표 때문에 길이가 달라지므로 길이 지표를 여기서 재면 안 된다. */
+    track("question_asked", demoProps(birth, { mode: "ritual", qlen: q.trim().length, q_anon: anon(q, birth.name), ritual: !!hi, lean: lean || "skip", hesit: hesit || null, mbti: mbti || null, core_value: core || null, element: saju?.main || null, zodiac: zo?.name || null, scope_hint: _sHint, reask: _reask, reask_depth: _reask ? records.filter(r => isReask(r.q)).length + 1 : 0, after_letter: letterSent }));   // v104 after_letter: 서신 대기 중에 한 번 더 물었는가
     setBusy(true); setErr(""); setRes(null); setDetail(null); setWhy(false); setFlip(false); setCardOn(false); setRated(0); setLetter(false); setLetterIntent(false); setLetterStage(""); setLetterSent(false); setLetterDoc(null); setLetterOpen(false); setLetterRated(0); setBoxOpen(false); reactRef.current = null; setIntroSeen(true);
     try {
       // 주역 괘는 질문마다 달라지므로 유저 턴에
@@ -3933,6 +4002,8 @@ export default function App() {
         // 표가 없거나(votes_ok=false) 표와 결론이 어긋난(dir_overridden) 비율이 곧 '판결이 지표에서 나오는가'의 지표다
         votes_ok: !!_tally, votes_n: _tally ? _tally.total : 0, dir_overridden: _tally ? _tally.overridden : null,
         votes: voteMap(r1.votes),
+        // 판결문 본문(가명본). 이게 없으면 "어떤 문장이 '딱이야'를 받고 어떤 문장이 '빗나감'을 받았나"를 영영 못 맞춘다
+        v_anon: anon(r1.verdict, birth.name),
         tok_in: _u1 ? _u1.in : null, tok_out: _u1 ? _u1.out : null }));   // 원가 — 유료 상품의 마진을 재려면 필요하다      // 축별 찬반 — HOLD 편중의 원인을 여기서 짚는다
       reactRef.current = { dir: r1.direction, t0: performance.now() };   // v28: 수호신이 판결을 연기
       setTimeout(() => { agitateRef.current = false; }, 700);
@@ -4099,9 +4170,13 @@ export default function App() {
           <p className="ainote">수호신의 판결은 AI가 생성합니다 · 재미로 보는 참고예요</p>
           {/* 신뢰 라인(2026-08-02 경쟁분석 반영): 시장 전체가 '만세력 오류·GPT 복붙' 의혹으로 신뢰를 잃는 중이다.
               계산 검증과 프라이버시는 우리가 실제로 갖춘 것이라 그대로 쓴다 — 둘 다 검증된 사실만 적는다.
-              근거: e2e/mansae-test.mjs 28문항 전수 통과 / track() 은 질문 원문을 안 싣고 qlen(글자수)만 싣는다.
+              근거: e2e/mansae-test.mjs 28문항 전수 통과.
+              ⚠ 2026-08-15: "질문 원문은 통계에 기록하지 않아요"였다. 창업자 지시로 질문·답변 본문을
+                 가명처리해 기록하기 시작했으므로 **그 문장은 그날부로 거짓이 됐다.** 화면 문구를 사실에 맞춘다.
+                 앱이 화면에서 하는 약속과 코드가 하는 일이 어긋나는 건, 안 적는 것보다 나쁘다.
               문항 수가 바뀌면 이 문장도 바꿔야 한다 — 검진이 숫자 대조로 잡는다. */}
-          <p className="ainote">사주 계산(만세력)은 자동검증 28문항을 통과한 엔진이 해요 · 질문 원문은 통계에 기록하지 않아요</p>
+          <p className="ainote">사주 계산(만세력)은 자동검증 28문항을 통과한 엔진이 해요 ·
+            질문과 답변은 <b>이름·연락처를 지운 뒤</b> 품질 확인용으로만 기록해요 — 끄고 싶으면 아래에서 끌 수 있어요</p>
         </section>
       )}
 
