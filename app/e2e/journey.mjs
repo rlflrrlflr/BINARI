@@ -57,7 +57,6 @@ await page.waitForTimeout(500); await shot("j11_의식_시작");
 await page.getByRole("button", { name: /동전/ }).first().click();
 await page.waitForTimeout(400); await shot("j12_의식_동전공중");
 await page.waitForTimeout(700); await shot("j13_의식_첫효");
-await page.getByRole("button", { name: "한 번에 던지기" }).click();
 await page.waitForTimeout(1300); await shot("j14_의식_괘완성");
 console.log("journey shots →", SHOTS);
 await b.close();

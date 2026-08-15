@@ -240,8 +240,6 @@ await onboard(page);
 }
 await page.locator("textarea.qbox").fill("전남친에게 연락할까?"); await page.waitForTimeout(300);
 await page.getByRole("button", { name: "판결을 청한다" }).click();
-await page.waitForSelector("text=동전 셋", { timeout: 5000 });
-await page.getByRole("button", { name: "한 번에 던지기" }).click();
 let got = false;
 for (let i = 0; i < 40; i++) { if (((await page.locator(".vv").allTextContents())[0] || "").includes("보내지 마")) { got = true; break; } await page.waitForTimeout(300); }
 ck("판결 도착", got);

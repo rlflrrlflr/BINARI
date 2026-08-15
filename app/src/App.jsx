@@ -2766,11 +2766,27 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v129.1 · 질감 재배선";
+const APP_VER = "v129.2 · 동전 없이·서명";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
    분업: 무료 카드는 '어느 쪽'(방향)에 답하고, 서신은 '언제·누구와·무엇을 걸고'에 답한다. */
+/* ── 동전 의식 스위치 (v129.2, 창업자 지시 "일단 없애보자 허들같아보여서") ──────
+   질문을 적고 '판결을 청한다'를 누르면 동전 셋을 여섯 번 던지는 화면이 끼어 있었다.
+   지금은 건너뛰고 곧장 판결로 간다. 주역 괘는 그 던지기에서 나오므로 **주역 축이 함께 빠진다**
+   (SYS 가 "주역 괘[유저가 동전으로 청한 경우만]"이라 hexInfo 가 null 이면 자연히 제외된다).
+
+   ⚠ 되돌리려면 이 한 줄만 true 로. 의식 화면·던지기 함수·괘 계산은 지우지 않고 그대로 뒀다 —
+     "일단"이라는 지시라 언제든 되돌릴 수 있어야 하고, 지웠다가 되살리면 같은 물건이 안 나온다.
+
+   측정 주의: 예전엔 question_asked 가 **던지기가 끝난 뒤에** 발사돼서, 동전 화면에서 이탈한
+   사람은 아무 흔적도 안 남겼다 — 허들인지 잴 방법 자체가 없었다. 그래서 버튼을 누른 순간
+   발사되는 judge_requested 를 신설했다. 이제 '청함 → 판결'이 실제로 몇 %인지 보인다.
+   끄기 직전 기준선(60일·외부): 사람 14명 · 판결 요청 103건 · 판결 성사 101건.
+   person 단위로는 막힌 사람이 0명이었다(깨운 14명 전원이 결국 질문함) — 다만 중도 이탈은
+   위 이유로 안 보였으므로, '허들이 아니었다'는 증거는 아니다. */
+const COIN_RITUAL = false;
+
 const LETTER_PRICE = 4900;
 const LETTER_SECTIONS = ["네가 망설인 자리", "여덟 글자가 이 일을 보는 눈", "언제 — 흐름과 움직일 날", "누구와 — 도울 사람, 피할 자리", "무엇을 걸고 — 이 판결이 틀릴 조건까지"];
 /* 일간별 한 줄 — 미리보기 첫 문장에 쓴다. 예전엔 '갑(甲)' 고정 문구였는데,
@@ -3665,6 +3681,36 @@ const stripName = (t, name) => {
 };
 const decodeShare = (s) => { try { const o = JSON.parse(_b64d(s)); if (!o || !o.v || !o.d) return null; delete o.n; return o; } catch (_) { return null; } };
 
+/* ── 공유 판결 서명 (v129.2) ────────────────────────────────────────────────
+   서명이 없던 동안 누구나 `?v=<base64>` 를 지어내면 우리 앱이 그걸 진짜 판결 카드로 렌더했다
+   (2026-08-15 실증 — BINARI 로고·神 인장이 붙은 채, SYS 가 금지한 "세 배는 확실해"까지 띄웠다).
+   가드레일은 전부 생성 경로에만 걸려 있어서, URL 한 줄로 12,000자짜리 규칙 전체가 우회됐다.
+
+   비밀키는 서버에만 있으므로 서명도 검증도 서버가 한다. 공유 링크로 들어온 사람만 한 번
+   호출하는 경로라 비용은 무시할 만하다. **판정은 항상 닫는 쪽으로** — 서명이 없거나,
+   틀렸거나, 서버에 못 닿으면 카드를 그리지 않는다. 진짜를 못 보여주는 것보다
+   가짜를 진짜처럼 보여주는 게 훨씬 나쁘다. */
+const SHARE_API = "/api/share";
+async function signShare(payloadB64) {
+  try {
+    const r = await fetch(SHARE_API, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ payload: payloadB64 }) });
+    if (!r.ok) return "";
+    const j = await r.json();
+    return typeof j.sig === "string" ? j.sig : "";
+  } catch (_) { return ""; }
+}
+async function verifyShare(payloadB64, sig) {
+  if (!sig) return false;                     // 서명 없는 링크는 우리가 만든 적이 없다
+  try {
+    const r = await fetch(SHARE_API, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ payload: payloadB64, sig, verify: true }) });
+    if (!r.ok) return false;
+    const j = await r.json();
+    return j.ok === true;
+  } catch (_) { return false; }
+}
+/** `?v=<payload>.<sig>` 를 가른다. 점이 없으면 서명 이전 형식 = 검증 불가 = 안 그린다. */
+const splitShare = (raw) => { const i = String(raw || "").lastIndexOf("."); return i < 0 ? { p: String(raw || ""), sig: "" } : { p: raw.slice(0, i), sig: raw.slice(i + 1) }; };
+
 /* ── 가명처리 — 자유 서술이 계측으로 나가기 전 통과하는 유일한 문 ──────────
    창업자 지시(2026-08-15): "질문과 답변은 다 남기자. 다만 개인 식별 불가능하게 해"
 
@@ -3732,19 +3778,36 @@ export default function App() {
      읽자마자 주소창에서 페이로드를 지운다(v128) — 그 안에 보낸 사람의 질문 원문·판결문·이름이
      평문으로 들어 있어서, 남겨두면 브라우저 기록·리퍼러·스크린샷·재공유로 계속 샌다.
      계측 쪽은 sanitize_properties 가 따로 막지만, 그건 우리 통계만 막을 뿐 주소창은 못 지운다. */
-  const [sharedIn] = useState(() => {
+  /* 공유로 들어온 판결. **검증되기 전에는 그리지 않는다** — 서명 없던 시절엔 지어낸 URL 이
+     그대로 진짜 카드가 됐다. 상태 셋: null(공유 아님) / "checking"(검증 중) / 객체(검증됨) / false(위조·불명) */
+  const [sharedRaw] = useState(() => {
     try {
       const sp = new URLSearchParams(window.location.search); const raw = sp.get("v");
       if (!raw) return null;
-      const dec = decodeShare(raw);
       try { window.history.replaceState(null, "", stripSharePayload(window.location.href)); } catch (_) {}
-      return dec;
+      return raw;
     } catch (_) { return null; }
   });
+  const [sharedIn, setSharedIn] = useState(() => (sharedRaw ? "checking" : null));
+  useEffect(() => {
+    if (!sharedRaw) return;
+    let alive = true;
+    (async () => {
+      const { p, sig } = splitShare(sharedRaw);
+      const ok = await verifyShare(p, sig);
+      if (!alive) return;
+      const dec = ok ? decodeShare(p) : null;
+      setSharedIn(dec || false);                       // 검증 실패든 해독 실패든 카드는 안 그린다
+      if (!dec) track("shared_verdict_rejected", { signed: !!sig });
+    })();
+    return () => { alive = false; };
+  }, [sharedRaw]);
+  // 공유 판결 조회는 **검증을 통과한 뒤에만** 집계한다 — 위조 시도까지 조회수로 세면 지표가 오염된다
+  useEffect(() => { if (sharedIn && typeof sharedIn === "object") track("shared_verdict_view", { dir: sharedIn.d }); }, [sharedIn]);
   const [sharedGone, setSharedGone] = useState(false);  // v75: '나도 물어볼래'로 공유 화면 닫음
   // 1단계 계측은 동의와 무관하게 항상 켠다(2단계 속성만 동의로 게이트)
   // 계측: 세션 시작. 유입은 first-touch(_superProps.ft_*)가 고정 부착하므로 여기선 이번 방문 경로(ref)만 참고용으로 남긴다.
-  useEffect(() => { _optout = readOptout(); _consent = readConsent(); _initAnalytics(); let ref = "direct"; try { const sp = new URLSearchParams(window.location.search); ref = sp.get("ref") || sp.get("utm_source") || (sp.get("v") ? "share" : "direct"); } catch (_) {} trackVisit({ returning, ref }); if (sharedIn) track("shared_verdict_view", { dir: sharedIn.d }); }, []);
+  useEffect(() => { _optout = readOptout(); _consent = readConsent(); _initAnalytics(); let ref = "direct"; try { const sp = new URLSearchParams(window.location.search); ref = sp.get("ref") || sp.get("utm_source") || (sp.get("v") ? "share" : "direct"); } catch (_) {} trackVisit({ returning, ref }); }, []);
   const [saju, setSaju] = useState(mem?.saju || null);
   const [zo, setZo] = useState(mem?.zo || null);
   const [moon, setMoon] = useState(mem?.moon || null);
@@ -3921,8 +3984,12 @@ export default function App() {
     /* A-2: n 필드 제거 + 본문에서 호칭 제거. 둘 다 해야 실명이 안 나간다 */
     const _nm = (birth.name || "").trim();
     const payload = { q, d: res.direction, v: stripName(res.verdict, _nm), s: stripName((detail && !detail._err ? detail.subline : "") || "", _nm), a: res.against || 0, t: res.total || 0, c: res.category || "", hx: hexInfo ? { n: hexInfo.name, t: (hexInfo.moving && hexInfo.moving.length ? hexInfo.toName : "") } : null };
+    /* 서명을 받아야만 판결이 실린 링크를 만든다. 못 받으면 맨 링크로 나간다 —
+       그래야 "?v= 가 붙은 링크는 전부 서명된 것"이 성립하고, 받는 쪽에서 검증 실패를
+       곧 위조로 읽을 수 있다. 서명 없는 링크를 하나라도 흘리면 그 규칙이 깨진다. */
     const enc = encodeShare(payload);
-    const url = enc ? `https://binari-sepia.vercel.app/?v=${enc}` : "https://binari-sepia.vercel.app/?ref=share";
+    const sig = enc ? await signShare(enc) : "";
+    const url = (enc && sig) ? `https://binari-sepia.vercel.app/?v=${enc}.${sig}` : "https://binari-sepia.vercel.app/?ref=share";
     try {
       if (navigator.share) { await navigator.share({ title: "비나리 — 수호신의 판결", text, url }); return; }
     } catch (_) { return; } // 유저 취소 포함 — 조용히
@@ -4307,7 +4374,19 @@ export default function App() {
       <style>{CSS}</style>
       <VerBadge />
 
-      {sharedIn && !sharedGone && (() => {
+      {/* 검증 중 — 잠깐이지만 이 사이에 카드를 그려 버리면 위조본이 한 프레임 보인다 */}
+      {sharedIn === "checking" && !sharedGone && (
+        <section className="scene fade"><p className="sub2 center">받은 판결을 확인하는 중…</p></section>
+      )}
+      {/* 검증 실패 — 우리가 만든 링크가 아니거나 내용이 바뀌었다. 무엇이 적혀 있었는지는 보여주지 않는다 */}
+      {sharedIn === false && !sharedGone && (
+        <section className="scene fade">
+          <p className="line">이 판결은 확인할 수 없어.</p>
+          <p className="sub2">비나리가 낸 판결이 맞는지 확인이 안 됐어 — 링크가 바뀌었거나, 우리가 만든 링크가 아니야.</p>
+          <button className="btn gold mt" onClick={() => { track("shared_cta", { dir: "unverified" }); setSharedGone(true); }}>나도 내 수호신에게 물어볼래</button>
+        </section>
+      )}
+      {sharedIn && typeof sharedIn === "object" && !sharedGone && (() => {
         const d = sharedIn.d, isGo = d === "GO", isHold = d === "HOLD";
         const dcls = isGo ? "go" : isHold ? "hold" : "";
         const a = +sharedIn.a || 0, t = +sharedIn.t || 0;
@@ -4626,9 +4705,14 @@ export default function App() {
               {!ritual && (
                 <div className="w100">
                   <div className="row gap center">
-                    <button className="btn gold" onClick={() => { if (!q.trim()) { setErr("먼저 질문을 적어줘."); return; } setErr(""); setRitual(true); }} disabled={busy}>판결을 청한다</button>
+                    <button className="btn gold" onClick={() => {
+                      if (!q.trim()) { setErr("먼저 질문을 적어줘."); return; }
+                      setErr("");
+                      track("judge_requested", { ritual: COIN_RITUAL, qlen: q.trim().length });
+                      if (COIN_RITUAL) setRitual(true); else { setTosses([]); setHexInfo(null); judge(null); }
+                    }} disabled={busy}>판결을 청한다</button>
                   </div>
-                  <p className="fine">동전 셋을 던져 하늘의 뜻을 묻는다 — 무엇을 묻든 같은 무게로 본다.</p>
+                  <p className="fine">{COIN_RITUAL ? "동전 셋을 던져 하늘의 뜻을 묻는다 — 무엇을 묻든 같은 무게로 본다." : "무엇을 묻든 같은 무게로 본다."}</p>
                 </div>
               )}
               {/* v105.2 서신함 — 유료로 산 것이니 홈에서 언제든 다시 열린다.
@@ -4747,7 +4831,11 @@ export default function App() {
               {err && (
                 <div className="fade">
                   <p className="err">{err}</p>
-                  {ritual && tosses.length === 6 && !res && !busy && (
+                  {/* 판결이 실패했을 때의 탈출구. 예전엔 `ritual && tosses.length === 6` 로 묶여 있어서
+                      **의식 화면 안에서만** 나왔는데, v129.2 로 동전을 끄자 조건이 영영 거짓이 되어
+                      실패한 사람이 아무 버튼도 없이 갇혔다(smoke 가 잡았다).
+                      탈출구는 의식과 무관하게 '판결을 청했는데 아직 못 받은 상태'면 있어야 한다. */}
+                  {!res && !busy && !tossing && (COIN_RITUAL ? tosses.length === 6 : q.trim().length > 0) && (
                     <div className="row gap center">
                       <button className="btn gold" onClick={() => judge(hexInfo)}>다시 청하기</button>
                       <button className="btn ghost" onClick={() => { setErr(""); setRitual(false); setTosses([]); setHexInfo(null); }}>질문을 고칠래</button>

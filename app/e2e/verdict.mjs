@@ -66,8 +66,6 @@ const b = await chromium.launch((process.env.CHROME_PATH ? { executablePath: pro
   ck("S1 complete 감지", await page.evaluate(() => typeof window.claude?.complete === "function"));
   await page.locator("textarea.qbox").fill("전남친에게 연락할까?"); await page.waitForTimeout(300);
   await page.getByRole("button", { name: "판결을 청한다" }).click();
-  await page.waitForSelector("text=동전 셋", { timeout: 5000 });
-  await page.getByRole("button", { name: "한 번에 던지기" }).click();
   ck("S1 판결(콜1)", await waitVerdict(page), await vvText(page));
   await page.getByRole("button", { name: "다른 걸 물어볼래" }).click(); await page.waitForTimeout(500);
   await page.waitForSelector("text=두드려봐", { timeout: 8000 }); // v55: 판결 후 로비 복귀
@@ -75,8 +73,6 @@ const b = await chromium.launch((process.env.CHROME_PATH ? { executablePath: pro
   await page.waitForSelector("textarea.qbox", { timeout: 8000 });
   await page.locator("textarea.qbox").fill("이직할까 크게 고민이야"); await page.waitForTimeout(300);
   await page.getByRole("button", { name: "판결을 청한다" }).click();
-  await page.waitForSelector("text=동전 셋", { timeout: 5000 });
-  await page.getByRole("button", { name: "한 번에 던지기" }).click();
   ck("S1 두 번째 판결(콜1)", await waitVerdict(page));
   await page.getByRole("button", { name: "왜 이렇게 봤어?" }).click().catch(() => {});
   let subOk = false;
@@ -145,8 +141,6 @@ const b = await chromium.launch((process.env.CHROME_PATH ? { executablePath: pro
   await page.getByRole("button", { name: "서신함 접기" }).click();
   await page.locator("textarea.qbox").fill("그럼 그동안 뭘 하면 좋을까"); await page.waitForTimeout(300);
   await page.getByRole("button", { name: "판결을 청한다" }).click();
-  await page.waitForSelector("text=동전 셋", { timeout: 5000 });
-  await page.getByRole("button", { name: "한 번에 던지기" }).click();   // question_asked 는 괘를 뽑은 뒤 judge() 안에서 나간다
   ck("서신 후 판결 성사", await waitVerdict(page));
   const qa = await page.evaluate(() => (window.__binariEvents || []).filter((e) => e.ev === "question_asked").pop());
   ck("⑥ 서신 후 재질문 표식(after_letter)", qa?.props?.after_letter === true, JSON.stringify(qa?.props?.after_letter));
@@ -192,8 +186,6 @@ const b = await chromium.launch((process.env.CHROME_PATH ? { executablePath: pro
   await onboard(page);
   await page.locator("textarea.qbox").fill("전남친에게 연락할까?"); await page.waitForTimeout(300);
   await page.getByRole("button", { name: "판결을 청한다" }).click();
-  await page.waitForSelector("text=동전 셋", { timeout: 5000 });
-  await page.getByRole("button", { name: "한 번에 던지기" }).click();
   ck("S2 complete 고장 → 폭포수로 판결 성사", await waitVerdict(page), await vvText(page));
   ck("S2 화면에 에러 없음(사용자는 실패를 못 느낌)", (await page.locator(".err").count()) === 0);
   await page.close();
@@ -214,8 +206,6 @@ const b = await chromium.launch((process.env.CHROME_PATH ? { executablePath: pro
   await onboard(page);
   await page.locator("textarea.qbox").fill("전남친에게 연락할까?"); await page.waitForTimeout(300);
   await page.getByRole("button", { name: "판결을 청한다" }).click();
-  await page.waitForSelector("text=동전 셋", { timeout: 5000 });
-  await page.getByRole("button", { name: "한 번에 던지기" }).click();
   let errTxt = "";
   for (let i = 0; i < 30; i++) { errTxt = (await page.locator(".err").allTextContents()).join(""); if (errTxt) break; await page.waitForTimeout(300); }
   ck("S3 앱 웹뷰: complete 호출 안 함(아티팩트 사망 방지)", (await page.evaluate(() => window.__completeCalled)) === false);
@@ -241,8 +231,6 @@ for (const [nmCase, v1, want] of [["앞면이 이름을 부름", "강석우, 보
   await onboard(page, "", "강석우");
   await page.locator("textarea.qbox").fill("전남친에게 연락할까?"); await page.waitForTimeout(300);
   await page.getByRole("button", { name: "판결을 청한다" }).click();
-  await page.waitForSelector("text=동전 셋", { timeout: 5000 });
-  await page.getByRole("button", { name: "한 번에 던지기" }).click();
   ck(`⑰ 호칭 — ${nmCase}: 판결 성사`, await waitVerdict(page));
   await page.getByRole("button", { name: "왜 이렇게 봤어?" }).click().catch(() => {});
   let p2 = ""; for (let i = 0; i < 30; i++) { p2 = await page.evaluate(() => window.__p2); if (p2) break; await page.waitForTimeout(300); }

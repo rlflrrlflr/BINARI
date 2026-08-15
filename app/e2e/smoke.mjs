@@ -71,8 +71,6 @@ try {
   await page.locator("textarea.qbox").fill("이직할까?");
   await page.waitForTimeout(300);
     await page.getByRole("button", { name: "판결을 청한다" }).click();
-  await page.waitForSelector("text=동전 셋", { timeout: 5000 });
-  await page.getByRole("button", { name: "한 번에 던지기" }).click();
   await page.waitForSelector("text=판결이 닿지 못했어", { timeout: 12000 });
   check("의식 실패: '다시 청하기' 노출", await page.getByRole("button", { name: "다시 청하기" }).isVisible());
   check("의식 실패: '질문을 고칠래' 노출", await page.getByRole("button", { name: "질문을 고칠래" }).isVisible());

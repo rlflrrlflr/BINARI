@@ -263,6 +263,23 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
       "축 하나가 상수로 굳으면 모두 비슷한 수호신이 됩니다. `node e2e/texture-check.mjs` 를 돌려 어느 축인지 보세요.");
   }
 
+  /* 공유 판결 서명 — 없으면 누구나 '비나리 판결'을 지어내 우리 앱이 진짜처럼 그린다(2026-08-15 실증).
+     가드레일은 전부 생성 경로에만 있어서, 표시 경로가 열려 있으면 URL 한 줄로 전부 우회된다. */
+  {
+    const hasApi = existsSync("api/share.js");
+    const signs = /signShare\(/.test(src) && /\?v=\$\{enc\}\.\$\{sig\}/.test(src);
+    const verifies = /verifyShare\(/.test(src) && /setSharedIn\(dec \|\| false\)/.test(src);
+    if (!hasApi || !signs || !verifies) {
+      add("심각", "공유 판결에 서명이 없다", `api ${hasApi ? "있음" : "없음"} · 서명 ${signs ? "함" : "안 함"} · 검증 ${verifies ? "함" : "안 함"}`,
+        "서명이 빠지면 누구나 URL 을 지어내 '비나리 판결' 카드를 만들 수 있습니다. api/share.js 와 signShare/verifyShare 배선을 되살리세요.");
+    } else add("정상", "공유 판결 서명", "서명·검증 배선 있음", "");
+    // 검증에 실패했는데도 카드를 그리면 서명이 있으나 마나다 — '열어두는 쪽' 실수를 이름째로 막는다
+    if (signs && !/sharedIn && typeof sharedIn === "object"/.test(src)) {
+      add("심각", "검증 전에 공유 판결을 그린다", "렌더 조건이 검증 상태를 안 본다",
+        "sharedIn 이 객체일 때만 카드를 그리세요. 'checking'·false 상태에서 그리면 위조본이 한 프레임이라도 보입니다.");
+    } else if (signs) add("정상", "검증된 공유 판결만 렌더", "객체일 때만 그림", "");
+  }
+
   // 티어 허용목록은 api/judge.js 에 있다 — 위 rules 루프는 App.jsx 만 보므로 여기서 따로 검사한다
   try {
     const api = readFileSync("api/judge.js", "utf8");
