@@ -2295,7 +2295,11 @@ void main(){
   if(u_orb>0.0005){
     float ospin = u_t*(0.05+0.06*u_focal);
     float otilt = 0.28+0.55*fract(u_zodiac*0.083+u_nayF);
-    float oth   = a_r1.x*6.2832 + ospin;
+    /* ⚠ 목적지를 **지금 있는 자리와 상관시킨다.** 구면 좌표를 난수로만 배정하면
+       위쪽 입자가 아래쪽으로 가는 식이라 전부 중앙을 가로지르고, 그게 "확 퍼졌다 뭉치는" 정체다.
+       현재 화면각을 경도에 섞어 주면 **제 자리 근처로 모여** 이동이 짧아진다(0.55 = 섞는 정도). */
+    float bAng  = atan(spos.y, spos.x);
+    float oth   = mix(a_r1.x*6.2832, bAng, 0.55) + ospin;
     float oph   = acos(clamp(2.0*a_r0.z-1.0,-1.0,1.0));
     vec3  osp   = vec3(sin(oph)*cos(oth), cos(oph), sin(oph)*sin(oth));
     float olat  = osp.y, obn = 3.0+u_strands, otex;
@@ -2321,9 +2325,20 @@ void main(){
       opos = orq.xy*(odc/(odc+orq.z))*0.96;
       otex = (0.22+0.40*abs(sin(orr*23.0)))*(0.45+0.55*smoothstep(-oR,oR,orq.z))*(0.30+0.75*u_nayA)*0.62;
     }
-    spos  = mix(spos, opos, u_orb);
-    orbK  = mix(1.0, otex*2.1, u_orb);
-    orbPS = mix(1.0, 1.02, u_orb);
+    /* 시차 — 한꺼번에 움직이면 '전환'이지만 파도처럼 도착하면 '응축'으로 읽힌다.
+       터치 응집(TUNE.stg)이 쓰는 것과 같은 수법이다. */
+    float ok = clamp((u_orb - a_r1.z*0.38)/0.62, 0.0, 1.0);
+    ok = ok*ok*(3.0-2.0*ok);
+    /* 직선으로 보간하면 현(弦)을 따라 **중심을 가로지른다.** 각도를 돌리고 반지름을 따로 줄이면
+       호(弧)를 그리며 감겨 들어간다 — 같은 시간이 걸려도 눈에는 이어져 보인다. */
+    float lA = max(length(spos), 1e-4), lB = max(length(opos), 1e-4);
+    vec2  dA = spos/lA, dB = opos/lB;
+    float aw = acos(clamp(dot(dA,dB),-1.0,1.0))*ok;
+    float sg = (dA.x*dB.y - dA.y*dB.x) >= 0.0 ? 1.0 : -1.0;
+    float ca = cos(aw*sg), sa = sin(aw*sg);
+    spos  = vec2(dA.x*ca - dA.y*sa, dA.x*sa + dA.y*ca) * mix(lA, lB, ok);
+    orbK  = mix(1.0, otex*2.1, ok);
+    orbPS = mix(1.0, 1.02, ok);
   }
   /* ── v134 곁 — 궤도를 도는 빛 하나 = 사람 하나 ───────────────────────────
      ⚠ **입자를 새로 만들지 않는다.** 위 헤일로(입자 16%)에서 앞쪽 일부를 떼어 쓴다.
@@ -2549,7 +2564,7 @@ function GuardianCanvasGL({ saju, zo, num, moon, birth, agitateRef, reactRef, re
         gl.uniform1f(L.u_agi, agi); gl.uniform1f(L.u_expand, expand); gl.uniform1f(L.u_bright, bright);
         /* v133 응축 보간 — **끊기면 "교체"로 읽히고 이어지면 "자세"로 읽힌다.**
            그게 이 변화가 헌장(수호신 비주얼 교체 금지)을 안 어기는 조건이라 반드시 시간을 들여 넘긴다. */
-        orb += ((orbRef && orbRef.current ? 1 : 0) - orb) * (1 - Math.exp(-dt / 0.75));
+        orb += ((orbRef && orbRef.current ? 1 : 0) - orb) * (1 - Math.exp(-dt / 1.25));
         gl.uniform1f(L.u_orb, orb < 0.0004 ? 0 : orb);
         /* v134 곁 — ref 로 받은 목록을 그대로 셰이더에 넘긴다(리렌더 없음).
            앞줄 셋까지만 궤도에 서고, 넷째부터는 뒤 성운이 짙어진다(§곁 예산). */
@@ -2964,7 +2979,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v134 · 곁 렌더";
+const APP_VER = "v134.1 · 응축 전이";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -5141,26 +5156,21 @@ export default function App() {
         </nav>
       )}
 
-      {/* 탭이 바뀌면 목표만 세운다 — 실제 변형은 셰이더에서 0.75초에 걸쳐 따라간다 */}
+      {/* 탭이 바뀌면 목표만 세운다 — 실제 변형은 셰이더에서 1.25초에 걸쳐 따라간다 */}
       {(() => { orbRef.current = tab === "gyeot"; return null; })()}
-      {step === 3 && tab === "gyeot" && phase >= 1 && (
-        <section className="scene fade gyeot">
-          <div className="halo wide gyeotscale">
-            {/* ⚠ 판결 탭과 **같은 size 식**을 쓴다. v132 에 여기만 0.5/600 으로 작게 잡고 확대율도 안 줘서
-                실측 466px — 판결(719px)의 65% 였다. 수호신이 탭마다 다른 크기로 보이면 같은 존재로 안 읽힌다. */}
-            <div className="fade"><Guardian saju={saju} zo={zo} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} restRef={restRef} orbRef={orbRef} gyeotRef={gyeotRef} size={guardianSize(vp)} /></div>
-          </div>
-          <div className="gyeotpanel fade">
-            <p className="gname under">곁</p>
-            {saju && <p className="gsay">{EL_TRAIT[saju.main]} 네 곁에, 오늘도 이렇게 서 있어.</p>}
-            <p className="fine">여기는 네 옆자리야. 누가 서게 되면 이 자리에 같이 보일 거야.</p>
-          </div>
-        </section>
-      )}
 
-      {step === 3 && tab === "judge" && (
-        <section className={`scene fade ${phase >= 1 && !res && !awake ? "lobby" : ""}`} onClick={phase >= 1 && !res && !awake ? tryWake : undefined}>
-          <div className={`halo wide ${!awake && phase >= 1 && !res ? "lobbyscale" : ""} ${asking ? "asking" : ""} ${ritual ? "ritualfade" : ""} ${busy || (res && !cardOn) ? "busy" : ""} ${res && cardOn ? "dimmed" : ""}`}>
+      {/* ── v134.1 탭 공용 한 섹션 ─────────────────────────────────────────────
+           ⚠ 전엔 판결·곁이 **각자 <section> 안에 각자 <Guardian>** 을 두고 있었다.
+             React 는 부모가 다르면 같은 컴포넌트라도 **언마운트 후 새로 만든다** — 탭을 누를 때마다
+             WebGL 컨텍스트가 새로 열리고 born 이 0 으로 돌아가 수호신이 처음부터 다시 응집했다.
+             그게 "확 퍼졌다가 뭉치는" 정체였다(응축 보간을 아무리 다듬어도 안 고쳐지는 이유).
+             한 섹션·한 Guardian 으로 합치면 트리 위치가 같아 **재생성이 없고**, 그때부터 u_orb 보간이
+             실제로 화면에 보인다. 바뀌는 건 감싸는 class 와 아래 패널뿐이다. */}
+      {step === 3 && (
+        <section
+          className={`scene fade ${tab === "gyeot" ? "gyeot" : (phase >= 1 && !res && !awake ? "lobby" : "")}`}
+          onClick={tab === "judge" && phase >= 1 && !res && !awake ? tryWake : undefined}>
+          <div className={`halo wide ${tab === "gyeot" ? "gyeotscale" : `${!awake && phase >= 1 && !res ? "lobbyscale" : ""} ${asking ? "asking" : ""} ${ritual ? "ritualfade" : ""} ${busy || (res && !cardOn) ? "busy" : ""} ${res && cardOn ? "dimmed" : ""}`}`}>
             {phase === 0
               ? <BirthCanvas tint={saju ? EL_COLOR[saju.main] : undefined} size={guardianSize(vp)} />
               : <div className="fade"><Guardian saju={saju} zo={zo} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} restRef={restRef} orbRef={orbRef} gyeotRef={gyeotRef} broodRef={broodRef} size={guardianSize(vp)} /></div>}
@@ -5168,6 +5178,17 @@ export default function App() {
               {phase === 0 && <div className="formwrap"><p className="forming">{birth.name ? `${birth.name}, 흩어져 있던 조각들이` : "흩어져 있던 조각들이"}<br />너를 향해 모이고 있어…<br />너의 수호신이 돌아오는 중이야.</p><ul className="formsteps">{FORM_STEPS.map((s, i) => <li key={i} className={i < formStep ? "done" : i === formStep ? "now" : ""}>{i < formStep ? "✓" : i === formStep ? "✦" : "·"} {s}{i === formStep ? "…" : ""}</li>)}</ul></div>}
             </div>
           </div>
+
+          {/* 곁 탭 — 1층은 위 수호신이 그대로 맡고, 여기는 글만 바뀐다 */}
+          {tab === "gyeot" && phase >= 1 && (
+            <div className="gyeotpanel fade">
+              <p className="gname under">곁</p>
+              {saju && <p className="gsay">{EL_TRAIT[saju.main]} 네 곁에, 오늘도 이렇게 서 있어.</p>}
+              <p className="fine">여기는 네 옆자리야. 누가 서게 되면 이 자리에 같이 보일 거야.</p>
+            </div>
+          )}
+
+          {tab === "judge" && (<>
 
           {phase >= 1 && !res && !awake && (
             <div className="lobbypanel fade">
@@ -5541,6 +5562,7 @@ export default function App() {
           )}
           {res && cardOn && <button className="btn ghost mt" onClick={backToLobby}>다른 걸 물어볼래</button>}
           {res && cardOn && <p className="ainote card">이 판결은 AI가 생성한 내용입니다</p>}
+          </>)}
         </section>
       )}
 
