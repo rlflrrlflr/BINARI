@@ -173,7 +173,11 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
     { name: "경험 편향이 되살아나지 않음", pat: /## 경험 편향/, want: false,
       fix: "'동률이면 해보는 쪽'은 지표가 아니라 인생관입니다. 표가 반반이면 반반이라고 말하세요." },
     { name: "동률을 GO로 밀지 않음", pat: /go === stop \? "GO"/, want: false,
-      fix: "코드 타이브레이크가 되살아났습니다. 동률은 HOLD(갈림)로 두세요 — 표를 안 따르는 판정입니다." },
+      fix: "'동률이면 해보는 쪽'은 지표가 아니라 인생관입니다. 표가 다수를 못 만들면 앱이 방향을 만들지 마세요." },
+    /* 그렇다고 동률을 HOLD 로 바꾸면 **판결앱이 판결을 안 하는 것**이 된다(창업자 지적).
+       SYS 도 같은 말을 한다 — "표가 갈렸다는 이유로 HOLD 를 고르지 마라". HOLD 는 '멈추라'는 판결이지 '모르겠다'가 아니다. */
+    { name: "동률을 모름(HOLD)으로 바꾸지 않음", pat: /go === stop \? "HOLD"/, want: false,
+      fix: "갈림을 모름으로 바꾸면 유저에겐 회피로 읽힙니다. 표가 다수를 못 만들면 모델이 읽은 방향을 그대로 두세요." },
     { name: "scope 계측", pat: /scope_level:/,
       fix: "S3 진입률·이탈률을 못 재면 스코프 설계가 맞는지 영영 알 수 없습니다. verdict_shown 의 scope_level/handoff_triggered 를 확인하세요." },
   ];
