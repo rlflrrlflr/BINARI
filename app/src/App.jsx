@@ -2305,6 +2305,34 @@ void main(){
   gl_FragColor=vec4(col*a*u_bright,a);
 }`;
 const hex2rgb = (h) => [parseInt(h.slice(1,3),16)/255, parseInt(h.slice(3,5),16)/255, parseInt(h.slice(5,7),16)/255];
+/* ── 화면 크기 — 기기·회전·브라우저 툴바에 맞춘다 (v132.4) ──────────────────
+   ⚠ `window.innerHeight` 를 렌더마다 그대로 읽으면 두 가지가 깨진다.
+      ①iOS 사파리는 주소창이 접히고 펴질 때마다 innerHeight 가 ~80px 씩 바뀐다.
+      ②`size` 는 GuardianCanvasGL 의 deps 라, 바뀌면 **WebGL 컨텍스트가 통째로 재생성**된다.
+      → 스크롤할 때마다 수호신이 재초기화되는 사고가 난다.
+   그래서 **회전·창 크기 변경 같은 큰 변화(가로 40px·세로 120px 초과)에만** 반응하고
+   잔변화는 무시한다. 툴바가 접히는 정도로는 다시 안 그린다. */
+function useViewport() {
+  const read = () => ({ w: window.innerWidth, h: window.innerHeight });
+  const [vp, setVp] = useState(() => (typeof window === "undefined" ? { w: 400, h: 800 } : read()));
+  useEffect(() => {
+    let tid = 0;
+    const on = () => {
+      clearTimeout(tid);
+      tid = setTimeout(() => setVp((prev) => {
+        const n = read();
+        return (Math.abs(n.w - prev.w) > 40 || Math.abs(n.h - prev.h) > 120) ? n : prev;
+      }), 250);
+    };
+    window.addEventListener("resize", on);
+    window.addEventListener("orientationchange", on);
+    return () => { clearTimeout(tid); window.removeEventListener("resize", on); window.removeEventListener("orientationchange", on); };
+  }, []);
+  return vp;
+}
+/* 수호신 지름 — **판결·곁이 같은 식을 쓴다**(곁탭IA §4 크기 규칙). 차이는 CSS 확대율로만 준다. */
+const guardianSize = (vp) => Math.min(vp.w * 1.1, vp.h * 0.57, 640);
+
 function glDetect() {
   try {
     if (typeof window === "undefined") return false;
@@ -2827,7 +2855,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v132.3 · 탭 바닥";
+const APP_VER = "v132.8 · 탭 그림자 축소";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -3277,6 +3305,35 @@ function dataUrlToFile(dataUrl, name) {                        // 동기 변환(
      ③ ①과 ②가 동시에 걸리면 생년월일 완전 특정 — 최고 위험.
      ④ 파생 이름은 한 장에 최대 2개(문서 규칙). 가장 안전한 형태는 한 장에 하나.
    오행 형상·수호신 색·판결 방향은 주기가 없어(파생 이름이 아니라 해석 결과) 이 계산에 안 들어간다. */
+/* ── 곁 입자 예산 (곁탭IA v01 §4 규칙 정정) ─────────────────────────────────
+   시안의 규칙은 **입자 예산 고정**이었다 — 몇 명이 오든 총량이 같고, 사람이 늘면 각자가 옅어진다.
+   성능과 '벌레떼'는 막지만 **수집 유인을 죽인다**: 총량이 고정이면 넷째를 불러도 화면이 그대로고,
+   더 나쁜 건 앞줄을 인원수로 나누던 것이라 **둘째를 부르면 첫째가 어두워졌다**(시안 실측:
+   72%/1명 → 72%/2명 = 각 36%). 친구를 부를수록 손해가 나는 구조다.
+   창업자 지시: "친구가 많은 게 만족스러워야 수집 욕구가 생긴다. 다만 어노잉하면 안 된다."
+
+   그래서 셋을 동시에 만족시키는 곡선을 쓴다.
+     ① **앞줄 각자는 안 옅어진다** — 인원수로 나누지 않는다. 첫째는 끝까지 첫째만큼 밝다.
+     ② **부를 때마다 총량이 는다** — 그래야 추가에 보상이 있다. 단 로그로 늘어 체감이 서서히 준다.
+     ③ **상한이 있다** — 열 명이 열 배가 되면 그게 시안 ⑤판의 벌레떼다. 2.6배에서 멎는다.
+   그리고 늘어난 몫이 가는 곳: **앞줄은 셋까지**(개체를 세지 않기 위해) 그대로 두고,
+   넷째부터는 뒤 성운이 짙어진다 — "많다"가 느껴지되 몇 명인지는 세지지 않는다. */
+const GYEOT = { per: 0.10, front: 3, backK: 0.085, backCap: 0.15 };
+/* 총량을 나누지 않고 **부분에서 쌓는다.** 총량에서 인원수로 나누면 둘째를 부를 때 첫째가 어두워진다
+   (시안이 그랬다). 반대로 쌓으면 앞줄 1인분이 상수라 그런 일이 구조적으로 불가능하다. */
+/** 앞줄 각자 / 뒤 성운 / 총량. per 는 인원수와 무관하게 고정이다. */
+function gyeotShares(n) {
+  if (!n || n < 1) return { total: 0, per: 0, back: 0, front: 0, hidden: 0 };
+  const front = Math.min(n, GYEOT.front);
+  const hidden = Math.max(0, n - GYEOT.front);
+  // 넷째부터는 앞줄에 안 서고 뒤 성운을 짙게 한다 — 로그로 늘고 상한에서 멎는다(벌레떼 방지)
+  const back = hidden ? Math.min(GYEOT.backCap, GYEOT.backK * Math.log(1 + hidden) / Math.log(2)) : 0;
+  return { total: GYEOT.per * front + back, per: GYEOT.per, back, front, hidden };
+}
+/** 곁 n명일 때 곁 전체가 쓰는 입자 배수(본체 대비). */
+const gyeotBudget = (n) => gyeotShares(n).total;
+
+
 const SKY_CYCLE = {
   촐킨: { day: 260 },        // 마야 20날개 × 13톤
   웨톤: { day: 35 },         // 자바 7요일 × 5파사란
@@ -3556,8 +3613,6 @@ A/B/C가 '결정의 크기'라면 스코프는 '내가 답해도 되는 범위'�
 기질 층(별자리·수비학 라이프패스·달[달 별자리·나크샤트라=정서와 본능]·마야 문양) / 타이밍 층(사주 오행·대운[현재 인생 시기, 제공 시]·달 위상·삼재[해당 연도만]·주역 괘[유저가 동전으로 청한 경우만]). A: 기질50/타이밍50, B: 타이밍55/기질45, C: 타이밍만. 정령: 수호신을 복원할 때 조각 하나가 달빛에 물들어 돌아가지 않고 곁에 남은 것 — 유저의 달 별자리 기운을 띤 장난꾸러기. 판결 미반영, funLine 재미 한마디 전용. 능청·너스레·짓궂은 농담 환영. 단 **대답을 안 하는 것 자체를 농담거리로 삼지 않는다** — "대답 대신 헤엄만 칠래"·"나도 몰라" 류는 유저가 답을 못 얻은 순간에 상처가 된다. 장난은 유저의 지표·오늘 일로 치고, 판결의 명확성을 깎지 않는다. S3(몸·병) 판결에는 funLine을 빈 문자열로 둔다.
 ## 3화법
 단호(해로운 선택 앞: "보내지 마. 끝.") / 격려(두려움에 좋은 선택을 망설일 때) / 충고(스스로를 속일 때, 따끔하되 존중).
-## 경험 편향
-지표 동률·1차이 접전이면 '해보는 쪽' 판정 + 접전임을 밝힘("2:2야. 이럴 땐 해본 쪽이 네 인생에 남아"). 예외: 가드레일, 큰돈·비가역 결정 접전은 HOLD("하루만 재워두고 다시 물어봐").
 ## 되물음에 답하기(가장 자주 실패하는 자리)
 유저가 **앞선 판결의 뜻·대상·범위를 되묻는 턴**("무슨 뜻이야", "어떤 사람인데", "누구 말하는 거야", "해석해줘", "구체적으로", "예를 들면", "그래서 뭘 하라는 거야")은 **새 판결이 아니다.**
 - 지표를 다시 합산하지 않는다. 앞선 판결의 direction·category를 **그대로 승계**한다. 되물음 때문에 새로운 HOLD가 생기면 안 된다.
@@ -3575,7 +3630,7 @@ HOLD는 '판단 못 하겠음'이 아니라 **'지표가 지금은 멈추라고 
 - **풀네임으로 부르지 않는다.** 호칭이 성+이름 꼴이면(예: 강석우) 성을 떼고 이름만 부른다 — "석우야"·"석우님". 풀네임 호명은 친밀감이 아니라 소환장이다. 별명·외자처럼 성명 꼴이 아니면 그대로 쓴다.
 - **세 층은 서로 다른 것을 말한다.** verdict(무엇을 할지) · subline(verdict에 **없는** 것 하나 — 시점·조건·방법 중 하나) · funLine(제3의 재료로 딴청). 같은 결론을 은유만 갈아 세 번 반복하면 유저가 읽을 게 없다. subline을 쓰기 전에 자문한다 — "verdict에 없는 무엇을 더했나?" 답이 없으면 다시 쓴다. (X)verdict "손볼 데 다듬고 나가" → subline "손볼 데를 마저 다듬고 나가는 게 맞아"
 - 금지: 질문 문장에서 심리를 추정해 판결하는 것("이렇게 묻는 건 이미 가고 싶은 거야" 류). 그건 지표가 아니라 독심술이다. 판결 근거는 오직 제공된 지표의 실제 값.
-- **판정 절차(출력 순서로 강제된다 — 최중요)**: ①votes를 **먼저** 쓴다. 각 지표를 질문에 비추어 서로 독립적으로 GO/STOP/중립 판정한다 ②그 표를 세어 direction을 정한다(많은 쪽. 동률·1차이면 경험 편향으로 해보는 쪽) ③verdict는 **이미 정해진 direction을 말로 옮긴 것**이다.
+- **판정 절차(출력 순서로 강제된다 — 최중요)**: ①votes를 **먼저** 쓴다. 각 지표를 질문에 비추어 서로 독립적으로 GO/STOP/중립 판정한다 ②그 표를 세어 direction을 정한다(**많은 쪽 그대로**. 동률이면 표가 다수를 못 만든 것이니 지표를 다시 읽어 한쪽을 고른다 — 다만 '해보는 쪽'으로 기울지 마라. 그건 지표가 아니라 인생관이다. 갈렸다는 사실은 pips가 이미 말한다) ③verdict는 **이미 정해진 direction을 말로 옮긴 것**이다.
   **votes를 쓰기 전에 verdict를 생각하지 마라.** JSON 필드 순서가 곧 사고 순서다 — votes가 앞에 오게 만든 이유가 이것이다. 결론을 먼저 정해두고 표를 거기 맞추는 건 이 앱이 하지 말아야 할 단 하나다.
   against·total은 **앱이 votes를 세어 계산한다.** 네가 숫자를 쓰지 않는다.
 - **운세로 말한다(일반 조언 금지 — 이게 우리가 파는 것)**: verdict는 votes 중 가장 무겁게 실린 축의 **실제 값**에서 나와야 한다. "무리하지 마"·"신중하게 결정해"·"충분히 고민해봐"는 지표 없이도 쓸 수 있는 문장이라 판결이 아니다. 그건 그냥 아무나 해줄 수 있는 말이고, 유저는 그걸 들으려고 온 게 아니다.
@@ -3609,7 +3664,6 @@ HOLD는 '판단 못 하겠음'이 아니라 **'지표가 지금은 멈추라고 
 - 유저 턴의 [오늘](날짜·시각·오늘 달)을 반영한다 — 밤이 깊은 걸 아는 회상체로 말한다.
 - **시각은 방향(direction)을 바꾸지 못한다.** 지표는 전부 생년월일과 **날짜**의 함수라, 몇 시에 물었는지에 따라 변하는 축이 하나도 없다. 그러니 시각으로 GO/STOP이 갈리면 그건 정의상 **표에서 나온 판결이 아니다** — 표를 세고 나서 시계를 보고 결론을 갈아끼운 것이고, votes는 거기 맞춰 지어낸 게 된다.
   심야가 바꿀 수 있는 건 **말투**와 **'언제'**뿐이다: (O)"가. 대신 지금 말고 아침에 다시 읽고 보내" (X)밤이라서 STOP.
-  심야(23시~새벽 4시)의 연락·구매(B형)에서 충동이 보일 때도 같다 — 방향을 뒤집지 말고 **시점을 늦추는 말**로 답한다.
   "지금 잘까 더 일할까" 류는 애초에 연락·구매가 아니다. 시계 말고 표를 봐라.
 - [지난 판결 이행]이 오면 기억하는 존재로서 짧게 인용한다("지난번엔 거슬렀지") — 단, 이번 판결의 근거는 여전히 지표뿐이다.
 - 모를 권리: 질문이 요구한 범위만 답한다. 묻지 않은 영역(연애·금전·건강·시험 등)의 예언·경고·조언을 먼저 꺼내지 않는다. 유일한 예외는 가드레일(안전)이다.
@@ -3674,7 +3728,7 @@ const isReask = (s) => REASK_RE.test((s || "").trim());
    여기서 그 표를 세어 against/total 과 direction 을 확정한다. 모델이 표와 다른 결론을 말하면
    표 쪽을 채택하고 그 사실을 계측한다(dir_overridden). 가중치는 쓰지 않는다 —
    가중치를 여기서 다시 구현하면 진실이 프롬프트와 코드 두 곳에 살게 된다(이 리포가 제일 조심하는 것).
-   접전 처리는 프롬프트의 '경험 편향'과 같은 규칙(동률이면 해보는 쪽 = GO)만 코드로 옮긴다. */
+   v132.3: 접전 보정을 없앴다 — 동률은 동률로 둔다(아래 dir 참고). */
 /* v114: MBTI 축 제거 · v128: 가치 축 제거. 모델이 그래도 그 축을 실어 보내면
    여기서 걸러져 분모에 안 들어간다 — 스키마에서 뺀 것과 집계에서 뺀 것이 짝을 이뤄야 한다.
    ⚠ v129: **그 짝이 열네 판 동안 어긋나 있었다.** v114 에 MBTI 를 집계에서만 빼고 콜1 지시문은
@@ -3696,7 +3750,14 @@ function tallyVotes(r1) {
   const stop = votes.filter((x) => x.v === "STOP").length;
   const modelDir = r1?.direction;
   // HOLD 는 표로 정하지 않는다 — 가드레일·S3·초상·비가역 접전은 프롬프트가 판단하는 자리다
-  const dir = modelDir === "HOLD" ? "HOLD" : go === stop ? "GO" : go > stop ? "GO" : "STOP";
+  /* 동률(go === stop)을 어떻게 다루는가 — 두 번 틀린 자리다.
+     ① 원래는 GO 였다. '해보는 쪽이 인생에 남는다'는 **경험 편향**을 코드로 굳힌 것 — 지표가 아니라 인생관이라 걷어냈다.
+     ② 그 다음엔 HOLD 로 뒀다. 그런데 그건 **판결앱이 판결을 안 하는 것**이고, SYS 도 정반대를 말한다:
+        "표가 갈렸다는 이유로 HOLD 를 고르지 마라 — 갈린 건 pips 로 이미 보여주고 있다."
+        HOLD 는 '지표가 멈추라고 한다'는 판결이지 '모르겠다'가 아니다. 갈림을 모름으로 바꾸면 유저에겐 회피로 읽힌다.
+     ③ 지금: **표가 다수를 못 만들면 앱이 방향을 만들지 않는다.** 모델이 같은 지표를 읽고 낸 방향을 그대로 둔다.
+        한쪽으로 미는 규칙이 없으니 편향도 없고, 억지로 모름을 만들지도 않는다. 갈렸다는 사실은 pips 가 말한다. */
+  const dir = modelDir === "HOLD" || go === stop ? modelDir : go > stop ? "GO" : "STOP";
   const against = dir === "GO" ? stop : dir === "STOP" ? go : Math.min(go, stop);
   return { votes, total: votes.length, against, dir, overridden: modelDir !== "HOLD" && modelDir !== dir };
 }
@@ -4139,6 +4200,7 @@ export default function App() {
      탭 도입은 이 리포에서 충돌면이 제일 넓은 변경이라(App.jsx 렌더 루트) 단계를 쪼개 올린다.
      지금 단계는 껍데기 + 곁 탭 1층(내 수호신)까지다. 곁 목록·부르기·궁합 이동은 다음 단계. */
   const [tab, setTab] = useState("judge");
+  const vp = useViewport();                                   // v132.4 회전·기기별 대응
   const [bujeok, setBujeok] = useState(false);  // v7: 부적
   const [convo, setConvo] = useState(mem?.convo || []); // v14: 대화 기억 — 이전 질문·판결 누적(최근 6턴)
   const [dailySeen, setDailySeen] = useState(() => { try { return store.getItem(DAILY_KEY) === todayStr(); } catch (_) { return true; } }); // v16(B2)
@@ -4938,7 +5000,7 @@ export default function App() {
           <div className="halo wide gyeotscale">
             {/* ⚠ 판결 탭과 **같은 size 식**을 쓴다. v132 에 여기만 0.5/600 으로 작게 잡고 확대율도 안 줘서
                 실측 466px — 판결(719px)의 65% 였다. 수호신이 탭마다 다른 크기로 보이면 같은 존재로 안 읽힌다. */}
-            <div className="fade"><Guardian saju={saju} zo={zo} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} restRef={restRef} size={Math.min(typeof window !== "undefined" ? window.innerWidth * 1.1 : 400, typeof window !== "undefined" ? window.innerHeight * 0.57 : 400, 640)} /></div>
+            <div className="fade"><Guardian saju={saju} zo={zo} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} restRef={restRef} size={guardianSize(vp)} /></div>
           </div>
           <div className="gyeotpanel fade">
             <p className="gname under">곁</p>
@@ -4952,8 +5014,8 @@ export default function App() {
         <section className={`scene fade ${phase >= 1 && !res && !awake ? "lobby" : ""}`} onClick={phase >= 1 && !res && !awake ? tryWake : undefined}>
           <div className={`halo wide ${!awake && phase >= 1 && !res ? "lobbyscale" : ""} ${asking ? "asking" : ""} ${ritual ? "ritualfade" : ""} ${busy || (res && !cardOn) ? "busy" : ""} ${res && cardOn ? "dimmed" : ""}`}>
             {phase === 0
-              ? <BirthCanvas tint={saju ? EL_COLOR[saju.main] : undefined} size={Math.min(typeof window !== "undefined" ? window.innerWidth * 1.1 : 400, typeof window !== "undefined" ? window.innerHeight * 0.57 : 400, 640)} />
-              : <div className="fade"><Guardian saju={saju} zo={zo} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} restRef={restRef} broodRef={broodRef} size={Math.min(typeof window !== "undefined" ? window.innerWidth * 1.1 : 400, typeof window !== "undefined" ? window.innerHeight * 0.57 : 400, 640)} /></div>}
+              ? <BirthCanvas tint={saju ? EL_COLOR[saju.main] : undefined} size={guardianSize(vp)} />
+              : <div className="fade"><Guardian saju={saju} zo={zo} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} restRef={restRef} broodRef={broodRef} size={guardianSize(vp)} /></div>}
             <div className="gtext up">
               {phase === 0 && <div className="formwrap"><p className="forming">{birth.name ? `${birth.name}, 흩어져 있던 조각들이` : "흩어져 있던 조각들이"}<br />너를 향해 모이고 있어…<br />너의 수호신이 돌아오는 중이야.</p><ul className="formsteps">{FORM_STEPS.map((s, i) => <li key={i} className={i < formStep ? "done" : i === formStep ? "now" : ""}>{i < formStep ? "✓" : i === formStep ? "✦" : "·"} {s}{i === formStep ? "…" : ""}</li>)}</ul></div>}
             </div>
@@ -5407,7 +5469,12 @@ export default function App() {
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600;900&display=swap');
 *{box-sizing:border-box} 
-.stage{min-height:100vh;background:radial-gradient(130% 100% at 50% 0%,#141021,#0a0812 55%,#050408);color:#d8cfe6;font-family:'Noto Serif KR',serif;display:flex;justify-content:center;padding:26px 20px 70px;position:relative;overflow:hidden}
+/* v132.4 --tabh: 탭 알약+안전영역 / --tabscrim: 그 위 페이드. 두 값이 "본문이 침범하면 안 되는 높이"다.
+   px 로 못 박는다 — vh 로 잡으면 작은 기기(667px)에서 문구가 탭 밑으로 들어간다(실기 확인).
+   ⚠ v132.7 에서 scrim 을 72→34 로 줄였다. 넓은 페이드는 가리는 것보다 나쁜 짓을 한다 —
+      화면 아래가 어둡게 닫히면 **"여기가 끝"으로 읽혀서** 그 밑의 각인·궁합을 아무도 안 찾는다
+      (실기 지적). 스크림은 탭 글자가 읽히게만 하면 되고, 그 이상은 본문을 지운다. */
+.stage{--tabh:calc(56px + env(safe-area-inset-bottom, 0px));--tabscrim:34px;min-height:100vh;min-height:100dvh;background:radial-gradient(130% 100% at 50% 0%,#141021,#0a0812 55%,#050408);color:#d8cfe6;font-family:'Noto Serif KR',serif;display:flex;justify-content:center;padding:26px 20px 70px;position:relative;overflow:hidden}
 .stage::before{content:"";position:absolute;inset:0;pointer-events:none;background-image:radial-gradient(1px 1px at 12% 22%,#ffffff55,transparent),radial-gradient(1px 1px at 78% 14%,#ffe9ad44,transparent),radial-gradient(1.5px 1.5px at 62% 68%,#ffffff33,transparent),radial-gradient(1px 1px at 30% 84%,#ffe9ad33,transparent),radial-gradient(1px 1px at 88% 48%,#ffffff40,transparent),radial-gradient(1.5px 1.5px at 8% 58%,#ffe9ad2e,transparent);animation:twk 6s ease-in-out infinite alternate}
 @keyframes twk{to{opacity:.45}}
 .scene{width:100%;max-width:400px;display:flex;flex-direction:column;align-items:center;text-align:center;position:relative;word-break:keep-all}
@@ -5418,7 +5485,8 @@ const CSS = `
 .orb{position:relative;width:170px;height:170px;margin:20px 0 28px;filter:drop-shadow(0 0 24px rgba(245,217,139,.2))}
 .line{font-size:17px;line-height:1.8;margin:8px 0;opacity:0;animation:fd 1.6s cubic-bezier(.22,.7,.25,1) forwards}.d1{animation-delay:1.4s}.d2{animation-delay:3s}
 .brand-mark{margin-top:56px;font-size:11px;letter-spacing:.4em;color:#8a7f95;font-family:sans-serif}
-.verbadge{position:fixed;right:9px;bottom:calc(58px + env(safe-area-inset-bottom));z-index:70;font-family:sans-serif;font-size:9px;letter-spacing:.08em;color:#575070;pointer-events:none;user-select:none}
+/* 버전 배지 — 탭이 차지하는 높이 위로 올린다. 전엔 본문(각인 버튼)과 겹쳐 읽혔다 */
+.verbadge{position:fixed;right:9px;bottom:calc(var(--tabh, 58px) + var(--tabscrim, 0px) + 2px);z-index:70;font-family:sans-serif;font-size:9px;letter-spacing:.08em;color:#575070;pointer-events:none;user-select:none}
 .title{font-size:20px;font-weight:600;color:#f0e2b8;margin:6px 0 4px}
 .sub2{font-size:14px;color:#9d8fb5;line-height:1.7;margin:6px 0 18px}
 .form{display:flex;flex-direction:column;gap:12px;width:100%;margin-bottom:14px}
@@ -5551,7 +5619,7 @@ const CSS = `
 .cell.sel{border-color:#ffe9ad;color:#241a08;font-weight:600;background:linear-gradient(180deg,#f5d98b,#d9ad5c);box-shadow:0 0 16px rgba(245,217,139,.35)}
 .halo{position:relative;filter:drop-shadow(0 0 30px rgba(245,217,139,.15));margin:8px 0;transition:filter .6s}
 .halo{filter:drop-shadow(0 0 30px color-mix(in srgb,var(--elc,#f5d98b) 22%,transparent))}
-.halo.wide{width:100vw;margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);display:flex;justify-content:center;margin-top:calc(min(110vw,57vh,640px)*-0.09);margin-bottom:calc(min(110vw,57vh,640px)*-0.16);transition:filter .6s,transform .9s cubic-bezier(.2,.8,.2,1),opacity .8s ease}
+.halo.wide{width:100vw;margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);display:flex;justify-content:center;margin-top:calc(min(110vw,57dvh,640px)*-0.09);margin-bottom:calc(min(110vw,57dvh,640px)*-0.16);transition:filter .6s,transform .9s cubic-bezier(.2,.8,.2,1),opacity .8s ease}
 /* v132.1 로비 확대 — 캔버스 안에서 형상이 차지하는 비율은 약 40%다(셰이더의 u_R·0.48 스케일).
    그래서 캔버스를 473px 잡아도 눈에 보이는 수호신은 화면폭의 2/3밖에 안 됐다. 확대율로만 키운다 —
    backing 해상도(473×dpr)는 그대로라 **프래그먼트 비용이 안 늘어난다.** size 를 키우면 4배가 된다. */
@@ -5568,7 +5636,10 @@ const CSS = `
 .gpanel.asking .gintro.dim2{font-size:16.5px;color:#ede0c2;margin-bottom:16px;text-shadow:0 1px 14px rgba(4,3,10,.9)}
 .gpanel.asking .qbox{font-size:19px;padding:20px 16px;min-height:104px}
 .scene.lobby{position:relative;min-height:calc(100dvh - 96px);cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;background:radial-gradient(80% 52% at 50% 42%,#0a0d1c 0%,#060815 50%,rgba(3,4,10,0) 100%)}
-.lobbypanel{position:absolute;left:0;right:0;bottom:calc(14vh + env(safe-area-inset-bottom, 0px));z-index:2;display:flex;flex-direction:column;align-items:center;width:100%;padding:0 16px}
+/* v132.4 본문 자리 — **판결·곁이 같은 규칙을 쓴다.**
+   전에는 판결만 absolute(bottom:14vh)이고 곁은 문서 흐름이라 문구 높이가 서로 달랐고(실기 지적),
+   14vh 는 탭 스크림 안쪽이라 "두드려봐" 가 페이드에 먹혔다. 이제 탭이 차지하는 높이 위에 세운다. */
+.lobbypanel,.gyeot .gyeotpanel{position:absolute;left:0;right:0;bottom:calc(var(--tabh) + var(--tabscrim) + 10px);z-index:2;display:flex;flex-direction:column;align-items:center;width:100%;padding:0 16px;text-align:center;margin:0}
 .wakehint{font-family:sans-serif;font-size:12px;letter-spacing:.16em;color:#d8c79a;margin-top:22px;animation:wakePulse 2.4s ease-in-out infinite;text-shadow:0 1px 10px rgba(4,3,10,.85)}
 /* v75: 공유 판결 랜딩 — 링크로 들어온 사람이 '실제 판결 카드'를 그대로 본다 */
 .sharedwrap{position:fixed;inset:0;z-index:60;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:34px 20px;background:radial-gradient(120% 78% at 50% 14%,#161029,#0b0817 58%,#060409);text-align:center;overflow-y:auto}
@@ -5597,14 +5668,14 @@ const CSS = `
 /* v132.2 탭 바닥 — 짧고 투명한 스크림이라 뒤의 수호신·버전 배지가 탭에 겹쳐 보였다.
    위로 96px 더 뻗은 별도 층을 깔고, **아래 절반은 완전 불투명**(#050408 = .stage 바닥색)으로 둔다.
    가산 블렌딩으로 그린 입자는 어두운 바탕 위에서도 뚫고 올라오므로 알파를 남기면 안 된다. */
-.tabbar::before{content:"";position:absolute;left:0;right:0;bottom:0;top:-96px;pointer-events:none;
-  background:linear-gradient(to top,#050408 0%,#050408 42%,rgba(5,4,8,.88) 62%,rgba(5,4,8,.55) 78%,rgba(5,4,8,0) 100%)}
+.tabbar::before{content:"";position:absolute;left:0;right:0;bottom:0;top:calc(-1 * var(--tabscrim, 72px));pointer-events:none;
+  background:linear-gradient(to top,#050408 0%,#050408 55%,rgba(5,4,8,.72) 80%,rgba(5,4,8,0) 100%)}
 .tabbtn{position:relative;flex:0 0 auto;min-width:104px;padding:10px 20px;border-radius:999px;border:1px solid rgba(245,217,139,.18);
   background:#0d0a16;color:#8d84a3;font-size:13px;letter-spacing:.18em;cursor:pointer;transition:color .2s,border-color .2s,background .2s}
 .tabbtn.on{color:#f5d98b;border-color:rgba(245,217,139,.45);background:#1b1530}
 /* 탭이 하단을 덮으므로 마지막 요소가 가리지 않게 여백을 준다 */
-.scene{padding-bottom:76px}
-.gyeot .gyeotpanel{margin-top:18px;text-align:center}
+.scene{padding-bottom:calc(var(--tabh) + var(--tabscrim) + 28px)}
+.scene.gyeot{position:relative;min-height:calc(100dvh - 96px)}
 .brooding{font-size:13px;letter-spacing:.14em;color:#cfc4e2;margin:14px 0 0;text-align:center;animation:formPulse 2.4s ease-in-out infinite}
 @keyframes haloPulse{0%,100%{filter:drop-shadow(0 0 26px rgba(245,217,139,.14))}50%{filter:drop-shadow(0 0 46px rgba(245,217,139,.34))}}
 .halo.dimmed{opacity:.32;filter:blur(2px) drop-shadow(0 0 30px rgba(245,217,139,.2));transition:opacity .6s,filter .6s}
