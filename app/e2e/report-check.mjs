@@ -142,6 +142,59 @@ await onboard(page);
   const len = ((await page.locator(".imp").textContent()) || "").length;
   ck("각인 — 본문 4,000자 이상(값어치 두께)", len >= 4000, `${len}자`);
   ck("각주에는 기법 이름이 적힌다", /일간|하우스/.test((await page.locator(".impnotes").textContent()) || ""));
+
+  /* ── v128 진입 모션 ────────────────────────────────────────────────────────
+     창업자 지적: "그래프, 표가 나타나는 모션이 주기가 너무 짧아서 발작 일으키는 것처럼 느껴져."
+     원인은 속도가 아니라 **동시성**이었다 — 문서를 여는 순간 마흔 개 블록이 같이 움직였다.
+     그래서 이 검사가 지키는 건 넷이다:
+     ① 화면에 들어온 것만 움직인다(한 번에 켜지는 수에 상한)
+     ② 무한 반복 모션이 없다
+     ③ 표도 줄마다 채워지고 막대도 자라 오른다
+     ④ 벗어났다 돌아오면 다시 그려진다
+     ⚠ **계산된 스타일로 본다.** CSS 문자열만 보면 셀렉터가 안 맞아도 통과한다(v126에서 그랬다). */
+  {
+    const probe = () => ({
+      rv: document.querySelectorAll(".imp .rv").length,
+      on: document.querySelectorAll(".imp .rvin").length,
+      inf: [...document.querySelectorAll(".imp *")].filter((el) => {
+        const s = getComputedStyle(el);
+        return s.animationName !== "none" && s.animationIterationCount.includes("infinite");
+      }).length,
+      wipe: [...document.querySelectorAll(".imp *")].filter((el) => getComputedStyle(el).animationName.includes("impWipe")).length,
+      grow: [...document.querySelectorAll(".imp *")].filter((el) => getComputedStyle(el).animationName.includes("impGrow")).length,
+    });
+    const acc = { rv: 0, maxOn: 0, inf: 0, wipe: 0, grow: 0 };
+    for (const sel of [".imp .impcore", ".imp svg[aria-label='여정 지도']", ".imp .improws",
+                       ".imp .impmrows", ".imp .impyrs", ".imp .impband", ".imp .impck"]) {
+      await page.evaluate((s) => document.querySelector(s)?.scrollIntoView({ block: "center" }), sel);
+      await page.waitForTimeout(450);
+      const x = await page.evaluate(probe);
+      acc.rv = Math.max(acc.rv, x.rv); acc.maxOn = Math.max(acc.maxOn, x.on);
+      acc.inf += x.inf; acc.wipe = Math.max(acc.wipe, x.wipe); acc.grow = Math.max(acc.grow, x.grow);
+    }
+    ck("각인 — 블록이 뷰포트 진입 표식을 받는다", acc.rv >= 20, `${acc.rv}개`);
+    ck("각인 — 한 화면에 들어온 것만 움직인다(동시 진입 금지)", acc.maxOn >= 1 && acc.maxOn <= 14, `한번에 최대 ${acc.maxOn}개`);
+    ck("각인 — 무한 반복 모션이 없다", acc.inf === 0, `${acc.inf}개`);
+    ck("각인 — 표도 줄마다 채워진다", acc.wipe >= 5, `${acc.wipe}줄`);
+    ck("각인 — 막대가 축에서 자라 오른다", acc.grow >= 5, `${acc.grow}개`);
+    const rep = await page.evaluate(async () => {
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      const t = document.querySelector(".imp .impcore");
+      const far = document.querySelectorAll(".imp .impck");
+      if (!t || !far.length) return null;
+      t.scrollIntoView({ block: "center" }); await wait(500);
+      const a = t.classList.contains("rvin");
+      far[far.length - 1].scrollIntoView({ block: "center" }); await wait(650);
+      const b = t.classList.contains("rvin");
+      t.scrollIntoView({ block: "center" }); await wait(500);
+      return { a, b, c: t.classList.contains("rvin") };
+    });
+    ck("각인 — 화면에 들어오면 그려진다", !!rep && rep.a);
+    ck("각인 — 스크롤로 벗어나면 되감긴다", !!rep && !rep.b);
+    ck("각인 — 다시 오면 다시 그려진다", !!rep && rep.c);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(300);
+  }
   await page.getByRole("button", { name: "닫을게" }).click(); await page.waitForTimeout(500);
   ck("각인을 닫으면 로비로 돌아온다", (await page.locator(".imp").count()) === 0);
 

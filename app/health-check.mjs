@@ -183,16 +183,6 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
       add("심각", "신뢰 라인의 문항 수가 실제와 다름", `화면 표기 ${claimed}문항 vs 실제 ${real}문항`,
         "화면에 적은 숫자는 유저와의 약속입니다. App.jsx 의 문구를 실제 문항 수로 맞추거나, 검사가 세는 방식을 고치세요.");
     } else add("정상", "신뢰 라인 — 만세력 문항 수", `표기 ${claimed}문항 = 실제 ${real}문항`, "");
-    /* "질문 원문은 통계에 기록하지 않아요" — 원문이 계측으로 나가는 길은 **둘**이다.
-       ①우리가 track() 에 직접 싣는 길 ②SDK 가 $current_url 을 자동으로 붙이는 길.
-       ②를 놓쳤다가 실제로 샜다(2026-07-28~, 22건·5명). 공유 링크가 ?v=<base64> 인데
-       그 안에 질문 원문·판결문·이름이 평문으로 들어 있었고, 공유 링크로 들어온 사람이
-       무슨 이벤트를 찍든 URL 이 통째로 딸려 나갔다. 호출부만 뒤지는 검사는 SDK 가
-       스스로 붙이는 값을 영원히 못 본다 — 그래서 두 길을 각각 본다. */
-    if (/track\([^)]*\{[^}]*\bq\b\s*[,:}]/.test(src)) {
-      add("심각", "질문 원문이 계측에 실림(직접)", "화면엔 '질문 원문은 기록하지 않아요'라고 적혀 있음",
-        "track() 에서 질문 원문을 빼고 qlen(글자수)만 보내세요. 지금 상태면 화면 문구가 거짓입니다.");
-    } else add("정상", "신뢰 라인 — 질문 원문 미기록(직접)", "track() 에 q 원문 없음(qlen 만)", "");
     const shareInUrl = /encodeShare\(/.test(src) && /\?v=\$\{|[?&]v=/.test(src);
     if (shareInUrl && !/sanitize_properties/.test(src)) {
       add("심각", "질문 원문이 계측에 실림($current_url)", "공유 페이로드가 URL 에 있는데 SDK URL 정화가 없음",
@@ -241,6 +231,21 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
     if (/mem\?\.tex \|\| mem\?\.mbti/.test(src)) add("정상", "옛 수호신 질감 코드 이관", "tex ← mbti 폴백 있음", "");
     else add("주의", "옛 수호신 질감 코드 이관이 없음", "mem.mbti 를 읽지 않음",
       "이미 쓰던 사람의 수호신 얼굴이 달라집니다(실측 16명 중 14명이 값 보유). tex ← mbti 폴백을 두세요.");
+    /* 2026-08-15 규칙 교체. 예전 약속은 "질문 원문은 통계에 기록하지 않아요"였고, 이 검사는
+       track() 에 q 가 실리는지를 봤다. 창업자 지시로 **질문·답변 본문을 가명처리해 기록**하게 되면서
+       그 약속이 화면에서 내려갔다. 그러면 검사도 새 약속을 지켜야 한다 —
+       지금 화면이 하는 약속은 "이름·연락처를 지운 뒤 기록한다"이고, 그게 거짓이 되는 경우는 둘이다:
+         ① 가명처리를 안 거친 원문이 나갈 때  ② 화면 문구만 남고 가명처리가 사라졌을 때 */
+    const promisesAnon = /질문과 답변은 <b>이름·연락처를 지운 뒤<\/b>/.test(src);
+    const hasAnonGate = /q_anon: anon\(q, birth\.name\)/.test(src) && /function anon\(t, name\)/.test(src);
+    const rawQ = /track\("question_asked"[^;]*?[{,]\s*q:\s*q[,\s}]/.test(src);
+    if (rawQ) {
+      add("심각", "질문 원문이 가명처리 없이 계측에 실림", "track(\"question_asked\") 에 q 원문 그대로",
+        "q 는 anon(q, birth.name) 을 거쳐 q_anon 으로만 보내세요. 지금 상태면 화면 문구가 거짓입니다.");
+    } else if (promisesAnon && !hasAnonGate) {
+      add("심각", "화면은 '지운 뒤 기록'이라는데 지우는 장치가 없음", "anon() 경유가 코드에서 사라짐",
+        "anon() 이 지워졌거나 이름이 바뀌었습니다. 화면 문구를 내리거나 가명처리를 되살리세요.");
+    } else add("정상", "신뢰 라인 — 질문·답변 가명처리", "anon() 경유 확인(원문 미전송)", "");
   }
 
   // 티어 허용목록은 api/judge.js 에 있다 — 위 rules 루프는 App.jsx 만 보므로 여기서 따로 검사한다
@@ -462,13 +467,41 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
     const payWired = /toss|portone|iamport|stripe|paypal/i.test(pkg);
     const api = readFileSync("api/judge.js", "utf8");
     const verified = /tier[\s\S]{0,400}(영수증|receipt|verify|검증)/.test(api) && !/클라이언트 말을 그대로 믿는다/.test(api);
-    if (payWired && !verified) {
-      add("심각", "결제가 붙었는데 유료 티어를 클라이언트 말만 믿음", "api/judge.js 의 tier 가 서버 검증 없이 통과됨",
-        "결제 영수증·토큰으로 tier='paid' 를 서버에서 검증하세요. 지금 상태면 누구나 유료 모델을 무료로 씁니다.");
+    /* C-3-② — 재발행이 지불 여부를 안 본다. 본문이 있으면 캐시를 여니 지금은 무해하지만,
+       재료(lmat)만 있고 본문이 없는 기록은 tier="paid" 로 다시 돌린다 → 결제일에 무료 재생성 경로가 된다. */
+    const reissuePaid = /reissueLetter[\s\S]{0,900}rec\.paid/.test(src);
+    /* C-4 — Permissions-Policy 가 payment 을 막고 있다. 지금은 무해하고 옳지만,
+       PG(Payment Request·애플페이 계열)를 붙이는 날 "원인 못 찾는 실패"로 나타난다. */
+    let payBlocked = false;
+    try { payBlocked = /Permissions-Policy[\s\S]{0,300}payment=\(\)/.test(readFileSync("vercel.json", "utf8")); } catch (_) {}
+    const gaps = [];
+    if (!verified) gaps.push("api/judge.js 의 tier 가 서버 검증 없이 통과됨");
+    if (!reissuePaid) gaps.push("reissueLetter 가 rec.paid 를 안 봄(무료 재생성 경로)");
+    if (payBlocked) gaps.push("vercel.json 의 Permissions-Policy 가 payment=() 로 결제 API를 차단 중");
+    if (payWired && gaps.length) {
+      add("심각", "결제가 붙었는데 결제 전 전제가 그대로 남음", gaps.join(" · "),
+        "①결제 영수증·토큰으로 tier='paid' 를 서버에서 검증 ②서신 재발행 전에 rec.paid 확인 ③Permissions-Policy 의 payment 를 self 로 여세요. 지금 상태면 누구나 유료 모델을 무료로 씁니다.");
     } else if (payWired) {
-      add("정상", "유료 티어 서버 검증", "결제 연동 + tier 검증 있음", "");
+      add("정상", "유료 티어 서버 검증", "결제 연동 + tier 검증 + 재발행 지불 확인 + payment 정책 열림", "");
     } else {
-      add("정상", "유료 티어(대기)", "결제 미연동 — tier 는 아직 클라이언트 신뢰로 충분. 결제 붙는 날 이 검사가 깨어남", "");
+      add("정상", "유료 티어(대기)",
+        `결제 미연동 — tier·재발행·payment 정책 모두 지금은 무해. 결제 붙는 날 이 검사가 셋을 한꺼번에 깨움(대기 중 ${gaps.length}건)`, "");
+    }
+    /* C-1 — 결제가 없는 동안 **판매처럼 보이는 표시**가 있으면 안 된다.
+       v122 는 청약철회 배제 고지("열람 후에는 환불되지 않아요")를 존재하지 않는 거래에 걸어 두었다.
+       뒤집어서, 결제가 붙으면 그 고지가 **반드시 있어야** 한다(전상법 제17조⑥). 양쪽을 다 본다. */
+    /* ⚠ 주석은 걷어내고 본다. 이 규칙의 **왜**를 코드 옆에 적어 두는 순간 그 주석이 스스로를 잡는다(실측). */
+    const view = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+    const refundNote = /환불되지 않아|청약\s*철회/.test(view);
+    const trialBadge = /시험 발행/.test(view);
+    if (!payWired && refundNote) {
+      add("심각", "결제가 없는데 청약철회 배제 고지가 붙어 있음", "존재하지 않는 거래의 환불 조건을 먼저 못 박은 상태",
+        "결제를 붙이기 전까지는 「시험 발행 · 값을 받지 않아」로 표시하세요. 지금 문구는 실제 판매로 읽힙니다.");
+    } else if (payWired && !refundNote) {
+      add("심각", "결제가 붙었는데 청약철회 배제 고지가 없음", "전자상거래법 제17조⑥ — 미리보기와 함께 알아보기 쉬운 곳에 둬야 함",
+        "서신 구매 화면에 '열람 후 환불 불가' 고지를 미리보기 옆에 되살리세요.");
+    } else if (!payWired) {
+      add("정상", "결제 전 표시(대기)", `시험 발행 배지 ${trialBadge ? "있음" : "없음"} · 청약철회 배제 고지 없음(옳음)`, "");
     }
   } catch (_) { /* 구조가 바뀌면 조용히 넘어간다 */ }
 }
@@ -752,6 +785,39 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
     bad.length ? "저장 키가 규칙 밖으로 샘 — 리셋에도 안 지워짐" : "저장 키 규칙 — 전부 binari. 접두 · 리셋이 전량 스윕",
     bad.length ? bad.join(" · ") : "밑줄 저장 키 0 · clearMemory 전량스윕(팀 플래그 보존) · 구키 마이그레이션 · 처리방침 제3자 항목",
     "저장 키는 전부 `binari.` 로 시작해야 리셋·내보내기 스윕에 걸립니다. 밑줄로 만들면 \"처음부터 다시\"를 눌러도 남아서 다음 사람에게 넘어갑니다 — 궁합의 상대방 생년월일은 제3자 정보라 특히 무겁습니다.");
+}
+
+/* ── 검사 5-k. 진입 모션이 다시 한꺼번에 터지지 않는가 (v128) ────────────
+   창업자 지적: "그래프, 표가 나타나는 모션이 주기가 너무 짧아서 발작 일으키는 것처럼 느껴져."
+   원인은 속도가 아니라 **동시성**이었다 — 문서를 여는 순간 마흔 개 블록이 같은 애니메이션을 같이 시작했다.
+   다음 판에서 절 하나를 더 붙이면서 `.imp .impXXX{animation:…}` 를 그대로 따라 쓰면 증상이 그대로 돌아온다.
+   그래서 **모양이 아니라 규칙을 못 박는다**: 진입 애니메이션은 뷰포트 표식(.rvin)을 거쳐야 하고,
+   각인 문서 안에 무한 반복은 없어야 한다.
+   ⚠ 초기 숨김(.rv)은 **JS 가 붙인다.** CSS 로 숨기면 스크립트가 죽는 순간 값을 치른 문서가 백지가 된다. */
+{
+  const app = readFileSync(APP, "utf8");
+  const bad = [];
+  const css = (app.match(/@keyframes impRise[\s\S]{0,3200}?prefers-reduced-motion[\s\S]{0,400}?\n\}/) || [""])[0];
+  if (!css) bad.push("각인 모션 블록을 못 찾음");
+  else {
+    /* 뷰포트 표식을 안 거치고 바로 도는 진입 애니메이션이 있는가 */
+    for (const m of css.matchAll(/^([^\n{]*)\{[^}]*animation:\s*imp(Rise|Wipe|Grow|Draw|Fill|Pulse)[^}]*\}/gm)) {
+      const sel = m[1].trim();
+      if (!/\.rvin\b/.test(sel)) bad.push(`뷰포트 표식 없이 도는 진입 모션 — ${sel.slice(0, 46)}`);
+    }
+    if (/animation:[^;}]*\binfinite\b/.test(css)) bad.push("각인에 무한 반복 모션이 있음");
+    if (!/\.imp \.rvin\b/.test(css)) bad.push("진입 표식(.rvin) 규칙이 없음");
+    if (/^\s*\.imp \.rv\s*\{[^}]*\}/m.test(css) === false) bad.push("초기 숨김(.rv) 규칙이 없음");
+    if (!/prefers-reduced-motion/.test(css)) bad.push("움직임 줄이기 대응 없음");
+  }
+  /* .rv 는 JS 가 붙여야 한다 — CSS 만으로 숨기면 스크립트가 죽을 때 문서가 사라진다 */
+  if (!/classList\.add\("rv"\)/.test(app)) bad.push("초기 숨김을 JS 가 안 붙임(스크립트 죽으면 백지)");
+  if (!/IntersectionObserver/.test(app)) bad.push("뷰포트 관찰자 없음");
+
+  add(bad.length ? "주의" : "정상",
+    bad.length ? "각인 진입 모션이 한꺼번에 터질 수 있음" : "각인 진입 모션 — 화면에 들어온 것만 · 무한 반복 없음",
+    bad.length ? bad.join(" · ") : "모든 진입 모션이 .rvin 을 거침 · infinite 0 · 초기 숨김은 JS · 움직임 줄이기 대응",
+    "리포트 모션은 **화면에 들어온 블록만** 움직여야 합니다. `.imp .impXXX{animation:…}` 처럼 표식 없이 걸면 문서를 여는 순간 수십 개가 동시에 떨립니다.");
 }
 
 /* ── 검사 6. 의존성 취약점 (npm audit) ───────────────────────────────────

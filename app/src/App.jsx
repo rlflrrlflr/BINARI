@@ -154,12 +154,23 @@ async function _initAnalytics() {
    그게 없으면 하루 종일 탭을 열어둔 사람은 재방문이 영영 안 잡힌다. */
 const VISIT_KEY = "binari.lastvisit.v1";
 const VISIT_GAP_MS = 30 * 60 * 1000;
+/* v127.5 광고 유입 진입면 — 본편(…불렀어?)은 그대로 두고, **광고로 들어온 방문에만** 한 줄을 얹는다.
+   왜: 첫 화면 문구가 '…불렀어?' / '조각을 모으러 갈래' 둘뿐이라 3초 안에 "여기가 뭐 하는 곳인가"가 안 읽힌다
+       (팀 피드백 트리아지 §3-3 채택). 몰입 설계는 직접 들어온 사람에게 맞는 것이고,
+       광고 클릭은 맥락 없이 떨어지는 유입이라 같은 화면으로는 감당이 안 된다.
+   이번 방문의 URL 만 본다 — 저장된 first-touch 로 판단하면 재방문자에게도 광고 문구가 계속 뜬다. */
+function isAdEntry() {
+  try {
+    const sp = new URLSearchParams(window.location.search);
+    return !!(sp.get("utm_source") || sp.get("utm_medium") || sp.get("utm_campaign") || sp.get("fbclid") || sp.get("gclid") || sp.get("ad"));
+  } catch (_) { return false; }
+}
 function trackVisit(props) {
   let last = 0;
   try { last = +(window.localStorage.getItem(VISIT_KEY) || 0) || 0; } catch (_) {}
   if (Date.now() - last < VISIT_GAP_MS) return false;
   try { window.localStorage.setItem(VISIT_KEY, String(Date.now())); } catch (_) {}
-  track("app_open", props);
+  track("app_open", { ...props, landing: (typeof window !== "undefined" && isAdEntry()) ? "ad" : "direct" });   // v127.5: 진입면 구분 — 소재별 성과와 붙이려면 이 값이 있어야 한다
   return true;
 }
 /* 방문당 1회로 묶는 계측. '이번 방문에 일어났는가'만 남기고 횟수는 속성으로 따로 싣는다.
@@ -829,6 +840,54 @@ function wrap2(t, max = 9) {
   return b ? [a, b] : [a];
 }
 
+/* ── 진입 모션 (v128) ──────────────────────────────────────────────────────
+   창업자 지적: "그래프, 표가 나타나는 모션이 주기가 너무 짧아서 발작 일으키는 것처럼 느껴져."
+   원인은 속도가 아니라 **동시성**이었다. 40여 개 블록이 페이지 로드 한 번에 0.5초짜리
+   같은 애니메이션을 동시에 시작하니 화면 전체가 한꺼번에 떨렸다.
+
+   고치는 방식 셋:
+   ① **뷰포트에 들어온 것만** 움직인다 — 한 번에 움직이는 건 화면에 담기는 몇 개뿐이다.
+   ② 같은 프레임에 여러 개가 들어오면 **80ms씩 어긋내** 계단으로 만든다(최대 여섯 칸).
+   ③ **무한 반복을 없앤다** — 계속 뛰는 점 하나가 문서 전체를 불안하게 만든다.
+
+   ⚠ **숨기는 초기 상태(.rv)를 CSS가 아니라 이 훅이 붙인다.** 스크립트가 죽으면
+   문서는 그냥 다 보인다 — 값을 치른 문서에서 "안 보임"은 최악의 실패다.
+   ⚠ 되감기(이탈 시 .rvin 제거)는 **완전히 화면 밖으로 나갔을 때만** 한다.
+   경계에서 떨면 그게 바로 창업자가 지적한 그 증상이 된다. */
+const REVEAL_SEL = ".impsvg,.impdom,.impsky,.impclash,.impband,.impck,.imptrig,.impch,.improws,.impmrows,.impyrs,.impcore";
+/* ⚠ **ref 를 새로 만들지 않고 받는다.** 각인·궁합 루트에는 이미 `useDocRead` 의 readRef 가 붙어 있고
+   한 요소에 ref 는 하나뿐이다. 두 훅이 각자 ref 를 들면 나중에 붙는 쪽이 앞의 것을 조용히 덮는다 —
+   그러면 읽기 계측이나 모션 둘 중 하나가 소리 없이 죽는다. */
+function useReveal(ref) {
+  useEffect(() => {
+    const root = ref.current;
+    if (!root || typeof IntersectionObserver === "undefined") return;
+    const seen = new WeakSet();
+    const io = new IntersectionObserver((ents) => {
+      const inn = ents.filter((e) => e.intersectionRatio >= 0.12)
+        .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+      inn.forEach((e, i) => {
+        e.target.style.setProperty("--d", `${Math.min(i, 6) * 80}ms`);
+        e.target.classList.add("rvin");
+      });
+      /* 되감기는 ratio 0 — 15%에서 켜고 0에서만 끄니 경계에 히스테리시스가 생긴다 */
+      for (const e of ents) if (e.intersectionRatio === 0) e.target.classList.remove("rvin");
+    }, { threshold: [0, 0.12], rootMargin: "0px 0px -6% 0px" });
+    const scan = () => {
+      for (const el of root.querySelectorAll(REVEAL_SEL)) {
+        if (seen.has(el)) continue;
+        seen.add(el); el.classList.add("rv"); io.observe(el);
+      }
+    };
+    scan();
+    /* 근거 펼치기·선택 입력 닫기처럼 **나중에 생기는 블록**도 같은 규칙을 받는다 */
+    const mo = new MutationObserver(scan);
+    mo.observe(root, { childList: true, subtree: true });
+    return () => { io.disconnect(); mo.disconnect(); };
+  }, []);
+  return ref;
+}
+
 function ImprintDoc({ saju, birth, sex, onClose }) {
   const [notesOn, setNotesOn] = useState(false);
   /* v115 선택 입력 — **각인을 열 때만** 묻는다. 무료 온보딩은 건드리지 않는다.
@@ -861,12 +920,14 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
   }, [failed]);
   /* 스크롤·체류를 붙일 자리. 실패 화면에도 붙여야 "열자마자 깨져서 3초 만에 나갔다"가 남는다 */
   const readRef = useDocRead("imprint_read", { failed });
+  useReveal(readRef);            // v128 진입 모션 — 같은 ref 를 공유한다(위 ⚠ 참고)
   if (!r) return (<div className="imp" ref={readRef}><p className="impmsg">각인을 읽지 못했어. 생년월일을 다시 확인해 줄래?</p>
     <button className="btn ghost mt" onClick={onClose}>닫을게</button></div>);
   const Ref = ({ n }) => (notesOn && n ? <sup className="impfx">{n}</sup> : null);
   const H = ({ t }) => <span dangerouslySetInnerHTML={{ __html: t }} />;
+  /* --i = 표 안에서의 줄 번호. 줄마다 차례로 채워지게 하는 데만 쓴다(v128) */
   const Row = ([k, v, n], i) => (
-    <div className="impr" key={i}><div className="impk">{k}</div>
+    <div className="impr" key={i} style={{ "--i": i }}><div className="impk">{k}</div>
       <div className="impv"><H t={v} /><Ref n={n} /></div></div>
   );
   /* ── 그래프 — 숫자가 눈에 보여야 문서가 값을 갖는다 ── */
@@ -881,7 +942,8 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
           const f = F[b.ss] ?? 0, h = 8 + Math.abs(f) * 13, y = f >= 0 ? 58 - h : 58;
           const on = r.cur && b.from === r.cur.from;
           return <g key={i}>
-            <rect x={10 + i * bw + 2} y={y} width={bw - 4} height={h} rx="2"
+            <rect x={10 + i * bw + 2} y={y} width={bw - 4} height={h} rx="2" className="bargrow"
+              style={{ "--i": i, transformOrigin: f >= 0 ? "center bottom" : "center top" }}
               fill={f >= 2 ? "#5b8fd4" : f === 1 ? "#4a6f9e" : f === 0 ? "#6f6580" : f === -1 ? "#a8674f" : "#a83229"} opacity={on ? 1 : 0.75} />
             <text x={10 + i * bw + bw / 2} y={96} fontSize="7.5" fill={on ? "#f5d98b" : "#8a7f95"} textAnchor="middle">{b.from}</text>
           </g>;
@@ -900,7 +962,9 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
         {[...Array(12)].map((_, i) => {
           const m = i + 1, f = (ms.find((x) => x[0] === m) || [0, 0])[1], h = 6 + Math.abs(f) * 26;
           return <g key={m}>
-            <rect x={10 + i * bw + 2} y={f >= 0 ? 50 - h : 50} width={bw - 4} height={h} rx="2" fill={f > 0 ? "#5b8fd4" : f < 0 ? "#a83229" : "#6f6580"} opacity="0.85" />
+            <rect x={10 + i * bw + 2} y={f >= 0 ? 50 - h : 50} width={bw - 4} height={h} rx="2" className="bargrow"
+              style={{ "--i": i, transformOrigin: f >= 0 ? "center bottom" : "center top" }}
+              fill={f > 0 ? "#5b8fd4" : f < 0 ? "#a83229" : "#6f6580"} opacity="0.85" />
             <text x={10 + i * bw + bw / 2} y={70} fontSize="7.5" fill="#8a7f95" textAnchor="middle">{m}</text>
           </g>;
         })}
@@ -1029,7 +1093,8 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
         {ys.map((y, i) => {
           const h = 6 + Math.abs(y.f) * 16;
           return <g key={i}>
-            <rect x={10 + i * bw + 3} y={y.f >= 0 ? 44 - h : 44} width={bw - 6} height={h} rx="2"
+            <rect x={10 + i * bw + 3} y={y.f >= 0 ? 44 - h : 44} width={bw - 6} height={h} rx="2" className="bargrow"
+              style={{ "--i": i, transformOrigin: y.f >= 0 ? "center bottom" : "center top" }}
               fill={y.f > 0 ? "#5b8fd4" : y.f < 0 ? "#a83229" : "#6f6580"} opacity={i === 0 ? 1 : 0.82} />
             <text x={10 + i * bw + bw / 2} y={66} fontSize="8" fill={i === 0 ? "#f5d98b" : "#8a7f95"} textAnchor="middle">{y.year}</text>
           </g>;
@@ -1150,7 +1215,7 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
       ))}
 
       <p className="imph">생김새 <i>거울 앞에서 바로 확인돼</i></p>
-      {r.body.map(Row)}
+      <div className="improws">{r.body.map(Row)}</div>
 
       <p className="imph">언제 네가 너 같지 않은가</p>
       <p className="impp">사람은 늘 같지 않아. <b>차분한 사람도 무너질 때가 있고, 순한 사람도 사나워질 때가 있어.</b> 네 곁에 있을 사람들이 알아야 할 건 네가 어떤 사람인지가 아니라 <b>언제 네가 달라지는지</b>야.</p>
@@ -1173,7 +1238,7 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
               {r.money.trough ? <> 가장 얇은 때는 <b>{r.money.trough.from}~{r.money.trough.to}세</b>야.</> : null}
               <Ref n={r.money.n} /></p>
             <div className="impmrows">{r.money.path.filter((x) => !x.young).map((x, i) => (
-              <div className={"impmrow" + (x.now ? " on" : "")} key={i}>
+              <div className={"impmrow" + (x.now ? " on" : "")} key={i} style={{ "--i": i }}>
                 <b>{x.from}~{x.to}</b><span>{x.how}</span></div>))}</div></>}
         </div>
       ))}
@@ -1182,12 +1247,12 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
         <p className="imph">직장생활 <i>어떤 일이 맞나가 아니라, 조직에서 어떻게 굴러가나</i></p>
         <p className="impp">맞는 직업을 골라도 <b>조직에서 못 버티는 사람</b>이 있어. 축이 다르거든.
           여긴 <b>네가 어떻게 일하고, 누구랑 맞고, 어디까지 가고, 언제 움직이나</b>를 봐.</p>
-        {r.work.rows.map(Row)}
+        <div className="improws">{r.work.rows.map(Row)}</div>
         <p className="imph2">언제 움직이나 <i>여섯 해</i></p>
         <YearBar />
         <div className="impyrs">
           {r.work.years.map((y, i) => (
-            <div className={"impyr" + (y.f > 0 ? " up" : y.f < 0 ? " dn" : "")} key={i}>
+            <div className={"impyr" + (y.f > 0 ? " up" : y.f < 0 ? " dn" : "")} key={i} style={{ "--i": i }}>
               <b>{y.year}</b><span>{y.w}</span></div>
           ))}
         </div>
@@ -1204,7 +1269,7 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
       {r.mate && <>
         <p className="imph">{r.mateMode === "wed" ? "짝 — 이미 곁에 있는 사람" : "짝 — 누구를 만나나"}
           {r.mateMode === "wed" ? <i>생김새는 네가 더 잘 알아</i> : null}</p>
-        {r.mate.map(Row)}
+        <div className="improws">{r.mate.map(Row)}</div>
       </>}
       {!r.mate && <p className="impmsg">짝 자리는 <b>성별이 있어야</b> 어느 글자가 그 인연인지 갈려 — 프로필에 더하면 열려.</p>}
 
@@ -1258,6 +1323,18 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
    각인의 최대 약점(평생 1회)을 메운다: 궁합은 **사람 수만큼 다시 산다.**
    상대 생년월일만 받는다. 이름·연락처는 안 받는다 — 남의 개인정보를 우리가 들고 있을 이유가 없다. */
 const MATCH_PRICE = 4900;
+
+/* D-3: 각인·궁합의 **분모**. 서신은 `verdict_shown` 이 노출이라 클릭률이 계산됐는데
+   로비의 두 상품은 대응 이벤트가 없어 분자만 쌓이고 있었다.
+   방문당 1회로 묶는다 — 로비를 오갈 때마다 세면 노출이 부풀어 클릭률이 실제보다 낮게 나온다. */
+function OfferShown({ records }) {
+  useEffect(() => {
+    trackVisitOnce("imprint_offer_shown", { price: IMPRINT_PRICE, nth_verdict: records.length });
+    trackVisitOnce("match_offer_shown", { price: MATCH_PRICE, nth_verdict: records.length });
+  }, []);
+  return null;
+}
+
 function MatchDoc({ saju, birth, onClose }) {
   const [notesOn, setNotesOn] = useState(false);
   const [f, setF] = useState(() => { try { return JSON.parse(localStorage.getItem(MATCH_LAST_KEY) || "{}"); } catch { return {}; } });
@@ -1282,6 +1359,7 @@ function MatchDoc({ saju, birth, onClose }) {
   const mfailed = done && !r;
   useEffect(() => { if (mfailed) track("match_failed", { has_hour: f.h != null, has_sex: !!f.sex }); }, [mfailed]);
   const readRef = useDocRead("match_read", { done });
+  useReveal(readRef);            // v128 진입 모션 — 같은 ref 를 공유한다
   const Ref = ({ n }) => (notesOn && n ? <sup className="impfx">{n}</sup> : null);
   const H = ({ t }) => <span dangerouslySetInnerHTML={{ __html: t }} />;
 
@@ -1326,7 +1404,7 @@ function MatchDoc({ saju, birth, onClose }) {
         return <g key={i}>
           <text x="96" y={y + 8} fontSize="9" fill="#8a7f95" textAnchor="end">{x.label}</text>
           <rect x="102" y={y} width="168" height="10" rx="2" fill="#6f658022" />
-          <rect x="102" y={y} width={Math.max(w, 1.5)} height="10" rx="2"
+          <rect x="102" y={y} width={Math.max(w, 1.5)} height="10" rx="2" className="akfill" style={{ "--i": i }}
             fill={x.ratio >= 0.8 ? "#5b8fd4" : x.ratio <= 0.34 ? "#a83229" : "#6f6580"} />
           <text x="276" y={y + 8} fontSize="8" fill="#6f6580">{x.sc}/{x.max}</text>
         </g>;
@@ -1356,7 +1434,7 @@ function MatchDoc({ saju, birth, onClose }) {
       <AkBar />
       <div className="impmrows">
         {r.akRows.map((x, i) => (
-          <div className={"impmrow" + (x.ratio <= 0.34 ? " dn" : x.ratio >= 0.8 ? " on" : "")} key={i}>
+          <div className={"impmrow" + (x.ratio <= 0.34 ? " dn" : x.ratio >= 0.8 ? " on" : "")} key={i} style={{ "--i": i }}>
             <b>{x.label}</b><span><H t={x.w} /></span></div>
         ))}
       </div>
@@ -2671,7 +2749,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v128 · 덜어냄";
+const APP_VER = "v128.1 · 덜어냄";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -3315,8 +3393,11 @@ function loadMemory() {
     const m = JSON.parse(raw);
     /* 필수 조각은 **지금도 반드시 받는 것**만 넣는다. 안 묻게 된 값을 여기 남겨두면
        새 유저는 저장해도 매번 로드에서 튕겨 기억이 통째로 날아가고, 기존 유저는 다음 저장 때
-       그 값이 빠지면서 리셋된다. v114에서 mbti 를 뺐고, v128에서 core(가치)를 뺐다.
-       이 줄과 아래 saveMemory 조건은 **항상 같이** 고쳐야 한다 — 한쪽만 고치면 조용히 리셋된다. */
+       그 값이 빠지면서 리셋된다. v114에서 mbti 를, v128에서 core(가치)를 뺐다.
+       이 줄과 아래 saveMemory 조건은 **항상 같이** 고쳐야 한다 — 한쪽만 고치면 조용히 리셋된다.
+       (v128 D-1 병행 발견: mbti 는 계측 속성으로도 계속 나가고 있었다. 새 유저는 영구히 null 인데
+        처리방침은 그걸 "수집 항목"으로 적어, 화면·코드·문서 셋이 서로 다른 말을 했다.
+        남은 쓰임은 수호신 얼굴 시드 하나뿐이고 그건 기기 밖으로 안 나간다 → tex 로 이관.) */
     if (!(m && m.saju)) return null;   // 필수 조각 검증 — 손상 시 새 출발
     // v51: 주기운 기준을 '최다 오행'→'일간(나)'으로 교정 — 저장된 dayGan으로 소급 보정(멱등)
     if (m.saju.dayGan) { const _di = GAN.indexOf(m.saju.dayGan); if (_di >= 0) m.saju.main = GAN_EL[_di]; }
@@ -3513,7 +3594,9 @@ function demoProps(birth, extra) {
      · 근거가 없으면 평가(딱이야/빗나갔어)와 묶어 "어떤 근거가 잘 맞았나"를 낼 수 없다
    질문 원문은 여기에도 절대 넣지 않는다. 축 수·글자 수를 잘라 값이 무한정 커지지 않게 한다.
    축을 키로 쓰는 객체로 담는 이유: PostHog 에서 properties.votes.삼재 처럼 축 하나만 바로 물을 수 있다. */
-const AX_MAX = 12, TXT_MAX = 140;
+/* TXT_MAX: 축별 값의 상한. 찬반 표시(GO/STOP)일 땐 남아돌고, 판단근거 본문일 땐 잘리면 안 된다.
+   실측 근거 문장이 40~120자라 400 이면 통째로 들어간다(2026-08-15 본문 복원). */
+const AX_MAX = 12, TXT_MAX = 400;
 function axisMap(list, pick) {
   if (!Array.isArray(list)) return null;
   const o = {};
@@ -3529,6 +3612,9 @@ const voteMap = (votes) => axisMap(votes, (v) => v.v ?? v.vote);
 /* A-3: 근거 **전문**을 계측에 실으면 실명·질문 원문이 그대로 나간다.
    축 이름과 길이만 남긴다 — "어느 축이 얼마나 길게 나왔나"는 이걸로도 재진다. */
 const reasonMap = (reasons) => axisMap(reasons, (r) => String(r.text || "").length);
+/* 축별 판단근거 **본문**(가명본). 위 reasonMap 은 길이 지표라 그대로 두고 따로 싣는다 —
+   자리표([메일] 등)가 섞이면 가명본의 길이는 원문 길이가 아니게 되기 때문이다. */
+const reasonTextMap = (reasons, name) => axisMap(reasons, (r) => anon(r.text, name));
 
 const encodeShare = (o) => { try { return _b64e(JSON.stringify(o)); } catch (_) { return ""; } };
 /* ── A-2 (작업지시 2026-08-14) ────────────────────────────────────────────
@@ -3559,6 +3645,55 @@ const stripName = (t, name) => {
 };
 const decodeShare = (s) => { try { const o = JSON.parse(_b64d(s)); if (!o || !o.v || !o.d) return null; delete o.n; return o; } catch (_) { return null; } };
 
+/* ── 가명처리 — 자유 서술이 계측으로 나가기 전 통과하는 유일한 문 ──────────
+   창업자 지시(2026-08-15): "질문과 답변은 다 남기자. 다만 개인 식별 불가능하게 해"
+
+   ⚠ **한계를 먼저 적는다. 규칙으로 '완전 익명화'는 되지 않는다.**
+     지워지는 것 — 본인 이름 · 이메일 · 링크 · 전화 · 주민번호 · 카드/계좌 · SNS 계정 ·
+                  연월일 · 호칭이 붙은 남의 이름("민준씨" · "박부장")
+     안 지워지는 것 — **맥락으로 사람이 좁혀지는 서술**("3층 팀장이 어제 회식에서…").
+                    이건 어떤 정규식으로도 못 잡는다. 사람이 읽으면 특정될 수 있다.
+     그래서 이 산출물은 익명정보가 아니라 **가명정보**다(개인정보보호법 §28-2).
+     통계 목적 한정 · 접근 통제 · 보관 기간이 함께 서야만 성립한다 — 처리방침 1·2·4조와 한 몸이다.
+
+   ⚠ 지우고 비우지 않고 **무엇을 지웠는지 자리표를 남긴다**([메일]·[전화]…).
+     통째로 지우면 나중에 "이 판결이 왜 이상한가"를 읽을 수 없게 된다.
+   ⚠ 상한을 둔다. 서술이 길수록 특정 위험이 올라가고, 길이는 어차피 별도로 재고 있다. */
+const ANON_MAX = 600;
+/* 뒤에 씨/님이 붙어도 사람 이름이 아닌 말. 이게 없으면 "선생님"이 "○○님"이 된다.
+   완전한 목록일 수 없다 — 빠진 게 나오면 여기 추가한다(검사: e2e/privacy-check.mjs). */
+const NOT_NAME = new Set(["선생", "사장", "고객", "회원", "어머", "아버", "부모", "누나", "오빠", "언니",
+  "동생", "엄마", "아빠", "할머", "할아", "사모", "기사", "손님", "여러", "아기", "애기", "대표", "작가",
+  "기자", "목사", "원장", "실장", "국장", "팀장", "부장", "과장", "차장", "대리", "이사", "교수", "박사",
+  "변호", "의사", "간호", "스승", "제자", "남편", "아내", "자기", "그대", "당신", "여기", "저기", "이분",
+  "그분", "저분", "우리", "저희", "모두", "다들", "새댁", "아드", "따님", "형님", "누님",
+  "아가", "총각", "아저", "아줌", "언니", "이모", "고모", "삼촌", "며느", "사위", "장모", "장인"]);
+function anon(t, name) {
+  let s = stripName(String(t == null ? "" : t), name);
+  if (!s) return "";
+  s = s
+    .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, "[메일]")
+    .replace(/(?:https?:\/\/|www\.)\S+/gi, "[링크]")
+    .replace(/\d{6}\s*[-–]\s*[1-4]\d{6}/g, "[주민번호]")
+    .replace(/\d{4}[-\s]\d{4}[-\s]\d{4}[-\s]\d{4}/g, "[카드]")
+    .replace(/0\d{1,2}[-.)\s]?\s?\d{3,4}[-.\s]?\d{4}(?!\d)/g, "[전화]")   // "02)555-1234" 처럼 괄호로 닫는 표기도 실제로 들어온다
+    .replace(/\d{2,6}-\d{2,6}-\d{2,8}/g, "[계좌]")
+    .replace(/(^|[\s([])@[A-Za-z0-9._]{2,}/g, "$1[계정]")
+    .replace(/(19|20)\d{2}\s*[.\-/년]\s*\d{1,2}\s*[.\-/월]\s*\d{1,2}\s*일?/g, "[날짜]")
+    /* 성 + 직함 — **직함은 남기고 성만 지운다.** 직함이 사라지면 문장 뜻이 무너진다("부장이 뭐래").
+       성과 직함이 붙어 쓰인 경우만 잡는다("박부장"). "우리 팀장"처럼 띄면 안 잡히고, 그게 맞다 —
+       띄어쓰기를 허용하면 "우리 팀장"의 '리'를 성으로 오인해 "우리"가 깨진다. */
+    .replace(/(^|[\s"'“([])([가-힣])(부장|차장|과장|팀장|대리|사원|이사|본부장|실장|점장|원장|교수|박사|변호사|쌤|선배|후배)(님)?/g,
+             (m, pre, _sn, title, h) => pre + "○" + title + (h || ""))
+    /* 이름 + 씨/님/양/군 — 일반명사는 위 목록으로 뺀다.
+       뒤 조사까지 허용해야 한다("민준씨가", "민준님한테"). 조사 없이 딱 끊길 때만 잡으면
+       실제 문장의 대부분을 놓친다 — 한국어에서 이름 뒤엔 거의 항상 조사가 붙는다. */
+    .replace(/(^|[\s"'“([])([가-힣]{2,3})(씨|님|양|군)(?=[가-힣]{0,4}(?:[\s,.…!?"'”」)\]]|$))/g,
+             (m, pre, w, h) => (NOT_NAME.has(w) || NOT_NAME.has(w.slice(-2)) ? m : pre + "○○" + h));
+  if (s.length > ANON_MAX) s = s.slice(0, ANON_MAX) + "…";
+  return s.replace(/[ \t]{2,}/g, " ").trim();
+}
+
 /* ═══════════════ 앱 ═══════════════ */
 export default function App() {
   const [mem] = useState(loadMemory);             // v16(B1): 부팅 시 기억 1회 로드
@@ -3568,6 +3703,8 @@ export default function App() {
   if (birth.name === undefined) birth.name = ""; if (birth.sex === undefined) birth.sex = ""; if (birth.hanja === undefined) birth.hanja = ""; // v26·v105.5: 구버전 저장 호환
   const [bstep, setBstep] = useState(0);                      // v26: 동화 도입부 장면 인덱스
   const [hanjaOpen, setHanjaOpen] = useState(false);   // v105.5: 한자 이름 노크
+  const [adEntry] = useState(() => (typeof window === "undefined" ? false : isAdEntry()));   // v127.5: 광고 유입 진입면
+
   const [addOpen, setAddOpen] = useState(false); const [addName, setAddName] = useState(""); const [addSex, setAddSex] = useState(""); // v26: 조각 보태기
   const [qhintI, setQhintI] = useState(0);   // v71 질문 힌트 롤링 인덱스
   const [agree, setAgree] = useState(() => readConsent());     // 분석 동의(선택) — 거부해도 모든 기능 정상 동작
@@ -3721,14 +3858,18 @@ export default function App() {
       setDetail(r2);
       // L3(지표별 근거)는 제품의 핵심 차별점이다. 실패율과 소요시간을 모르면 개선 근거가 없다.
       track("detail_shown", { ms: Math.round(performance.now() - _t0), dir: r1?.direction || null, retry: !!isRetry, axes: Array.isArray(r2?.reasons) ? r2.reasons.length : 0,
-        /* A-3(작업지시 2026-08-14): 원문 대신 파생값만. 처리방침 §9 가 "분석 도구에는 질문 원문·이름·
-           생년월일 원값을 전송하지 않는다"고 적어 두었는데 뒷면 원문이 그대로 나가고 있었다.
-           ⚠ 뒷면이 더 위험했다 — 콜2 에 이름 금지 지시가 붙는 조건이 "앞면에서 이미 이름을 부른 경우"뿐이라,
-              **앞면이 이름을 안 부른 경우에만 뒷면이 이름을 부르는** 구조였다. 그 문자열이 그대로 갔다.
-           톤 개선 측정은 길이·존재 여부로도 된다. 원문이 필요하면 평가 하네스(eval/)로 재는 게 맞다. */
+        /* 2026-08-15 재판정(창업자): "질문과 답변은 다 남기자. 다만 개인 식별 불가능하게 해"
+           → 08-14 에 길이만 남기도록 잘라냈던 것을 **가명본으로 되돌린다.**
+           08-14 의 우려는 사실이었다 — 콜2 에 이름 금지 지시가 붙는 조건이 "앞면에서 이미 이름을 부른
+           경우"뿐이라, **앞면이 이름을 안 부른 경우에만 뒷면이 이름을 부르는** 구조다. 그래서 뒷면은
+           특히 anon() 을 반드시 통과시킨다(stripName 이 그 안에 들어 있다). 길이는 길이대로 남긴다 —
+           자리표가 섞이면 가명본의 길이는 원문 길이가 아니게 되기 때문이다. */
         sublen: (r2?.subline || "").length || 0,
         funlen: (r2?.funLine || "").length || 0,
-        reasons: reasonMap(r2?.reasons),     // A-3: 축별 **길이**만(전문 금지)
+        sub_anon: anon(r2?.subline, birth.name),      // 정령 멘트
+        fun_anon: anon(r2?.funLine, birth.name),      // 곁들이는 한 줄
+        reasons_len: reasonMap(r2?.reasons),          // 축별 길이(기존 지표 유지)
+        reasons: reasonTextMap(r2?.reasons, birth.name),   // 축별 판단근거 본문(가명본)
         disclaimer: r2?.disclaimer || null,
         tok_in: _u2 ? _u2.in : null, tok_out: _u2 ? _u2.out : null });
     } catch (e) {
@@ -3880,7 +4021,15 @@ export default function App() {
       // 판결 기록에 붙여 둔다 — 홈 서신함에서 언제든 다시 열 수 있고, 새로고침에도 살아남는다
       setRecords((prev) => { if (!prev.length) return prev; const nx = prev.slice(); nx[nx.length - 1] = { ...nx[nx.length - 1], letter: doc }; return nx; });
       track("letter_written", { ..._base(), ms: Math.round(performance.now() - t0), chapters: doc.chapters.length, chars: doc.chapters.reduce((a, c) => a + c.body.length, 0),
-        price: LETTER_PRICE, tok_in: doc.tok ? doc.tok.in : null, tok_out: doc.tok ? doc.tok.out : null });   // 4,900원짜리 한 통의 원가
+        price: LETTER_PRICE, tok_in: doc.tok ? doc.tok.in : null, tok_out: doc.tok ? doc.tok.out : null,   // 4,900원짜리 한 통의 원가
+        /* 서신도 '답변'이다(창업자 지시 2026-08-15). 장(章)마다 가명본으로 싣는다 —
+           통째로 한 문자열로 만들면 "어느 장이 약한가"를 못 가른다. 제목은 모델이 지은 것이라 그대로. */
+        letter: doc.chapters.slice(0, 8).reduce((o, c, i) => {
+          const k = String(c.t || `장${i + 1}`).trim().slice(0, 24);
+          const v = anon(c.body, birth.name);
+          if (v) o[k] = v;
+          return o;
+        }, {}) });
     } catch (e) {
       setLetterDoc({ _err: true });
       // shape: 응답이 오긴 왔는데 못 읽은 경우 '어떤 키로 왔나'를 남긴다(본문은 담지 않는다).
@@ -3981,7 +4130,10 @@ export default function App() {
     // 되물음은 '앞선 판결이 있을 때'만 성립한다 — 첫 질문의 "어떤 사람이 좋을까"는 되물음이 아니라 그냥 질문이다.
     const _reask = !!_prevRec && isReask(q);
     const _sHint = scopeHint(q);
-    track("question_asked", demoProps(birth, { mode: "ritual", qlen: q.trim().length, ritual: !!hi, lean: lean || "skip", hesit: hesit || null, element: saju?.main || null, zodiac: zo?.name || null, scope_hint: _sHint, reask: _reask, reask_depth: _reask ? records.filter(r => isReask(r.q)).length + 1 : 0, after_letter: letterSent }));   // v104 after_letter: 서신 대기 중에 한 번 더 물었는가
+    /* 창업자 지시(2026-08-15) "질문과 답변은 다 남기자. 다만 개인 식별 불가능하게 해"
+       → 원문이 아니라 anon() 을 통과한 가명본을 싣는다. 길이(qlen)는 그대로 둔다 —
+         가명본은 자리표 때문에 길이가 달라지므로 길이 지표를 여기서 재면 안 된다. */
+    track("question_asked", demoProps(birth, { mode: "ritual", qlen: q.trim().length, q_anon: anon(q, birth.name), ritual: !!hi, lean: lean || "skip", hesit: hesit || null, element: saju?.main || null, zodiac: zo?.name || null, scope_hint: _sHint, reask: _reask, reask_depth: _reask ? records.filter(r => isReask(r.q)).length + 1 : 0, after_letter: letterSent }));   // v104 after_letter: 서신 대기 중에 한 번 더 물었는가
     setBusy(true); setErr(""); setRes(null); setDetail(null); setWhy(false); setFlip(false); setCardOn(false); setRated(0); setLetter(false); setLetterIntent(false); setLetterStage(""); setLetterSent(false); setLetterDoc(null); setLetterOpen(false); setLetterRated(0); setBoxOpen(false); reactRef.current = null; setIntroSeen(true);
     try {
       // 주역 괘는 질문마다 달라지므로 유저 턴에
@@ -4018,6 +4170,8 @@ export default function App() {
         // 표가 없거나(votes_ok=false) 표와 결론이 어긋난(dir_overridden) 비율이 곧 '판결이 지표에서 나오는가'의 지표다
         votes_ok: !!_tally, votes_n: _tally ? _tally.total : 0, dir_overridden: _tally ? _tally.overridden : null,
         votes: voteMap(r1.votes),
+        // 판결문 본문(가명본). 이게 없으면 "어떤 문장이 '딱이야'를 받고 어떤 문장이 '빗나감'을 받았나"를 영영 못 맞춘다
+        v_anon: anon(r1.verdict, birth.name),
         tok_in: _u1 ? _u1.in : null, tok_out: _u1 ? _u1.out : null }));   // 원가 — 유료 상품의 마진을 재려면 필요하다      // 축별 찬반 — HOLD 편중의 원인을 여기서 짚는다
       reactRef.current = { dir: r1.direction, t0: performance.now() };   // v28: 수호신이 판결을 연기
       setTimeout(() => { agitateRef.current = false; }, 700);
@@ -4176,6 +4330,7 @@ export default function App() {
       {step === 0 && (
         <section className="scene fade">
           <div className="orb"><DustOrb size={170} stage={0} /></div>
+          {adEntry && <p className="adhook">망설이는 일에 <b>판결</b>을 내려주는 곳이야 — 가라 · 멈춰라 · 기다려라, 셋 중 하나로.</p>}
           <p className="line">…불렀어?</p>
           <p className="line d1">어른이 된다는 건, 나를 이루던 것들이 조금씩 흩어지는 일이야.</p>
           <p className="line d2">나는 그 흩어진 조각들이야. 네가 모아주면, 다시 너의 곁이 될 수 있어.</p>
@@ -4186,9 +4341,13 @@ export default function App() {
           <p className="ainote">수호신의 판결은 AI가 생성합니다 · 재미로 보는 참고예요</p>
           {/* 신뢰 라인(2026-08-02 경쟁분석 반영): 시장 전체가 '만세력 오류·GPT 복붙' 의혹으로 신뢰를 잃는 중이다.
               계산 검증과 프라이버시는 우리가 실제로 갖춘 것이라 그대로 쓴다 — 둘 다 검증된 사실만 적는다.
-              근거: e2e/mansae-test.mjs 28문항 전수 통과 / track() 은 질문 원문을 안 싣고 qlen(글자수)만 싣는다.
+              근거: e2e/mansae-test.mjs 28문항 전수 통과.
+              ⚠ 2026-08-15: "질문 원문은 통계에 기록하지 않아요"였다. 창업자 지시로 질문·답변 본문을
+                 가명처리해 기록하기 시작했으므로 **그 문장은 그날부로 거짓이 됐다.** 화면 문구를 사실에 맞춘다.
+                 앱이 화면에서 하는 약속과 코드가 하는 일이 어긋나는 건, 안 적는 것보다 나쁘다.
               문항 수가 바뀌면 이 문장도 바꿔야 한다 — 검진이 숫자 대조로 잡는다. */}
-          <p className="ainote">사주 계산(만세력)은 자동검증 28문항을 통과한 엔진이 해요 · 질문 원문은 통계에 기록하지 않아요</p>
+          <p className="ainote">사주 계산(만세력)은 자동검증 28문항을 통과한 엔진이 해요 ·
+            질문과 답변은 <b>이름·연락처를 지운 뒤</b> 품질 확인용으로만 기록해요 — 끄고 싶으면 아래에서 끌 수 있어요</p>
         </section>
       )}
 
@@ -4470,18 +4629,34 @@ export default function App() {
                       </button>
                     </div>
                   ))}
-                  <p className="fine">서신은 이 기기에 보관돼. 기기를 바꾸거나 지워졌다면 <b>번호를 대고 다시 받으면</b> 돼 — 값은 다시 안 받아.</p>
+                  {/* C-2(작업지시 2026-08-14): "번호를 대고 다시 받으면 돼"는 **이행할 수 없는 약속**이었다.
+                      letterNo 는 기록에서 계산해 낸 비가역 해시라 열쇠가 아니고, 계정도 서버 주문 기록도 없다.
+                      기기를 바꾸면 우리도 못 되살린다. 그러니 사실대로 적고, 실제로 듣는 대책을 준다. */}
+                  <p className="fine">서신은 <b>이 기기에만</b> 있어. 계정이 없어서 기기를 바꾸거나 브라우저 데이터를 지우면
+                    <b> 우리도 되살릴 수 없어</b> — 번호는 이 기기에서 계산한 표식이지 열쇠가 아니야.
+                    남기고 싶으면 서신을 열어 <b>「서신 간직하기 — 파일로」</b>를 눌러 둬.</p>
                 </div>
               )}
               {/* v113 각인 진입점 — 판결 흐름 밖이다. 서신은 질문 하나에 딸리고, 각인은 사람 자체에 딸린다.
-                  결제 전이라 지금은 무료로 열린다(실물이 나와야 값을 매길 수 있다). 연 시점만 계측한다. */}
+                  결제 전이라 지금은 무료로 열린다(실물이 나와야 값을 매길 수 있다).
+                  ── D-3 (작업지시 2026-08-14) ─────────────────────────────────────
+                  ROADMAP 은 `imprint_clicked` 와 `letter_clicked` 를 나란히 놓고 값을 정하겠다고 적었는데
+                  **두 클릭이 같은 종류가 아니었다.** 서신 버튼은 4,900원을 보여주고 누른 것이고,
+                  각인·궁합 버튼은 **가격이 안 보이는 채로** 누른 것이다 — 원 지시서 §5가 경고한 그대로
+                  "가격 없는 버튼을 누르는 건 호기심이지 돈 낼 의사가 아니다". 분모도 없었다:
+                  서신 노출은 `verdict_shown` 인데 각인·궁합은 로비에 그냥 있어서 대응 노출 이벤트가 없었다.
+                  그래서 둘을 맞춘다 — ①버튼에 값을 적고 ②노출을 방문당 1회 이벤트로 남긴다.
+                  이제 클릭률 = *_clicked / *_offer_shown 으로 세 상품을 같은 자로 잰다. */}
               {!ritual && !res && saju && (<>
+                <OfferShown records={records} />
                 <button className="btn ghost mt w100" onClick={() => { track("imprint_clicked", { price: IMPRINT_PRICE, nth_verdict: records.length }); setImprintOpen(true); }}>
-                  각인 — 네가 어떻게 만들어졌는지 <span className="impbadge">시험 발행</span>
+                  각인 — 네가 어떻게 만들어졌는지 · {IMPRINT_PRICE.toLocaleString()}원 <span className="impbadge">시험 발행</span>
                 </button>
                 <button className="btn ghost mt w100" onClick={() => { track("match_clicked", { price: MATCH_PRICE, nth_verdict: records.length }); setMatchOpen(true); }}>
-                  궁합 — 그 사람과 너 <span className="impbadge">시험 발행</span>
+                  궁합 — 그 사람과 너 · {MATCH_PRICE.toLocaleString()}원 <span className="impbadge">시험 발행</span>
                 </button>
+                <p className="fine">둘 다 <b>지금은 값을 안 받아.</b> 결제는 아직 연결돼 있지 않고, 적힌 값은
+                  <b> "이만하면 받겠어?"</b>를 묻는 표시야.</p>
               </>)}
               {!ritual && !res && records.length > 0 && (
                 <button className="resetlink" onClick={() => { setLogOpen(o => !o); setOpenRec(-1); }}>{logOpen ? "판결록 접기" : `판결록 — ${records.length}번의 판결`}</button>
@@ -4652,7 +4827,7 @@ export default function App() {
           {/* D4: 결제 fake-door — 지불 의사만 잰다. 결제 인프라는 만들지 않는다. */}
           {res && cardOn && letterOk && (
             !letter ? (
-              <button className="btn ghost mt" onClick={openLetter}>수호신의 서신 — 이 판결의 깊은 풀이 · {LETTER_PRICE.toLocaleString()}원</button>
+              <button className="btn ghost mt" onClick={openLetter}>수호신의 서신 — 이 판결의 깊은 풀이 · {LETTER_PRICE.toLocaleString()}원 <span className="impbadge">시험 발행</span></button>
             ) : letterIntent ? (
               <p className="ratedone">서신을 맡겼어 — 수호신이 쓰기 시작했어.</p>
             ) : (
@@ -4661,8 +4836,15 @@ export default function App() {
                 <ul className="letterlist">{LETTER_SECTIONS.map((t, i) => <li key={i}>{t}</li>)}</ul>
                 <p className="letterprev">{letterPreview(saju, hesit)}</p>
                 <p className="letterprevtag">— 여기까지가 미리보기야</p>
-                {/* 전상법 제17조⑥: 미리보기 제공 + 철회 배제 고지를 '알아보기 쉬운 곳'에 함께 둔다 */}
-                <p className="refundnote">서신은 열어보는 순간 전해지는 글이라, 열람 후에는 환불되지 않아요. 위 미리보기로 먼저 확인해 주세요.</p>
+                {/* ── C-1 (작업지시 2026-08-14) ────────────────────────────────
+                    v122까지 여기에 "열람 후에는 환불되지 않아요"가 적혀 있었다.
+                    **결제가 없는데 청약철회를 배제하는 고지**였다 — 존재하지 않는 거래의 조건을
+                    먼저 못 박은 셈이고, 유저 눈에는 실제 판매로 보인다. 각인·궁합은 「시험 발행」
+                    배지로 정직하게 표시했는데 서신만 안 했다.
+                    ⚠ **결제를 붙이는 날 원래 문구를 되살린다** — 전상법 제17조⑥은 미리보기와
+                    철회 배제 고지를 알아보기 쉬운 곳에 함께 두라고 한다. 지금은 그 대상이 없다. */}
+                <p className="refundnote"><b>지금은 시험 발행이라 값을 받지 않아.</b> 결제는 아직 연결돼 있지 않아 —
+                  위 가격은 <b>"이만한 값이면 받겠어?"</b>를 묻는 표시야. 미리보기로 먼저 확인하고 눌러 줘.</p>
                 <button className="btn gold mt" onClick={confirmLetterIntent}>받을게</button>
               </div>
             )
@@ -4739,7 +4921,9 @@ export default function App() {
             </div>
             {/* 유료 물건은 기기 하나에만 맡기지 않는다 — iOS 는 7일이면 저장소를 지울 수 있다 */}
             <button className="btn ghost mt" onClick={saveLetterFile}>서신 간직하기 — 파일로</button>
-            <p className="fine">서신함(홈)에서 언제든 다시 열려. 기기가 바뀌어도 번호 <b>{letterNo(records[letterIdx] || {})}</b>로 다시 받을 수 있어.</p>
+            {/* C-2: 같은 약속이 여기에도 있었다("기기가 바뀌어도 번호로 다시 받을 수 있어"). 사실이 아니다. */}
+            <p className="fine">서신함(홈)에서 언제든 다시 열려 — 다만 <b>이 기기 안에서만</b>이야.
+              기기를 바꾸거나 브라우저 데이터를 지우면 사라져. 남기려면 위의 <b>「파일로」</b>를 눌러 둬.</p>
             <p className="ainote">이 서신은 AI가 생성한 내용입니다 · 재미로 보는 참고용이야</p>
             <button className="btn ghost mt" onClick={() => setLetterOpen(false)}>접어둘게</button>
           </div>
@@ -4787,6 +4971,9 @@ const CSS = `
 .gsealinner{transform:scale(.58);transform-origin:center;opacity:.92}
 .gsealline{margin:10px 0 0;font-size:13.5px;color:#f0e2b8;letter-spacing:.04em}
 .gsealkind{margin:2px 0 0;font-family:sans-serif;font-size:10.5px;letter-spacing:.12em;color:#8a7f95;text-transform:none}
+/* v127.5 광고 유입 훅 — 세계관 문장 위에 한 줄. 본편 방문자에겐 렌더되지 않는다 */
+.adhook{font-size:15px;line-height:1.7;color:#ffe9ad;margin:0 0 14px;padding:10px 16px;border:1px solid rgba(245,217,139,.28);border-radius:14px;background:rgba(245,217,139,.06)}
+.adhook b{color:#fff3d4;font-weight:700}
 .confirmline{font-size:12.5px;color:#c9bb96;letter-spacing:.02em;margin:2px 0 0;padding:7px 14px;border:1px dashed rgba(245,217,139,.28);border-radius:10px;background:rgba(245,217,139,.045)}
 .in::placeholder{color:#4d445f}
 .in.sm{width:60px}.in.wide{width:100%;text-align:center;font-size:15px}
@@ -5074,23 +5261,48 @@ const CSS = `
 .impaskrow span{font-size:11.5px;color:#9d8fb5;flex:0 0 72px}
 .impchip{background:none;border:1px solid #c9b98f3d;border-radius:14px;color:#bfb6cc;font-size:11.5px;padding:4px 13px;cursor:pointer}
 .impchip.on{border-color:#f5d98b;color:#f5d98b;background:#c98f3d1f}
-@keyframes impRise{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:none}}
+/* ── 진입 모션 (v128) ─────────────────────────────────────────────────────────
+   v127까지는 **문서가 열리는 순간 마흔 개 블록이 한꺼번에** 0.5초 애니메이션을 시작했다.
+   창업자 지적("발작 일으키는 것처럼 느껴져")의 원인은 속도가 아니라 그 동시성이었다.
+   .rv  = 아직 화면에 안 들어온 상태. **이 클래스는 JS(useReveal)가 붙인다** —
+          스크립트가 죽으면 문서는 그냥 다 보인다. 값을 치른 문서에서 "안 보임"은 최악이다.
+   .rvin = 화면에 들어옴. --d 는 같은 프레임에 여럿이 들어올 때의 계단 간격(훅이 넣는다).
+   --i   = 표 안에서의 줄 번호. 줄이 차례로 채워지게 한다.
+   ⚠ **무한 반복 금지.** 눈이 머무는 문서에서 계속 뛰는 요소 하나가 문서 전체를 불안하게 만든다. */
+@keyframes impRise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 @keyframes impDraw{from{stroke-dashoffset:1400}to{stroke-dashoffset:0}}
 @keyframes impFill{from{opacity:0}to{opacity:1}}
-.imp .impdom,.imp .impsky,.imp .impclash,.imp .impband,.imp .impck{animation:impRise .5s cubic-bezier(.22,.8,.28,1) both}
-.imp .impsvg{animation:impRise .55s cubic-bezier(.22,.8,.28,1) both}
-.drawin .mline{stroke-dasharray:1400;animation:impDraw 1.5s cubic-bezier(.3,.7,.3,1) .15s both}
-.drawin .jline{animation:impFill .6s ease both}
-.drawin .jline:nth-of-type(1){animation-delay:.1s}.drawin .jline:nth-of-type(2){animation-delay:.22s}
-.drawin .jline:nth-of-type(3){animation-delay:.34s}.drawin .jline:nth-of-type(4){animation-delay:.46s}
-.drawin .jline:nth-of-type(5){animation-delay:.58s}.drawin .jline:nth-of-type(6){animation-delay:.7s}
-.drawin .jline:nth-of-type(7){animation-delay:.82s}
-.drawin .mfill{animation:impFill 1s ease .9s both}
-.drawin line,.drawin circle,.drawin text{animation:impFill .7s ease .5s both}
-@media (prefers-reduced-motion:reduce){.imp .impdom,.imp .impsky,.imp .impclash,.imp .impband,.imp .impck,.imp .impsvg,.drawin .mline,.drawin .jline,.drawin .mfill,.drawin line,.drawin circle,.drawin text{animation:none}}
-@keyframes impPulse{0%,100%{opacity:.14;r:9}50%{opacity:.3;r:13}}
-.drawin .pulse{animation:impPulse 2.6s ease-in-out infinite}
-@media (prefers-reduced-motion:reduce){.drawin .pulse{animation:none}}
+@keyframes impWipe{from{opacity:0;clip-path:inset(0 100% 0 0)}to{opacity:1;clip-path:inset(0 0 0 0)}}
+@keyframes impGrowY{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+@keyframes impGrowX{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+.imp .rv{opacity:0}
+.imp .rvin{animation:impRise .72s cubic-bezier(.22,.8,.28,1) var(--d,0ms) both}
+/* 표 — "그래프가 그려지듯 표도 채워져야 한다"(창업자). 칸은 가만히 있고 줄이 왼쪽부터 찬다 */
+.imp .improws.rvin,.imp .impmrows.rvin,.imp .impyrs.rvin{animation:none;opacity:1}
+.imp .improws.rv .impr,.imp .impmrows.rv .impmrow,.imp .impyrs.rv .impyr{opacity:0}
+.imp .improws.rvin .impr,.imp .impmrows.rvin .impmrow,.imp .impyrs.rvin .impyr{
+  animation:impWipe .5s cubic-bezier(.3,.75,.35,1) calc(var(--d,0ms) + var(--i,0) * 70ms) both}
+/* 막대 — 축에서 자라 오른다(위 막대는 아래에서, 아래 막대는 위에서). 원점은 JSX가 준다 */
+.imp .impsvg.rvin .bargrow{transform-box:fill-box;animation:impGrowY .55s cubic-bezier(.22,.8,.28,1) calc(var(--d,0ms) + var(--i,0) * 45ms) both}
+.imp .impsvg.rvin .akfill{transform-box:fill-box;transform-origin:left center;animation:impGrowX .6s cubic-bezier(.22,.8,.28,1) calc(var(--d,0ms) + var(--i,0) * 60ms) both}
+.drawin.rvin .mline{stroke-dasharray:1400;animation:impDraw 1.5s cubic-bezier(.3,.7,.3,1) calc(var(--d,0ms) + .15s) both}
+.drawin.rvin .jline{animation:impFill .6s ease both}
+.drawin.rvin .jline:nth-of-type(1){animation-delay:.1s}.drawin.rvin .jline:nth-of-type(2){animation-delay:.22s}
+.drawin.rvin .jline:nth-of-type(3){animation-delay:.34s}.drawin.rvin .jline:nth-of-type(4){animation-delay:.46s}
+.drawin.rvin .jline:nth-of-type(5){animation-delay:.58s}.drawin.rvin .jline:nth-of-type(6){animation-delay:.7s}
+.drawin.rvin .jline:nth-of-type(7){animation-delay:.82s}
+.drawin.rvin .mfill{animation:impFill 1s ease calc(var(--d,0ms) + .9s) both}
+.drawin.rvin line,.drawin.rvin circle,.drawin.rvin text{animation:impFill .7s ease calc(var(--d,0ms) + .5s) both}
+/* 「여기」 표식 — v127의 infinite 를 걷어냈다. 두 번 숨 쉬고 멎는다 */
+@keyframes impPulse{0%,100%{opacity:.18;r:10}50%{opacity:.34;r:14}}
+.drawin.rvin .pulse{animation:impPulse 3.2s ease-in-out .4s 2 both}
+/* 움직임을 줄여 달라고 한 사람에게는 **모션만** 끈다.
+   ⚠ opacity 를 통째로 1로 밀면 막대의 강약(SVG opacity 속성)까지 뭉개진다 —
+   우리가 0으로 만든 것만 되돌린다. */
+@media (prefers-reduced-motion:reduce){
+  .imp .rv,.imp .rv *,.imp .rvin,.imp .rvin *{animation:none!important}
+  .imp .rv,.imp .rv .impr,.imp .rv .impmrow,.imp .rv .impyr{opacity:1!important}
+}
 .impsaga{font-size:14px;line-height:1.95;color:#d8cfe8;margin:0 0 12px;letter-spacing:-.01em}
 .impsaga b{color:#f0e2b8}
 .impch{margin:0 0 2px;padding:11px 12px;border-left:2px solid #6f658044}

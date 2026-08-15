@@ -95,7 +95,13 @@ const b = await chromium.launch((process.env.CHROME_PATH ? { executablePath: pro
   /* v104 서신 대기 연출 — 봉인 5초 → '곧 답변이 있을 것이다' 2초 → 로비.
      전체화면을 덮는 데다 되돌릴 버튼이 없으므로, 타이머가 끊기면 유저가 갇힌다. 끝까지 실제로 태워 본다. */
   await page.getByRole("button", { name: /수호신의 서신/ }).click();
-  ck("서신 미리보기 + 환불 고지", await page.getByText("환불되지 않아요", { exact: false }).isVisible().catch(() => false));
+  /* C-1(작업지시 2026-08-14): v122까지 여기서 "환불되지 않아요"를 확인했다 — **결제가 없는데
+     청약철회를 배제하는 고지**였다. 검사가 그 문구의 존재를 지키고 있었으니 검사도 같이 뒤집는다.
+     결제를 붙이는 날 이 줄을 원래대로 되돌린다(health-check 4-3 이 양방향으로 감시한다). */
+  ck("서신 미리보기 + 결제 전 정직한 표시",
+    await page.getByText("지금은 시험 발행이라 값을 받지 않아", { exact: false }).isVisible().catch(() => false));
+  ck("서신 — 존재하지 않는 거래의 환불 고지가 없다",
+    !(await page.getByText("환불되지 않아요", { exact: false }).isVisible().catch(() => false)));
   await page.getByRole("button", { name: "받을게" }).click();
   await page.waitForSelector(".sealwrap", { timeout: 3000 });
   ck("① 봉인 연출 등장", await page.getByText("수호신이 붓을 들었어").isVisible().catch(() => false));
