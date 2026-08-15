@@ -101,6 +101,15 @@ SELECT
     countIf(event LIKE 'letter_%failed' AND {EXT})                      AS letter_err,
     countIf(event = 'imprint_clicked' AND {EXT})                        AS imprint,
     countIf(event = 'imprint_opened' AND {EXT})                         AS imprint_open,
+    -- 각인·궁합은 '열었나'가 아니라 '읽었나'가 값어치의 지표다(스크롤 최대 도달률의 평균)
+    round(avgIf(toInt(coalesce(properties.read_pct, 0)),
+                event = 'imprint_read' AND {EXT}))                      AS imprint_read,
+    countIf(event = 'match_clicked' AND {EXT})                          AS match_c,
+    countIf(event = 'match_run' AND {EXT})                              AS match_run,
+    countIf(event = 'match_again' AND {EXT})                            AS match_again,
+    round(avgIf(toInt(coalesce(properties.read_pct, 0)),
+                event = 'match_read' AND {EXT}))                        AS match_read,
+    countIf(event IN ('imprint_failed','match_failed') AND {EXT})       AS doc_err,
     countIf(event = 'verdict_shared' AND {EXT})                         AS shared,
     -- 공유는 '보낸 것'과 '그래서 들어온 것'이 다르다. 분자가 없으면 바이럴 계수를 못 낸다.
     countIf(event = 'shared_verdict_view' AND {EXT})                    AS share_in,
@@ -186,7 +195,11 @@ MSG = {
     "숫자_공유계수": " · 1건당 {계수}명",
     "숫자_서신":    "서신 {클릭}건 클릭 → {확인}건 받을게 → {발행}건 발행",
     "숫자_서신실패": " · 실패 {실패}건",
-    "숫자_각인":    "각인 {클릭}건 클릭 → {열람}건 열람",
+    "숫자_각인":    "각인 {클릭}건 클릭 → {열람}건 열람{읽음}",
+    "숫자_궁합":    "궁합 {클릭}건 클릭 → {실행}건 실행 → {재사용}건 다시{읽음}",
+    # 여는 것과 읽는 것은 다르다. 9,900원짜리 문서를 두 줄 보고 닫았는지 끝까지 내렸는지가
+    # "값을 하는가"에 대한 지금 유일한 답이다(별점은 아직 안 붙였다).
+    "숫자_읽음":    " · 평균 {비율}% 읽음",
     "숫자_원가":    "AI 원가 약 {원}원 · 1인 {인당}원",
 
     # ── 코멘트: 해당하는 것만 • 로 붙는다 ──
@@ -194,6 +207,8 @@ MSG = {
     "말_이탈지점":  "{화면} 화면에서 {인원}명이 빠져나갔습니다. 어제 사람을 가장 많이 잃은 곳입니다. 이 화면을 줄이거나 순서를 바꾸는 걸 생각해볼 만합니다.",
     "말_STOP없음":  "어제 'STOP(하지 마)' 판결이 하나도 없었습니다. 망설일 때 딱 잘라 말해주는 게 비나리인데, 정작 말리는 법이 없는 셈입니다. 데이터가 좀 더 쌓이면 판결 기준을 손볼지 정해야 합니다.",
     "말_서신실패":  "서신 발행이 {실패}건 실패했습니다. 돈 받는 물건이라 판결 실패보다 급합니다. 바로 확인이 필요합니다.",
+    "말_문서실패":  "각인·궁합 문서가 {실패}건 만들어지지 않았습니다. 값을 매길 물건이라 판결 실패와 같은 급으로 봐야 합니다. 바로 확인이 필요합니다.",
+    "말_안읽힘":    "{문서}을 연 사람들이 평균 {비율}%에서 멈췄습니다. 문서는 나오는데 안 읽히는 상태라, 길이나 앞부분 구성을 의심해볼 자리입니다.",
     "말_서신유보":  "서신은 아직 눌린 횟수가 적어 돈 낼 사람이 있는지 판단하기 이릅니다. 계속 지켜보겠습니다.",
     "말_서신판정":  "서신이 300번 넘게 노출됐습니다. 이제 돈 낼 사람이 있는지 판단할 수 있는 시점입니다.",
 
@@ -301,7 +316,9 @@ def build_report(cfg):
 
     keys = ["d", "people", "visits", "ob_start", "ob_done", "asked", "verdicts",
             "failed", "rated", "letter", "letter_yes", "letter_made", "letter_err",
-            "imprint", "imprint_open", "shared", "share_in", "tokens", "in_people", "in_verdicts"]
+            "imprint", "imprint_open", "imprint_read",
+            "match_c", "match_run", "match_again", "match_read", "doc_err",
+            "shared", "share_in", "tokens", "in_people", "in_verdicts"]
     t = dict(zip(keys, rows[0]))
     p = dict(zip(keys, rows[1])) if len(rows) > 1 else {}
 
@@ -345,7 +362,11 @@ def build_report(cfg):
         D.append(say("숫자_서신", 클릭=t["letter"], 확인=t["letter_yes"], 발행=t["letter_made"])
                  + (say("숫자_서신실패", 실패=t["letter_err"]) if t["letter_err"] else ""))
     if t["imprint"]:
-        D.append(say("숫자_각인", 클릭=t["imprint"], 열람=t["imprint_open"]))
+        D.append(say("숫자_각인", 클릭=t["imprint"], 열람=t["imprint_open"],
+                     읽음=say("숫자_읽음", 비율=t["imprint_read"]) if t["imprint_read"] else ""))
+    if t["match_c"]:
+        D.append(say("숫자_궁합", 클릭=t["match_c"], 실행=t["match_run"], 재사용=t["match_again"],
+                     읽음=say("숫자_읽음", 비율=t["match_read"]) if t["match_read"] else ""))
     if t["tokens"]:
         # 대략치다. 정확한 단가는 모델·티어마다 다르니 '약' 으로 적는다.
         won = round(t["tokens"] / 1000 * 4)          # 1,000토큰 ≈ 4원 (sonnet 급 입출력 평균)
@@ -359,6 +380,14 @@ def build_report(cfg):
     notes = []
     if t["letter_err"]:
         notes.append(say("말_서신실패", 실패=t["letter_err"]))
+    # 각인·궁합이 안 나오는 사고는 여태 화면에만 뜨고 우리한테는 안 왔다. 이제 온다.
+    if t["doc_err"]:
+        notes.append(say("말_문서실패", 실패=t["doc_err"]))
+    # 열리기는 하는데 아무도 안 읽는 상태 — 사고보다 조용하고 더 나쁘다
+    if t["imprint_open"] >= 5 and t["imprint_read"] and t["imprint_read"] < 40:
+        notes.append(say("말_안읽힘", 문서="각인", 비율=t["imprint_read"]))
+    if t["match_run"] >= 5 and t["match_read"] and t["match_read"] < 40:
+        notes.append(say("말_안읽힘", 문서="궁합", 비율=t["match_read"]))
 
     if t["failed"]:
         fails = hogql(cfg, Q_FAIL)

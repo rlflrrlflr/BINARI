@@ -149,8 +149,47 @@ function trackVisitOnce(ev, props) {
   track(ev, props || {});
   return true;
 }
+/* ── 유료 문서를 '열었나'가 아니라 '읽었나' ────────────────────────────────
+   각인 9,900원 · 궁합 4,900원은 여는 것과 읽는 것이 완전히 다른 일이다.
+   지금은 열람 수만 세는데, **두 줄 보고 닫은 사람과 끝까지 내린 사람이 같은 1건**으로
+   잡힌다. 그래서 "이 문서가 값을 하는가"에 데이터로 답할 수가 없다.
+   → 스크롤 최대 도달률과 머문 시간을 **문서를 떠날 때 한 번만** 보낸다(열람당 1건).
+   별점 UI 를 새로 세우지 않는다 — 화면을 안 건드리고 얻히는 신호부터 쓴다(§모를 권리와 무관: 수집이지 노출이 아니다).
+   스크롤 컨테이너는 문서 자신이 아니라 바깥 .readwrap 이라 closest 로 올라가 붙인다. */
+function useDocRead(ev, props) {
+  const box = useRef(null);
+  const pr = useRef(props);
+  pr.current = props;
+  useEffect(() => {
+    const el = (box.current && box.current.closest(".readwrap")) || box.current;
+    const t0 = Date.now();
+    let deep = 0, sent = false;
+    const onScroll = () => {
+      if (!el || !el.scrollHeight) return;
+      const p = Math.round(((el.scrollTop + el.clientHeight) / el.scrollHeight) * 100);
+      if (p > deep) deep = Math.min(100, p);
+    };
+    onScroll();                                          // 문서가 한 화면에 다 들어오면 스크롤 이벤트가 안 온다 → 100%
+    if (el) el.addEventListener("scroll", onScroll, { passive: true });
+    const flush = () => {
+      if (sent) return;
+      sent = true;
+      track(ev, { ...(pr.current || {}), read_pct: deep, sec: Math.round((Date.now() - t0) / 1000) });
+    };
+    const onHide = () => { if (document.visibilityState === "hidden") flush(); };   // 모바일은 닫지 않고 떠난다
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      if (el) el.removeEventListener("scroll", onScroll);
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, []);
+  return box;
+}
 function track(ev, props) {
-  if (_optout) return;                                            // A-1: 거부하면 아무것도 안 보낸다(속성 제거가 아니라 전송 중단)
+  if (_optout) return;                                          // A-1: 거부하면 아무것도 안 보낸다(속성 제거가 아니라 전송 중단)
   try {
     const p = { ..._superProps, ...(props || {}) };               // 고정 속성(내부여부·first-touch·신념)을 먼저 깔고 개별 속성으로 덮는다
     const out = _consent ? p : stripProfile(p);                   // 미동의 → 2단계 속성만 제거, 이벤트는 전송
@@ -789,7 +828,15 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
     } catch (e) { return null; }
   }, [saju, birth, sex, extra.married, extra.kids, extra.timeAcc, extra.metAge]);
   useEffect(() => { track("imprint_opened", { has_sex: !!sex, has_hour: !!(saju?.idx && saju.idx.hG != null), has_extra: extra.married != null }); }, []);
-  if (!r) return (<div className="imp"><p className="impmsg">각인을 읽지 못했어. 생년월일을 다시 확인해 줄래?</p>
+  /* 9,900원짜리 문서가 안 나오는 사고가 지금은 화면에만 뜨고 우리한테는 안 온다.
+     유저는 "각인을 읽지 못했어"를 보고 나가는데 우리는 그런 일이 있었다는 것조차 모른다. */
+  const failed = !r;
+  useEffect(() => {
+    if (failed) track("imprint_failed", { has_sex: !!sex, has_hour: !!(saju?.idx && saju.idx.hG != null) });
+  }, [failed]);
+  /* 스크롤·체류를 붙일 자리. 실패 화면에도 붙여야 "열자마자 깨져서 3초 만에 나갔다"가 남는다 */
+  const readRef = useDocRead("imprint_read", { failed });
+  if (!r) return (<div className="imp" ref={readRef}><p className="impmsg">각인을 읽지 못했어. 생년월일을 다시 확인해 줄래?</p>
     <button className="btn ghost mt" onClick={onClose}>닫을게</button></div>);
   const Ref = ({ n }) => (notesOn && n ? <sup className="impfx">{n}</sup> : null);
   const H = ({ t }) => <span dangerouslySetInnerHTML={{ __html: t }} />;
@@ -986,7 +1033,7 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
     </svg>
   );
   return (
-    <div className="imp fade">
+    <div className="imp fade" ref={readRef}>
       <div className="imphead">
         <p className="impeyebrow">비 나 리 · 각 인</p>
         <p className="imptitle">네가 어떻게 만들어졌는지</p>
@@ -1015,7 +1062,17 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
             <button className={"impchip" + (extra.kids === false ? " on" : "")} onClick={() => setEx("kids", false)}>없어</button>
           </div>
           <p className="impaskw">이걸 모르면 <b>이미 지난 일을 앞일처럼</b> 적게 돼. 안 알려줘도 문서는 나오지만, 그 부분이 헐거워져.</p>
-          <button className="btn ghost sm" onClick={() => setAskOpen(false)}>{extra.married != null || extra.kids != null ? "이대로 읽을게" : "안 알려줄래"}</button>
+          {/* 각인은 유일하게 문 앞에서 뭔가를 되묻는 자리다. 그걸 사람들이 참아주는지 아닌지가
+              앞으로 다른 상품에 입력을 붙일 수 있느냐를 가른다 — 지금은 전혀 안 잡히고 있었다.
+              ⚠ **답한 값은 절대 안 보낸다.** 처리방침에 이 세 항목은 "기기에만 저장"으로 고지돼 있다.
+                 보내는 건 '답했는가' 뿐이고, 그것만으로 응답률은 다 나온다. */}
+          <button className="btn ghost sm" onClick={() => {
+            track("imprint_extra_answered", {
+              answered: extra.married != null || extra.kids != null,
+              n: [extra.married, extra.kids, extra.metAge].filter((v) => v != null).length,
+            });
+            setAskOpen(false);
+          }}>{extra.married != null || extra.kids != null ? "이대로 읽을게" : "안 알려줄래"}</button>
         </div>
       )}
 
@@ -1194,11 +1251,17 @@ function MatchDoc({ saju, birth, onClose }) {
     } catch (e) { return null; }
   }, [done, f.y, f.m, f.d, f.h, f.sex, saju, birth]);
   useEffect(() => { track("match_opened", { has_saju: !!saju?.idx }); }, []);
+  /* 여기가 실제 사고 경로다: 입력 검증(ok)은 통과했는데 readMatch 가 null 을 돌려주면
+     화면은 **아무 말 없이 입력 폼으로 되돌아간다.** 유저 눈에는 버튼이 안 먹는 걸로 보이고
+     우리 쪽엔 match_run 만 남아서 "돌렸는데 왜 결과가 없지"가 영영 안 잡힌다. */
+  const mfailed = done && !r;
+  useEffect(() => { if (mfailed) track("match_failed", { has_hour: f.h != null, has_sex: !!f.sex }); }, [mfailed]);
+  const readRef = useDocRead("match_read", { done });
   const Ref = ({ n }) => (notesOn && n ? <sup className="impfx">{n}</sup> : null);
   const H = ({ t }) => <span dangerouslySetInnerHTML={{ __html: t }} />;
 
   if (!done || !r) return (
-    <div className="imp fade">
+    <div className="imp fade" ref={readRef}>
       <div className="imphead">
         <p className="impeyebrow">비 나 리 · 궁 합</p>
         <p className="imptitle">그 사람과 너</p>
@@ -1248,7 +1311,7 @@ function MatchDoc({ saju, birth, onClose }) {
   );
 
   return (
-    <div className="imp fade">
+    <div className="imp fade" ref={readRef}>
       <div className="imphead">
         <p className="impeyebrow">비 나 리 · 궁 합</p>
         <p className="imptitle">그 사람과 너</p>
@@ -1288,10 +1351,12 @@ function MatchDoc({ saju, birth, onClose }) {
         <b>관계를 끊거나 이으라는 판정이 아니고</b>, 상대에 대한 사실 확인도 아니야.
         여기 적힌 건 <b>무엇을 조심하면 되는지</b>까지고, 사람에 대한 결정은 네가 해.</p>
       <div className="impfoot">
-        <button className="btn ghost sm" onClick={() => setNotesOn((v) => !v)}>
+        <button className="btn ghost sm" onClick={() => { setNotesOn((v) => !v); track("match_notes_toggled", { on: !notesOn }); }}>
           {notesOn ? "▴ 근거 접기" : `▾ 근거 보기 — ${r.notes.length}개`}</button>
         {notesOn && (<ol className="impnotes">{r.notes.map((t, i) => <li key={i}><span>{i + 1}</span><span dangerouslySetInnerHTML={{ __html: t }} /></li>)}</ol>)}
-        <button className="btn ghost mt" onClick={() => setDone(false)}>다른 사람과도 봐볼게</button>
+        {/* 궁합의 존재 이유가 이 버튼이다 — "각인은 평생 한 번, 궁합은 사람 수만큼"(§1174 주석).
+            재구매 논리가 실제로 작동하는지는 이 클릭 말고 확인할 방법이 없는데 안 세고 있었다. */}
+        <button className="btn ghost mt" onClick={() => { track("match_again", {}); setDone(false); }}>다른 사람과도 봐볼게</button>
         <button className="btn ghost mt" onClick={onClose}>닫을게</button>
       </div>
     </div>
