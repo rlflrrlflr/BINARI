@@ -67,24 +67,38 @@ ck("거부 UI 가 화면에 있다", /사용 통계 수집을 끌래/.test(src))
 {
   const pv = readFileSync(new URL("../public/privacy.html", import.meta.url), "utf8");
   ck("처리방침이 없는 절차를 안내하지 않는다", !/온보딩의 분석 동의를 해제/.test(pv));
-  ck("처리방침이 실제 자리를 가리킨다", (pv.match(/사용 통계 수집을 끌래/g) || []).length === 2,
-     `${(pv.match(/사용 통계 수집을 끌래/g) || []).length}/2곳`);
+  /* 잡으려던 건 "없는 절차를 안내하는 것"이지 "몇 번 안내하는가"가 아니다.
+     횟수를 못 박으면 안내를 한 곳 더 붙일 때마다 검사가 운다(2026-08-15 실제로 울었다). */
+  ck("처리방침이 실제 자리를 가리킨다", (pv.match(/사용 통계 수집을 끌래/g) || []).length >= 2,
+     `${(pv.match(/사용 통계 수집을 끌래/g) || []).length}곳`);
   ck("처리방침이 '전송 중단'이라고 정확히 적는다", /전송 자체가 중단/.test(pv));
 }
 
-/* ── A-3. 계측에 원문이 안 나간다 ──
+/* ── A-3. 계측으로 나가는 자유 서술은 **반드시 anon() 을 거친다** ──
+   2026-08-14 엔 "본문을 아예 안 보낸다"가 규칙이었다. 2026-08-15 창업자 지시
+   "질문과 답변은 다 남기자. 다만 개인 식별 불가능하게 해"로 규칙이 바뀌었다.
+   그래서 검사도 **금지에서 경유 강제로** 바꾼다 — 본문이 나가는 건 되고, 문을 안 거치는 건 안 된다.
    ⚠ track() 안만 본다. setRecords 는 로컬 판결록이라 원문을 들고 있어야 정상이다 —
       파일 전체를 보면 그걸 잡아 헛울음이 난다. **나가는 것과 남는 것은 다르다.** */
 {
-  const trk = [...src.matchAll(/track\("(verdict_shown|detail_shown)"[\s\S]{0,1600}?\}\)*;/g)].map((x) => x[0]).join("\n");
-  ck("계측 호출을 찾았다(검사가 안 낡았다)", !!trk);
-  ck("앞면 원문을 안 보낸다", !/verdict: r1\.verdict/.test(trk) && /vlen:/.test(trk));
-  ck("뒷면 원문을 안 보낸다", !/subline: r2\?\.subline/.test(trk) && !/funline: r2\?\.funLine/.test(trk));
-  ck("근거는 축별 길이만 보낸다", /axisMap\(reasons, \(r\) => String\(r\.text \|\| ""\)\.length\)/.test(src));
-  /* 코드가 안 보내게 됐으면 문서도 따라와야 한다 — 과대 기재도 코드·문서 충돌이다 */
+  const trk = [...src.matchAll(/track\("(question_asked|verdict_shown|detail_shown|letter_written)"[\s\S]{0,1800}?\}\)*;/g)].map((x) => x[0]).join("\n");
+  ck("계측 호출을 찾았다(검사가 안 낡았다)", !!trk && /question_asked/.test(trk) && /letter_written/.test(trk));
+  ck("질문이 anon 을 거쳐 나간다", /q_anon: anon\(q, birth\.name\)/.test(trk));
+  ck("질문 원문 그대로는 안 나간다", !/[{,]\s*q: q[,\s}]/.test(trk));
+  ck("판결문이 anon 을 거쳐 나간다", /v_anon: anon\(r1\.verdict/.test(trk));
+  ck("판결문 원문 그대로는 안 나간다", !/verdict: r1\.verdict/.test(trk));
+  ck("정령 멘트·곁들이는 줄이 anon 을 거친다", /sub_anon: anon\(r2\?\.subline/.test(trk) && /fun_anon: anon\(r2\?\.funLine/.test(trk));
+  ck("뒷면 원문 그대로는 안 나간다", !/subline: r2\?\.subline/.test(trk) && !/funline: r2\?\.funLine/.test(trk));
+  ck("축별 판단근거가 anon 을 거친다", /const reasonTextMap = \(reasons, name\) => axisMap\(reasons, \(r\) => anon\(r\.text, name\)\)/.test(src));
+  ck("서신 본문이 anon 을 거친다", /anon\(c\.body, birth\.name\)/.test(trk));
+  ck("길이 지표는 그대로 남는다(가명본 길이 ≠ 원문 길이)", /vlen:/.test(trk) && /sublen:/.test(trk) && /reasons_len:/.test(trk));
+  /* 코드가 보내게 됐으면 문서도 따라와야 한다 — 과소 기재는 코드·문서 충돌이자 고지 위반이다 */
   const pv2 = readFileSync(new URL("../public/privacy.html", import.meta.url), "utf8");
   ck("처리방침이 '판결 결과 전체 수집'을 더 안 적는다", !/AI가 생성한 판결 결과 전체/.test(pv2));
-  ck("처리방침이 '글자 수만'이라고 정확히 적는다", /글자 수만<\/strong> 기록합니다/.test(pv2));
+  ck("처리방침이 '본문은 전송하지 않는다'는 옛 문장을 안 남긴다", !/본문은 전송하지 않고 글자 수만/.test(pv2));
+  ck("처리방침이 무엇을 지우는지 열거한다",
+     /주민등록번호/.test(pv2) && /카드·계좌번호/.test(pv2) && /제3자의 이름/.test(pv2));
+  ck("처리방침이 '맥락으로 특정될 수 있음'을 숨기지 않는다", /맥락만으로 사람이 좁혀질/.test(pv2));
   ck("처리방침이 공유 링크 실명 제거를 고지한다", /이름은 링크에 담기지 않습니다/.test(pv2));
   ck("처리방침 수집 항목표에 각인 선택 입력이 있다", /혼인 여부, 자녀 유무/.test(pv2));
 }
@@ -139,6 +153,72 @@ ck("부적 이미지에 AI 표시를 그린다", /AI가 생성한 내용 · 재�
   ck("처리방침이 상대 이름·연락처 미수집을 밝힌다", /이름·연락처는 받지 않습니다/.test(pv3));
   ck("처리방침이 기기 저장·미전송을 밝힌다", /서버나 분석 도구로 전송되지 않으며/.test(pv3));
   ck("처리방침이 삭제 방법을 밝힌다", /처음부터 다시」를 누르면\n함께 삭제됩니다|처음부터 다시」를 누르면/.test(pv3));
+}
+
+/* ── 가명처리 anon() ─────────────────────────────────────────────────────
+   창업자 지시(2026-08-15) "질문과 답변은 다 남기자. 다만 개인 식별 불가능하게 해"로
+   질문·판결문·판단근거·서신 본문이 계측에 실린다. 그 문이 anon() 하나뿐이라 여기서 못 박는다.
+   ⚠ 이 검사는 "완전 익명화"를 주장하지 않는다 — 맥락 특정은 규칙으로 못 잡는다(설계상 인정).
+      여기서 보는 건 **기계적으로 잡히는 식별자는 하나도 안 새는가**와
+      **멀쩡한 말을 망가뜨리지 않는가** 둘이다. */
+{
+  const pick = (re, what) => { const m = src.match(re); if (!m) { console.log(`FAIL — App.jsx 에서 ${what} 못 찾음`); process.exit(1); } return m[0]; };
+  const anon = new Function(`${pick(/const stripName = \(t, name\) => \{[\s\S]*?\n\};/, "stripName")}
+${pick(/const ANON_MAX = \d+;/, "ANON_MAX")}
+${pick(/const NOT_NAME = new Set\(\[[\s\S]*?\]\);/, "NOT_NAME")}
+${pick(/function anon\(t, name\) \{[\s\S]*?\n\}/, "anon")}
+return anon;`)();
+
+  // ① 기계로 잡히는 식별자는 하나도 남으면 안 된다
+  const LEAK = [
+    ["연락 줘 kim.dev@gmail.com 로", "gmail.com", "이메일"],
+    ["010-1234-5678 로 연락할까", "1234-5678", "휴대폰"],
+    ["02)555-1234 말고", "555-1234", "지역번호"],
+    ["https://open.kakao.com/o/abc123 이 링크", "kakao.com", "링크"],
+    ["www.instagram.com/xyz 봤어", "instagram", "www 링크"],
+    ["900101-1234567 이 번호가", "900101", "주민번호"],
+    ["카드 5432 1234 8765 4321 로 긁었는데", "8765", "카드번호"],
+    ["110-234-567890 으로 보내라는데", "234-567", "계좌"],
+    ["@some_handle 이 사람이", "some_handle", "SNS 계정"],
+    ["1993년 7월 21일생인데", "1993", "생년월일"],
+    ["1993.07.21 에 태어난", "1993", "점 구분 날짜"],
+  ];
+  for (const [q, leak, what] of LEAK) {
+    const o = anon(q, "");
+    ck(`${what}가 안 남는다`, !o.includes(leak), o.slice(0, 46));
+  }
+
+  // ② 본인 이름 — 이미 stripName 이 맡지만 anon 을 거쳐도 살아 있어야 한다
+  ck("본인 이름이 anon 을 거쳐도 지워진다", !anon("지원아, 그 사람한테 연락할까?", "지원").includes("지원"));
+
+  // ③ 호칭이 붙은 남의 이름
+  ck("이름+씨 가 가려진다", !anon("민준씨가 어제 그랬는데", "").includes("민준"));
+  ck("성+직함에서 성만 가려지고 직함은 남는다", (() => {
+    const o = anon("박부장이 회식 가자는데", "");
+    return !o.includes("박부장") && o.includes("부장");
+  })(), anon("박부장이 회식 가자는데", ""));
+
+  // ④ 멀쩡한 말을 망가뜨리지 않는다 — 여기가 깨지면 데이터가 쓰레기가 된다
+  const KEEP = [["선생님한테 물어볼까", "선생님"], ["사장님이 화났어", "사장님"],
+    ["부모님께 말씀드릴까", "부모님"], ["고객님이 컴플레인을", "고객님"],
+    ["우리 팀장이 그러는데", "우리 팀장"], ["어머님 생신인데", "어머님"],
+    ["형님이랑 상의했어", "형님"], ["작가님 답장이 없어", "작가님"]];
+  for (const [q, keep] of KEEP) ck(`"${keep}"는 그대로 둔다`, anon(q, "").includes(keep), anon(q, ""));
+
+  // ⑤ 지운 자리에 표시를 남긴다 — 통째로 비우면 나중에 못 읽는다
+  ck("지운 자리에 자리표가 남는다", anon("메일 a@b.co 로 줘", "").includes("[메일]"));
+
+  // ⑥ 길이 상한 — 길수록 특정 위험이 올라간다
+  ck("상한을 넘으면 자른다", anon("가".repeat(900), "").length <= 601);
+
+  // ⑦ 빈 값·null 에서 안 터진다(계측이 판결을 죽이면 안 된다)
+  ck("빈 값에서 안 터진다", anon("", "") === "" && anon(null, null) === "" && anon(undefined, "") === "");
+
+  // ⑧ 처리방침이 이 수집을 실제로 고지하는가 — 코드만 바꾸고 고지를 안 고치면 그게 위반이다
+  const pv4 = readFileSync(new URL("../public/privacy.html", import.meta.url), "utf8");
+  ck("처리방침이 질문·답변 본문 수집을 고지한다", /가명처리/.test(pv4) && /질문 원문/.test(pv4));
+  ck("처리방침에 '질문 원문을 전송하지 않는다'는 옛 문장이 남아 있지 않다",
+     !/질문 원문[^。.]{0,40}전송하지 않습니다/.test(pv4.replace(/<[^>]+>/g, "")));
 }
 
 const pass = R.filter(Boolean).length;

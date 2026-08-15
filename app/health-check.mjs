@@ -183,11 +183,21 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
       add("심각", "신뢰 라인의 문항 수가 실제와 다름", `화면 표기 ${claimed}문항 vs 실제 ${real}문항`,
         "화면에 적은 숫자는 유저와의 약속입니다. App.jsx 의 문구를 실제 문항 수로 맞추거나, 검사가 세는 방식을 고치세요.");
     } else add("정상", "신뢰 라인 — 만세력 문항 수", `표기 ${claimed}문항 = 실제 ${real}문항`, "");
-    // "질문 원문은 통계에 기록하지 않아요" — track() 에 q 원문이 실리면 그 줄이 그 순간 거짓 표시가 된다
-    if (/track\([^)]*\{[^}]*\bq\b\s*[,:}]/.test(src)) {
-      add("심각", "질문 원문이 계측에 실림", "화면엔 '질문 원문은 기록하지 않아요'라고 적혀 있음",
-        "track() 에서 질문 원문을 빼고 qlen(글자수)만 보내세요. 지금 상태면 화면 문구가 거짓입니다.");
-    } else add("정상", "신뢰 라인 — 질문 원문 미기록", "track() 에 q 원문 없음(qlen 만)", "");
+    /* 2026-08-15 규칙 교체. 예전 약속은 "질문 원문은 통계에 기록하지 않아요"였고, 이 검사는
+       track() 에 q 가 실리는지를 봤다. 창업자 지시로 **질문·답변 본문을 가명처리해 기록**하게 되면서
+       그 약속이 화면에서 내려갔다. 그러면 검사도 새 약속을 지켜야 한다 —
+       지금 화면이 하는 약속은 "이름·연락처를 지운 뒤 기록한다"이고, 그게 거짓이 되는 경우는 둘이다:
+         ① 가명처리를 안 거친 원문이 나갈 때  ② 화면 문구만 남고 가명처리가 사라졌을 때 */
+    const promisesAnon = /질문과 답변은 <b>이름·연락처를 지운 뒤<\/b>/.test(src);
+    const hasAnonGate = /q_anon: anon\(q, birth\.name\)/.test(src) && /function anon\(t, name\)/.test(src);
+    const rawQ = /track\("question_asked"[^;]*?[{,]\s*q:\s*q[,\s}]/.test(src);
+    if (rawQ) {
+      add("심각", "질문 원문이 가명처리 없이 계측에 실림", "track(\"question_asked\") 에 q 원문 그대로",
+        "q 는 anon(q, birth.name) 을 거쳐 q_anon 으로만 보내세요. 지금 상태면 화면 문구가 거짓입니다.");
+    } else if (promisesAnon && !hasAnonGate) {
+      add("심각", "화면은 '지운 뒤 기록'이라는데 지우는 장치가 없음", "anon() 경유가 코드에서 사라짐",
+        "anon() 이 지워졌거나 이름이 바뀌었습니다. 화면 문구를 내리거나 가명처리를 되살리세요.");
+    } else add("정상", "신뢰 라인 — 질문·답변 가명처리", "anon() 경유 확인(원문 미전송)", "");
   }
 
   // 티어 허용목록은 api/judge.js 에 있다 — 위 rules 루프는 App.jsx 만 보므로 여기서 따로 검사한다
