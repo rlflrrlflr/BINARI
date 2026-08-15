@@ -56,7 +56,7 @@ await onboard(page);
   const ib = page.getByRole("button", { name: /각인 — 네가 어떻게/ });
   ck("각인 진입점이 로비에 있다", (await ib.count()) === 1);
   await ib.click(); await page.waitForTimeout(900);
-  ck("각인이 실제로 발행된다(결제 없이)", (await page.locator(".imp").count()) === 1);
+  ck("각인이 실제로 발행된다(결제 없이)", (await page.locator(".imp").count()) === 1, `.imp=${await page.locator(".imp").count()}`);
   const it = (await page.locator(".imp").textContent()) || "";
   ck("각인 — 겉과 속을 갈라 말한다", /너는 .{4,}(이야|야)/.test(it) && /네 속은 다르다/.test(it));
   ck("각인 — 생김새·짝 표가 채워진다", (await page.locator(".imp .impr").count()) >= 5, `${await page.locator(".imp .impr").count()}행`);
@@ -88,6 +88,12 @@ await onboard(page);
     return /@keyframes impRise/.test(css) && /prefers-reduced-motion/.test(css);
   });
   ck("각인 — 모션이 있고 접근성 설정을 존중한다", motionOk);
+  /* ── A-4 (작업지시 2026-08-14): 각인은 LLM 을 안 타서 판결의 S3 가드레일을 구조적으로 통과하지 않는다.
+     여섯 판 연속 문서만 넓어지고 고지는 0이었다 — **하단 고정 블록**으로 붙였는지 화면에서 확인한다. */
+  ck("각인 — 하단에 고지가 붙는다", (await page.locator(".imp .ainote.docnote").count()) === 1);
+  ck("각인 — 의료 조언이 아니라고 명시한다", /의료·법률·재무 조언이 아니야/.test(it) && /병원에 가는 게 먼저/.test(it));
+  ck("각인 — 발병을 단정하지 않는다", !/크게 앓을 수 있어/.test(it),
+    (it.match(/.{0,12}크게 앓을 수 있어.{0,12}/) || [""])[0]);
   /* v123 — 같은 값을 서사로도 읽힌다. 단 모호함으로 되돌아가면 안 된다 */
   ck("각인 — 이야기 절이 있다", /너의 이야기/.test(it) && (await page.locator(".impch").count()) >= 6,
     `${await page.locator(".impch").count()}장`);
@@ -102,6 +108,8 @@ await onboard(page);
     `${await page.locator(".impyr").count()}행`);
   ck("각인 — 해마다 순역 막대가 그려진다", /위 = 움직이기 좋은 해/.test(it));
   ck("각인 — 좋은 해가 없으면 없다고 말한다", /옮기기 가장 좋은 해|자리가 열리는 해가 없어/.test(it));
+
+
   ck("각인 — 비문이 없다", !/(사람|문|손|틀)이 얇/.test(it), (it.match(/.{6}(사람|문|손|틀)이 얇.{6}/) || [""])[0]);
   ck("각인 — 뒤집히는 조건 셋", (await page.locator(".imptrig").count()) === 3);
   ck("각인 — 여든 해가 갈린다", (await page.locator(".impband").count()) >= 6, `${await page.locator(".impband").count()}구간`);
@@ -143,6 +151,40 @@ await onboard(page);
   ck("각주에는 기법 이름이 적힌다", /일간|하우스/.test((await page.locator(".impnotes").textContent()) || ""));
   await page.getByRole("button", { name: "닫을게" }).click(); await page.waitForTimeout(500);
   ck("각인을 닫으면 로비로 돌아온다", (await page.locator(".imp").count()) === 0);
+
+  /* ⚠ **판결을 던지기 전에** 검사해야 한다. 로비의 두 진입점은 `!ritual && !res` 조건이라
+     판결이 한 번 돌고 나면 사라진다 — 뒤에 두면 "진입점이 없다"고 헛울음이 난다(실제로 그랬다). */
+  /* ── v125 궁합 — 각인의 애드온. 상대 생년월일만 받고 이름·연락처는 안 받는다 ── */
+  {
+    const mb = page.getByRole("button", { name: /궁합 — 그 사람과 너/ });
+    ck("궁합 진입점이 로비에 있다", (await mb.count()) === 1);
+    if (await mb.count()) {
+      await mb.first().click(); await page.waitForTimeout(350);
+      const ask = await page.locator(".imp").innerText();
+      ck("궁합 — 상대 생년월일을 묻는다", /상대의 생년월일만 알려줘/.test(ask));
+      ck("궁합 — 이름·연락처는 안 받는다", /이름도 연락처도 안 받아/.test(ask) &&
+        (await page.locator(".imp input[type=text]").count()) === 0);
+      ck("궁합 — 연인 말고도 쓰라고 안내한다", /같이 일하는 사람|가족|동업자/.test(ask));
+      /* 실제로 돌려 본다 */
+      const ins = page.locator(".imp .impnum");
+      await ins.nth(0).fill("1997"); await ins.nth(1).fill("4"); await ins.nth(2).fill("22");
+      await page.getByRole("button", { name: /둘을 맞대 볼게/ }).click();
+      await page.waitForTimeout(400);
+      const mt = await page.locator(".imp").innerText();
+      ck("궁합 — 아홉 축이 각각 나온다", (await page.locator(".imp .impsky").count()) >= 9,
+        `${await page.locator(".imp .impsky").count()}개`);
+      ck("궁합 — 인도 여덟 항목이 막대로 나온다", /칸이 길수록/.test(mt) && (await page.locator(".imp .impmrow").count()) === 8);
+      ck("궁합 — 갈리는 곳을 따로 말한다", /하늘끼리 갈린다|모든 하늘이 같은 말/.test(mt));
+      ck("궁합 — 조심할 것을 준다", (await page.locator(".imp .imptrig").count()) >= 1);
+      ck("궁합 — 총점을 맨 뒤에만 둔다", /이 숫자를 먼저 보지 마/.test(mt));
+      ck("궁합 — 헤어지라고 안 한다", !/(헤어져|정리해|만나지 마|그만 만나)/.test(mt));
+      ck("궁합 — 다른 사람과 다시 볼 수 있다", /다른 사람과도 봐볼게/.test(mt));
+    /* A-4: 궁합에도 고지가 붙는다 */
+    ck("궁합 — 고지가 붙는다", /재미로 보는 참고용/.test(mt) && /관계를 끊거나 이으라는 판정이 아니고/.test(mt));
+    }
+  }
+  await page.getByRole("button", { name: /^닫을게$/ }).last().click().catch(() => {});
+  await page.waitForTimeout(400);
 }
 await page.locator("textarea.qbox").fill("전남친에게 연락할까?"); await page.waitForTimeout(300);
 await page.getByRole("button", { name: "판결을 청한다" }).click();
@@ -186,6 +228,9 @@ ck("각인 — 기운 개수 막대 5종", (await page.locator(".msrbody .bar").
 ck("계산 근거 고지(직접 계산·대조 검증)", /태양의 실제 위치를 직접 계산/.test(body) && /대조 검증 28건/.test(body));
 ck("시각 보정 분 공개", /[+−]\d+분 보정/.test(body), (body.match(/[+−]\d+분 보정/) || [])[0] || "");
 ck("자리 전량 공개(그 밖의 자리들)", /그 밖의 자리들/.test(body));
+
+
+
 // ── v110 정직성 4 (작명 구상 §3-8 차용). 리포트는 '알 권리' 국면이라 판결과 규칙이 반대다.
 // ① 판단마다 확신도 3단 — 계산값과 유파 해석과 곁가지를 같은 목소리로 말하면 전부가 헐거워진다
 const cfs = await page.locator(".msrbody .cf").allTextContents();
@@ -252,7 +297,10 @@ ck("평범한 말로 갈렸다(십성 자리 이름)",
 ck("확신도 꼬리표도 평범한 말", ["확실한 것", "갈리는 것", "곁들이는 것"].every((t) => cfs.includes(t)), [...new Set(cfs)].join("/"));
 ck("화면 오류 없음", errs.length === 0, errs.join(" / "));
 
+
 await b.close();
+
+
 const pass = R.filter(Boolean).length;
 console.log(`\n=== 리포트 체크: ${pass}/${R.length} PASS ===`);
 process.exit(pass === R.length ? 0 : 1);

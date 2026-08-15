@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { readImprint } from "./lib/imprint.js";
+import { readMatch } from "./lib/match.js";
 
 /* ───── 계측(PostHog) — 휴면-준비: VITE_POSTHOG_KEY 없으면 완전 무동작 ───── */
 const AKEY = import.meta.env.VITE_POSTHOG_KEY;
@@ -63,6 +64,21 @@ function _initSuperProps() {
   if (b) _superProps.belief = b;
 }
 
+/* ── A-1 (전략 세션 작업지시 2026-08-14) ─────────────────────────────────
+   처리방침이 두 곳에서 "온보딩의 분석 동의를 해제하는 것만으로 거부할 수 있다"고 안내한다.
+   그런데 v122 에서 그 체크박스를 화면에서 뺐고, PROFILE_KEYS 가 빈 집합이라
+   손으로 키를 0으로 바꿔도 **아무것도 안 막혔다.** 즉 문서가 약속한 절차가 코드에 없었다.
+   → **문서를 고치는 게 아니라 수단을 만든다.** ②(문서를 동작에 맞춤)는 거부권 자체를 없애는 방향이다.
+   OPTOUT_KEY 가 켜지면 track() 이 조기 반환한다 — 속성만 지우는 게 아니라 **전송 자체를 멈춘다**. */
+const OPTOUT_KEY = "binari.analytics_optout.v1";
+let _optout = false;
+function readOptout() { try { return window.localStorage.getItem(OPTOUT_KEY) === "1"; } catch (_) { return false; } }
+function setOptout(on) {
+  _optout = !!on;
+  try { window.localStorage.setItem(OPTOUT_KEY, on ? "1" : "0"); } catch (_) {}
+  /* 끌 때는 이미 쌓인 큐도 버린다 — 끄기 전에 대기하던 걸 나중에 보내면 거부가 무의미해진다 */
+  if (_optout) { _q.length = 0; try { _ph?.reset?.(); } catch (_) {} }
+}
 const CONSENT_KEY = "binari.analytics_consent.v1";
 let _consent = false;                                             // 2단계(프로파일) 동의 여부
 function readConsent() { try { return window.localStorage.getItem(CONSENT_KEY) === "1"; } catch (_) { return false; } }
@@ -134,6 +150,7 @@ function trackVisitOnce(ev, props) {
   return true;
 }
 function track(ev, props) {
+  if (_optout) return;                                            // A-1: 거부하면 아무것도 안 보낸다(속성 제거가 아니라 전송 중단)
   try {
     const p = { ..._superProps, ...(props || {}) };               // 고정 속성(내부여부·first-touch·신념)을 먼저 깔고 개별 속성으로 덮는다
     const out = _consent ? p : stripProfile(p);                   // 미동의 → 2단계 속성만 제거, 이벤트는 전송
@@ -753,9 +770,9 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
   /* v115 선택 입력 — **각인을 열 때만** 묻는다. 무료 온보딩은 건드리지 않는다.
      없어도 문서는 나온다. 있으면 **틀린 말을 안 하게 된다** — 마흔 살 기혼자에게
      "서른에 짝을 만난다"고 쓰는 순간 문서 전체가 죽는다. 그 한 줄을 막으려고 받는다. */
-  const [extra, setExtra] = useState(() => { try { return JSON.parse(localStorage.getItem("binari_imprint_extra") || "{}"); } catch { return {}; } });
+  const [extra, setExtra] = useState(() => { try { return JSON.parse(localStorage.getItem(IMPRINT_EXTRA_KEY) || "{}"); } catch { return {}; } });
   const [askOpen, setAskOpen] = useState(extra.married == null && (new Date().getFullYear() - +(birth?.y || 0) + 1) >= 20);
-  const setEx = (k, v) => { const n = { ...extra, [k]: v }; setExtra(n); try { localStorage.setItem("binari_imprint_extra", JSON.stringify(n)); } catch {} };
+  const setEx = (k, v) => { const n = { ...extra, [k]: v }; setExtra(n); try { localStorage.setItem(IMPRINT_EXTRA_KEY, JSON.stringify(n)); } catch {} };
   const r = useMemo(() => {
     try {
       const ladder = [];
@@ -1132,12 +1149,149 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
       {r.noHour && <p className="impmsg">태어난 <b>시(時)를 몰라</b> 네 자리 중 하나가 비었어. 시에 걸린 건 못 읽었다고 봐야 해.</p>}
       {!r.given.city && <p className="impmsg">태어난 <b>도시를 몰라</b> 서울 기준으로 읽었어. 다른 지역이면 시(時)와 겉모습이 한 칸 옮겨갈 수 있어.</p>}
 
+      {/* ── A-4 (작업지시 2026-08-14) ──────────────────────────────────────────
+          각인은 LLM 을 안 타므로 판결의 S3 가드레일("병세·완치·수명을 점치는 문장 절대 금지")을
+          **구조적으로 통과하지 않는다.** 그런데 여섯 판 연속 문서만 넓어지고 고지는 0이었다.
+          ⚠ **절마다 붙이지 않는다.** 절마다 붙이면 다음 판에서 또 빠진다 — 문서 하단 고정 블록 하나로 둔다.
+          그리고 "AI가 생성"은 맞는 문구가 아니다(각인은 LLM 산출물이 아니다). 필요한 건
+          참고용 · 의료 조언 아님 · 진단과 치료는 전문가 쪽이다. */}
+      <p className="ainote docnote">이 문서는 <b>생년월일시로 계산한 전통 해석</b>이야 — 재미로 보는 참고용이고,
+        <b>의료·법률·재무 조언이 아니야.</b> 몸 이야기는 병을 점친 게 아니라 <b>어디를 더 살피라는 표시</b>일 뿐이야.
+        증상이 있으면 <b>병원에 가는 게 먼저</b>고, 큰 결정은 이 문서 말고 네 판단으로 해.
+        맞는지 안 맞는지는 위 <b>확인 문항</b>으로 네가 직접 재 보면 돼.</p>
       <div className="impfoot">
         <button className="btn ghost sm" onClick={() => { setNotesOn(v => !v); track("imprint_notes_toggled", { on: !notesOn }); }}>
           {notesOn ? "▴ 근거 접기" : `▾ 근거 보기 — ${r.notes.length}개`}</button>
         {notesOn && (<ol className="impnotes">
           {r.notes.map((t, i) => <li key={i}><span>{i + 1}</span><span dangerouslySetInnerHTML={{ __html: t }} /></li>)}
         </ol>)}
+        <button className="btn ghost mt" onClick={onClose}>닫을게</button>
+      </div>
+    </div>
+  );
+}
+
+/* ── 궁합 ──────────────────────────────────────────────────────────────────
+   각인의 애드온이다 — **내 명식이 이미 있어야** 열린다. 그래서 각인의 자연스러운 2차 구매가 되고,
+   각인의 최대 약점(평생 1회)을 메운다: 궁합은 **사람 수만큼 다시 산다.**
+   상대 생년월일만 받는다. 이름·연락처는 안 받는다 — 남의 개인정보를 우리가 들고 있을 이유가 없다. */
+const MATCH_PRICE = 4900;
+function MatchDoc({ saju, birth, onClose }) {
+  const [notesOn, setNotesOn] = useState(false);
+  const [f, setF] = useState(() => { try { return JSON.parse(localStorage.getItem(MATCH_LAST_KEY) || "{}"); } catch { return {}; } });
+  const [done, setDone] = useState(false);
+  const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  const ok = /^\d{4}$/.test(String(f.y || "")) && +f.y >= 1900 && +f.y <= 2030
+    && +f.m >= 1 && +f.m <= 12 && +f.d >= 1 && +f.d <= 31;
+  const r = useMemo(() => {
+    if (!done || !ok || !saju?.idx) return null;
+    try {
+      const noH = !f.h && f.h !== 0;
+      const bs = calcSaju(+f.y, +f.m, +f.d, noH ? 12 : +f.h, 0, noH, 126.978);
+      if (!bs?.idx) return null;
+      return readMatch({ a: { saju, birth, sex: birth?.sex },
+        b: { saju: bs, birth: { y: +f.y, m: +f.m, d: +f.d, h: noH ? 12 : +f.h, min: 0 }, sex: f.sex || null } });
+    } catch (e) { return null; }
+  }, [done, f.y, f.m, f.d, f.h, f.sex, saju, birth]);
+  useEffect(() => { track("match_opened", { has_saju: !!saju?.idx }); }, []);
+  const Ref = ({ n }) => (notesOn && n ? <sup className="impfx">{n}</sup> : null);
+  const H = ({ t }) => <span dangerouslySetInnerHTML={{ __html: t }} />;
+
+  if (!done || !r) return (
+    <div className="imp fade">
+      <div className="imphead">
+        <p className="impeyebrow">비 나 리 · 궁 합</p>
+        <p className="imptitle">그 사람과 너</p>
+        <p className="impsub">아홉 하늘이 <b>각각 다른 걸</b> 봐. 총점 하나로 뭉개지 않아 —
+          <b>어디가 맞고 어디가 갈리는지</b>를 따로 적어. "잘 맞아요"는 어디서든 살 수 있지만,
+          <b>어디서 갈리는지는 여기서만 나와.</b></p>
+      </div>
+      <div className="impask fade">
+        <p className="impaskh">상대의 생년월일만 알려줘 <i>이름은 안 받아</i></p>
+        <div className="impaskrow"><span>태어난 날</span>
+          <input className="impnum w70" type="number" placeholder="1997" value={f.y ?? ""} onChange={(e) => set("y", e.target.value)} />
+          <input className="impnum w48" type="number" placeholder="4" min="1" max="12" value={f.m ?? ""} onChange={(e) => set("m", e.target.value)} />
+          <input className="impnum w48" type="number" placeholder="22" min="1" max="31" value={f.d ?? ""} onChange={(e) => set("d", e.target.value)} />
+        </div>
+        <div className="impaskrow"><span>태어난 시</span>
+          <input className="impnum w48" type="number" placeholder="시" min="0" max="23" value={f.h ?? ""} onChange={(e) => set("h", e.target.value === "" ? null : +e.target.value)} />
+          <em className="impaskhint">모르면 비워 둬 — 그만큼만 얕게 읽어</em>
+        </div>
+        <div className="impaskrow"><span>성별</span>
+          <button className={"impchip" + (f.sex === "M" ? " on" : "")} onClick={() => set("sex", "M")}>남</button>
+          <button className={"impchip" + (f.sex === "F" ? " on" : "")} onClick={() => set("sex", "F")}>여</button>
+        </div>
+        <p className="impaskw">상대의 <b>이름도 연락처도 안 받아.</b> 생년월일은 이 기기에만 남고 서버로 안 보내.
+          궁합은 <b>연인만이 아니야</b> — 같이 일하는 사람, 가족, 동업자에게도 그대로 써.</p>
+        <button className="btn mt" disabled={!ok} onClick={() => { try { localStorage.setItem(MATCH_LAST_KEY, JSON.stringify(f)); } catch {} track("match_run", { has_hour: f.h != null }); setDone(true); }}>
+          {ok ? "둘을 맞대 볼게" : "생년월일을 채워 줘"}
+        </button>
+        <button className="btn ghost mt" onClick={onClose}>닫을게</button>
+      </div>
+    </div>
+  );
+
+  const AkBar = () => (
+    <svg viewBox="0 0 320 152" width="100%" height="152" className="impsvg drawin" role="img" aria-label="여덟 항목">
+      {r.akRows.map((x, i) => {
+        const y = 10 + i * 17, w = 168 * x.ratio;
+        return <g key={i}>
+          <text x="96" y={y + 8} fontSize="9" fill="#8a7f95" textAnchor="end">{x.label}</text>
+          <rect x="102" y={y} width="168" height="10" rx="2" fill="#6f658022" />
+          <rect x="102" y={y} width={Math.max(w, 1.5)} height="10" rx="2"
+            fill={x.ratio >= 0.8 ? "#5b8fd4" : x.ratio <= 0.34 ? "#a83229" : "#6f6580"} />
+          <text x="276" y={y + 8} fontSize="8" fill="#6f6580">{x.sc}/{x.max}</text>
+        </g>;
+      })}
+      <text x="102" y="150" fontSize="7" fill="#6f6580">칸이 길수록 그 항목이 맞는다는 뜻이야</text>
+    </svg>
+  );
+
+  return (
+    <div className="imp fade">
+      <div className="imphead">
+        <p className="impeyebrow">비 나 리 · 궁 합</p>
+        <p className="imptitle">그 사람과 너</p>
+        <p className="impsub">{f.y}년 {f.m}월 {f.d}일생과 맞대 봤어. {f.h == null ? "태어난 시를 몰라 그만큼 얕게 읽었어." : ""}</p>
+      </div>
+
+      <p className="imph">아홉 하늘이 각각 뭐라고 하는가</p>
+      {r.rows.map((x, i) => (
+        <div className={"impsky" + (x.v >= 1 ? " up" : x.v <= -1 ? " dn" : "")} key={i}>
+          <p className="impskh"><i>{x.from}</i>{x.ask}<Ref n={x.n} /></p>
+          <p className="impskv">{x.val}</p>
+          <p className="impskw"><H t={x.w} /></p>
+        </div>
+      ))}
+
+      <p className="imph2">인도가 보는 여덟 자리</p>
+      <AkBar />
+      <div className="impmrows">
+        {r.akRows.map((x, i) => (
+          <div className={"impmrow" + (x.ratio <= 0.34 ? " dn" : x.ratio >= 0.8 ? " on" : "")} key={i}>
+            <b>{x.label}</b><span><H t={x.w} /></span></div>
+        ))}
+      </div>
+
+      <p className="imph">{r.clash.t}</p>
+      <div className="impclash"><p><H t={r.clash.w} /><Ref n={r.clash.n} /></p></div>
+
+      <p className="imph">조심할 것 <i>헤어지라는 말은 안 해</i></p>
+      {r.care.map((c, i) => (<div className="imptrig" key={i}><p><H t={c} /></p></div>))}
+
+      <p className="imph2">굳이 한 줄로 하면</p>
+      <p className="impepi">아홉 축 중 <b>{r.band}</b>. <b>다만 이 숫자를 먼저 보지 마</b> —
+        궁합은 총점이 아니라 <b>어느 축이 어긋나는가</b>로 읽는 거야. 위를 다 읽고 나서 이 줄을 봐.<Ref n={r.n} /></p>
+
+      {/* A-4: 궁합도 같은 고지를 받는다 — 같은 엔진 계열이고 같은 성격의 문서다 */}
+      <p className="ainote docnote">이 문서는 <b>두 사람의 생년월일로 계산한 전통 해석</b>이야 — 재미로 보는 참고용이야.
+        <b>관계를 끊거나 이으라는 판정이 아니고</b>, 상대에 대한 사실 확인도 아니야.
+        여기 적힌 건 <b>무엇을 조심하면 되는지</b>까지고, 사람에 대한 결정은 네가 해.</p>
+      <div className="impfoot">
+        <button className="btn ghost sm" onClick={() => setNotesOn((v) => !v)}>
+          {notesOn ? "▴ 근거 접기" : `▾ 근거 보기 — ${r.notes.length}개`}</button>
+        {notesOn && (<ol className="impnotes">{r.notes.map((t, i) => <li key={i}><span>{i + 1}</span><span dangerouslySetInnerHTML={{ __html: t }} /></li>)}</ol>)}
+        <button className="btn ghost mt" onClick={() => setDone(false)}>다른 사람과도 봐볼게</button>
         <button className="btn ghost mt" onClick={onClose}>닫을게</button>
       </div>
     </div>
@@ -2428,7 +2582,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v124.1 · 인장";
+const APP_VER = "v127.1 · 인장";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -2783,6 +2937,10 @@ function buildBujeokPoster({ saju, direction, seed, tosses, hexInfo, category, a
   const d = new Date();
   ctx.font = "400 30px sans-serif"; ctx.fillStyle = "#5f5670";
   ctx.fillText(`${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")} · 수호신의 부적`, W / 2, 1810);
+  /* A-5(작업지시 2026-08-14): 이미지는 앱 밖으로 나가서 혼자 돌아다닌다 —
+     받은 사람은 우리 화면의 어떤 고지도 못 본다. 그림 안에 넣지 않으면 표시가 사라진다. */
+  ctx.font = "400 26px sans-serif"; ctx.fillStyle = "#4e4660";
+  ctx.fillText("AI가 생성한 내용 · 재미로 보는 참고용", W / 2, 1858);
   return cv;
 }
 function dataUrlToFile(dataUrl, name) {                        // 동기 변환(제스처 보존용)
@@ -2990,6 +3148,26 @@ function todayIlju() { const d = new Date(); const g = (jdn(d.getFullYear(), d.g
 
 /* v16(B1): 수호신의 기억 — localStorage 영속화. "수호신은 이미 너를 안다"를 처음으로 사실로 만든다 */
 const STORE_KEY = "binari.v1";
+/* ── A-6 (전략 세션 작업지시 2026-08-14) ─────────────────────────────────────
+   저장 키에 **점(`.`) 접두 = 관리 대상**이라는 암묵 규칙이 있었다.
+   `clearMemory` 도, 내보내기/불러오기 스윕도 `binari.` 만 본다.
+   그런데 새 기능은 계속 **밑줄**로 키를 만들었다 — v115 각인 선택 입력, v125 궁합 상대 생년월일.
+   결과: **"다른 사람이야? — 처음부터 다시"를 눌러도 안 지워지고 다음 사람에게 넘어간다.**
+   궁합 쪽이 특히 무겁다 — **상대는 이 앱을 쓴 적도 동의한 적도 없는 제3자**다.
+   암묵 규칙을 명시 규칙으로 올린다: **저장 키는 전부 `binari.` 로 시작한다.**
+   health-check 가 `localStorage.*Item("binari_` 패턴으로 재발을 잡는다
+   (`binari_bujeok` 은 다운로드 파일명, `__binari_t` 는 가용성 프로브라 오탐하면 안 되므로 패턴을 좁혔다). */
+const IMPRINT_EXTRA_KEY = "binari.imprint_extra.v1";
+const MATCH_LAST_KEY = "binari.match_last.v1";
+/* 구키에서 한 번만 옮겨 오고 지운다. 이미 쓰던 사람의 값을 잃지 않으면서 규칙 밖 키를 없앤다 */
+(function migrateUnderscoreKeys() {
+  try {
+    for (const [oldK, newK] of [["binari_imprint_extra", IMPRINT_EXTRA_KEY], ["binari_match_last", MATCH_LAST_KEY]]) {
+      const v = localStorage.getItem(oldK);
+      if (v != null) { if (localStorage.getItem(newK) == null) localStorage.setItem(newK, v); localStorage.removeItem(oldK); }
+    }
+  } catch (_) {}
+})();
 function loadMemory() {
   try {
     const raw = store.getItem(STORE_KEY);
@@ -3007,7 +3185,23 @@ function loadMemory() {
   } catch (_) { return null; }
 }
 function saveMemory(m) { try { store.setItem(STORE_KEY, JSON.stringify(m)); } catch (_) {} }
-function clearMemory() { try { store.removeItem(STORE_KEY); } catch (_) {} }
+/* A-6 ②: 키 하나만 지우면 "처음부터 다시"가 거짓말이 된다.
+   `binari.` 전량을 쓸되 **팀 플래그(INTERNAL_KEY)는 남긴다** — 그게 날아가면 계측이 팀 유입으로 오염되고,
+   그건 D7 게이트를 무의미하게 만든다(CLAUDE.md §계측 주의). 지운 목록은 개수만 계측한다. */
+function clearMemory() {
+  let n = 0;
+  try { store.removeItem(STORE_KEY); } catch (_) {}
+  try {
+    const ks = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.indexOf("binari.") === 0 && k !== INTERNAL_KEY) ks.push(k);
+    }
+    for (const k of ks) { localStorage.removeItem(k); n++; }
+  } catch (_) {}
+  try { _ph?.reset?.(); } catch (_) {}      // 앞사람의 distinct_id 를 물려주지 않는다
+  return n;
+}
 
 /* v15: 강건 JSON 파서 (끝 잘림·트레일링 콤마 복구) — 2콜 공용 */
 function repairJSON(txt) {
@@ -3189,10 +3383,38 @@ function axisMap(list, pick) {
   return Object.keys(o).length ? o : null;
 }
 const voteMap = (votes) => axisMap(votes, (v) => v.v ?? v.vote);
-const reasonMap = (reasons) => axisMap(reasons, (r) => r.text);
+/* A-3: 근거 **전문**을 계측에 실으면 실명·질문 원문이 그대로 나간다.
+   축 이름과 길이만 남긴다 — "어느 축이 얼마나 길게 나왔나"는 이걸로도 재진다. */
+const reasonMap = (reasons) => axisMap(reasons, (r) => String(r.text || "").length);
 
 const encodeShare = (o) => { try { return _b64e(JSON.stringify(o)); } catch (_) { return ""; } };
-const decodeShare = (s) => { try { const o = JSON.parse(_b64d(s)); return o && o.v && o.d ? o : null; } catch (_) { return null; } };
+/* ── A-2 (작업지시 2026-08-14) ────────────────────────────────────────────
+   `?v=` 는 base64 인코딩만 거친 **평문**이라 링크를 받은 사람도, 링크가 남는 곳도 다 읽는다.
+   설계 헌장: "공유 링크·이미지 — 실명은 절대 싣지 않는다."
+   ⚠ **payload 의 n 만 지우면 부족하다.** SYS 프롬프트가 판결문 안에서 이름을 부르게 하고 있어
+     실명이 verdict/subline **본문 문자열**에 실려 나간다. 둘 다 걷어내야 한다.
+   ⚠ 그리고 경계를 봐야 한다 — 이름이 "지원"일 때 "지원 아끼지"가 깨지면 안 된다.
+     그래서 **호격 조사가 붙은 형태**(지원아/지원야/지원님/지원 씨)와 문장 첫머리 호명만 지운다. */
+const stripName = (t, name) => {
+  const n = String(name || "").trim();
+  if (!n || n.length < 2 || !t) return t || "";
+  const e = n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  let o = String(t)
+    /* ① 호격 — "지원아," "지원님" "지원 씨." 뒤가 문장부호나 끝일 때만 지운다 */
+    .replace(new RegExp(`${e}\\s*(아|야|님|씨)(?=[\\s,.…!?"'\u2014-]|$)`, "g"), "")
+    /* ② 문장 첫머리 호명 — "지원, 오늘은" */
+    .replace(new RegExp(`(^|[.!?…]\\s*)${e}(?=[\\s]*[,、])`, "g"), "$1");
+  /* ③ 그래도 남으면 **'너'로 갈아 끼운다.**
+     ⚠ 트레이드오프를 알고 고른 것이다 — 이름이 흔한 명사와 겹치면(지원·하늘·사랑) 뜻이 살짝 틀어진다.
+        "지원 아끼지 마" → "너 아끼지 마". 어색해도 말은 된다.
+        반대로 안 지우면 **실명이 링크에 그대로 실린다.** 설계 헌장은 후자를 금지한다.
+        어색한 문장과 새는 실명 중에 어색한 쪽을 고른다. */
+  if (new RegExp(e).test(o)) o = o.replace(new RegExp(e, "g"), "너");
+  /* ④ 지우고 남은 부스러기 정리 — "보내지 마. ." 가 실제로 나왔다 */
+  return o.replace(/\s{2,}/g, " ").replace(/([.!?…])\s*[.,、]/g, "$1")
+    .replace(/^\s*[,、.]\s*/, "").trim();
+};
+const decodeShare = (s) => { try { const o = JSON.parse(_b64d(s)); if (!o || !o.v || !o.d) return null; delete o.n; return o; } catch (_) { return null; } };
 
 /* ═══════════════ 앱 ═══════════════ */
 export default function App() {
@@ -3210,7 +3432,7 @@ export default function App() {
   const [sharedGone, setSharedGone] = useState(false);  // v75: '나도 물어볼래'로 공유 화면 닫음
   // 1단계 계측은 동의와 무관하게 항상 켠다(2단계 속성만 동의로 게이트)
   // 계측: 세션 시작. 유입은 first-touch(_superProps.ft_*)가 고정 부착하므로 여기선 이번 방문 경로(ref)만 참고용으로 남긴다.
-  useEffect(() => { _consent = readConsent(); _initAnalytics(); let ref = "direct"; try { const sp = new URLSearchParams(window.location.search); ref = sp.get("ref") || sp.get("utm_source") || (sp.get("v") ? "share" : "direct"); } catch (_) {} trackVisit({ returning, ref }); if (sharedIn) track("shared_verdict_view", { dir: sharedIn.d }); }, []);
+  useEffect(() => { _optout = readOptout(); _consent = readConsent(); _initAnalytics(); let ref = "direct"; try { const sp = new URLSearchParams(window.location.search); ref = sp.get("ref") || sp.get("utm_source") || (sp.get("v") ? "share" : "direct"); } catch (_) {} trackVisit({ returning, ref }); if (sharedIn) track("shared_verdict_view", { dir: sharedIn.d }); }, []);
   const [saju, setSaju] = useState(mem?.saju || null);
   const [zo, setZo] = useState(mem?.zo || null);
   const [moon, setMoon] = useState(mem?.moon || null);
@@ -3246,6 +3468,8 @@ export default function App() {
   const [noting, setNoting] = useState(false);
   const [logOpen, setLogOpen] = useState(false);              // v16(B6): 판결록 펼침
   const [imprintOpen, setImprintOpen] = useState(false);      // v113: 각인 전문 — 판결 밖의 문서
+  const [matchOpen, setMatchOpen] = useState(false);          // v125: 궁합 — 각인의 애드온
+  const [optOut, setOptOut] = useState(() => readOptout());   // A-1: 분석 수집 거부(처리방침이 약속한 수단)
   const [openRec, setOpenRec] = useState(-1);                 // 판결록 행 클릭 → 다시 읽기
   const [streak, setStreak] = useState(mem?.streak || null);  // v16(B7): 연속 방문 {last, count}
   const [dailyOpen, setDailyOpen] = useState(false);          // v18: 아침 문안 노크형 — 청해야 펼친다
@@ -3347,9 +3571,14 @@ export default function App() {
       setDetail(r2);
       // L3(지표별 근거)는 제품의 핵심 차별점이다. 실패율과 소요시간을 모르면 개선 근거가 없다.
       track("detail_shown", { ms: Math.round(performance.now() - _t0), dir: r1?.direction || null, retry: !!isRetry, axes: Array.isArray(r2?.reasons) ? r2.reasons.length : 0,
-        subline: r2?.subline || null,        // 카드 앞면 설명 한 줄
-        funline: r2?.funLine || null,        // 정령 멘트 — 톤 개선의 유일한 측정 대상
-        reasons: reasonMap(r2?.reasons),     // 지표별 근거 전문(축별)
+        /* A-3(작업지시 2026-08-14): 원문 대신 파생값만. 처리방침 §9 가 "분석 도구에는 질문 원문·이름·
+           생년월일 원값을 전송하지 않는다"고 적어 두었는데 뒷면 원문이 그대로 나가고 있었다.
+           ⚠ 뒷면이 더 위험했다 — 콜2 에 이름 금지 지시가 붙는 조건이 "앞면에서 이미 이름을 부른 경우"뿐이라,
+              **앞면이 이름을 안 부른 경우에만 뒷면이 이름을 부르는** 구조였다. 그 문자열이 그대로 갔다.
+           톤 개선 측정은 길이·존재 여부로도 된다. 원문이 필요하면 평가 하네스(eval/)로 재는 게 맞다. */
+        sublen: (r2?.subline || "").length || 0,
+        funlen: (r2?.funLine || "").length || 0,
+        reasons: reasonMap(r2?.reasons),     // A-3: 축별 **길이**만(전문 금지)
         disclaimer: r2?.disclaimer || null,
         tok_in: _u2 ? _u2.in : null, tok_out: _u2 ? _u2.out : null });
     } catch (e) {
@@ -3383,7 +3612,9 @@ export default function App() {
     track("verdict_shared", { dir: res.direction, mode: "ritual" });
     const text = `"${q}"\n→ ${res.direction}. ${res.verdict}\n\n— 내 수호신의 판결, 비나리`;
     // v75: 판결을 링크에 실어 보낸다 — 받은 사람이 홈이 아니라 이 판결을 먼저 보게
-    const payload = { q, d: res.direction, v: res.verdict, s: (detail && !detail._err ? detail.subline : "") || "", n: (birth.name || "").trim(), a: res.against || 0, t: res.total || 0, c: res.category || "", hx: hexInfo ? { n: hexInfo.name, t: (hexInfo.moving && hexInfo.moving.length ? hexInfo.toName : "") } : null };
+    /* A-2: n 필드 제거 + 본문에서 호칭 제거. 둘 다 해야 실명이 안 나간다 */
+    const _nm = (birth.name || "").trim();
+    const payload = { q, d: res.direction, v: stripName(res.verdict, _nm), s: stripName((detail && !detail._err ? detail.subline : "") || "", _nm), a: res.against || 0, t: res.total || 0, c: res.category || "", hx: hexInfo ? { n: hexInfo.name, t: (hexInfo.moving && hexInfo.moving.length ? hexInfo.toName : "") } : null };
     const enc = encodeShare(payload);
     const url = enc ? `https://binari-sepia.vercel.app/?v=${enc}` : "https://binari-sepia.vercel.app/?ref=share";
     try {
@@ -3632,7 +3863,7 @@ export default function App() {
       agitateRef.current = true; setRes(r1);
       // scope_level(모델 판정) vs scope_hint(규칙) — 둘이 어긋난 건이 경계 케이스다. 그 목록이 다음 규칙 개정의 근거가 된다.
       const _sLevel = ["S1", "S2", "S3"].includes(r1.scope) ? r1.scope : null;
-      track("verdict_shown", demoProps(birth, { dir: r1.direction, cat: r1.category, tone: r1.tone, against: r1.against, total: r1.total, mode: "ritual", lean: lean || "skip", verdict: r1.verdict || null, mbti: mbti || null, element: saju?.main || null, ms: Math.round(performance.now() - _jt0),
+      track("verdict_shown", demoProps(birth, { dir: r1.direction, cat: r1.category, tone: r1.tone, against: r1.against, total: r1.total, mode: "ritual", lean: lean || "skip", vlen: (r1.verdict || "").length || 0, mbti: mbti || null, element: saju?.main || null, ms: Math.round(performance.now() - _jt0),
         scope_level: _sLevel, scope_hint: _sHint, scope_agree: _sLevel ? _sLevel === _sHint : null, handoff_triggered: _sLevel === "S3", reask: _reask,
         // 표가 없거나(votes_ok=false) 표와 결론이 어긋난(dir_overridden) 비율이 곧 '판결이 지표에서 나오는가'의 지표다
         votes_ok: !!_tally, votes_n: _tally ? _tally.total : 0, dir_overridden: _tally ? _tally.overridden : null,
@@ -3763,7 +3994,7 @@ export default function App() {
         const vv = sharedIn.v || "";
         return (
           <section className="scene fade sharedwrap">
-            <p className="sharedeyebrow">{sharedIn.n ? `${sharedIn.n}의 수호신이 이렇게 판결했어` : "어떤 이의 수호신이 이렇게 판결했어"}</p>
+            <p className="sharedeyebrow">어떤 이의 수호신이 이렇게 판결했어</p>
             <div className="persp sharedcard">
               <div className="vcard">
                 <div className="vface">
@@ -3781,6 +4012,10 @@ export default function App() {
               </div>
             </div>
             <button className="btn gold sharedcta" onClick={dismiss}>나도 내 수호신에게 물어볼래</button>
+            {/* A-5(작업지시 2026-08-14): 이 화면은 position:fixed 로 뷰포트를 덮어서
+                아래 깔린 온보딩 ainote 가 **물리적으로 안 보인다.** 링크로 처음 들어온 사람에게는
+                여기가 비나리의 첫 화면이므로, AI 표시가 여기 없으면 어디에도 없는 것과 같다. */}
+            <p className="ainote">이 판결은 AI가 생성한 내용입니다 · 재미로 보는 참고예요</p>
             <p className="sharedfoot">비나리 — 답은 거기에 있어</p>
           </section>
         );
@@ -4103,11 +4338,14 @@ export default function App() {
               )}
               {/* v113 각인 진입점 — 판결 흐름 밖이다. 서신은 질문 하나에 딸리고, 각인은 사람 자체에 딸린다.
                   결제 전이라 지금은 무료로 열린다(실물이 나와야 값을 매길 수 있다). 연 시점만 계측한다. */}
-              {!ritual && !res && saju && (
+              {!ritual && !res && saju && (<>
                 <button className="btn ghost mt w100" onClick={() => { track("imprint_clicked", { price: IMPRINT_PRICE, nth_verdict: records.length }); setImprintOpen(true); }}>
                   각인 — 네가 어떻게 만들어졌는지 <span className="impbadge">시험 발행</span>
                 </button>
-              )}
+                <button className="btn ghost mt w100" onClick={() => { track("match_clicked", { price: MATCH_PRICE, nth_verdict: records.length }); setMatchOpen(true); }}>
+                  궁합 — 그 사람과 너 <span className="impbadge">시험 발행</span>
+                </button>
+              </>)}
               {!ritual && !res && records.length > 0 && (
                 <button className="resetlink" onClick={() => { setLogOpen(o => !o); setOpenRec(-1); }}>{logOpen ? "판결록 접기" : `판결록 — ${records.length}번의 판결`}</button>
               )}
@@ -4137,6 +4375,12 @@ export default function App() {
               ) : (
                 <button className="resetlink" onClick={() => setResetAsk(true)}>다른 사람이야? — 처음부터 다시</button>
               ))}
+              {/* A-1: 처리방침이 "해제하면 수집이 중단됩니다"라고 두 번 안내하는 그 수단. 여기가 그 자리다. */}
+              {!ritual && !res && (
+                <button className="resetlink optout" onClick={() => { const on = !optOut; if (!on) track("analytics_optout_off", {}); setOptOut(on); setOptout(on); }}>
+                  {optOut ? "사용 통계 수집 — 꺼짐 · 다시 켤래" : "사용 통계 수집을 끌래"}
+                </button>
+              )}
               {!ritual && returning && !res && (
                 <div className="memrow">
                   <button className="resetlink" onClick={exportMemory}>수호신 기억 보관하기</button>
@@ -4320,6 +4564,14 @@ export default function App() {
           </div>
         </div>
       )}
+      {matchOpen && (
+        <div className="readwrap">
+          <button className="escx" onClick={() => setMatchOpen(false)} aria-label="닫기">✕</button>
+          <div className="readbody">
+            <MatchDoc saju={saju} birth={birth} onClose={() => setMatchOpen(false)} />
+          </div>
+        </div>
+      )}
       {letterOpen && letterDoc && !letterDoc._err && (
         <div className="readwrap">
           <button className="escx" onClick={() => setLetterOpen(false)} aria-label="닫기">✕</button>
@@ -4475,6 +4727,8 @@ const CSS = `
 .rclose{margin:32px 0 0;font-size:14.5px;line-height:1.9;color:#ffe9ad;letter-spacing:.03em;text-shadow:0 0 20px rgba(245,217,139,.35)}
 .readbody .raterow{margin-top:34px}
 .readbody .ainote{margin-top:26px}
+.ainote.docnote{text-align:left;margin:22px 0 4px;padding:12px 13px;border:1px solid #6f658044;border-radius:9px;background:#1a152455;font-size:10.5px;line-height:1.8}
+.ainote.docnote b{color:#9d8fb5}
 .ainote.card{margin-top:18px;opacity:.85}
 .err{color:#e58a8a;font-size:13px;font-family:sans-serif;margin:10px 0}
 .cards{display:flex;flex-direction:column;gap:14px;width:100%;margin-top:10px}
@@ -4751,6 +5005,10 @@ const CSS = `
 .impwfrom{font-size:10.5px;color:#8a7f95;letter-spacing:.02em}
 .impwval{grid-row:1/3;align-self:center;font-size:11.5px;color:#9d8fb5;text-align:right}
 .impwsay{font-size:12.5px;color:#c8bcd8}
+.impnum.w70{width:70px}.impnum.w48{width:48px}
+.impsky.up{border-left-color:#5b8fd4aa}
+.impsky.dn{border-left-color:#a83229aa}
+.impmrow.dn b,.impmrow.dn span{color:#e0a094}
 .impnum{width:74px;background:#1a1524;border:1px solid #6f658055;border-radius:7px;color:#e6dff2;font-size:12px;padding:5px 8px;font-family:inherit}
 .impnum:focus{outline:none;border-color:#c98f3d99}
 .impaskhint{font-style:normal;font-size:9.5px;color:#6f6580}
@@ -4818,6 +5076,7 @@ sup.impfx{font-size:9px;color:#c98f3d;vertical-align:super;margin-left:2px}
 .split{font-family:sans-serif;font-size:10.5px;letter-spacing:.22em;color:#e5b96b;margin:0 0 6px;animation:formPulse 1.8s ease-in-out infinite}
 .retrybtn{background:transparent;border:1px solid #c98f3d66;color:#e6d6a8;font-size:11px;padding:3px 12px;border-radius:14px;cursor:pointer;font-family:sans-serif;margin-left:8px}
 .retrybtn:hover{border-color:#f5d98b}
+.resetlink.optout{opacity:.72}
 .resetlink{background:none;border:none;margin-top:18px;color:#5f5670;font-family:sans-serif;font-size:10.5px;letter-spacing:.06em;cursor:pointer;text-decoration:underline dotted}
 .resetlink:hover{color:#9d8fb5}
 .daily{width:100%;border:1px solid rgba(245,217,139,.28);border-radius:14px;padding:14px 16px;margin:2px 0 14px;background:linear-gradient(160deg,#1c173066,#120e1e88)}

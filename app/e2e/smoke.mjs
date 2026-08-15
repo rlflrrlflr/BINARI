@@ -124,6 +124,39 @@ try {
   check("재재방문: 노크·카드 재노출 없음", (await page.getByText("수호신이 오늘의 하늘을 봐뒀어").count()) === 0 && (await page.getByText("아침 문안").count()) === 0);
   check("리셋 링크 존재", await page.getByText("다른 사람이야?").isVisible());
   await shot("09_return_after_daily");
+
+  /* ── A-1 (작업지시 2026-08-14): 처리방침이 안내한 분석 거부 수단이 화면에 실재하고 실제로 끄는가 ──
+     v122 가 동의 체크박스를 빼면서, 문서만 "해제하면 중단된다"고 남았다. 수단을 만들었으니 화면에서 확인한다. */
+  const optBtn = page.getByRole("button", { name: /사용 통계 수집을 끌래|사용 통계 수집 — 꺼짐/ });
+  check("A-1 분석 거부 스위치가 로비에 있다", (await optBtn.count()) >= 1);
+  if (await optBtn.count()) {
+    await optBtn.first().click(); await page.waitForTimeout(250);
+    const off = await page.evaluate(() => localStorage.getItem("binari.analytics_optout.v1"));
+    check("A-1 누르면 실제로 꺼진다", off === "1", `키=${off}`);
+    await optBtn.first().click(); await page.waitForTimeout(250);   // 되돌려 둔다
+  }
+
+  /* ── A-6: 남의 생년월일이 리셋에 **실제로** 지워지는가 ──
+     정적 검사(privacy-check)는 코드 모양만 본다. 궁합의 상대 생년월일은 **제3자 정보**라
+     "코드가 그렇게 생겼다"로는 부족하다 — 브라우저에서 눌러서 확인한다. */
+  await page.evaluate(() => {
+    localStorage.setItem("binari.match_last.v1", JSON.stringify({ y: 1997, m: 4, d: 22 }));
+    localStorage.setItem("binari.imprint_extra.v1", JSON.stringify({ married: true }));
+    localStorage.setItem("binari.internal.v1", "1");
+  });
+  check("A-6 상대 생년월일이 저장된 상태(사전 조건)",
+    await page.evaluate(() => !!localStorage.getItem("binari.match_last.v1")));
+  await page.getByText("다른 사람이야?").click(); await page.waitForTimeout(300);
+  await page.getByRole("button", { name: "응, 흩어져도 돼" }).click();
+  await page.waitForTimeout(1200);
+  const left = await page.evaluate(() => ({
+    match: localStorage.getItem("binari.match_last.v1"),
+    extra: localStorage.getItem("binari.imprint_extra.v1"),
+    team: localStorage.getItem("binari.internal.v1"),
+  }));
+  check("A-6 리셋이 상대 생년월일을 지운다", left.match === null, String(left.match));
+  check("A-6 리셋이 각인 선택 입력도 지운다", left.extra === null, String(left.extra));
+  check("A-6 리셋이 팀 플래그는 남긴다(계측 오염 방지)", left.team === "1", String(left.team));
 } catch (e) {
   check("예외 없이 완주", false, e.message.slice(0, 200));
   await shot("99_error");
