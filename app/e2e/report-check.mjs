@@ -41,7 +41,9 @@ async function onboard(page) {
   await page.waitForSelector("textarea.qbox", { timeout: 12000 }); await page.waitForTimeout(600);
 }
 
-const b = await chromium.launch((process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}));
+// PW_CHROMIUM: playwright 번들 버전과 설치된 크로미움이 어긋나는 환경(CI·클라우드)에서 경로를 직접 준다
+const b = await chromium.launch((process.env.CHROME_PATH || process.env.PW_CHROMIUM)
+  ? { executablePath: process.env.CHROME_PATH || process.env.PW_CHROMIUM } : {});
 const page = await b.newPage({ viewport: { width: 430, height: 932 } });
 page.setDefaultTimeout(9000);
 const errs = [];
