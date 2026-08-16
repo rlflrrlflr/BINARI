@@ -897,6 +897,53 @@ function useReveal(ref) {
   return ref;
 }
 
+/* ── 문서를 파일로 내린다 (작업지시_루프배관 §1-5) ──────────────────────────
+   각인·궁합에는 **문서가 화면 밖으로 나갈 방법이 0이었다.** 이미지 카드가 있긴 하지만
+   그건 남에게 보일 **조각**(겉·속 한 줄)이지 문서가 아니다 — 값을 치른 물건이 기기에 안 남는다.
+   서신은 이미 `.txt` 저장이 있다. 같은 것을 나머지 두 문서에도 준다.
+   공유보다 저장이 먼저인 이유도 거기 있다: 소지가 없는 소유물은 다음 판에 사라진다
+   (localStorage 는 iOS 에서 7일이면 지워질 수 있는 그릇이다).
+
+   ⚠ **필드를 손으로 옮겨 적지 않는다.** 그렇게 하면 문서에 절을 하나 더할 때마다
+      저장본이 조용히 뒤처진다 — 이 리포에서 각인이 여섯 판 넓어지는 동안 고지가 0이었던 것과
+      같은 종류의 실패다. **화면에 그려진 것을 그대로 읽는다.** 그러면 어긋날 수가 없다.
+   ⚠ 파일 이름은 **ASCII 로 둔다.** 한글 이름을 `a[download]` 에 주면 크로미움이 그 값을 버리고
+      확장자 없는 `download` 로 떨어뜨린다(실측). 유저 손에 안 열리는 파일이 남는다.
+   ⚠ 파일은 기기에서만 만들어진다(Blob + a[download]). 서버로 아무것도 안 보낸다. */
+function docToText(node) {
+  const out = [];
+  const walk = (el) => {
+    for (const ch of el.children) {
+      const tag = (ch.tagName || "").toLowerCase();
+      // 버튼·그림·입력칸은 문서가 아니다. 그림(막대·원판)의 뜻은 옆의 글이 이미 말한다
+      if (tag === "button" || tag === "svg" || tag === "canvas" || tag === "input" || tag === "nav") continue;
+      // 글 블록이면 통째로 읽고(내부 <b> 까지), 껍데기면 한 겹 더 내려간다
+      if (ch.children.length && !/^(p|li|h[1-6]|figcaption)$/.test(tag)) { walk(ch); continue; }
+      const t = (ch.innerText || ch.textContent || "").replace(/[ \t]+/g, " ").trim();
+      if (t) out.push(t);
+    }
+  };
+  try { walk(node); } catch (_) {}
+  return out.join("\n\n");
+}
+function saveDocFile({ node, title, notes, foot, file }) {
+  if (!node) return false;
+  const body = docToText(node);
+  if (!body) return false;
+  /* 근거는 접혀 있을 수 있다 — 화면에 안 펼쳐 뒀다고 저장본에서 빠지면 안 된다.
+     값을 치른 사람이 산 건 결론이 아니라 **왜 그렇게 나왔는가**까지다. */
+  const ns = (notes || []).map((t, i) => `[${i + 1}] ${String(t).replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim()}`);
+  const txt = [title, "─".repeat(28), "", body,
+    ns.length ? `\n\n── 근거 ${ns.length}개 ──\n${ns.join("\n")}` : "",
+    `\n\n${foot}`].filter(Boolean).join("\n");
+  try {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([txt], { type: "text/plain;charset=utf-8" }));
+    a.download = file; document.body.appendChild(a); a.click(); a.remove();
+    return true;
+  } catch (_) { return false; }
+}
+
 function ImprintDoc({ saju, birth, sex, onClose }) {
   const [notesOn, setNotesOn] = useState(false);
   /* v115 선택 입력 — **각인을 열 때만** 묻는다. 무료 온보딩은 건드리지 않는다.
@@ -1181,7 +1228,10 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
       </div>
       <CoreFig />
       <p className="impp"><b>그리고 네게는 {r.core.block.t}이 얇아.</b><Ref n={r.core.n3} /> {r.core.block.s}. {r.core.block.w}</p>
-      <p className="impfix"><b>그래서 필요한 건 하나야</b> — {r.core.block.fix}.</p>
+      {/* fix 는 imprint.js 에서 `<b>` 를 품고 온다(burn·d·w 와 같은 계열). `{}` 로 꽂으면 React 가
+          이스케이프해서 **화면에 태그가 글자로 보인다** — 실제로 그랬다(값을 치른 문서에서, 가장 강조한 줄에서).
+          같은 파일의 다른 필드는 전부 <H> 를 거치고 있었고 이 한 줄만 빠져 있었다. */}
+      <p className="impfix"><b>그래서 필요한 건 하나야</b> — <H t={r.core.block.fix} />.</p>
 
       {r.saga && <>
         <p className="imph">너의 이야기 <i>내가 지켜본 대로</i></p>
@@ -1307,7 +1357,7 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
           ⚠ **절마다 붙이지 않는다.** 절마다 붙이면 다음 판에서 또 빠진다 — 문서 하단 고정 블록 하나로 둔다.
           그리고 "AI가 생성"은 맞는 문구가 아니다(각인은 LLM 산출물이 아니다). 필요한 건
           참고용 · 의료 조언 아님 · 진단과 치료는 전문가 쪽이다. */}
-      <p className="ainote docnote">이 문서는 <b>생년월일시로 계산한 전통 해석</b>이야 — 재미로 보는 참고용이고,
+      <p className="ainote docnote">이 문서는 <b>생년월일시로 계산한 전통 해석</b>이야 — 재미로 보는 참고용이고,{" "}
         <b>의료·법률·재무 조언이 아니야.</b> 몸 이야기는 병을 점친 게 아니라 <b>어디를 더 살피라는 표시</b>일 뿐이야.
         증상이 있으면 <b>병원에 가는 게 먼저</b>고, 큰 결정은 이 문서 말고 네 판단으로 해.
         맞는지 안 맞는지는 위 <b>확인 문항</b>으로 네가 직접 재 보면 돼.</p>
@@ -1332,6 +1382,17 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
         })}>이미지로 간직하기 — 겉과 속 한 장</button>
         <p className="fine">그림엔 <b>생년월일·이름·건강·짝 이야기가 안 담겨.</b> 겉·속 한 줄과
           태어난 해의 이름까지야 — <b>날짜가 역산되지 않게</b> 파생 이름은 한 장에 하나만 실어.</p>
+        {/* §1-5 — 위 그림은 **남에게 보일 조각**이고, 이건 **네가 갖는 문서 전체**다. 둘은 다른 물건이다. */}
+        <button className="btn ghost mt" onClick={() => {
+          const ok = saveDocFile({
+            node: readRef.current, title: "비나리 · 각인", notes: r.notes,
+            foot: "이 문서는 생년월일시로 계산한 전통 해석이야 — 재미로 보는 참고용이고, 의료·법률·재무 조언이 아니야.\n비나리 · " + SHARE_HOST,
+            file: "binari_gakin.txt",
+          });
+          track("imprint_saved", { ok });
+        }}>글로 저장하기 — 문서 전체를 파일로</button>
+        <p className="fine">파일은 <b>네 기기에만 만들어져.</b> 저장한 파일에는 문서에 적힌 게
+          <b> 전부 들어가 — 건강·짝 이야기까지.</b> 남에게 보낼 거라면 위의 그림 쪽을 써.</p>
         <button className="btn ghost mt" onClick={onClose}>닫을게</button>
       </div>
     </div>
@@ -1355,6 +1416,87 @@ function OfferShown({ records }) {
   return null;
 }
 
+/* ── 궁합 인장 2인 (관계표현인계서 §4-A) ─────────────────────────────────────
+   ⚠ **WebGL 을 안 쓴다.** v127.1 인장은 문서마다 두 번째 WebGL 컨텍스트를 열었고
+     렉 때문에 v127.6 에서 통째로 뺐다(창업자: "각인 상단 수호신 빼자, 렉만 걸려").
+     그래서 응축 상태(행성)를 **Canvas2D 정지화**로 그린다 — 컨텍스트 0개·프레임 0.
+     한 장 그리고 끝이라 문서를 몇 번 열든 비용이 안 쌓인다.
+   지키는 것(인계서 §3): ①두 형상을 **합성하지 않는다**(나란히) ②게이지·퍼센트 없음
+     ③관계는 **방향**으로 그린다 ④상대는 **작게·덜 밝게**(초대된 손님) */
+function drawSealPlanet(g, cx, cy, R, el, seed, dim) {
+  const C = EL_COLOR[el] || EL_COLOR.토;
+  const rnd = (n) => ((Math.sin(seed * 12.9898 + n * 78.233) * 43758.5453) % 1 + 1) % 1;
+  const tilt = -0.5 + rnd(1) * 1.0;                       // 자전축 — 명식마다 다르다
+  g.save();
+  g.globalAlpha = dim;
+  g.beginPath(); g.arc(cx, cy, R, 0, 6.2832); g.clip();
+  const grd = g.createRadialGradient(cx - R * 0.34, cy - R * 0.38, R * 0.05, cx, cy, R * 1.02);
+  grd.addColorStop(0, C[1]); grd.addColorStop(0.5, C[0]); grd.addColorStop(1, "#07060e");
+  g.fillStyle = grd; g.fillRect(cx - R, cy - R, R * 2, R * 2);
+  g.translate(cx, cy); g.rotate(tilt);
+  g.globalCompositeOperation = "lighter";
+  const bands = 3 + Math.floor(rnd(2) * 4);               // 띠 수 — 명식마다 다르다
+  if (el === "화" || el === "수" || el === "토") {
+    for (let i = 0; i < bands; i++) {
+      const y = (-1 + 2 * (i + 0.5) / bands) * R * 0.86;
+      g.globalAlpha = dim * (el === "수" ? 0.16 : 0.24) * (0.6 + rnd(10 + i) * 0.6);
+      g.fillStyle = i % 2 ? C[2] : C[1];
+      g.fillRect(-R, y - R * (el === "토" ? 0.05 : 0.08), R * 2, R * (el === "토" ? 0.10 : 0.16));
+    }
+  } else if (el === "목") {
+    for (let i = 0; i < bands + 1; i++) {
+      const x = (-1 + 2 * (i + 0.5) / (bands + 1)) * R * 0.9;
+      g.globalAlpha = dim * 0.22 * (0.6 + rnd(20 + i) * 0.6);
+      g.fillStyle = C[1]; g.fillRect(x - R * 0.045, -R, R * 0.09, R * 2);
+    }
+  } else {
+    g.globalAlpha = dim * 0.42;                            // 금 — 무늬 대신 광택
+    const gl = g.createRadialGradient(-R * 0.3, -R * 0.34, 0, -R * 0.3, -R * 0.34, R * 0.95);
+    gl.addColorStop(0, C[1]); gl.addColorStop(1, "rgba(0,0,0,0)");
+    g.fillStyle = gl; g.fillRect(-R, -R, R * 2, R * 2);
+  }
+  g.restore();
+  g.save(); g.globalAlpha = dim * 0.5; g.strokeStyle = C[1]; g.lineWidth = Math.max(1, R * 0.02);
+  g.beginPath(); g.arc(cx, cy, R * 0.995, 0, 6.2832); g.stroke(); g.restore();
+}
+function MatchSeal({ work }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const cv = ref.current; if (!cv || !work) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const W = 300, H = 132;
+    cv.width = W * dpr; cv.height = H * dpr; cv.style.width = W + "px"; cv.style.height = H + "px";
+    const g = cv.getContext("2d"); if (!g) return;
+    g.scale(dpr, dpr); g.clearRect(0, 0, W, H);
+    const mine = { x: 58, r: 44 }, theirs = { x: 244, r: 33 };   // 상대는 작다(§원칙 5)
+    drawSealPlanet(g, mine.x, H / 2, mine.r, work.elA, (work.dgA + 1) * 7.13, 1);
+    drawSealPlanet(g, theirs.x, H / 2, theirs.r, work.elB, (work.dgB + 1) * 11.7, 0.8);
+    const A = EL_COLOR[work.elA] || EL_COLOR.토, B = EL_COLOR[work.elB] || EL_COLOR.토;
+    const x0 = mine.x + mine.r + 12, x1 = theirs.x - theirs.r - 12, y = H / 2;
+    const toMe = work.push === "상대가 너를 민다";
+    const lg = g.createLinearGradient(x0, 0, x1, 0);
+    lg.addColorStop(0, toMe ? A[0] : A[1]); lg.addColorStop(1, toMe ? B[1] : B[0]);
+    g.save(); g.globalCompositeOperation = "lighter"; g.strokeStyle = lg; g.lineWidth = 1.4;
+    g.globalAlpha = 0.85; g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.stroke();
+    /* 흐르는 알갱이 — 방향은 점의 굵기로만 말한다. 화살표를 쓰면 도표가 되고, 도표는 우리 문법이 아니다. */
+    const flow = (work.push === "미는 쪽이 따로 없다" || work.push === "서로 안 밀고 안 쏟는다") ? 0 : 1;
+    for (let i = 0; i < 9; i++) {
+      const t = (i + 0.5) / 9, x = x0 + (x1 - x0) * t;
+      const w = flow ? (toMe ? 1 - t : t) : 0.5;
+      g.globalAlpha = 0.25 + 0.7 * w;
+      g.fillStyle = toMe ? B[1] : A[1];
+      g.beginPath(); g.arc(x, y, 0.9 + 1.9 * w, 0, 6.2832); g.fill();
+    }
+    g.restore();
+  }, [work]);
+  if (!work) return null;
+  return (
+    <div className="mseal">
+      <canvas ref={ref} aria-hidden="true" />
+      <p className="msealcap"><b>{work.push}.</b> 왼쪽이 너, 오른쪽이 그 사람이야.</p>
+    </div>
+  );
+}
 function MatchDoc({ saju, birth, onClose, onMet }) {
   const [notesOn, setNotesOn] = useState(false);
   const [f, setF] = useState(() => { try { return JSON.parse(localStorage.getItem(MATCH_LAST_KEY) || "{}"); } catch { return {}; } });
@@ -1446,6 +1588,8 @@ function MatchDoc({ saju, birth, onClose, onMet }) {
 
   return (
     <div className="imp fade" ref={readRef}>
+      {/* 인계서 §4-A — **결과 화면 머리에만** 둔다. 입력 폼엔 넣지 않는다(아직 상대가 없다) */}
+      <MatchSeal work={r.work} />
       <div className="imphead">
         <p className="impeyebrow">비 나 리 · 궁 합</p>
         <p className="imptitle">그 사람과 너</p>
@@ -1494,7 +1638,7 @@ function MatchDoc({ saju, birth, onClose, onMet }) {
         궁합은 총점이 아니라 <b>어느 축이 어긋나는가</b>로 읽는 거야. 위를 다 읽고 나서 이 줄을 봐.<Ref n={r.n} /></p>
 
       {/* A-4: 궁합도 같은 고지를 받는다 — 같은 엔진 계열이고 같은 성격의 문서다 */}
-      <p className="ainote docnote">이 문서는 <b>두 사람의 생년월일로 계산한 전통 해석</b>이야 — 재미로 보는 참고용이야.
+      <p className="ainote docnote">이 문서는 <b>두 사람의 생년월일로 계산한 전통 해석</b>이야 — 재미로 보는 참고용이야.{" "}
         <b>관계를 끊거나 이으라는 판정이 아니고</b>, 상대에 대한 사실 확인도 아니야.
         여기 적힌 건 <b>무엇을 조심하면 되는지</b>까지고, 사람에 대한 결정은 네가 해.</p>
       <div className="impfoot">
@@ -1516,6 +1660,17 @@ function MatchDoc({ saju, birth, onClose, onMet }) {
         })}>이미지로 간직하기 — 한 장</button>
         <p className="fine">그림엔 <b>둘의 생년월일도, 어느 축이 갈렸는지도, 총점도 안 담겨.</b>
           상대는 이 앱을 쓴 적이 없는 사람이야 — <b>보내기 전에 한 번 더 생각해 줘.</b></p>
+        {/* §1-5 — 그림은 조각, 이건 문서 전체. 다만 궁합은 **제3자 이야기**라 경고가 한 겹 더 붙는다. */}
+        <button className="btn ghost mt" onClick={() => {
+          const ok = saveDocFile({
+            node: readRef.current, title: "비나리 · 궁합", notes: r.notes,
+            foot: "이 문서는 두 사람의 생년월일로 계산한 전통 해석이야 — 재미로 보는 참고용이고, 관계를 끊거나 이으라는 판정이 아니야.\n비나리 · " + SHARE_HOST,
+            file: "binari_gunghap.txt",
+          });
+          track("match_saved", { ok });
+        }}>글로 저장하기 — 문서 전체를 파일로</button>
+        <p className="fine">파일은 <b>네 기기에만 만들어져.</b> 다만 이 문서는 <b>상대 이야기</b>야 —
+          상대는 이 앱을 쓴 적도 동의한 적도 없어. <b>네가 읽으려고 갖는 것까지</b>로 두는 게 좋아.</p>
         <button className="btn ghost mt" onClick={() => { track("match_again", {}); setDone(false); }}>다른 사람과도 봐볼게</button>
         <button className="btn ghost mt" onClick={onClose}>닫을게</button>
       </div>
@@ -2992,7 +3147,7 @@ function Guardian(props) {
 /* 돌아올 주소 — 부적·각인 카드·공유 링크가 같은 값을 쓴다. 자체 도메인을 붙이는 날 **여기 한 곳만** 고친다.
    예전엔 세 곳에 따로 박혀 있어서, 한 곳만 고치면 나머지가 옛 주소로 남는 종류의 사고가 예약돼 있었다. */
 const SHARE_HOST = "https://binari-sepia.vercel.app";
-const APP_VER = "v134.2 · 곁 명부";
+const APP_VER = "v134.3 · 문서 저장";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -4824,7 +4979,7 @@ export default function App() {
     try {
       const a = document.createElement("a");
       a.href = URL.createObjectURL(new Blob([body], { type: "text/plain;charset=utf-8" }));
-      a.download = `비나리-서신-${letterNo(rec)}.txt`; document.body.appendChild(a); a.click(); a.remove();
+      a.download = `binari_seosin_${letterNo(rec)}.txt`; document.body.appendChild(a); a.click(); a.remove();
       track("letter_saved", demoProps(birth, { no: letterNo(rec) }));
     } catch (_) {}
   };
@@ -6290,6 +6445,10 @@ const CSS = `
 .impck p{font-size:10.5px;color:#8a7f95;line-height:1.6;margin:4px 0 0}
 .impbadge{font-size:9px;letter-spacing:.14em;border:1px solid #c9b98f55;border-radius:3px;padding:1px 5px;margin-left:6px;color:#c9b98f;vertical-align:1px}
 .imp{font-family:sans-serif;padding:6px 2px 30px}
+.mseal{display:flex;flex-direction:column;align-items:center;gap:6px;margin:2px 0 14px}
+.mseal canvas{display:block;max-width:100%}
+.msealcap{font-size:11px;color:#8a7f95;letter-spacing:.02em;margin:0;text-align:center}
+.msealcap b{color:#cbbf8f;font-weight:600}
 .imphead{padding:6px 0 20px;border-bottom:1px solid #c9b98f2e;margin-bottom:8px}
 .impeyebrow{font-size:10px;letter-spacing:.4em;color:#c9b98f;margin:0}
 .imptitle{font-size:25px;color:#f0e2b8;margin:12px 0 0;line-height:1.4;letter-spacing:-.01em}

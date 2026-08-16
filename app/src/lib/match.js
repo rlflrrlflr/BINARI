@@ -236,7 +236,10 @@ export function readMatch({ a, b, lat = 37.5665, lon = 126.978 } = {}) {
     if (rel === "충" || rel === "형") careW.push("<b>같은 방에 오래 두지 마.</b> 각자 하고 정해진 때에 모이는 방식이 이 둘에겐 훨씬 잘 맞아.");
     if (graha.ratio < 0.5) careW.push("<b>구두 합의를 믿지 마.</b> 회의 끝에 세 줄만 적어서 서로 확인하면 대부분 막힌다.");
     if (!careW.length) careW.push("<b>일 축에서 못 박아 둘 위험은 안 잡혀.</b> 편한 만큼 역할이 흐려지는 것만 조심해.");
-    return { rows: rows2, care: careW,
+    /* 시각화가 쓰는 값 — 이미 계산해 둔 것을 **밖으로 내보내기만** 한다(새 계산 0).
+       관계표현인계서 §2: "엔진이 이미 방향값을 준다 — 있는 값을 그리기만 하면 된다" */
+    return { rows: rows2, care: careW, push, elA, elB,
+      dgA: a.saju.idx.dG, dgB: b.saju.idx.dG,
       n: fn("이 절은 <b>새로 계산한 게 아니다</b> — 위 아홉 축에서 이미 뽑은 값(일간·자리 글자·바르나·그라하)을 <b>일의 눈으로 다시 읽은 것</b>이다. 그래서 총점에도 안 들어간다. 연애 궁합과 일 궁합을 한 숫자로 뭉개지 않으려는 것이다.") };
   })();
 

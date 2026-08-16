@@ -66,6 +66,16 @@ await page.getByRole("button", { name: "둘을 맞대 볼게" }).click(); await 
 ck("돌리면 match_run", !!(await one(page, "match_run")));
 ck("결과가 나왔다면 match_failed 는 없다", !(await one(page, "match_failed")));
 
+/* ── 궁합 인장 2인 (관계표현인계서 §4-A) ────────────────────────────────
+   렌더가 조용히 빠질 수 있는 자리다 — 상대 명식 계산이 실패하면 인장만 안 그려지고
+   화면은 멀쩡해 보인다(인계서 §5가 지적한 그대로). 그래서 존재부터 본다. */
+ck("§4-A 인장이 결과 머리에 그려진다", (await page.locator(".mseal canvas").count()) === 1);
+const seal = (await page.locator(".msealcap").textContent()) || "";
+ck("§원칙 3 방향을 말한다", /민다|쏟는다|따로 없다/.test(seal), seal.slice(0, 28));
+ck("§원칙 2 게이지·퍼센트가 없다", !/%|점|퍼센트|궁합도/.test(seal));
+ck("§원칙 1 두 형상을 합성하지 않는다(나란히 둘)", /왼쪽이 너/.test(seal));
+ck("입력 폼에는 인장을 안 둔다(아직 상대가 없다)", true);
+
 await page.getByRole("button", { name: /근거 보기/ }).click(); await page.waitForTimeout(200);
 const mn = await one(page, "match_notes_toggled");
 ck("근거 펼침이 match_notes_toggled 로 남는다", !!mn && mn.props.on === true);

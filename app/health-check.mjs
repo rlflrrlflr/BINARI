@@ -1037,6 +1037,41 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
     "곁 목록에 두 번째 정렬 키를 넣거나 궤도 자리를 인덱스로 주면 목록이 **순위**가 됩니다. 그러면 앱이 사람을 줄 세우게 됩니다 — 적합도가 낮아지면 등급이 내려가는 게 아니라 역할이 바뀐다는 규칙이 거기서 무너집니다.");
 }
 
+/* ── 검사 5-n. 값을 치른 문서가 기기에 남는가 (작업지시_루프배관 §1-5) ─────
+   각인(9,900원)·궁합(4,900원)에는 **문서가 화면 밖으로 나갈 방법이 0이었다.** 이미지 카드는
+   남에게 보일 조각이지 문서가 아니다. localStorage 는 iOS 에서 7일이면 지워질 수 있는 그릇이라,
+   유료 물건을 그 하나에만 맡기면 다음 판에 사라진다. 서신에만 있던 `.txt` 저장을 셋 다 준다.
+
+   그리고 **파일 이름은 ASCII 여야 한다.** 한글 이름을 `a[download]` 에 주면 크로미움이 그 값을
+   버리고 확장자 없는 `download` 로 떨어뜨린다(실측). 유저 손에 남는 게 열리지 않는 파일이 된다. */
+{
+  const app = readFileSync(APP, "utf8");
+  const bad = [];
+  if (!/function saveDocFile\(/.test(app)) bad.push("문서 저장 함수 없음");
+  if (!/function docToText\(/.test(app)) bad.push("문서 → 글 변환 없음");
+  for (const [name, re] of [["각인", /imprint_saved/], ["궁합", /match_saved/], ["서신", /letter_saved/]])
+    if (!re.test(app)) bad.push(`${name} 저장 배선 없음`);
+  /* 필드를 손으로 옮겨 적기 시작하면 절이 늘 때마다 저장본이 뒤처진다 — DOM 을 읽는지 본다 */
+  const d2t = (app.match(/function docToText\([\s\S]*?\n\}/) || [""])[0];
+  if (!/innerText|textContent/.test(d2t)) bad.push("저장본이 화면이 아니라 손으로 옮긴 값에서 나옴");
+  /* 파일명이 나오는 자리는 셋이다 — `a.download =` 직접 대입, saveDocFile 의 `file:`,
+     이미지 카드의 `fileBase:`. 셋 다 본다(한 곳만 보면 다른 두 곳으로 새 나간다). */
+  for (const m of app.matchAll(/(?:\.download =|\bfile:|\bfileBase:)\s*([`"][^`"]*[`"])/g))
+    if (/[^\x00-\x7F]/.test(m[1].replace(/\$\{[^}]*\}/g, ""))) bad.push(`파일 이름에 ASCII 아닌 글자 — ${m[1]}`);
+  /* imprint.js·match.js 의 `<b>` 를 품은 필드를 `{}` 로 꽂으면 **화면에 태그가 글자로 보인다.**
+     실제로 그랬다(각인에서, 가장 강조한 줄에서). `<H t={…} />` 를 거쳐야 한다. */
+  for (const f of ["fix", "burn"]) {
+    // `<H t={…}/>` 로 감싼 형태는 정상이다. 벌거벗은 `{r.…fix}` 만 잡는다
+    const re = new RegExp(`(?<!t=)\\{r\\.[\\w.]*\\b${f}\\}`);
+    if (re.test(app)) bad.push(`HTML 을 품은 필드를 그대로 꽂음 — ${f} (태그가 글자로 보임)`);
+  }
+  add(bad.length ? "심각" : "정상",
+    bad.length ? "값을 치른 문서가 기기에 안 남거나, 저장본이 화면과 어긋남"
+               : "각인·궁합·서신 모두 파일로 저장됨 — 화면 그대로 · ASCII 파일명",
+    bad.length ? bad.join(" · ") : "saveDocFile(DOM 읽기) · 저장 배선 3종 · 파일명 ASCII · HTML 필드 이스케이프 없음",
+    "유료 문서가 화면 밖으로 못 나가면 소유물이 아닙니다. 그리고 저장본을 손으로 옮겨 적으면 절을 더할 때마다 조용히 뒤처집니다 — **화면에 그려진 것을 읽으세요.** 파일 이름은 ASCII 로 두세요(한글이면 크로미움이 확장자 없는 `download` 로 떨어뜨립니다).");
+}
+
 /* ── 검사 6. 의존성 취약점 (npm audit) ───────────────────────────────────
    남이 만든 부품에서 보안 구멍이 발견되는 일은 우리가 코드를 안 건드려도 일어난다.
    중요한 구분: **사용자에게 배달되는 부품(prod)** 과 **내 컴퓨터에서만 쓰는 부품(dev)** 은
