@@ -49,6 +49,8 @@ if (process.argv.includes("--sample")) {            // 저비용 데모: 2인 ×
 }
 const pArg = process.argv.find((a) => a.startsWith("--personas="));   // 예: --personas=3
 if (pArg) personas = personas.slice(0, +pArg.split("=")[1]);
+const pidArg = process.argv.find((a) => a.startsWith("--pids="));      // 예: --pids=P8 — 실패분만 재실행할 때(--personas 는 앞에서 자르기만 한다)
+if (pidArg) { const set = new Set(pidArg.split("=")[1].split(",")); personas = personas.filter((p) => set.has(p.id)); }
 const qArg = process.argv.find((a) => a.startsWith("--qids="));       // 예: --qids=Q08,Q09,Q20
 if (qArg) { const set = new Set(qArg.split("=")[1].split(",")); questions = questions.filter((q) => set.has(q.id)); }
 const catArg = process.argv.find((a) => a.startsWith("--cat="));      // 예: --cat=A,GUARD
