@@ -54,7 +54,14 @@ ck("② 곁이 없어도 화면이 말이 된다", gtxt.trim().length > 10 && gt
 await page.getByRole("button", { name: "판결", exact: true }).click();
 await page.waitForTimeout(700);
 ck("③ 판결 탭으로 돌아온다", await page.locator("textarea.qbox").isVisible().catch(() => false));
-for (const t of ["그래서, 요즘 뭘 망설이고 있어?", "판결을 청한다"]) {
+/* ⚠ 인사말은 **시각에 따라 갈린다**(밤이면 "밤이 깊었네…"). 한 문장으로 못 박아 두면
+   낮에 돌리면 통과하고 밤에 돌리면 실패하는 검사가 된다 — 실제로 그렇게 한 번 붉게 떴다.
+   여기서 지켜야 할 건 "판결 탭이 안 바뀌었다"이지 어느 인사말이냐가 아니므로, 둘 중 하나면 통과다. */
+const NIGHT = "밤이 깊었네. 이 시간의 물음은 마음이 먼저 기울어 있기 마련이야.";
+const DAY = "그래서, 요즘 뭘 망설이고 있어?";
+ck("③ 판결 화면 문구 보존 — 로비 인사말(시각별 둘 중 하나)",
+   (await page.getByText(DAY, { exact: false }).count()) + (await page.getByText(NIGHT, { exact: false }).count()) >= 1);
+for (const t of ["판결을 청한다"]) {
   ck(`③ 판결 화면 문구 보존 — ${t}`, (await page.getByText(t, { exact: false }).count()) >= 1);
 }
 
@@ -77,6 +84,43 @@ for (const t of ["그래서, 요즘 뭘 망설이고 있어?", "판결을 청한
   ck("⑤ 탭 전환이 계측된다", evs.length >= 1 && evs[evs.length - 1].props.to === "gyeot",
      JSON.stringify(evs.map((e) => e.props.to)));
   await p2.close();
+}
+
+/* ── ⑥ 빈 옆자리에 탈출구가 있는가 (B-2) ────────────────────────────────────
+   이 탭의 제일 큰 구멍은 없는 기능이 아니라 **막다른 길**이었다 —
+   "누가 서게 되면 이 자리에…"라고만 써 두면 유저는 **어떻게 서게 하는지를 모른다.**
+   그래서 여기서 보는 건 문구가 아니라 **문이 실제로 열리는가**다. */
+{
+  const p3 = await b.newPage({ viewport: { width: 430, height: 932 } });
+  p3.setDefaultTimeout(15000);
+  await onboard(p3, BASE, "?trackdebug");
+  await p3.getByRole("button", { name: "곁", exact: true }).click();
+  await p3.waitForTimeout(900);
+  const cta = p3.getByRole("button", { name: /여기 서/ });
+  ck("⑥ 곁이 비면 나갈 문이 있다", (await cta.count()) === 1);
+  /* §5 금지 — 첫 화면이 결제벽이 되면 안 된다. 문 하나를 가리키는 것과 값을 파는 건 다르다. */
+  const panel = await p3.locator(".gyeotpanel").innerText();
+  ck("⑥ 그 문이 결제벽이 아니다(값·원 표기 없음)", !/원|₩|\d{3,}/.test(panel), panel.replace(/\n/g, " ").slice(0, 60));
+  await cta.click();
+  await p3.waitForTimeout(900);
+  ck("⑥ 문이 실제로 궁합으로 이어진다", await p3.locator(".impask").isVisible().catch(() => false));
+  const evs = await p3.evaluate(() => (window.__binariEvents || []).filter((e) => e.ev === "gyeot_empty_cta"));
+  ck("⑥ 그 문을 누른 게 계측된다 — 빈 탭이 실제로 전환을 만드는지 봐야 한다", evs.length >= 1);
+
+  /* 곁이 하나라도 서면 그 문은 사라진다 — 목록이 있는데 "비었다"는 안내가 남아 있으면 안 된다 */
+  const ins = p3.locator(".impask input.impnum");
+  await ins.nth(0).fill("1997"); await ins.nth(1).fill("4"); await ins.nth(2).fill("22");
+  await p3.getByRole("button", { name: "둘을 맞대 볼게" }).click();
+  await p3.waitForTimeout(1100);
+  await p3.getByRole("button", { name: /닫을게/ }).last().click();
+  await p3.waitForTimeout(700);
+  await p3.getByRole("button", { name: "곁", exact: true }).click();
+  await p3.waitForTimeout(1100);
+  ck("⑥ 궁합을 보면 그 사람이 실제로 곁에 선다", (await p3.locator(".gyeotlist li").count()) === 1);
+  ck("⑥ 곁이 서면 '비었다' 안내는 사라진다", (await p3.getByRole("button", { name: /여기 서/ }).count()) === 0);
+  /* 창업자 결정 1(절충안) — 궁합만 본 사람은 정식 자리가 아니라 '답 대기'로 흐리게 선다 */
+  ck("⑥ 궁합만 본 사람은 '답 대기' 자리다", (await p3.locator(".gyeotlist li.wait").count()) === 1);
+  await p3.close();
 }
 
 await b.close();

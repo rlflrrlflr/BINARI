@@ -127,6 +127,83 @@ ck("내 명식이 없으면 안 낸다", readMatch({ a: { birth: { y: 1990 } }, 
 ck("시(時)를 몰라도 죽지 않는다",
    !!readMatch({ a: A, b: { ...B, saju: { idx: { ...B.saju.idx, hG: null, hJ: null } } } }));
 
+/* ── ⑨ 버그 셋 (역할과초대 §B-0-b) ─────────────────────────────────────────
+   셋 다 **화면이 멀쩡해 보이는 종류**였다. 값이 조용히 틀렸고, 문장은 매끄러웠다.
+   그래서 여기서 못 박는다 — 세 개 전부 "되살아나면 알아채는" 모양으로 쓴다. */
+{
+  /* ① 축⑨(수비학)의 v 가 `same ? 1 : 1` 이라 늘 긍정표였다.
+     연쇄 피해: plus 가 항상 ≥1 → split 이 사실상 minus 만 보게 되고 →
+     「아홉 축이 전부 어렵다」 분기가 도달 불가능해진다. 그 분기가 닿는지를 직접 본다. */
+  const lifeRow = (x) => x.rows.find((q) => q.from.includes("수비학"));
+  const diff = [];
+  for (let i = 0; i < 400 && diff.length < 2; i++) {
+    const x = readMatch({ a: P(i % 10, i % 12, 1990 + i % 30, 1 + i % 12, 1 + i % 28, i % 24),
+                          b: P((i * 7) % 10, (i * 5) % 12, 1988 + (i * 3) % 30, 1 + (i * 5) % 12, 1 + (i * 7) % 28, (i * 2) % 24) });
+    if (!x) continue;
+    const row = lifeRow(x);
+    if (row && !row.val.split(" ↔ ")[0].trim().startsWith(row.val.split(" ↔ ")[1].trim())) diff.push(row.v);
+  }
+  ck("① 수비학 축이 상수가 아니다 — 길이 다르면 긍정표를 안 던진다",
+     diff.length > 0 && diff.every((v) => v === 0), `다른 길 표본 ${diff.length}건 · v=${[...new Set(diff)].join(",")}`);
+
+  /* 「아홉 축이 전부 어렵다」 분기는 **드물다 — 실측 0.36%.** 그래서 표본이 커야 잡힌다.
+     900쌍으로는 기댓값이 3건이라 우연히 0이 나온다(실제로 그렇게 한 번 헛통과했다).
+     40,000쌍 결정론적 스윕이 A/B 로 갈린 지점이다: `same?1:1` 이면 **0건**, `same?1:0` 이면 **154건**.
+     난수 대신 LCG 를 쓰는 이유 — 검사가 실행할 때마다 다른 답을 내면 그건 검사가 아니다. */
+  let seed = 12345;
+  const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+  let allMinus = 0, branchHit = 0, samples = 0;
+  for (let i = 0; i < 40000; i++) {
+    const x = readMatch({
+      a: P(0 | rnd() * 10, 0 | rnd() * 12, 1950 + (0 | rnd() * 70), 1 + (0 | rnd() * 12), 1 + (0 | rnd() * 28), 0 | rnd() * 24),
+      b: P(0 | rnd() * 10, 0 | rnd() * 12, 1950 + (0 | rnd() * 70), 1 + (0 | rnd() * 12), 1 + (0 | rnd() * 28), 0 | rnd() * 24) });
+    if (!x) continue;
+    samples++;
+    const plus = x.rows.filter((q) => q.v >= 1), minus = x.rows.filter((q) => q.v <= -1);
+    if (!plus.length && minus.length) { allMinus++; if (!x.split) branchHit++; }
+  }
+  ck("① 「전부 어렵다」 분기가 도달 가능하다(죽은 코드가 아니다)",
+     allMinus > 0 && branchHit > 0, `${samples}쌍 중 ${allMinus}건 (${(allMinus / samples * 100).toFixed(2)}%) · 고치기 전 0건`);
+
+  /* ② 납음이 달력 연도가 아니라 **사주년**(입춘 보정)에서 나와야 한다.
+     1~2월 초 출생자는 같은 사람인데 궁합과 각인이 다른 납음을 말했다. */
+  {
+    const soundOf = (x) => x.rows.find((q) => q.from.includes("소리")).val.split(" ↔ ")[0].trim();
+    // 입춘 전(1/15)에 태어난 사람 — saju.nayin 을 들고 오면 그 값을 그대로 써야 한다
+    const withSaju = { saju: { idx: { yG: 9, yJ: 3, mG: 3, mJ: 5, dG: 2, dJ: 0, hG: 8, hJ: 10 }, nayin: "대림목" },
+                       birth: { y: 1990, m: 1, d: 15, h: 9, min: 0 } };
+    const x = readMatch({ a: withSaju, b: B });
+    ck("② 납음은 명식이 이미 보정한 값을 쓴다(궁합·각인이 안 갈린다)",
+       x && soundOf(x) === "대림목", x ? soundOf(x) : "null");
+    // 명식에 납음이 없는 옛 저장분은 예전처럼 계산해서 죽지 않아야 한다
+    const noNayin = { ...withSaju, saju: { idx: withSaju.saju.idx } };
+    ck("② 명식에 납음이 없어도 안 죽는다", !!readMatch({ a: noNayin, b: B }));
+  }
+
+  /* ③ 축⑥ 문구가 조건보다 더 말했다 — 합만 보면서 "한쪽이 무겁고 한쪽이 가벼워"라고 단언했다.
+     둘 다 중간(차이가 작음)인 쌍에서 그 문장이 안 나오는지 본다. */
+  {
+    const w6 = (x) => { const r6 = x.rows.find((q) => q.from.includes("자바")); return { txt: st(r6.w), val: r6.val }; };
+    let checkedEven = 0, lied = 0, sawTilted = 0;
+    for (let i = 0; i < 900; i++) {
+      const x = readMatch({ a: P(i % 10, (i * 3) % 12, 1970 + i % 55, 1 + i % 12, 1 + i % 28, i % 24),
+                            b: P((i * 3) % 10, (i * 7) % 12, 1970 + (i * 7) % 55, 1 + (i * 5) % 12, 1 + (i * 11) % 28, (i * 5) % 24) });
+      if (!x) continue;
+      const { txt, val } = w6(x);
+      const [na, nb] = val.split("=")[0].split("+").map((s) => +s.trim());
+      const gap = Math.abs(na - nb), sum = na + nb;
+      if (sum > 20 && sum < 28) {
+        if (gap < 5) { checkedEven++; if (/한쪽이 무겁고/.test(txt)) lied++; }
+        else if (/한쪽이 무겁고/.test(txt)) sawTilted++;
+      }
+    }
+    ck("③ 무게가 비슷한데 '한쪽이 무겁다'고 말하지 않는다",
+       checkedEven > 0 && lied === 0, `차이<5 표본 ${checkedEven}건 · 거짓 단언 ${lied}건`);
+    ck("③ 실제로 기운 쌍에는 여전히 그렇게 말한다(문구를 죽인 게 아니다)",
+       sawTilted > 0, `차이≥5 표본 ${sawTilted}건`);
+  }
+}
+
 const pass = R.filter(Boolean).length;
 console.log(`\n=== 궁합 엔진: ${pass}/${R.length} PASS ===`);
 process.exit(pass === R.length ? 0 : 1);

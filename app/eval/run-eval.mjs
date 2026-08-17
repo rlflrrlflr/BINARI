@@ -56,8 +56,16 @@ if (qArg) { const set = new Set(qArg.split("=")[1].split(",")); questions = ques
 const catArg = process.argv.find((a) => a.startsWith("--cat="));      // 예: --cat=A,GUARD
 if (catArg) { const set = new Set(catArg.split("=")[1].split(",")); questions = questions.filter((q) => set.has(q.cat)); }
 
+/* ⚠️ A-4 (방향점검 §1-9) — **하네스가 앱과 다른 재료를 보내고 있었다.**
+   앱은 v132.10~11부터 시계("14시")를 빼고 **시진**("미시(토)")을 보낸다. 시계를 지운 이유가 있다:
+   시계는 일반 상식("밤이니 자라")을 부르는 재료라 SYS 의 지표 정박 규칙이 있어도 뚫렸고,
+   시진은 다른 축과 같은 문법이라 지표로 읽힌다. 그런데 하네스는 옛 형식을 그대로 보내고 있었다 —
+   **평가가 앱이 안 쓰는 프롬프트를 채점하고 있었던 것이다.** 아래 식은 App.jsx 의 _sijin 과 같다. */
+const JI_E = ["자", "축", "인", "묘", "진", "사", "오", "미", "신", "유", "술", "해"];
+const JI_EL_E = ["수", "토", "목", "목", "토", "화", "화", "토", "금", "금", "토", "수"];
 const today = new Date();
-const TODAY = `[오늘] ${today.getFullYear()}년 ${today.getMonth() + 1}월 ${today.getDate()}일 ${today.getHours()}시 · 오늘 밤 달 상현달`;
+const _hjE = Math.floor((((today.getHours() + 1) % 24) + 24) % 24 / 2);
+const TODAY = `[오늘] ${today.getFullYear()}년 ${today.getMonth() + 1}월 ${today.getDate()}일 · 지금 시진 ${JI_E[_hjE]}시(${JI_EL_E[_hjE]}) · 오늘 밤 달 상현달`;
 
 function profile(p) {
   return `${p.name ? `호칭: ${p.name}\n` : ""}성별: ${p.sex === "M" ? "남" : "여"}
@@ -130,7 +138,13 @@ function voteCheck(r1) {
   const val = (x) => String(x?.v || x?.vote || "").toUpperCase();
   const go = vs.filter((x) => val(x) === "GO").length, stop = vs.filter((x) => val(x) === "STOP").length;
   if (r1.direction === "HOLD") return "";                       // HOLD 는 표가 아니라 규칙이 정한다
-  const expect = go >= stop ? "GO" : "STOP";                     // 동률은 경험 편향(해보는 쪽)
+  /* ⚠️ A-4 — 예전엔 `go >= stop ? "GO"` 였다(동률은 경험 편향, 해보는 쪽).
+     **그 규칙은 v132.5 에 없어졌다.** 지금 앱은 표가 다수를 못 만들면 **모델이 낸 방향을 그대로 둔다** —
+     동률에서 코드가 GO 로 밀면 그건 운세가 아니라 우리가 심은 편향이고, 창업자 지시로 걷어냈다.
+     하네스만 옛 규칙에 남아 있어서 **동률 3건이 '불일치'로 잘못 잡혔다.** 오탐은 진짜 실패를 가린다.
+     동률일 때 여기서 아무 말도 안 하는 게 맞다 — 대조할 기대값 자체가 없기 때문이다. */
+  if (go === stop) return "";                                    // 표가 다수를 못 만들면 모델 방향 유지(v132.5)
+  const expect = go > stop ? "GO" : "STOP";
   return r1.direction === expect ? "" : `표와결론불일치(${go}GO:${stop}STOP→${r1.direction})`;
 }
 // 지표 없이도 쓸 수 있는 문장 = 판결이 아니라 조언. 사용자 지적("그냥 내가 답해주는 느낌")의 자동 탐지.

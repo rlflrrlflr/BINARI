@@ -1072,6 +1072,64 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
     "유료 문서가 화면 밖으로 못 나가면 소유물이 아닙니다. 그리고 저장본을 손으로 옮겨 적으면 절을 더할 때마다 조용히 뒤처집니다 — **화면에 그려진 것을 읽으세요.** 파일 이름은 ASCII 로 두세요(한글이면 크로미움이 확장자 없는 `download` 로 떨어뜨립니다).");
 }
 
+/* ── 검사 5-o. 지금 새고 있던 것 넷 (방향점검 §1-1·§1-9 / 배분표 §6-2) ──────
+   넷 다 **화면이 멀쩡한 채로 틀려 있던** 것들이다. 그래서 눈으로는 안 잡히고 검사로만 잡힌다. */
+{
+  const app = readFileSync(APP, "utf8");
+  const api = existsSync("api/judge.js") ? readFileSync("api/judge.js", "utf8") : "";
+  const ev = existsSync("eval/run-eval.mjs") ? readFileSync("eval/run-eval.mjs", "utf8") : "";
+  const bad = [];
+
+  /* A-0 — tier 는 요청 본문에 있고 Origin 은 스크립트가 붙인다. 결제 전까지 서버가 안 믿어야 한다.
+     ⚠ 결제를 붙이는 날 PAID_ENABLED 를 true 로 올리면 이 검사가 깨진다 — 그때 **영수증 검증이
+       옆에 섰는지** 확인하고 이 규칙을 그 검증 확인으로 바꿔라. 그냥 지우면 구멍이 돌아온다. */
+  if (api) {
+    if (!/const PAID_ENABLED = false;/.test(api)) bad.push("A-0 유료 티어가 서버에서 안 잠겨 있음(PAID_ENABLED)");
+    if (/const tierKey = tier === "paid"/.test(api)) bad.push("A-0 tierKey 가 클라이언트 tier 를 그대로 씀");
+    // 봉합의 부작용 방어 — 콜 구분까지 tierKey 로 하면 서신이 전부 콜2 로 찍힌다(v105.4 회귀)
+    if (!/call: tierAsked === "paid"/.test(api)) bad.push("A-0 콜 구분이 tierAsked 가 아님(콜3 오분류 회귀)");
+  }
+
+  /* A-1 — 내부 TODO 가 유저 화면에 뜨면 안 된다. 주석(<!-- -->)으로 옮긴 건 통과. */
+  if (existsSync("public/privacy.html")) {
+    const pv = readFileSync("public/privacy.html", "utf8");
+    const visible = pv.replace(/<!--[\s\S]*?-->/g, "");
+    for (const w of ["변호사", "검토를 받고", "추가해야 합니다"])
+      if (visible.includes(w)) bad.push(`A-1 내부 TODO 가 유저에게 보임 — "${w}"`);
+  }
+
+  /* A-2 — 궁합 버그 셋이 되살아나지 않는가 */
+  if (existsSync("src/lib/match.js")) {
+    const mj = readFileSync("src/lib/match.js", "utf8");
+    /* ⚠ 깨진 꼴(`same ? 1 : 1`)을 찾으면 **바로 위 주석이 그 문자열을 인용하고 있어서 자기 오탐**이 난다
+       (실제로 그렇게 한 번 걸렸다). 고쳐진 꼴이 있는지를 본다 — 규칙은 "없어야 할 것"보다
+       "있어야 할 것"으로 쓰는 편이 주석에 안 걸린다. */
+    if (!/same \? 1 : 0, `라이프패스/.test(mj)) bad.push("A-2① 축⑨ v 가 상수로 되돌아감(전부 어렵다 분기가 죽는다)");
+    if (/nayin\(\+a\.birth\.y\)\s*,\s*nB = nayin/.test(mj)) bad.push("A-2② 납음이 달력 연도로 되돌아감(입춘 보정 없음)");
+    if (!/const gap = Math\.abs\(wA\.neptu - wB\.neptu\)/.test(mj)) bad.push("A-2③ 축⑥ 이 갈림을 재지 않고 단언함");
+  }
+
+  /* A-3 — 방향 없는 판결이 화면에 나가면 안 된다 */
+  if (!/verdict_nodir/.test(app)) bad.push("A-3 direction 가드가 없음(방향 없는 판결이 나감)");
+  /* A-3 은유 — 목록만으로는 4.0% 가 샜다. **고쳐 쓴 짝**이 프롬프트에 남아 있는지 본다
+     (이 리포의 반복 발견: 모델은 금지 조항보다 (O) 예시를 따른다 — 검사 5-g 와 같은 이유) */
+  for (const s of ["물이 고이는 괘야", "임오 대운이 터를", "은유를 서술어로 쓰기"])
+    if (!app.includes(s)) bad.push(`A-3 은유 금칙의 실측 예시가 사라짐 — "${s}"`);
+
+  /* A-4 — 하네스가 앱과 같은 재료·같은 규칙을 쓰는가. 어긋나면 오탐이 진짜 실패를 가린다. */
+  if (ev) {
+    if (/TODAY = [^\n]*getHours\(\)\}시/.test(ev)) bad.push("A-4 하네스가 옛 시계 형식을 보냄(앱은 시진)");
+    if (!/지금 시진/.test(ev)) bad.push("A-4 하네스가 시진을 안 보냄");
+    if (/const expect = go >= stop/.test(ev)) bad.push("A-4 하네스 동률 기대가 옛 경험 편향 규칙임");
+    if (!/if \(go === stop\) return "";/.test(ev)) bad.push("A-4 하네스가 동률을 불일치로 잡음");
+  }
+
+  add(bad.length ? "심각" : "정상",
+    bad.length ? "새고 있던 넷 중 되살아난 것이 있음" : "새던 넷이 막혀 있음 — 유료티어 잠금 · 고지 문구 · 궁합 버그 셋 · 방향 가드/하네스 정합",
+    bad.length ? bad.join(" · ") : "PAID_ENABLED=false · 내부 TODO 비노출 · 축⑨/납음/축⑥ 교정 · verdict_nodir 가드 · 하네스 시진·동률 규칙 일치",
+    "이 넷은 전부 **화면이 멀쩡한 채로 틀려 있던** 것들입니다. tier 는 요청 본문에 들어 있어 Origin 검사로는 못 막습니다(결제 전까지 서버에서 잠급니다). 하네스가 앱과 다른 프롬프트·다른 규칙을 쓰면 평가가 오탐을 만들고, 오탐은 진짜 실패를 가립니다.");
+}
+
 /* ── 검사 6. 의존성 취약점 (npm audit) ───────────────────────────────────
    남이 만든 부품에서 보안 구멍이 발견되는 일은 우리가 코드를 안 건드려도 일어난다.
    중요한 구분: **사용자에게 배달되는 부품(prod)** 과 **내 컴퓨터에서만 쓰는 부품(dev)** 은

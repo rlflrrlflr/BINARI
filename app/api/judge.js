@@ -3,10 +3,12 @@
    v102 — 티어별 모델(무료/유료 분리):
      무료(카드 앞면 콜1 + 뒷면 근거 콜2) = BINARI_MODEL_FREE, 유료(서신) = BINARI_MODEL_PAID.
      요청 본문의 tier("free"|"paid")로 고른다. 미설정 시 전부 BINARI_MODEL 하나로 동작(현행 그대로).
-     ⚠️ tier 는 지금 **클라이언트 말을 그대로 믿는다.** 결제가 아직 없어서 무해하지만,
-        결제를 붙이는 날 반드시 서버에서 영수증·토큰으로 검증할 것 — 안 그러면 누구나
-        무료로 비싼 모델을 쓸 수 있다. 허용 목록(TIERS)에 없는 값은 무시하므로
-        임의 모델 지정(예: 최고가 모델 강제)은 지금도 불가능하다.
+     ⚠️ **A-0 봉합(2026-08-16) — 결제 배선 전까지 서버가 tier 를 안 믿는다(PAID_ENABLED=false).**
+        예전 주석은 이 위험을 "결제가 아직 없어서 무해하다"고 적었는데 **그게 틀렸다.**
+        tier 는 요청 본문에 들어 있고 Origin 헤더는 스크립트가 마음대로 붙인다 —
+        결제가 없어도 아무나 `{tier:"paid"}` 로 유료 모델을 쓸 수 있었다.
+        허용 목록(TIERS)이 임의 모델 지정은 막지만, **우리가 등록한 비싼 모델은 막지 못한다.**
+        결제(영수증·토큰 검증)를 붙이는 날 PAID_ENABLED 를 true 로 올리고 검증을 그 옆에 세운다.
      ⚠️ 판결(콜1)의 모델을 바꾸기 전엔 반드시 평가 워크플로로 GUARD·REASK·S3 를 먼저 돌릴 것 —
         콜1이 가드레일(자해 감지)·스코프·표 판정을 전부 지고 있다.
    방어(v54): Origin 필수+허용목록 · 본문 크기 상한 · max_tokens 클램프 · SYS 프리픽스 대조(임의 프롬프트 주입 차단).
@@ -111,7 +113,16 @@ export default async function handler(req, res) {
   const mt = Math.min(Math.max(parseInt(max_tokens, 10) || 320, 1), 3400);   // 콜3(서신)이 다섯 장 1,700자를 쓴다 — 2400에선 마지막 장이 통째로 잘린다(상한은 천장일 뿐 — 안 쓰면 비용 0)
   // 티어 → 모델. 허용 목록 방식이라 클라이언트가 임의 모델을 지정할 수 없다(비용 폭주 차단).
   const TIERS = { free: process.env.BINARI_MODEL_FREE, paid: process.env.BINARI_MODEL_PAID };
-  const tierKey = tier === "paid" ? "paid" : "free";
+  /* ⚠️ A-0 (방향점검 §1-1 / 배분표 §6-2) — **결제 배선 전까지 서버가 tier 를 안 믿는다.**
+     예전 주석은 이걸 "결제를 붙이는 날 고칠 것"으로 미뤄 뒀는데, 그 전제가 틀렸다:
+     tier 는 **요청 본문**에 들어 있고 Origin 헤더는 스크립트가 마음대로 붙인다.
+     즉 지금도 아무나 `{tier:"paid"}` 를 보내 유료 모델을 쓸 수 있다 —
+     "결제 후 문제"가 아니라 **지금 새고 있는 구멍**이다. 실제로 팔지도 않는 티어에.
+     결제(영수증·토큰 검증)를 붙이는 날 이 한 줄을 true 로 바꾸고 검증을 그 옆에 세운다.
+     ⚠️ **결제 없이 true 로 되돌리지 마라.** 그러면 구멍이 그대로 돌아온다. */
+  const PAID_ENABLED = false;
+  const tierAsked = tier === "paid" ? "paid" : "free";
+  const tierKey = PAID_ENABLED ? tierAsked : "free";
   const model = TIERS[tierKey] || process.env.BINARI_MODEL || "claude-sonnet-5";
 
   try {
@@ -141,7 +152,11 @@ export default async function handler(req, res) {
       // 모델을 같이 남긴다 — 티어 전환 뒤 "어느 모델이 이 판결을 냈나"를 못 되짚으면 A/B 비교가 불가능하다
       // 콜3(서신)은 토큰 상한이 아니라 tier 로 가른다 — v105.1에서 서신을 두 조각으로 쪼개며 상한이 2100까지
       // 내려가, 토큰 경계로는 콜2와 구분이 안 된다(실측: 유료 서신이 call:2 로 찍혔다). paid 는 서신 전용이다.
-      console.log(JSON.stringify({ at: new Date().toISOString(), call: tierKey === "paid" ? 3 : mt <= 800 ? 1 : 2, tier: tierKey, model, cat, dir, scope, usage: data.usage || null }));
+      /* ⚠️ **어느 콜인가는 tierAsked 로 가른다(tierKey 가 아니다).** A-0 으로 tierKey 가 항상 free 가
+         됐는데 여기서 tierKey 를 보면 서신이 전부 콜2 로 찍힌다 — v105.4 에서 고친 그 오분류가
+         비용 봉합의 부작용으로 되살아난다. 무엇을 청했나(콜 구분)와 무엇으로 응답했나(모델)는 다른 값이다.
+         tier_served 를 같이 남겨 강등이 일어났다는 사실 자체도 로그에 보이게 한다. */
+      console.log(JSON.stringify({ at: new Date().toISOString(), call: tierAsked === "paid" ? 3 : mt <= 800 ? 1 : 2, tier: tierAsked, tier_served: tierKey, model, cat, dir, scope, usage: data.usage || null }));
     } catch {}
     return res.status(200).json(data);
   } catch (e) {
