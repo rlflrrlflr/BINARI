@@ -3062,7 +3062,7 @@ function Guardian(props) {
 }
 
 /* v81: 테스트 단계 버전 배지 — 배포마다 APP_VER 갱신. 유저가 지금 보는 게 어느 버전·어느 렌더러인지 즉시 식별 */
-const APP_VER = "v134.2 · 궁합 인장";
+const APP_VER = "v134.3 · 이름과 말";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -4767,13 +4767,13 @@ export default function App() {
   const saveLetterFile = () => {
     if (!letterDoc || letterDoc._err) return;
     const rec = records[letterIdx] || {};
-    const body = [`수호신의 서신 · ${letterNo(rec)}`, rec.q ? `물음: ${rec.q}` : "", rec.direction ? `판결: ${rec.direction} — ${rec.verdict || ""}` : "", "",
+    const body = [`아홉 하늘 서신 · ${letterNo(rec)}`, rec.q ? `물음: ${rec.q}` : "", rec.direction ? `판결: ${rec.direction} — ${rec.verdict || ""}` : "", "",
       ...letterDoc.chapters.map((c, i) => `${i + 1}. ${c.t}\n${c.body}\n`), letterDoc.closing ? `— ${letterDoc.closing}` : "",
       "", "비나리 · 이 서신은 AI가 생성한 내용입니다(재미로 보는 참고용)"].filter((s) => s !== null).join("\n");
     try {
       const a = document.createElement("a");
       a.href = URL.createObjectURL(new Blob([body], { type: "text/plain;charset=utf-8" }));
-      a.download = `비나리-서신-${letterNo(rec)}.txt`; document.body.appendChild(a); a.click(); a.remove();
+      a.download = `비나리-아홉하늘서신-${letterNo(rec)}.txt`; document.body.appendChild(a); a.click(); a.remove();
       track("letter_saved", demoProps(birth, { no: letterNo(rec) }));
     } catch (_) {}
   };
@@ -5265,9 +5265,14 @@ export default function App() {
           {/* 곁 탭 — 1층은 위 수호신이 그대로 맡고, 여기는 글만 바뀐다 */}
           {tab === "gyeot" && phase >= 1 && (
             <div className="gyeotpanel fade">
+              {/* v134.3 빈 상태 카피 — 곁탭IA §3 정본 어휘에 맞춘다. 고친 셋:
+                  ①"옆자리" → 정본은 「곁」. 같은 뜻의 다른 말을 두면 어휘가 둘로 갈린다
+                  ②"누가 서게 되면"(수동) → 「곁에 부른다」. 주체 없는 수동태는 화면을 **대기실**로 만든다
+                  ③"이 자리에 같이 보일 거야" → 자리(슬롯)를 암시한다. §5 빈 슬롯 금지와 아슬아슬하다
+                  ⚠ 결핍을 말하지 않는다 — "아직 없어"는 §5 개수 표기 금지의 정신을 문장으로 어기는 것이다. */}
               <p className="gname under">곁</p>
               {saju && <p className="gsay">{EL_TRAIT[saju.main]} 네 곁에, 오늘도 이렇게 서 있어.</p>}
-              <p className="fine">여기는 네 옆자리야. 누가 서게 되면 이 자리에 같이 보일 거야.</p>
+              <p className="fine">곁은 네가 불러야 서. 부르면 나와 같이 돌아.</p>
             </div>
           )}
 
@@ -5282,7 +5287,7 @@ export default function App() {
                   {/* v105: 서신함 — 쓰는 중 / 도착 / 못 씀. 세 상태를 숨기지 않는다. */}
                   {letterDoc && !letterDoc._err && (
                     <div className="mailbox fade" style={{ animationDelay: ".95s" }}>
-                      <p className="dtag">수호신의 서신 · 도착</p>
+                      <p className="dtag">아홉 하늘 서신 · 도착</p>
                       <button className="btn gold sm" onClick={openLetterDoc}>서신을 펼친다</button>
                     </div>
                   )}
@@ -5395,7 +5400,7 @@ export default function App() {
                   숨기면 산 사람이 잃은 걸 모른 채 넘어간다 — 그게 제일 나쁜 상태다. */}
               {!ritual && !res && paidRecs.length > 0 && (
                 <button className="knock fade" onClick={() => { setBoxOpen((o) => !o); if (!boxOpen) track("letterbox_opened", { n: paidRecs.length, lost: paidRecs.filter((p) => !p.r.letter).length }); }}>
-                  {boxOpen ? "서신함 접기" : `수호신의 서신함 — ${paidRecs.length}통${paidRecs.some((p) => !p.r.letter) ? " · 못 받은 게 있어" : ""}`}
+                  {boxOpen ? "서신함 접기" : `아홉 하늘 서신함 — ${paidRecs.length}통${paidRecs.some((p) => !p.r.letter) ? " · 못 받은 게 있어" : ""}`}
                 </button>
               )}
               {!ritual && !res && boxOpen && (
@@ -5613,12 +5618,12 @@ export default function App() {
           {/* D4: 결제 fake-door — 지불 의사만 잰다. 결제 인프라는 만들지 않는다. */}
           {res && cardOn && letterOk && (
             !letter ? (
-              <button className="btn ghost mt" onClick={openLetter}>수호신의 서신 — 이 판결의 깊은 풀이 · {LETTER_PRICE.toLocaleString()}원 <span className="impbadge">시험 발행</span></button>
+              <button className="btn ghost mt" onClick={openLetter}>아홉 하늘 서신 — 이 판결 하나를 하늘 전부로 다시 읽어 · {LETTER_PRICE.toLocaleString()}원 <span className="impbadge">시험 발행</span></button>
             ) : letterIntent ? (
               <p className="ratedone">서신을 맡겼어 — 수호신이 쓰기 시작했어.</p>
             ) : (
               <div className="letterwrap fade">
-                <p className="dtag">수호신의 서신 · {LETTER_PRICE.toLocaleString()}원</p>
+                <p className="dtag">아홉 하늘 서신 · {LETTER_PRICE.toLocaleString()}원</p>
                 <ul className="letterlist">{LETTER_SECTIONS.map((t, i) => <li key={i}>{t}</li>)}</ul>
                 <p className="letterprev">{letterPreview(saju, hesit)}</p>
                 <p className="letterprevtag">— 여기까지가 미리보기야</p>

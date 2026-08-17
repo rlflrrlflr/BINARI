@@ -54,9 +54,15 @@ ck("② 곁이 없어도 화면이 말이 된다", gtxt.trim().length > 10 && gt
 await page.getByRole("button", { name: "판결", exact: true }).click();
 await page.waitForTimeout(700);
 ck("③ 판결 탭으로 돌아온다", await page.locator("textarea.qbox").isVisible().catch(() => false));
-for (const t of ["그래서, 요즘 뭘 망설이고 있어?", "판결을 청한다"]) {
-  ck(`③ 판결 화면 문구 보존 — ${t}`, (await page.getByText(t, { exact: false }).count()) >= 1);
-}
+/* ⚠ 첫 줄은 **시각에 따라 갈린다**(v132.2 심야 분기: 23~04시엔 "밤이 깊었네…").
+   전엔 낮 문구만 못 박아 두어서 **밤에 돌리면 무조건 FAIL** 이었다 — 실제로 KST 새벽에 걸렸다.
+   탭이 판결 화면을 안 건드렸는지가 검사의 목적이므로, 둘 중 하나만 있으면 통과다. */
+const INTRO = ["그래서, 요즘 뭘 망설이고 있어?", "밤이 깊었네"];
+let introHit = 0;
+for (const t of INTRO) introHit += await page.getByText(t, { exact: false }).count();
+ck("③ 판결 화면 인사말 보존(낮/심야 둘 중 하나)", introHit >= 1);
+ck("③ 판결 화면 문구 보존 — 판결을 청한다",
+   (await page.getByText("판결을 청한다", { exact: false }).count()) >= 1);
 
 /* ── ④ 집중 국면에선 탭을 숨긴다 ──────────────────────────────────────── */
 {
