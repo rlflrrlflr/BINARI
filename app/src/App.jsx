@@ -59,7 +59,18 @@ function _initSuperProps() {
     try { window.localStorage.setItem(FIRSTTOUCH_KEY, JSON.stringify(ft)); } catch (_) {}
   }
 
-  _superProps = { is_internal: internal, ...ft };
+  /* D7 게이트의 분모 — "첫 방문에서 며칠째인가".
+     이게 없으면 재방문을 세도 **그게 D1인지 D7인지 D30인지 구분할 방법이 없다.**
+     ft_date 는 최초 1회만 쓰이고 덮이지 않으므로(위) 신뢰할 수 있는 기준선이다.
+     날짜끼리 UTC 자정 기준으로 뺀다 — 시각을 섞으면 "23시에 와서 다음날 1시에 온" 게 0일이 된다.
+     ⚠ 모든 이벤트에 붙인다. 이벤트를 새로 만드는 것보다 싸고, 어떤 지표든 D별로 쪼갤 수 있게 된다. */
+  let dsf = null;
+  try {
+    const d0 = Date.parse(ft.ft_date + "T00:00:00Z");
+    const dn = Date.parse(new Date().toISOString().slice(0, 10) + "T00:00:00Z");
+    if (!isNaN(d0) && !isNaN(dn)) dsf = Math.max(0, Math.round((dn - d0) / 86400000));
+  } catch (_) {}
+  _superProps = { is_internal: internal, ...ft, days_since_first: dsf };
   const b = readBelief();                     // D3 — 답했으면 이후 모든 이벤트에 따라붙는다
   if (b) _superProps.belief = b;
 }
@@ -4465,6 +4476,7 @@ export default function App() {
   useEffect(() => { restRef.current = (res && cardOn) ? 300 : (busy || res) ? 46 : 0; }, [busy, res, cardOn]); // v30: 카드 뜨면 수호신 사실상 정지(스크롤·클릭 회복)
 
   // v16(B7): 스트릭 최소형 — 방문일 카운터만. 어제에 이어졌으면 +1, 끊겼으면 1부터
+  const streakSentRef = useRef(null);            // 스트릭 계측 하루 1회 잠금(StrictMode 이중 호출 방지)
   useEffect(() => {
     if (step !== 3) return;
     const t = todayStr();
@@ -4472,7 +4484,22 @@ export default function App() {
       if (prev && prev.last === t) return prev;
       const y = new Date(); y.setDate(y.getDate() - 1);
       const ys = `${y.getFullYear()}-${String(y.getMonth() + 1).padStart(2, "0")}-${String(y.getDate()).padStart(2, "0")}`;
-      return { last: t, count: prev && prev.last === ys ? prev.count + 1 : 1 };
+      const next = { last: t, count: prev && prev.last === ys ? prev.count + 1 : 1 };
+      /* 리텐션 자산 계측(작업배분 §6-1 2번) — 스트릭은 지금까지 화면에만 있고 계측이 0건이었다.
+         D7 게이트는 "다시 왔는가"에 답하는데, **왜 다시 왔는가**는 이 셋(스트릭·문안·판결록)이 답한다.
+         날이 바뀐 첫 방문에서만 찍힌다(같은 날 재방문은 위 early-return 으로 걸러진다).
+         끊김을 따로 남기는 이유: 이어짐만 세면 "몇 명이 습관이 됐나"는 알아도
+         **"며칠에서 끊기나"** 를 못 읽는다. 붙잡을 지점을 정하려면 끊긴 자리가 필요하다. */
+      /* ⚠ setState 업데이터 안이라 StrictMode 는 이 함수를 두 번 부른다. 그대로 track 하면
+         개발 빌드에서 이벤트가 두 배로 찍힌다. 날짜를 열쇠로 한 ref 로 하루 1회를 못 박는다. */
+      if (streakSentRef.current !== t) {
+        streakSentRef.current = t;
+        const broke = !!prev && prev.count >= 2 && next.count === 1;
+        track(broke ? "streak_broken" : "streak_day", {
+          streak: next.count, prev_streak: prev ? prev.count : 0, returning: !!prev,
+        });
+      }
+      return next;
     });
   }, [step]);
 
@@ -4992,6 +5019,19 @@ export default function App() {
     return { bio, mp, ilju: todayIlju(), mood };
   })() : null;
 
+  /* 문안이 **눈앞에 있었는가** — daily_opened 의 분모다.
+     이게 없으면 "안 열었다"가 '안 궁금했다'인지 '아예 안 떴다'인지 영영 못 가른다.
+     문안은 재방문 유저에게 하루 한 번만 뜨므로 방문당 1회 잠금(trackVisitOnce)이면 충분하다.
+     되물음(askback)이 있으면 문안 자리를 되물음이 가져가므로 그 사실도 같이 싣는다 —
+     리텐션 자산 셋이 같은 자리를 두고 서로 밀어내는 구조라, 안 밝히면 노출 수가 서로를 오염시킨다. */
+  useEffect(() => {
+    if (!dailyData || ritual || res) return;
+    trackVisitOnce("daily_offered", {
+      streak: streak ? streak.count : 0,
+      blocked_by_askback: !!askback,          // true 면 화면에 안 뜬 것 — 분모에서 빼고 읽어야 한다
+    });
+  }, [!!dailyData, ritual, res, !!askback]);
+
   const guardianIntro = saju && zo ? `나는 ${saju.nayin ? `'${saju.nayin.split("·")[1] || saju.nayin}'` : (saju.main === "수" ? "깊은 물결" : saju.main === "화" ? "꺼지지 않는 불꽃" : saju.main === "목" ? "자라나는 숲" : saju.main === "금" ? "벼려진 빛" : "단단한 대지")}의 기운을 두른, ${zo.el === "물" ? "안개처럼 흐르는" : zo.el === "불" ? "타오르는 형상의" : zo.el === "공기" ? "바람으로 된" : "산처럼 고요한"} 존재야.` : "";
 
   return (
@@ -5327,14 +5367,14 @@ export default function App() {
                 <p className="streak">수호신과 연결된 지 {streak.count}일째</p>
               )}
               {dailyData && !ritual && !res && !askback && !dailyOpen && (
-                <button className="knock fade" onClick={() => setDailyOpen(true)}>수호신이 오늘의 하늘을 봐뒀어 — 들을래?</button>
+                <button className="knock fade" onClick={() => { track("daily_opened", { streak: streak ? streak.count : 0 }); setDailyOpen(true); }}>수호신이 오늘의 하늘을 봐뒀어 — 들을래?</button>
               )}
               {dailyData && !ritual && !res && !askback && dailyOpen && (
                 <div className="daily fade">
                   <p className="dtag">아침 문안 · 오늘 하루만 — 자정에 사라져</p>
                   <p className="dmain">오늘은 <b>{dailyData.mood.k}</b>. {dailyData.mood.line}</p>
                   <p className="dsub">오늘의 일진 {dailyData.ilju} · 오늘 밤 달 {dailyData.mp.name}</p>
-                  <button className="btn ghost sm" onClick={() => { try { store.setItem(DAILY_KEY, todayStr()); } catch (_) {} setDailySeen(true); }}>받았어</button>
+                  <button className="btn ghost sm" onClick={() => { try { store.setItem(DAILY_KEY, todayStr()); } catch (_) {} track("daily_received", { streak: streak ? streak.count : 0 }); setDailySeen(true); }}>받았어</button>
                 </div>
               )}
               {askback && !ritual && !res && (
@@ -5440,13 +5480,24 @@ export default function App() {
                 <p className="fine">둘 다 <b>지금은 값을 안 받아.</b> 결제는 아직 연결돼 있지 않고, 적힌 값은
                   <b> "이만하면 받겠어?"</b>를 묻는 표시야.</p>
               </>)}
+              {/* 판결록은 '되읽으러 오는' 자산이다 — 새 판결을 안 물어도 다시 오는 이유가 된다.
+                  지금까지 계측이 0건이라 D7 재방문자 중 몇이 여기로 왔는지를 못 읽었다.
+                  미보고 건수를 같이 싣는 이유: 되물음 루프가 살아 있는지가 여기서 보인다. */}
               {!ritual && !res && records.length > 0 && (
-                <button className="resetlink" onClick={() => { setLogOpen(o => !o); setOpenRec(-1); }}>{logOpen ? "판결록 접기" : `판결록 — ${records.length}번의 판결`}</button>
+                <button className="resetlink" onClick={() => {
+                  if (!logOpen) track("log_opened", { n: records.length, unreported: records.filter((r) => !r.followUp).length, streak: streak ? streak.count : 0 });
+                  setLogOpen(o => !o); setOpenRec(-1);
+                }}>{logOpen ? "판결록 접기" : `판결록 — ${records.length}번의 판결`}</button>
               )}
               {!ritual && !res && logOpen && (
                 <div className="vlog fade">
                   {[...records].slice(-10).reverse().map((r, i) => (
-                    <div key={i} className={`vlogrow${openRec === i ? " open" : ""}`} onClick={() => setOpenRec(openRec === i ? -1 : i)}>
+                    /* 어느 판결을 다시 펼치는가 — 며칠 지난 판결을 되읽는지가 '기억으로서의 값어치'다.
+                       질문 원문은 안 싣는다(가명처리를 거치지 않은 자리라 원칙대로 방향·나이만). */
+                    <div key={i} className={`vlogrow${openRec === i ? " open" : ""}`} onClick={() => {
+                      if (openRec !== i) track("log_row_opened", { dir: r.direction || null, age_days: Math.round((Date.now() - r.at) / 86400000), followed: r.followUp || "none" });
+                      setOpenRec(openRec === i ? -1 : i);
+                    }}>
                       <BujeokCanvas saju={saju} direction={r.direction} seed={r.q + (r.verdict || "")} size={54} />
                       <div className="vlogtxt">
                         <p className="vlogq">"{r.q}"</p>
