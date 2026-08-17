@@ -36,6 +36,8 @@ const hex2rgb = (h) => [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5
 const M = new Function("store", "hex2rgb", `
   ${grab("const EL_COLOR = {", "const")}
   ${grab("const GYEOT_KEY =", "const")}
+  ${grab("const GY_CALLED =", "const")}
+  ${grab("const GY_STANDING =", "const")}
   ${grab("const GYEOT_MAX =", "const")}
   ${grab("const GYEOT_SAENG =", "const")}
   ${grab("const GYEOT_GEUK ", "const")}
@@ -52,7 +54,7 @@ const M = new Function("store", "hex2rgb", `
   ${grab("function gyeotRename(")}
   ${grab("function gyeotOrder(")}
   ${grab("function gyeotView(")}
-  return { GYEOT_KEY, GYEOT_MAX, GYEOT_REL_LINE, gyeotFingerprint, gyeotSeat, gyeotRel,
+  return { GYEOT_KEY, GYEOT_MAX, GY_CALLED, GY_STANDING, GYEOT_REL_LINE, gyeotFingerprint, gyeotSeat, gyeotRel,
            readGyeot, writeGyeot, gyeotAdd, gyeotDrop, gyeotRename, gyeotOrder, gyeotView };
 `)(store, hex2rgb);
 
@@ -112,9 +114,9 @@ const fp = (y, m, d) => M.gyeotFingerprint(y, m, d);
   /* 사이(rel)가 전부 다른 셋을 넣는다 — 순위가 생긴다면 여기서 '생'이 위로 올라온다 */
   const me = "화";                              // 나를 생하는 건 목, 나를 극하는 건 수
   const list = [
-    { key: "a", el: "수", alias: "", tier: "대기", at: 100 },   // 극
-    { key: "b", el: "목", alias: "", tier: "대기", at: 300 },   // 생
-    { key: "c", el: "화", alias: "", tier: "곁", at: 200 },     // 동
+    { key: "a", el: "수", alias: "", tier: "called", at: 100 },   // 극
+    { key: "b", el: "목", alias: "", tier: "called", at: 300 },   // 생
+    { key: "c", el: "화", alias: "", tier: "standing", at: 200 },     // 동
   ];
   const ord = M.gyeotOrder(list);
   ck("③ 정렬은 최근순 하나뿐 — 사이로 줄 세우지 않는다",
@@ -146,7 +148,7 @@ const fp = (y, m, d) => M.gyeotFingerprint(y, m, d);
   };
   ck("③ 앞줄 셋이 겹쳐 서지 않는다", gapOK(v1) >= Math.PI * 2 / 12 - 1e-9, `최소 간격 ${gapOK(v1).toFixed(3)}rad`);
   /* 지문이 이웃해도 자리는 벌어져야 한다 — 처음 이 검사를 깨뜨린 바로 그 모양 */
-  const near = ["a", "b", "c"].map((k, i) => ({ key: k, el: "토", tier: "곁", at: i }));
+  const near = ["a", "b", "c"].map((k, i) => ({ key: k, el: "토", tier: "standing", at: i }));
   ck("③ 이웃한 지문도 자리가 벌어진다", gapOK(M.gyeotView(near, me)) >= Math.PI * 2 / 12 - 1e-9,
      `최소 간격 ${gapOK(M.gyeotView(near, me)).toFixed(3)}rad`);
 
@@ -162,13 +164,28 @@ const fp = (y, m, d) => M.gyeotFingerprint(y, m, d);
   ck("③ 명식이 없으면 사이도 안 만든다", M.gyeotRel(null, "수") === 0 && M.gyeotRel("화", null) === 0);
 }
 
-/* ── ④ 두 층 — 회신 온 사람 / 답 대기 (창업자 결정 2026-08-15 #1) ─────────── */
+/* ── ④ 두 층 — 「곁」(standing) / 「부른 곁」(called) ────────────────────────
+   창업자 결정 2026-08-15 #1 의 **층 구분**은 그대로 채택했고, 「답 대기」라는 **말**만
+   디자인 레인이 기각했다(행정 용어 · 사람을 규정 · 대기열은 순번을 부른다 → §5 위반).
+   ⚠ 코드 값이 한글이면 화면 말이 바뀔 때마다 저장분이 깨진다 — v134.2 가 실제로 그랬다.
+     그래서 값은 called/standing 이고, 구 한글 값은 읽을 때 한 번 옮긴다(아래 ④-b). */
 {
   reset();
   const l = M.gyeotAdd([], { key: "z", el: "토" }, 1);
-  ck("④ 새로 드는 사람은 '대기' 다 (회신 레그가 아직 없다)", l[0].tier === "대기", l[0].tier);
-  const vw = M.gyeotView([{ key: "z", el: "토", tier: "곁" }, { key: "z2", el: "토", tier: "대기" }], "화");
-  ck("④ '대기' 는 흐리게 선다", vw[1].col[0] < vw[0].col[0], `${vw[0].col[0].toFixed(3)} → ${vw[1].col[0].toFixed(3)}`);
+  ck("④ 새로 드는 사람은 '부른 곁'이다 (회신 레그가 아직 없다)", l[0].tier === M.GY_CALLED, l[0].tier);
+  ck("④ 코드 값이 한글이 아니다(화면 말이 바뀌어도 저장분이 안 깨진다)",
+     !/[가-힣]/.test(M.GY_CALLED + M.GY_STANDING), `${M.GY_CALLED}/${M.GY_STANDING}`);
+  const vw = M.gyeotView([{ key: "z", el: "토", tier: M.GY_STANDING }, { key: "z2", el: "토", tier: M.GY_CALLED }], "화");
+  ck("④ '부른 곁'은 흐리게 선다", vw[1].col[0] < vw[0].col[0], `${vw[0].col[0].toFixed(3)} → ${vw[1].col[0].toFixed(3)}`);
+  /* ④-b 구값 승계 — v134.2 가 한글로 저장한 것을 안 옮기면 **밝기 판정이 조용히 뒤집힌다**
+     (둘 다 GY_STANDING 이 아니게 되어 전원이 흐려지거나, 반대로 전원이 밝아진다). */
+  reset();
+  disk.set(M.GYEOT_KEY, JSON.stringify([{ key: "old1", el: "토", alias: "", tier: "곁", at: 1 },
+                                        { key: "old2", el: "토", alias: "", tier: "대기", at: 2 }]));
+  const migrated = M.readGyeot();
+  ck("④-b v134.2 가 저장한 한글 층이 승계된다",
+     migrated[0].tier === M.GY_STANDING && migrated[1].tier === M.GY_CALLED,
+     migrated.map((x) => x.tier).join(","));
   ck("④ 흐린 것도 꺼지지는 않는다", vw[1].col[0] > 0);
   ck("④ 셰이더가 받는 모양은 {rel,ang,col} 뿐",
      Object.keys(vw[0]).sort().join(",") === "ang,col,rel", Object.keys(vw[0]).sort().join(","));

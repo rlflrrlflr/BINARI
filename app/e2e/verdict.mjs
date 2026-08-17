@@ -90,7 +90,10 @@ const b = await chromium.launch((process.env.CHROME_PATH ? { executablePath: pro
 
   /* v104 서신 대기 연출 — 봉인 5초 → '곧 답변이 있을 것이다' 2초 → 로비.
      전체화면을 덮는 데다 되돌릴 버튼이 없으므로, 타이머가 끊기면 유저가 갇힌다. 끝까지 실제로 태워 본다. */
-  await page.getByRole("button", { name: /수호신의 서신/ }).click();
+  /* ⚠ 상품명이 v134.3 에 「수호신의 서신」 → 「아홉 하늘 서신」으로 바뀌었는데 이 선택자가 안 따라와
+     **verdict 검사가 통째로 타임아웃**났다(그 판의 검증 목록에 verdict 가 없었다).
+     상품명은 앞으로도 움직일 수 있으니 **값(원)과 '서신'** 으로 잡는다 — 이름이 아니라 물건을 가리킨다. */
+  await page.getByRole("button", { name: /서신 —.*원|서신.*4,900원/ }).first().click();
   /* C-1(작업지시 2026-08-14): v122까지 여기서 "환불되지 않아요"를 확인했다 — **결제가 없는데
      청약철회를 배제하는 고지**였다. 검사가 그 문구의 존재를 지키고 있었으니 검사도 같이 뒤집는다.
      결제를 붙이는 날 이 줄을 원래대로 되돌린다(health-check 4-3 이 양방향으로 감시한다). */
@@ -135,8 +138,10 @@ const b = await chromium.launch((process.env.CHROME_PATH ? { executablePath: pro
   await page.locator("canvas").first().dblclick();
   await page.waitForSelector("textarea.qbox", { timeout: 8000 });
   // v105.2 홈 서신함 — 유료로 산 것이니 판결이 끝난 뒤에도 홈에서 상시 열려야 한다
-  ck("⑫ 홈 서신함 상시 노출", await page.getByRole("button", { name: /수호신의 서신함/ }).isVisible().catch(() => false));
-  await page.getByRole("button", { name: /수호신의 서신함/ }).click();
+  /* 같은 이유로 이름이 아니라 **물건**을 가리킨다(v134.3 상품명 변경) — "…서신함 — N통" */
+  const box = page.getByRole("button", { name: /서신함 —/ }).first();
+  ck("⑫ 홈 서신함 상시 노출", await box.isVisible().catch(() => false));
+  await box.click();
   ck("⑬ 서신 번호 표시", /[2-9A-Z]{4}-[2-9A-Z]{4}/.test((await page.locator(".lboxno").allTextContents())[0] || ""), (await page.locator(".lboxno").allTextContents())[0] || "");
   await page.getByRole("button", { name: "서신함 접기" }).click();
   await page.locator("textarea.qbox").fill("그럼 그동안 뭘 하면 좋을까"); await page.waitForTimeout(300);
@@ -157,7 +162,7 @@ const b = await chromium.launch((process.env.CHROME_PATH ? { executablePath: pro
   await page.waitForSelector("text=두드려봐", { timeout: 12000 });
   await page.locator("canvas").first().dblclick();
   await page.waitForSelector("textarea.qbox", { timeout: 12000 });
-  const boxBtn = page.getByRole("button", { name: /수호신의 서신함/ });
+  const boxBtn = page.getByRole("button", { name: /서신함 —/ }).first();   // 이름이 아니라 물건으로(위 ⑫ 주석 참조)
   ck("⑭ 잃어버린 서신도 서신함에 남음", (await boxBtn.textContent().catch(() => "") || "").includes("못 받은 게 있어"), await boxBtn.textContent().catch(() => ""));
   await boxBtn.click();
   await page.getByRole("button", { name: "다시 받기" }).click();

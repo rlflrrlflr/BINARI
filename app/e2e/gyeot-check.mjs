@@ -54,16 +54,15 @@ ck("② 곁이 없어도 화면이 말이 된다", gtxt.trim().length > 10 && gt
 await page.getByRole("button", { name: "판결", exact: true }).click();
 await page.waitForTimeout(700);
 ck("③ 판결 탭으로 돌아온다", await page.locator("textarea.qbox").isVisible().catch(() => false));
-/* ⚠ 인사말은 **시각에 따라 갈린다**(밤이면 "밤이 깊었네…"). 한 문장으로 못 박아 두면
-   낮에 돌리면 통과하고 밤에 돌리면 실패하는 검사가 된다 — 실제로 그렇게 한 번 붉게 떴다.
-   여기서 지켜야 할 건 "판결 탭이 안 바뀌었다"이지 어느 인사말이냐가 아니므로, 둘 중 하나면 통과다. */
-const NIGHT = "밤이 깊었네. 이 시간의 물음은 마음이 먼저 기울어 있기 마련이야.";
-const DAY = "그래서, 요즘 뭘 망설이고 있어?";
-ck("③ 판결 화면 문구 보존 — 로비 인사말(시각별 둘 중 하나)",
-   (await page.getByText(DAY, { exact: false }).count()) + (await page.getByText(NIGHT, { exact: false }).count()) >= 1);
-for (const t of ["판결을 청한다"]) {
-  ck(`③ 판결 화면 문구 보존 — ${t}`, (await page.getByText(t, { exact: false }).count()) >= 1);
-}
+/* ⚠ 첫 줄은 **시각에 따라 갈린다**(v132.2 심야 분기: 23~04시엔 "밤이 깊었네…").
+   전엔 낮 문구만 못 박아 두어서 **밤에 돌리면 무조건 FAIL** 이었다 — 실제로 KST 새벽에 걸렸다.
+   탭이 판결 화면을 안 건드렸는지가 검사의 목적이므로, 둘 중 하나만 있으면 통과다. */
+const INTRO = ["그래서, 요즘 뭘 망설이고 있어?", "밤이 깊었네"];
+let introHit = 0;
+for (const t of INTRO) introHit += await page.getByText(t, { exact: false }).count();
+ck("③ 판결 화면 인사말 보존(낮/심야 둘 중 하나)", introHit >= 1);
+ck("③ 판결 화면 문구 보존 — 판결을 청한다",
+   (await page.getByText("판결을 청한다", { exact: false }).count()) >= 1);
 
 /* ── ④ 집중 국면에선 탭을 숨긴다 ──────────────────────────────────────── */
 {
@@ -96,7 +95,7 @@ for (const t of ["판결을 청한다"]) {
   await onboard(p3, BASE, "?trackdebug");
   await p3.getByRole("button", { name: "곁", exact: true }).click();
   await p3.waitForTimeout(900);
-  const cta = p3.getByRole("button", { name: /여기 서/ });
+  const cta = p3.getByRole("button", { name: /부르게 돼/ });
   ck("⑥ 곁이 비면 나갈 문이 있다", (await cta.count()) === 1);
   /* §5 금지 — 첫 화면이 결제벽이 되면 안 된다. 문 하나를 가리키는 것과 값을 파는 건 다르다. */
   const panel = await p3.locator(".gyeotpanel").innerText();
@@ -117,9 +116,13 @@ for (const t of ["판결을 청한다"]) {
   await p3.getByRole("button", { name: "곁", exact: true }).click();
   await p3.waitForTimeout(1100);
   ck("⑥ 궁합을 보면 그 사람이 실제로 곁에 선다", (await p3.locator(".gyeotlist li").count()) === 1);
-  ck("⑥ 곁이 서면 '비었다' 안내는 사라진다", (await p3.getByRole("button", { name: /여기 서/ }).count()) === 0);
+  ck("⑥ 곁이 서면 '비었다' 안내는 사라진다", (await p3.getByRole("button", { name: /부르게 돼/ }).count()) === 0);
   /* 창업자 결정 1(절충안) — 궁합만 본 사람은 정식 자리가 아니라 '답 대기'로 흐리게 선다 */
-  ck("⑥ 궁합만 본 사람은 '답 대기' 자리다", (await p3.locator(".gyeotlist li.wait").count()) === 1);
+  /* 창업자 결정 1(절충안)의 층 구분은 그대로다. 다만 화면 말은 「부른 곁」이고,
+     **라벨을 글자로 안 붙이기로** 했으므로(곁탭IA 어휘확장) 흐리기로만 갈린다 — 그걸 본다. */
+  ck("⑥ 궁합만 본 사람은 '부른 곁'으로 흐리게 선다", (await p3.locator(".gyeotlist li.called").count()) === 1);
+  const panel2 = await p3.locator(".gyeotpanel").innerText();
+  ck("⑥ 기각된 「답 대기」·「대기」가 화면에 없다", !/대기/.test(panel2), panel2.replace(/\n/g, " ").slice(0, 50));
   await p3.close();
 }
 

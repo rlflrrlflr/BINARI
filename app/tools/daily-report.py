@@ -82,7 +82,19 @@ KST_YDAY = ("toDate(timestamp + INTERVAL 9 HOUR) = toDate(now() + INTERVAL 9 HOU
 # 모든 제품 지표는 외부(실유저)만 센다. 내부는 맨 아래 한 줄로 따로 알린다.
 #   2026-07-28 사고: 사람 수만 내부를 빼고 나머지(방문·질문·판결·평가·서신)는 합산이라
 #   '내부 6명(제외)' 라고 써놓고 판결 26건 중 19건이 내부였다. 라벨이 거짓말을 했다.
-EXT = "properties.is_internal != true"
+#
+# ⚠ **이중 필터** (2026-08-16 실측 반전 · 작업배분 §6-1 1번)
+#   is_internal 플래그만 걸면 부족하다. 플래그가 배포된 건 7/25 19:13(bc54a82)인데
+#   그 전에 유입된 내부 헤비유저 2인(666·614이벤트)은 플래그를 영영 못 받는다.
+#   그 둘이 외부로 집계되는 바람에 8/15 전략 문서가 공유율 5%·k≈0.14 를 유저 신호로 실었고,
+#   8/16 에 뒤집혔다 — **이중 필터로 보면 외부 공유 발신은 0건이다.**
+#   소급 식별은 코호트 436757("계측 분리 이전 내부")이 맡는다. 게이트 대시보드 4종도 같은 코호트를 뺀다.
+#   → 여기 EXT 하나만 고치면 아래 네 질의가 전부 같은 정의를 쓴다. 손으로 두 조건을 기억하지 않는다.
+INTERNAL_COHORT = 436757
+EXT = f"properties.is_internal != true AND person_id NOT IN COHORT {INTERNAL_COHORT}"
+# 내부 쪽 줄(맨 아래 '위 숫자에서 내부 N명은 뺐습니다')은 EXT 의 여집합이어야 한다.
+# 플래그만 보면 코호트 내부인이 어느 쪽에도 안 세어져 합이 안 맞는다.
+INT = f"(properties.is_internal = true OR person_id IN COHORT {INTERNAL_COHORT})"
 
 Q_DAILY = f"""
 SELECT
@@ -116,8 +128,8 @@ SELECT
     -- 원가: 유료 상품을 파는 이상 마진을 매일 봐야 한다
     sumIf(toInt(coalesce(properties.tok_in, 0)) + toInt(coalesce(properties.tok_out, 0)),
           event IN ('verdict_shown','detail_shown','letter_written') AND {EXT})  AS tokens,
-    uniqIf(person_id, properties.is_internal = true)                    AS in_people,
-    countIf(event = 'verdict_shown' AND properties.is_internal = true)  AS in_verdicts
+    uniqIf(person_id, {INT})                                            AS in_people,
+    countIf(event = 'verdict_shown' AND {INT})                          AS in_verdicts
 FROM events
 WHERE timestamp >= now() - INTERVAL 5 DAY AND event NOT LIKE '$%'
 GROUP BY d

@@ -59,7 +59,18 @@ function _initSuperProps() {
     try { window.localStorage.setItem(FIRSTTOUCH_KEY, JSON.stringify(ft)); } catch (_) {}
   }
 
-  _superProps = { is_internal: internal, ...ft };
+  /* D7 게이트의 분모 — "첫 방문에서 며칠째인가".
+     이게 없으면 재방문을 세도 **그게 D1인지 D7인지 D30인지 구분할 방법이 없다.**
+     ft_date 는 최초 1회만 쓰이고 덮이지 않으므로(위) 신뢰할 수 있는 기준선이다.
+     날짜끼리 UTC 자정 기준으로 뺀다 — 시각을 섞으면 "23시에 와서 다음날 1시에 온" 게 0일이 된다.
+     ⚠ 모든 이벤트에 붙인다. 이벤트를 새로 만드는 것보다 싸고, 어떤 지표든 D별로 쪼갤 수 있게 된다. */
+  let dsf = null;
+  try {
+    const d0 = Date.parse(ft.ft_date + "T00:00:00Z");
+    const dn = Date.parse(new Date().toISOString().slice(0, 10) + "T00:00:00Z");
+    if (!isNaN(d0) && !isNaN(dn)) dsf = Math.max(0, Math.round((dn - d0) / 86400000));
+  } catch (_) {}
+  _superProps = { is_internal: internal, ...ft, days_since_first: dsf };
   const b = readBelief();                     // D3 — 답했으면 이후 모든 이벤트에 따라붙는다
   if (b) _superProps.belief = b;
 }
@@ -3147,7 +3158,7 @@ function Guardian(props) {
 /* 돌아올 주소 — 부적·각인 카드·공유 링크가 같은 값을 쓴다. 자체 도메인을 붙이는 날 **여기 한 곳만** 고친다.
    예전엔 세 곳에 따로 박혀 있어서, 한 곳만 고치면 나머지가 옛 주소로 남는 종류의 사고가 예약돼 있었다. */
 const SHARE_HOST = "https://binari-sepia.vercel.app";
-const APP_VER = "v134.4 · 누수 봉합";
+const APP_VER = "v134.5 · 곁 어휘";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -4126,6 +4137,15 @@ const MATCH_LAST_KEY = "binari.match_last.v1";
    ⚠ 두 층 (창업자 결정 2026-08-15 #1): 회신이 온 사람은 `곁`, 내가 궁합만 본 사람은 `대기` — 흐리게 선다.
       지금은 회신 레그가 없으므로 새로 드는 사람은 전부 `대기`다. 스키마만 먼저 깔아 둔다. */
 const GYEOT_KEY = "binari.gyeot.v1";
+/* ── 곁의 두 층 — 어휘 정본은 곁탭IA 「어휘 확장」(2026-08-16) ────────────────
+   창업자 결정은 "회신 온 사람 / 궁합만 본 사람"의 **층 구분**이었고 그건 그대로 채택했다.
+   다만 「답 대기」라는 **말**은 디자인 레인이 기각했다 — ①행정 용어라 세계관이 관공서가 되고
+   ②"답 안 준 사람"으로 **사람을 규정**하며 ③대기열은 순번을 부른다(§5 개수 표기 금지 위반).
+   채택된 말은 「부른 곁」 — 상대의 상태가 아니라 **내 행위**를 말한다. 기다림이 아니라 부름이다.
+   ⚠ 코드 값은 한글이 아니라 called/standing 이다. 화면 말이 또 바뀌어도 저장된 값은 안 흔들린다 —
+     v134.2 가 한글 값("대기")을 저장해 버려서, 이 한 판만에 마이그레이션이 필요해졌다. */
+const GY_CALLED = "called";       // 내가 부르기만 한 쪽 — 뒤로 물러나 흐리게
+const GY_STANDING = "standing";   // 대답이 온 쪽 — 궤도 앞줄, 제 밝기. 회신 레그가 없어 아직 아무도 없다
 const GYEOT_MAX = 24;                     // 상한이 없으면 명부가 곧 수집 카운터가 된다
 const GYEOT_SAENG = { 화: "목", 토: "화", 금: "토", 수: "금", 목: "수" };   // 나를 생하는 오행
 const GYEOT_GEUK  = { 화: "수", 금: "화", 목: "금", 토: "목", 수: "토" };   // 나를 극하는 오행
@@ -4173,7 +4193,13 @@ function gyeotRel(mine, theirs) {
 function readGyeot() {
   try {
     const a = JSON.parse(store.getItem(GYEOT_KEY) || "[]");
-    return Array.isArray(a) ? a.filter((x) => x && x.key && x.el).slice(0, GYEOT_MAX) : [];
+    if (!Array.isArray(a)) return [];
+    /* v134.2 는 층을 한글("곁"/"대기")로 저장했다. 읽을 때 한 번만 옮긴다 —
+       안 옮기면 그때 곁을 들인 사람은 전원이 `standing` 도 `called` 도 아닌 값이 되어
+       **밝기 판정이 조용히 뒤집힌다**(화면은 멀쩡하고 흐림만 사라진다). */
+    return a.filter((x) => x && x.key && x.el)
+      .map((x) => ({ ...x, tier: x.tier === "곁" || x.tier === GY_STANDING ? GY_STANDING : GY_CALLED }))
+      .slice(0, GYEOT_MAX);
   } catch (_) { return []; }
 }
 function writeGyeot(list) {
@@ -4192,7 +4218,7 @@ function gyeotAdd(list, e, now) {
     next[i] = { ...next[i], el: e.el, at: t };
     return writeGyeot(next);
   }
-  return writeGyeot([{ key: e.key, el: e.el, alias: "", tier: e.tier === "곁" ? "곁" : "대기", at: t }, ...list]);
+  return writeGyeot([{ key: e.key, el: e.el, alias: "", tier: e.tier === GY_STANDING ? GY_STANDING : GY_CALLED, at: t }, ...list]);
 }
 function gyeotDrop(list, key) { return writeGyeot(list.filter((x) => x.key !== key)); }
 /* 별칭은 **유저가 스스로 붙이는 말**이다(곁탭IA §5). 상대에게서 이름을 받지 않는다 —
@@ -4217,7 +4243,7 @@ function gyeotView(list, myMain) {
   const seat = gyeotSeat(list);
   return list.map((g) => {
     const base = hex2rgb((EL_COLOR[g.el] || EL_COLOR.토)[1]);
-    const dim = g.tier === "곁" ? 1 : 0.45;
+    const dim = g.tier === GY_STANDING ? 1 : 0.45;
     return { rel: gyeotRel(myMain, g.el), ang: seat.get(g.key) || 0, col: base.map((c) => c * dim) };
   });
 }
@@ -4649,7 +4675,7 @@ export default function App() {
     try { dbg = Math.max(0, Math.min(3, parseInt((window.location.search.match(/[?&]gyeot=(\d)/) || [])[1] || "0", 10) || 0)); } catch (_) {}
     if (!saju) { gyeotRef.current = []; return; }
     const fake = Array.from({ length: dbg }, (_, i) => ({
-      key: `dbg${i}`, tier: i % 2 ? "대기" : "곁",
+      key: `dbg${i}`, tier: i % 2 ? GY_CALLED : GY_STANDING,
       el: [GYEOT_SAENG[saju.main], GYEOT_GEUK[saju.main], saju.main][i % 3],
     }));
     gyeotRef.current = gyeotView(gyeotSorted.concat(fake), saju.main);
@@ -4684,6 +4710,7 @@ export default function App() {
   useEffect(() => { restRef.current = (res && cardOn) ? 300 : (busy || res) ? 46 : 0; }, [busy, res, cardOn]); // v30: 카드 뜨면 수호신 사실상 정지(스크롤·클릭 회복)
 
   // v16(B7): 스트릭 최소형 — 방문일 카운터만. 어제에 이어졌으면 +1, 끊겼으면 1부터
+  const streakSentRef = useRef(null);            // 스트릭 계측 하루 1회 잠금(StrictMode 이중 호출 방지)
   useEffect(() => {
     if (step !== 3) return;
     const t = todayStr();
@@ -4691,7 +4718,22 @@ export default function App() {
       if (prev && prev.last === t) return prev;
       const y = new Date(); y.setDate(y.getDate() - 1);
       const ys = `${y.getFullYear()}-${String(y.getMonth() + 1).padStart(2, "0")}-${String(y.getDate()).padStart(2, "0")}`;
-      return { last: t, count: prev && prev.last === ys ? prev.count + 1 : 1 };
+      const next = { last: t, count: prev && prev.last === ys ? prev.count + 1 : 1 };
+      /* 리텐션 자산 계측(작업배분 §6-1 2번) — 스트릭은 지금까지 화면에만 있고 계측이 0건이었다.
+         D7 게이트는 "다시 왔는가"에 답하는데, **왜 다시 왔는가**는 이 셋(스트릭·문안·판결록)이 답한다.
+         날이 바뀐 첫 방문에서만 찍힌다(같은 날 재방문은 위 early-return 으로 걸러진다).
+         끊김을 따로 남기는 이유: 이어짐만 세면 "몇 명이 습관이 됐나"는 알아도
+         **"며칠에서 끊기나"** 를 못 읽는다. 붙잡을 지점을 정하려면 끊긴 자리가 필요하다. */
+      /* ⚠ setState 업데이터 안이라 StrictMode 는 이 함수를 두 번 부른다. 그대로 track 하면
+         개발 빌드에서 이벤트가 두 배로 찍힌다. 날짜를 열쇠로 한 ref 로 하루 1회를 못 박는다. */
+      if (streakSentRef.current !== t) {
+        streakSentRef.current = t;
+        const broke = !!prev && prev.count >= 2 && next.count === 1;
+        track(broke ? "streak_broken" : "streak_day", {
+          streak: next.count, prev_streak: prev ? prev.count : 0, returning: !!prev,
+        });
+      }
+      return next;
     });
   }, [step]);
 
@@ -4986,13 +5028,16 @@ export default function App() {
   const saveLetterFile = () => {
     if (!letterDoc || letterDoc._err) return;
     const rec = records[letterIdx] || {};
-    const body = [`수호신의 서신 · ${letterNo(rec)}`, rec.q ? `물음: ${rec.q}` : "", rec.direction ? `판결: ${rec.direction} — ${rec.verdict || ""}` : "", "",
+    const body = [`아홉 하늘 서신 · ${letterNo(rec)}`, rec.q ? `물음: ${rec.q}` : "", rec.direction ? `판결: ${rec.direction} — ${rec.verdict || ""}` : "", "",
       ...letterDoc.chapters.map((c, i) => `${i + 1}. ${c.t}\n${c.body}\n`), letterDoc.closing ? `— ${letterDoc.closing}` : "",
       "", "비나리 · 이 서신은 AI가 생성한 내용입니다(재미로 보는 참고용)"].filter((s) => s !== null).join("\n");
     try {
       const a = document.createElement("a");
       a.href = URL.createObjectURL(new Blob([body], { type: "text/plain;charset=utf-8" }));
-      a.download = `binari_seosin_${letterNo(rec)}.txt`; document.body.appendChild(a); a.click(); a.remove();
+      /* 상품명은 「아홉 하늘 서신」(v134.3)이지만 **파일명은 ASCII 로 둔다** —
+         한글 이름을 a[download] 에 주면 크로미움이 그 값을 버리고 확장자 없는 `download` 로
+         떨어뜨린다(실측). 유저 손에 안 열리는 파일이 남는다. 각인·궁합 저장과 같은 규칙이다. */
+      a.download = `binari_ahopsky_letter_${letterNo(rec)}.txt`; document.body.appendChild(a); a.click(); a.remove();
       track("letter_saved", demoProps(birth, { no: letterNo(rec) }));
     } catch (_) {}
   };
@@ -5232,6 +5277,19 @@ export default function App() {
       : { k: "지키는 날", line: "오늘은 크게 벌이지 말고 지키는 날 — 흐름은 내일 또 바뀌어." };
     return { bio, mp, ilju: todayIlju(), mood };
   })() : null;
+
+  /* 문안이 **눈앞에 있었는가** — daily_opened 의 분모다.
+     이게 없으면 "안 열었다"가 '안 궁금했다'인지 '아예 안 떴다'인지 영영 못 가른다.
+     문안은 재방문 유저에게 하루 한 번만 뜨므로 방문당 1회 잠금(trackVisitOnce)이면 충분하다.
+     되물음(askback)이 있으면 문안 자리를 되물음이 가져가므로 그 사실도 같이 싣는다 —
+     리텐션 자산 셋이 같은 자리를 두고 서로 밀어내는 구조라, 안 밝히면 노출 수가 서로를 오염시킨다. */
+  useEffect(() => {
+    if (!dailyData || ritual || res) return;
+    trackVisitOnce("daily_offered", {
+      streak: streak ? streak.count : 0,
+      blocked_by_askback: !!askback,          // true 면 화면에 안 뜬 것 — 분모에서 빼고 읽어야 한다
+    });
+  }, [!!dailyData, ritual, res, !!askback]);
 
   const guardianIntro = saju && zo ? `나는 ${saju.nayin ? `'${saju.nayin.split("·")[1] || saju.nayin}'` : (saju.main === "수" ? "깊은 물결" : saju.main === "화" ? "꺼지지 않는 불꽃" : saju.main === "목" ? "자라나는 숲" : saju.main === "금" ? "벼려진 빛" : "단단한 대지")}의 기운을 두른, ${zo.el === "물" ? "안개처럼 흐르는" : zo.el === "불" ? "타오르는 형상의" : zo.el === "공기" ? "바람으로 된" : "산처럼 고요한"} 존재야.` : "";
 
@@ -5506,36 +5564,45 @@ export default function App() {
           {/* 곁 탭 — 1층은 위 수호신이 그대로 맡고, 여기는 글만 바뀐다 */}
           {tab === "gyeot" && phase >= 1 && (
             <div className="gyeotpanel fade">
+              {/* v134.3 빈 상태 카피 — 곁탭IA §3 정본 어휘에 맞춘다. 고친 셋:
+                  ①"옆자리" → 정본은 「곁」. 같은 뜻의 다른 말을 두면 어휘가 둘로 갈린다
+                  ②"누가 서게 되면"(수동) → 「곁에 부른다」. 주체 없는 수동태는 화면을 **대기실**로 만든다
+                  ③"이 자리에 같이 보일 거야" → 자리(슬롯)를 암시한다. §5 빈 슬롯 금지와 아슬아슬하다
+                  ⚠ 결핍을 말하지 않는다 — "아직 없어"는 §5 개수 표기 금지의 정신을 문장으로 어기는 것이다. */}
               <p className="gname under">곁</p>
               {saju && <p className="gsay">{EL_TRAIT[saju.main]} 네 곁에, 오늘도 이렇게 서 있어.</p>}
               {/* ── 2층 · 곁에 선 사람들 (곁탭IA §4) ────────────────────────────
                  비어 있으면 **세지 않는다** — "0명"도 빈 슬롯도 안 만든다(§5). 1층이 이미 화면을 완결한다. */}
               {gyeotSorted.length === 0 ? (
-                <><p className="fine">여기는 네 옆자리야. 누가 서게 되면 이 자리에 같이 보일 거야.</p>
-                {/* B-2 — **빈 옆자리에 탈출구가 없던 게 이 탭의 제일 큰 구멍이었다.**
-                    "누가 서게 되면"이라고만 써 두면 유저는 **어떻게 서게 하는지를 모른다** —
-                    보이는 건 있고 할 수 있는 건 0인 화면이 된다.
+                <><p className="fine">곁은 네가 불러야 서. 부르면 나와 같이 돌아.</p>
+                {/* B-2 — **빈 곁에 탈출구가 없던 게 이 탭의 제일 큰 구멍이었다.**
+                    윗줄이 "네가 불러야 선다"고 말하는데 **부르는 방법이 화면에 없으면** 그 문장은
+                    안내가 아니라 핀잔이 된다. 보이는 건 있고 할 수 있는 건 0인 화면이 그렇게 생긴다.
                     ⚠ 곁탭IA §5 「곁 탭 첫 화면을 결제벽으로 만들지 마라」와 부딪히지 않게 재는 곳:
                       이건 상품 진열이 아니라 **자리를 채우는 유일한 경로의 안내**다. 그래서
                       값을 안 쓰고(가격 없음), 강조 버튼(gold)도 안 쓴다 — 있는 문 하나를 가리킬 뿐이다. */}
                 <button className="btn ghost mt" onClick={() => {
                   track("gyeot_empty_cta", { from: "gyeot" });
                   setTab("judge"); setMatchOpen(true);
-                }}>궁합을 보면 그 사람이 여기 서</button></>
+                }}>궁합을 보면 그 사람을 부르게 돼</button></>
               ) : (<>
                 {/* 방어 ① 을 **화면에도 적는다.** 코드에서만 최근순이면 유저는 그걸 순위로 읽는다.
                     이 한 줄이 "위에 있는 사람이 더 잘 맞는 사람"이라는 오독을 막는 유일한 장치다. */}
                 <p className="fine gorderline">요즘 주고받은 순서야 — <b>잘 맞는 순서가 아니야.</b></p>
                 <ul className="gyeotlist">
                   {gyeotSorted.map((g) => (
-                    <li key={g.key} className={g.tier === "곁" ? "" : "wait"}>
+                    <li key={g.key} className={g.tier === GY_STANDING ? "" : "called"}>
                       <i className="gdot" style={{ background: (EL_COLOR[g.el] || EL_COLOR.토)[1] }} aria-hidden="true" />
                       <div className="gbody">
                         <input className="galias" value={g.alias || ""} maxLength={12} placeholder="별칭을 붙일래"
                           aria-label="이 곁의 별칭"
                           onChange={(e) => setGyeot((p) => gyeotRename(p, g.key, e.target.value))} />
                         <span className="grel">{GYEOT_REL_LINE[String(gyeotRel(saju?.main, g.el))]}</span>
-                        {g.tier !== "곁" && <span className="gwaitline">아직 답을 기다리는 자리야</span>}
+                        {/* ⚠ 여기에 「부른 곁」 라벨을 글자로 붙이지 않는다(곁탭IA 어휘확장:
+                            "라벨은 필요할 때만 붙인다. 밝기·거리만으로 갈리면 그게 제일 좋다").
+                            회신 레그가 없어 **지금은 전원이 부른 곁**이라 라벨이 모든 줄에 똑같이 붙는다 —
+                            정보가 0인데 자리만 먹는다. 그리고 "아직 답을 기다리는"은 **결핍의 서술**이라
+                            §5 개수 표기 금지의 정신을 문장으로 어긴다. 층은 흐리기(.called)로만 말한다. */}
                       </div>
                       <button className="gdrop" aria-label="이 곁을 지운다"
                         onClick={() => { setGyeot((p) => gyeotDrop(p, g.key)); track("gyeot_dropped", {}); }}>지울래</button>
@@ -5559,7 +5626,7 @@ export default function App() {
                   {/* v105: 서신함 — 쓰는 중 / 도착 / 못 씀. 세 상태를 숨기지 않는다. */}
                   {letterDoc && !letterDoc._err && (
                     <div className="mailbox fade" style={{ animationDelay: ".95s" }}>
-                      <p className="dtag">수호신의 서신 · 도착</p>
+                      <p className="dtag">아홉 하늘 서신 · 도착</p>
                       <button className="btn gold sm" onClick={openLetterDoc}>서신을 펼친다</button>
                     </div>
                   )}
@@ -5604,14 +5671,14 @@ export default function App() {
                 <p className="streak">수호신과 연결된 지 {streak.count}일째</p>
               )}
               {dailyData && !ritual && !res && !askback && !dailyOpen && (
-                <button className="knock fade" onClick={() => setDailyOpen(true)}>수호신이 오늘의 하늘을 봐뒀어 — 들을래?</button>
+                <button className="knock fade" onClick={() => { track("daily_opened", { streak: streak ? streak.count : 0 }); setDailyOpen(true); }}>수호신이 오늘의 하늘을 봐뒀어 — 들을래?</button>
               )}
               {dailyData && !ritual && !res && !askback && dailyOpen && (
                 <div className="daily fade">
                   <p className="dtag">아침 문안 · 오늘 하루만 — 자정에 사라져</p>
                   <p className="dmain">오늘은 <b>{dailyData.mood.k}</b>. {dailyData.mood.line}</p>
                   <p className="dsub">오늘의 일진 {dailyData.ilju} · 오늘 밤 달 {dailyData.mp.name}</p>
-                  <button className="btn ghost sm" onClick={() => { try { store.setItem(DAILY_KEY, todayStr()); } catch (_) {} setDailySeen(true); }}>받았어</button>
+                  <button className="btn ghost sm" onClick={() => { try { store.setItem(DAILY_KEY, todayStr()); } catch (_) {} track("daily_received", { streak: streak ? streak.count : 0 }); setDailySeen(true); }}>받았어</button>
                 </div>
               )}
               {askback && !ritual && !res && (
@@ -5672,7 +5739,7 @@ export default function App() {
                   숨기면 산 사람이 잃은 걸 모른 채 넘어간다 — 그게 제일 나쁜 상태다. */}
               {!ritual && !res && paidRecs.length > 0 && (
                 <button className="knock fade" onClick={() => { setBoxOpen((o) => !o); if (!boxOpen) track("letterbox_opened", { n: paidRecs.length, lost: paidRecs.filter((p) => !p.r.letter).length }); }}>
-                  {boxOpen ? "서신함 접기" : `수호신의 서신함 — ${paidRecs.length}통${paidRecs.some((p) => !p.r.letter) ? " · 못 받은 게 있어" : ""}`}
+                  {boxOpen ? "서신함 접기" : `아홉 하늘 서신함 — ${paidRecs.length}통${paidRecs.some((p) => !p.r.letter) ? " · 못 받은 게 있어" : ""}`}
                 </button>
               )}
               {!ritual && !res && boxOpen && (
@@ -5717,13 +5784,24 @@ export default function App() {
                 <p className="fine">둘 다 <b>지금은 값을 안 받아.</b> 결제는 아직 연결돼 있지 않고, 적힌 값은
                   <b> "이만하면 받겠어?"</b>를 묻는 표시야.</p>
               </>)}
+              {/* 판결록은 '되읽으러 오는' 자산이다 — 새 판결을 안 물어도 다시 오는 이유가 된다.
+                  지금까지 계측이 0건이라 D7 재방문자 중 몇이 여기로 왔는지를 못 읽었다.
+                  미보고 건수를 같이 싣는 이유: 되물음 루프가 살아 있는지가 여기서 보인다. */}
               {!ritual && !res && records.length > 0 && (
-                <button className="resetlink" onClick={() => { setLogOpen(o => !o); setOpenRec(-1); }}>{logOpen ? "판결록 접기" : `판결록 — ${records.length}번의 판결`}</button>
+                <button className="resetlink" onClick={() => {
+                  if (!logOpen) track("log_opened", { n: records.length, unreported: records.filter((r) => !r.followUp).length, streak: streak ? streak.count : 0 });
+                  setLogOpen(o => !o); setOpenRec(-1);
+                }}>{logOpen ? "판결록 접기" : `판결록 — ${records.length}번의 판결`}</button>
               )}
               {!ritual && !res && logOpen && (
                 <div className="vlog fade">
                   {[...records].slice(-10).reverse().map((r, i) => (
-                    <div key={i} className={`vlogrow${openRec === i ? " open" : ""}`} onClick={() => setOpenRec(openRec === i ? -1 : i)}>
+                    /* 어느 판결을 다시 펼치는가 — 며칠 지난 판결을 되읽는지가 '기억으로서의 값어치'다.
+                       질문 원문은 안 싣는다(가명처리를 거치지 않은 자리라 원칙대로 방향·나이만). */
+                    <div key={i} className={`vlogrow${openRec === i ? " open" : ""}`} onClick={() => {
+                      if (openRec !== i) track("log_row_opened", { dir: r.direction || null, age_days: Math.round((Date.now() - r.at) / 86400000), followed: r.followUp || "none" });
+                      setOpenRec(openRec === i ? -1 : i);
+                    }}>
                       <BujeokCanvas saju={saju} direction={r.direction} seed={r.q + (r.verdict || "")} size={54} />
                       <div className="vlogtxt">
                         <p className="vlogq">"{r.q}"</p>
@@ -5890,12 +5968,12 @@ export default function App() {
           {/* D4: 결제 fake-door — 지불 의사만 잰다. 결제 인프라는 만들지 않는다. */}
           {res && cardOn && letterOk && (
             !letter ? (
-              <button className="btn ghost mt" onClick={openLetter}>수호신의 서신 — 이 판결의 깊은 풀이 · {LETTER_PRICE.toLocaleString()}원 <span className="impbadge">시험 발행</span></button>
+              <button className="btn ghost mt" onClick={openLetter}>아홉 하늘 서신 — 이 판결 하나를 하늘 전부로 다시 읽어 · {LETTER_PRICE.toLocaleString()}원 <span className="impbadge">시험 발행</span></button>
             ) : letterIntent ? (
               <p className="ratedone">서신을 맡겼어 — 수호신이 쓰기 시작했어.</p>
             ) : (
               <div className="letterwrap fade">
-                <p className="dtag">수호신의 서신 · {LETTER_PRICE.toLocaleString()}원</p>
+                <p className="dtag">아홉 하늘 서신 · {LETTER_PRICE.toLocaleString()}원</p>
                 <ul className="letterlist">{LETTER_SECTIONS.map((t, i) => <li key={i}>{t}</li>)}</ul>
                 <p className="letterprev">{letterPreview(saju, hesit)}</p>
                 <p className="letterprevtag">— 여기까지가 미리보기야</p>
@@ -6215,14 +6293,13 @@ const CSS = `
    화면 밖으로 밀려 올라가 위쪽 행이 잘린다. 넘치면 목록 안에서 스크롤한다. */
 .gyeotlist{list-style:none;margin:0;padding:0;width:100%;max-width:340px;display:flex;flex-direction:column;gap:6px;max-height:44vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .gyeotlist li{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid rgba(159,143,196,.22);border-radius:11px;background:rgba(20,15,38,.55);text-align:left}
-.gyeotlist li.wait{opacity:.55}
+.gyeotlist li.called{opacity:.55}   /* 층은 밝기로만 말한다 — 라벨을 안 붙인다(곁탭IA 어휘확장) */
 .gdot{flex:0 0 auto;width:9px;height:9px;border-radius:50%;box-shadow:0 0 9px currentColor}
 .gbody{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px}
 .galias{background:none;border:none;border-bottom:1px dashed rgba(159,143,196,.3);color:#efe6ff;font-family:inherit;font-size:14px;padding:1px 0;width:100%;max-width:150px}
 .galias:focus{outline:none;border-bottom-color:rgba(245,217,139,.6)}
 .galias::placeholder{color:#6f658a}
 .grel{font-size:12px;line-height:1.6;color:#b6aacc}
-.gwaitline{font-size:11px;color:#8f84a8}
 .gdrop{flex:0 0 auto;background:none;border:none;color:#7d7296;font-family:inherit;font-size:11px;padding:4px;cursor:pointer}
 .gdrop:hover{color:#c9bde3}
 .brooding{font-size:13px;letter-spacing:.14em;color:#cfc4e2;margin:14px 0 0;text-align:center;animation:formPulse 2.4s ease-in-out infinite}
