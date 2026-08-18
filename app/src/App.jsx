@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { readImprint } from "./lib/imprint.js";
-import { readMatch } from "./lib/match.js";
+import { readMatch, roleOf, ROLE } from "./lib/match.js";
 
 /* ───── 계측(PostHog) — 휴면-준비: VITE_POSTHOG_KEY 없으면 완전 무동작 ───── */
 const AKEY = import.meta.env.VITE_POSTHOG_KEY;
@@ -1575,7 +1575,16 @@ function MatchDoc({ saju, birth, onClose, onMet }) {
           <b>어디서 갈리는지는 여기서만 나와.</b></p>
       </div>
       <div className="impask fade">
-        <p className="impaskh">상대의 생년월일만 알려줘 <i>이름은 안 받아</i></p>
+        <p className="impaskh">누구랑 맞대 볼까 <i>이름은 이 기기에만</i></p>
+        {/* 2026-08-17 창업자 결정 — 이름을 받는다. 그 전엔 곁탭IA §5 가 금지했고 근거는 "엔진이 안 쓴다"였다.
+            뒤집힌 근거는 관찰이다: 경쟁 앱에서 사람들이 심부름인 줄 알면서도 이름을 넣는다 — 관계가 궁금해서다.
+            ⚠ 이름은 **계산에 안 쓴다**(엔진은 여전히 생년월일만 본다). 곁 명부에서 **누가 누군지 알아보려고**만 쓴다.
+              그래서 비워도 궁합은 그대로 나온다 — 필수로 만들면 이름을 모르는 사람은 궁합을 못 본다. */}
+        <div className="impaskrow"><span>이름</span>
+          <input className="impname" maxLength={12} placeholder="민수 · 팀장님 · 엄마" value={f.nm ?? ""}
+            aria-label="상대를 부를 이름" onChange={(e) => set("nm", e.target.value)} />
+          <em className="impaskhint">비워도 돼 — 곁에서 알아보려고 받는 거야</em>
+        </div>
         <div className="impaskrow"><span>태어난 날</span>
           <input className="impnum w70" type="number" placeholder="1997" value={f.y ?? ""} onChange={(e) => set("y", e.target.value)} />
           <input className="impnum w48" type="number" placeholder="4" min="1" max="12" value={f.m ?? ""} onChange={(e) => set("m", e.target.value)} />
@@ -1588,17 +1597,22 @@ function MatchDoc({ saju, birth, onClose, onMet }) {
         {/* 성별 칩 제거(2026-08-15) — readMatch 에 sex 를 넘기고는 있었지만 match.js 본문에서
             **한 번도 읽지 않는다**(JSDoc 한 줄뿐). 안 쓰는 값을 위해 **남의 성별**을 묻고 있었다.
             제3자 정보는 쓸 데가 분명할 때만 받는다 — 쓰지도 않으면서 받는 건 그냥 수집이다. */}
-        <p className="impaskw">상대의 <b>이름도 연락처도 안 받아.</b> 생년월일은 이 기기에만 남고 서버로 안 보내.
+        <p className="impaskw">이름도 생년월일도 <b>이 기기에만 남아</b> — 서버로도, 통계로도 안 보내.
+          이름은 <b>계산에 안 쓰고</b> 네가 곁에서 알아보려고만 써. 연락처는 안 받아.
           궁합은 <b>연인만이 아니야</b> — 같이 일하는 사람, 가족, 동업자에게도 그대로 써.</p>
         <button className="btn mt" disabled={!ok} onClick={() => {
-          try { localStorage.setItem(MATCH_LAST_KEY, JSON.stringify(f)); } catch {}
-          track("match_run", { has_hour: f.h != null }); markFreeIssue("match");   // 결정 8
+          /* ⚠ **이름(nm)은 저장에서 뺀다.** MATCH_LAST_KEY 는 폼을 되살리는 값인데, 이름까지 남기면
+             다음 사람 궁합을 볼 때 **앞사람 이름이 미리 채워져** 엉뚱한 사람에게 붙는다. */
+          try { const { nm: _drop, ...keep } = f; localStorage.setItem(MATCH_LAST_KEY, JSON.stringify(keep)); } catch {}
+          track("match_run", { has_hour: f.h != null, named: !!(f.nm || "").trim() }); markFreeIssue("match");   // 결정 8 · ⚠ 이름 자체가 아니라 **적었는지 여부**만 센다
           /* 곁 명부에 한 자리 — **명부에 사람이 생기는 유일한 입구**다.
-             위로 올려 보내는 건 파생값 둘(지문·오행)뿐이다. 생년월일은 이 콜백 밖으로 안 나간다. */
+             위로 올려 보내는 건 파생값(지문·오행·일간)과 유저가 적은 이름뿐이다.
+             **생년월일은 이 콜백 밖으로 안 나간다** — 지문으로만 남는다. */
           try {
             const noH = !f.h && f.h !== 0;
             const bs = calcSaju(+f.y, +f.m, +f.d, noH ? 12 : +f.h, 0, noH, 126.978);
-            if (bs?.main && onMet) onMet({ key: gyeotFingerprint(f.y, f.m, f.d), el: bs.main });
+            if (bs?.main && onMet) onMet({ key: gyeotFingerprint(f.y, f.m, f.d), el: bs.main,
+              dg: bs?.idx?.dG, name: (f.nm || "").trim() });   // dg 는 역할 10종을 세는 데 쓴다(0~9)
           } catch (_) {}
           setDone(true);
         }}>
@@ -1710,7 +1724,7 @@ function MatchDoc({ saju, birth, onClose, onMet }) {
         }}>글로 저장하기 — 문서 전체를 파일로</button>
         <p className="fine">파일은 <b>네 기기에만 만들어져.</b> 다만 이 문서는 <b>상대 이야기</b>야 —
           상대는 이 앱을 쓴 적도 동의한 적도 없어. <b>네가 읽으려고 갖는 것까지</b>로 두는 게 좋아.</p>
-        <button className="btn ghost mt" onClick={() => { track("match_again", {}); setDone(false); }}>다른 사람과도 봐볼게</button>
+        <button className="btn ghost mt" onClick={() => { track("match_again", {}); setF((p) => ({ ...p, nm: "" })); setDone(false); }}>다른 사람과도 봐볼게</button>
         <button className="btn ghost mt" onClick={onClose}>닫을게</button>
       </div>
     </div>
@@ -3186,7 +3200,7 @@ function Guardian(props) {
 /* 돌아올 주소 — 부적·각인 카드·공유 링크가 같은 값을 쓴다. 자체 도메인을 붙이는 날 **여기 한 곳만** 고친다.
    예전엔 세 곳에 따로 박혀 있어서, 한 곳만 고치면 나머지가 옛 주소로 남는 종류의 사고가 예약돼 있었다. */
 const SHARE_HOST = "https://binari-sepia.vercel.app";
-const APP_VER = "v134.5 · 곁 어휘";
+const APP_VER = "v136 · 곁에 이름";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -4156,9 +4170,18 @@ const MATCH_LAST_KEY = "binari.match_last.v1";
    `gyeotShares(n)` 은 사람 수 n 을 받는데 **그 n 을 만드는 것이 여태 없었다.**
    `MATCH_LAST_KEY` 는 한 칸이고 궁합을 돌릴 때마다 덮어써서, 화면엔 늘 한 명뿐이었다.
 
-   ⚠ **원값(생년월일)을 쌓지 않는다.** 명부에 남는 건 파생값 넷뿐이다 —
-      상대 일간의 오행 한 글자 · 지문 · 층 · 마지막으로 주고받은 때.
-      수호신 궤도도 사이 한 줄도 이 넷이면 그려진다. 원값이 필요한 계산은 명부에 없다.
+   ⚠ **원값(생년월일)을 쌓지 않는다.** 명부에 남는 건 파생값뿐이다 —
+      상대 일간의 오행(el) · 일간 인덱스(dg, 0~9) · 지문 · 층 · 마지막으로 주고받은 때.
+      수호신 궤도도, 사이 한 줄도, 역할 10종도 이것들이면 그려진다. 생년월일이 필요한 계산은 명부에 없다.
+
+   ⚠ **이름(name)은 2026-08-17 창업자 결정으로 받는다.** 그 전까지 곁탭IA §5 가 「상대 이름 받기」를
+      금지했고 이 파일도 그렇게 적혀 있었다. 뒤집힌 근거는 이론이 아니라 **관찰**이다 —
+      경쟁 앱(도령)에서 사람들이 "심부름"인 줄 알면서도 이름을 넣는다. 관계가 궁금해서다.
+      대신 조건이 붙는다: **이름은 이 기기 밖으로 한 걸음도 안 나간다.**
+        · 서버 전송 0 (명부를 보내는 배선이 애초에 없다)
+        · 계측 전송 0 (track 에 이름을 싣지 않는다 — health-check 가 감시)
+        · 판결(LLM)에도 **이름 대신 `곁1`·`곁2` 자리표를 보내고**, 돌아온 문장에서 앱이 이름으로 바꾼다
+      상대는 이 앱을 쓴 적도 동의한 적도 없는 제3자다. 그 사실은 결정이 바뀌어도 안 바뀐다.
    ⚠ `key` 는 **같은 사람을 두 번 안 세우려고 두는 중복제거 지문**이다. 해시라서 안전하다고 쓰지 않는다 —
       후보가 4만 개뿐이라 마음먹으면 되돌려진다. 이 값이 하는 일은 "명부에 생년월일이 **문자열로** 안 남는다"
       까지고, 그래서 **명부를 기기 밖으로 내보내는 배선을 만들지 않는다**(공유·서버 전송 경로 0).
@@ -4175,6 +4198,7 @@ const GYEOT_KEY = "binari.gyeot.v1";
 const GY_CALLED = "called";       // 내가 부르기만 한 쪽 — 뒤로 물러나 흐리게
 const GY_STANDING = "standing";   // 대답이 온 쪽 — 궤도 앞줄, 제 밝기. 회신 레그가 없어 아직 아무도 없다
 const GYEOT_MAX = 24;                     // 상한이 없으면 명부가 곧 수집 카운터가 된다
+const GYEOT_NAME_MAX = 12;                // 이름 칸 — 길면 목록이 문단이 된다
 const GYEOT_SAENG = { 화: "목", 토: "화", 금: "토", 수: "금", 목: "수" };   // 나를 생하는 오행
 const GYEOT_GEUK  = { 화: "수", 금: "화", 목: "금", 토: "목", 수: "토" };   // 나를 극하는 오행
 /* 사이 한 줄 — 셋 다 **쓸모의 서술**이다(역할과초대 §0 규칙 3). 등급이 아니라 종류라서 서열이 안 선다.
@@ -4226,7 +4250,12 @@ function readGyeot() {
        안 옮기면 그때 곁을 들인 사람은 전원이 `standing` 도 `called` 도 아닌 값이 되어
        **밝기 판정이 조용히 뒤집힌다**(화면은 멀쩡하고 흐림만 사라진다). */
     return a.filter((x) => x && x.key && x.el)
-      .map((x) => ({ ...x, tier: x.tier === "곁" || x.tier === GY_STANDING ? GY_STANDING : GY_CALLED }))
+      /* alias → name 승계. v134.2~4 는 「유저가 붙이는 별칭」이라 alias 였는데,
+         2026-08-17부터 **상대의 이름**을 받는다. 뜻이 달라졌으므로 이름도 바꿔 둔다 —
+         같은 칸에 다른 뜻을 담아 두면 다음 사람이 개인정보 등급을 잘못 읽는다. */
+      .map((x) => ({ ...x, name: x.name != null ? x.name : (x.alias || ""),
+        tier: x.tier === "곁" || x.tier === GY_STANDING ? GY_STANDING : GY_CALLED }))
+      .map(({ alias, ...x }) => x)
       .slice(0, GYEOT_MAX);
   } catch (_) { return []; }
 }
@@ -4243,16 +4272,20 @@ function gyeotAdd(list, e, now) {
   const i = list.findIndex((x) => x.key === e.key);
   if (i >= 0) {
     const next = list.slice();
-    next[i] = { ...next[i], el: e.el, at: t };
+    /* 이름은 **덮어쓰지 않는다** — 두 번째 궁합에서 칸을 비워 두면 먼저 적은 이름이 지워진다.
+       새로 적었을 때만 바뀐다. 지우고 싶으면 목록에서 직접 비우면 된다. */
+    next[i] = { ...next[i], el: e.el, at: t,
+      dg: Number.isInteger(e.dg) ? e.dg : next[i].dg,
+      name: e.name ? String(e.name).slice(0, GYEOT_NAME_MAX) : next[i].name };
     return writeGyeot(next);
   }
-  return writeGyeot([{ key: e.key, el: e.el, alias: "", tier: e.tier === GY_STANDING ? GY_STANDING : GY_CALLED, at: t }, ...list]);
+  return writeGyeot([{ key: e.key, el: e.el, dg: Number.isInteger(e.dg) ? e.dg : null,
+    name: String(e.name || "").slice(0, GYEOT_NAME_MAX), tier: e.tier === GY_STANDING ? GY_STANDING : GY_CALLED, at: t }, ...list]);
 }
 function gyeotDrop(list, key) { return writeGyeot(list.filter((x) => x.key !== key)); }
-/* 별칭은 **유저가 스스로 붙이는 말**이다(곁탭IA §5). 상대에게서 이름을 받지 않는다 —
-   목록이 생겼다는 이유로 그 금지를 되살리지 않는다. */
-function gyeotRename(list, key, alias) {
-  return writeGyeot(list.map((x) => (x.key === key ? { ...x, alias: String(alias || "").slice(0, 12) } : x)));
+/* 이름을 고쳐 적는다. 목록에서 직접 비우면 이름 없는 곁이 된다(그래도 자리는 남는다). */
+function gyeotSetName(list, key, name) {
+  return writeGyeot(list.map((x) => (x.key === key ? { ...x, name: String(name || "").slice(0, GYEOT_NAME_MAX) } : x)));
 }
 /* ── 목록이 순위가 되지 않게 하는 장치 (작업지시_역할과초대 §C-3 방어 1) ──────
    지금까지 순위가 안 생긴 건 원칙이 아니라 **화면에 사람이 한 명뿐이었기 때문**이다.
@@ -4265,6 +4298,62 @@ function gyeotRename(list, key, alias) {
 function gyeotOrder(list) {
   return list.slice().sort((a, b) => (b.at || 0) - (a.at || 0));
 }
+/* ── 곁 써머리 — 역할 10종으로 묶는다 (2026-08-17 창업자 지시) ────────────────
+   **왜 역할이 축인가**: 곁탭IA §5 는 개수 표기를 금지했는데 창업자가 요약을 지시했다. 둘을 같이 지키는
+   길이 하나 있다 — **세되, 사람을 안 센다.** "n명"이 붙는 대상이 *사람*이면 그건 친구 수 카운터고,
+   *자리(역할)*면 그건 분포다. "판을 같이 키우는 자리 2명"은 서열이 아니라 **내 곁의 생김새**다.
+
+   ⚠ 표는 **개수 내림차순**이다. 이건 사람의 줄 세우기가 아니라 **범주의 분포**다 —
+     같은 이유로 아래 이름 목록은 절대 이 순서를 안 쓴다(거긴 최근순 그대로다).
+     둘을 같은 순서로 맞추는 순간 "1등 역할의 사람"이 목록 맨 위에 서고, 그게 순위가 된다.
+   ⚠ 역할표는 `match.js` 의 것을 **그대로 가져다 쓴다**(roleOf). 베끼면 궁합 문서와 곁 써머리가
+     같은 사람을 두고 다른 말을 하게 된다. */
+function gyeotSummary(list, myDG) {
+  const g = new Map();
+  let unread = 0;
+  for (const x of list) {
+    const r = Number.isInteger(x.dg) && Number.isInteger(myDG) ? roleOf(myDG, x.dg) : null;
+    if (!r) { unread++; continue; }          // v134 이전에 든 곁은 일간을 안 들고 있다 — 세지 않고 따로 알린다
+    if (!g.has(r.ss)) g.set(r.ss, { ss: r.ss, label: r.name, use: r.use, people: [] });
+    g.get(r.ss).people.push(x);
+  }
+  const rows = [...g.values()].sort((a, b) => b.people.length - a.people.length || (a.ss < b.ss ? -1 : 1));
+  return { rows, unread, max: rows.length ? rows[0].people.length : 0, counted: list.length - unread };
+}
+/* ── 판결이 곁을 볼 수 있게 (2026-08-17 창업자 지시: "내 사업에 도움이 될 사람이 있을까?") ──
+   ⚠ **이름을 모델에 안 보낸다.** 보내는 건 `곁1`·`곁2` 자리표와 그 사람의 **역할 이름**뿐이다.
+     모델은 자리표로 답하고, 돌아온 문장에서 앱이 이름으로 바꾼다(gyeotFillNames).
+     이 리포의 반복 원칙과 같은 모양이다 — **모델에 못 맡길 건 코드가 하고 모델엔 재료만 준다.**
+     덤으로 개인정보 약속이 안 깨진다: 상대는 이 앱을 쓴 적도 동의한 적도 없는 제3자다.
+   ⚠ 이름 없는 곁도 자리표를 받는다 — 이름이 없다고 존재까지 빠지면 "그런 사람 없다"가 되어 버린다.
+     대신 치환할 이름이 없으면 아래에서 「곁에 선 사람」으로 되돌린다. */
+function gyeotPromptLine(list, myDG) {
+  const named = list.slice(0, 8);            // 프롬프트를 재료로 채우지 않는다 — 여덟이면 충분하다
+  const parts = named.map((x, i) => {
+    const r = Number.isInteger(x.dg) && Number.isInteger(myDG) ? roleOf(myDG, x.dg) : null;
+    return `곁${i + 1}=${r ? r.name : "자리를 아직 못 읽은 곁"}`;
+  });
+  if (!parts.length) return "";
+  return `\n[곁] 네 곁에 선 사람들: ${parts.join(" · ")}. `
+    + `**누가/사람/도움/함께를 묻는 질문에만** 이 중에서 골라 \`곁1\` 같은 표기를 그대로 써서 답한다`
+    + `(앱이 이름으로 바꿔 보여준다). 없으면 억지로 고르지 말고 곁 얘기를 꺼내지 마라.`;
+}
+/* 모델이 쓴 `곁1` 을 실제 이름으로 되돌린다. 이름이 비어 있으면 사람이 없는 게 아니라
+   **부를 말이 없는 것**이므로 「곁에 선 사람」으로 바꾼다 — 자리표가 화면에 그대로 나가면 안 된다. */
+function gyeotMaskNames(text) {
+  /* 밖으로 나가는 그림·링크용. **남의 이름을 남에게 보내지 않는다** — 곁은 이 앱을 쓴 적도
+     동의한 적도 없는 제3자다. 자리표를 그대로 두면 "곁1"이 찍히므로 말이 되게 바꾼다. */
+  return String(text || "").replace(/곁\s*(\d{1,2})/g, "곁에 선 사람");
+}
+function gyeotFillNames(text, list) {
+  if (!text || !list.length) return text;
+  return String(text).replace(/곁\s*(\d{1,2})/g, (m, n) => {
+    const x = list[+n - 1];
+    if (!x) return m;
+    return (x.name || "").trim() || "곁에 선 사람";
+  });
+}
+
 /* 셰이더가 받는 모양 {rel, ang, col} 로 낮춘다 — 명부의 원소는 여기서 밖으로 안 나간다.
    `대기` 층은 색을 죽여 흐리게 세운다. 셰이더는 손대지 않는다(u_gc 가 이미 밝기를 나르는 vec3다). */
 function gyeotView(list, myMain) {
@@ -4687,6 +4776,13 @@ export default function App() {
      탭 도입은 이 리포에서 충돌면이 제일 넓은 변경이라(App.jsx 렌더 루트) 단계를 쪼개 올린다.
      지금 단계는 껍데기 + 곁 탭 1층(내 수호신)까지다. 곁 목록·부르기·궁합 이동은 다음 단계. */
   const [tab, setTab] = useState("judge");
+  /* v136 — 곁 명부는 **두 번 두드려야 열린다**(창업자 지시: "마치 판결 탭처럼").
+     판결 탭의 `awake` 와 같은 문법이다. 왜 굳이 한 겹을 두나:
+     ①곁 탭의 1층은 **수호신과 곁이 도는 그림**이고, 목록이 상시로 깔리면 그 그림이 안 보인다
+     ②이름이 적힌 목록은 **남이 옆에서 볼 수 있는 화면**이다 — 한 번의 의도적인 동작 뒤에 두는 게 맞다
+     ③"두드리면 답이 있다"가 이 앱의 이미 있는 문법이라, 새로 배울 게 없다 */
+  const [gyeotOpen, setGyeotOpen] = useState(false);
+  const gyeotTapRef = useRef(0);
   const vp = useViewport();                                   // v132.4 회전·기기별 대응
   /* v133 응축 — 곁 탭이면 행성, 판결 탭이면 펼친 형상. ref 로 넘겨 **리렌더 없이** 셰이더만 따라가게 한다
      (state 로 넘기면 size 처럼 deps 를 건드려 WebGL 컨텍스트가 재생성된다). */
@@ -4886,11 +4982,11 @@ export default function App() {
   const shareVerdict = async () => {
     if (!res) return;
     track("verdict_shared", { dir: res.direction, mode: "ritual" });
-    const text = `"${q}"\n→ ${res.direction}. ${res.verdict}\n\n— 내 수호신의 판결, 비나리`;
+    const text = `"${q}"\n→ ${res.direction}. ${gyeotMaskNames(res.verdict)}\n\n— 내 수호신의 판결, 비나리`;
     // v75: 판결을 링크에 실어 보낸다 — 받은 사람이 홈이 아니라 이 판결을 먼저 보게
     /* A-2: n 필드 제거 + 본문에서 호칭 제거. 둘 다 해야 실명이 안 나간다 */
     const _nm = (birth.name || "").trim();
-    const payload = { q, d: res.direction, v: stripName(res.verdict, _nm), s: stripName((detail && !detail._err ? detail.subline : "") || "", _nm), a: res.against || 0, t: res.total || 0, c: res.category || "", hx: hexInfo ? { n: hexInfo.name, t: (hexInfo.moving && hexInfo.moving.length ? hexInfo.toName : "") } : null };
+    const payload = { q, d: res.direction, v: gyeotMaskNames(stripName(res.verdict, _nm)), s: gyeotMaskNames(stripName((detail && !detail._err ? detail.subline : "") || "", _nm)), a: res.against || 0, t: res.total || 0, c: res.category || "", hx: hexInfo ? { n: hexInfo.name, t: (hexInfo.moving && hexInfo.moving.length ? hexInfo.toName : "") } : null };
     /* 서명을 받아야만 판결이 실린 링크를 만든다. 못 받으면 맨 링크로 나간다 —
        그래야 "?v= 가 붙은 링크는 전부 서명된 것"이 성립하고, 받는 쪽에서 검증 실패를
        곧 위조로 읽을 수 있다. 서명 없는 링크를 하나라도 흘리면 그 규칙이 깨진다. */
@@ -4927,6 +5023,12 @@ export default function App() {
     t.taps += 1; t.last = now; if (!t.first) t.first = now;
     if (now - wakeTapRef.current < 350) { wakeTapRef.current = 0; if (!awake) { setAwake(true); trackVisitOnce("guardian_wake", {}); } }
     else { wakeTapRef.current = now; }
+  };
+  /* 곁 명부 열기 — tryWake 와 **같은 350ms 규칙**을 쓴다. 문법이 같아야 배우는 게 하나뿐이다. */
+  const tryGyeotOpen = () => {
+    const now = performance.now();
+    if (now - gyeotTapRef.current < 350) { gyeotTapRef.current = 0; if (!gyeotOpen) { setGyeotOpen(true); track("gyeot_roster_opened", { n: gyeot.length }); } }
+    else { gyeotTapRef.current = now; }
   };
   // v104: 화면만 로비로 되돌린다(계측 없음). 유저가 X를 눌러 나가는 경우와
   //       서신 대기 연출이 끝나 자동으로 돌아가는 경우가 같은 상태를 공유하되, 이벤트는 서로 달라야 한다.
@@ -5149,7 +5251,11 @@ export default function App() {
          시주 계산과 **같은 식**을 쓴다(태어난 시각을 읽던 방식 그대로 지금 시각에). */
       const _hj = Math.floor((((new Date().getHours() + 1) % 24) + 24) % 24 / 2);
       const _sijin = `${JI[_hj]}시(${JI_EL[_hj]})`;
-      const userText = `질문: ${q}${qExtra}\n[오늘] ${_nd.getFullYear()}년 ${_nd.getMonth() + 1}월 ${_nd.getDate()}일 · 지금 시진 ${_sijin} · 오늘 밤 달 ${_tmoon.name}${innerLine}${reaskLine}${fuLine}`;      const system = makeSystem();
+      /* v136 — 곁이 판결에 흘러든다(창업자 지시: "내 사업에 도움이 될 사람이 있을까?").
+         ⚠ 여기 들어가는 건 **자리표(곁1·곁2)와 역할 이름뿐이고 사람 이름은 안 들어간다.**
+           이름은 응답이 돌아온 뒤 앱이 바꿔 넣는다(gyeotFillNames). */
+      const gyeotLine = gyeotPromptLine(gyeotSorted, saju?.idx?.dG);
+      const userText = `질문: ${q}${qExtra}\n[오늘] ${_nd.getFullYear()}년 ${_nd.getMonth() + 1}월 ${_nd.getDate()}일 · 지금 시진 ${_sijin} · 오늘 밤 달 ${_tmoon.name}${innerLine}${reaskLine}${fuLine}${gyeotLine}`;      const system = makeSystem();
       // v105: 서신(콜3)은 이 재료를 그대로 쓴다. 같은 system 이라 프롬프트 캐시도 그대로 먹는다.
       letterCtxRef.current = { system, userText };
       // ── 콜1: 결론만(작은 출력=빠름) → L1 즉시 노출 ──
@@ -5186,6 +5292,12 @@ export default function App() {
         if (_t2) { r1.against = _t2.against; r1.total = _t2.total; }
         track("verdict_nodir", { retry: 1, recovered: true });
       }
+      /* ⚠ **여기서 r1 을 이름으로 바꾸지 않는다.** 처음엔 그렇게 썼다가 되돌렸다 —
+         r1 은 밖으로 나가는 모든 길을 탄다: convo(다음 턴 프롬프트) · v_anon(PostHog) ·
+         explainMsg(콜2) · 공유 페이로드 · 서신(콜3). 한 줄 바꾸면 그 다섯 곳 전부로 이름이 샌다.
+         화면 바로 아래에 "서버로도 통계로도 안 나가"라고 적어 놓고 그러면 그건 거짓말이 된다
+         (v127.7 에 실제로 그런 사고가 있었다 — 약속을 먼저 쓰고 코드가 안 따라갔다).
+         그래서 치환은 **화면과 기기 저장에서만** 한다. 아래 records 와 렌더 지점 참조. */
       // L1 등장 연출(짧게)
       agitateRef.current = true; setRes(r1);
       // scope_level(모델 판정) vs scope_hint(규칙) — 둘이 어긋난 건이 경계 케이스다. 그 목록이 다음 규칙 개정의 근거가 된다.
@@ -5205,7 +5317,10 @@ export default function App() {
       setConvo(prev => [...prev, { role: "user", content: userText }, { role: "assistant", content: `판결: ${r1.direction} — ${r1.verdict} (${r1.total}중 ${r1.against} 반대)` }].slice(-12));
       // actionable=되물음("따랐어?") 대상인가. 되물음 턴과 S3 넘김은 제외 — "뜻이 뭐야"에 대고 따랐냐고 묻는 건 말이 안 되고,
       // 병원 가라는 넘김을 '판결 이행'으로 세면 이행률 지표가 오염된다.
-      setRecords(prev => [...prev, { at: Date.now(), q: q.slice(0, 60), direction: r1.direction, verdict: r1.verdict, cat: r1.category, scope: _sLevel, actionable: isDecisionQ(q) && !_reask && _sLevel !== "S3", followUp: null, note: "", rating: 0 }].slice(-50)); // v16(B3) · v73 actionable · v75 rating
+      setRecords(prev => [...prev, { at: Date.now(), q: q.slice(0, 60), direction: r1.direction,
+        /* 판결록은 **기기에만** 남으므로 여기서 이름을 박아 둔다. 자리표로 두면 나중에 명부 순서가
+           바뀌었을 때 `곁1` 이 딴 사람을 가리킨다 — 지난 판결의 뜻이 조용히 바뀌는 셈이다. */
+        verdict: gyeotFillNames(r1.verdict, gyeotSorted), cat: r1.category, scope: _sLevel, actionable: isDecisionQ(q) && !_reask && _sLevel !== "S3", followUp: null, note: "", rating: 0 }].slice(-50)); // v16(B3) · v73 actionable · v75 rating
       setBusy(false);
       // ── 콜2: 근거는 백그라운드로 미리 로드(유저가 '왜?' 읽는 사이 완성) ──
       detailArgsRef.current = [system, priorConvo, userText, r1]; fetchDetail(system, priorConvo, userText, r1);   // v103: 모든 판결이 근거를 갖는다
@@ -5568,7 +5683,7 @@ export default function App() {
       )}
 
       {/* 탭이 바뀌면 목표만 세운다 — 실제 변형은 셰이더에서 1.25초에 걸쳐 따라간다 */}
-      {(() => { orbRef.current = tab === "gyeot"; return null; })()}
+      {(() => { orbRef.current = tab === "gyeot"; if (tab !== "gyeot" && gyeotOpen) setTimeout(() => setGyeotOpen(false), 0); return null; })()}
 
       {/* ── v134.1 탭 공용 한 섹션 ─────────────────────────────────────────────
            ⚠ 전엔 판결·곁이 **각자 <section> 안에 각자 <Guardian>** 을 두고 있었다.
@@ -5580,7 +5695,8 @@ export default function App() {
       {step === 3 && (
         <section
           className={`scene fade ${tab === "gyeot" ? "gyeot" : (phase >= 1 && !res && !awake ? "lobby" : "")}`}
-          onClick={tab === "judge" && phase >= 1 && !res && !awake ? tryWake : undefined}>
+          onClick={tab === "judge" ? (phase >= 1 && !res && !awake ? tryWake : undefined)
+            : (phase >= 1 && gyeotSorted.length > 0 && !gyeotOpen ? tryGyeotOpen : undefined)}>
           <div className={`halo wide ${tab === "gyeot" ? "gyeotscale" : `${!awake && phase >= 1 && !res ? "lobbyscale" : ""} ${asking ? "asking" : ""} ${ritual ? "ritualfade" : ""} ${busy || (res && !cardOn) ? "busy" : ""} ${res && cardOn ? "dimmed" : ""}`}`}>
             {phase === 0
               ? <BirthCanvas tint={saju ? EL_COLOR[saju.main] : undefined} size={guardianSize(vp)} />
@@ -5592,7 +5708,7 @@ export default function App() {
 
           {/* 곁 탭 — 1층은 위 수호신이 그대로 맡고, 여기는 글만 바뀐다 */}
           {tab === "gyeot" && phase >= 1 && (
-            <div className="gyeotpanel fade">
+            <div className={`gyeotpanel fade${gyeotOpen ? " open" : ""}`}>
               {/* v134.3 빈 상태 카피 — 곁탭IA §3 정본 어휘에 맞춘다. 고친 셋:
                   ①"옆자리" → 정본은 「곁」. 같은 뜻의 다른 말을 두면 어휘가 둘로 갈린다
                   ②"누가 서게 되면"(수동) → 「곁에 부른다」. 주체 없는 수동태는 화면을 **대기실**로 만든다
@@ -5614,32 +5730,71 @@ export default function App() {
                   track("gyeot_empty_cta", { from: "gyeot" });
                   setTab("judge"); setMatchOpen(true);
                 }}>궁합을 보면 그 사람을 부르게 돼</button></>
-              ) : (<>
-                {/* 방어 ① 을 **화면에도 적는다.** 코드에서만 최근순이면 유저는 그걸 순위로 읽는다.
-                    이 한 줄이 "위에 있는 사람이 더 잘 맞는 사람"이라는 오독을 막는 유일한 장치다. */}
+              ) : !gyeotOpen ? (<>
+                {/* 닫힌 상태 — 목록 대신 **곁이 돌고 있다는 사실**만. 판결 탭의 "두드려봐"와 같은 자리다.
+                    ⚠ 여기에 인원수를 안 쓴다. 세는 건 열고 나서 **자리(역할)** 를 세는 것뿐이다(§5). */}
+                <p className="fine">네가 부른 사람들이 지금 같이 돌고 있어.</p>
+                <p className="wakehint gyeothint">두 번 두드려봐 — 누가 있는지 보여줄게</p>
+              </>) : (<>
+                {(() => {
+                  const sum = gyeotSummary(gyeotSorted, saju?.idx?.dG);
+                  return (<>
+                    {/* ── 써머리 ① 그래프 — 자리별 몇이나 되나 ──────────────────────
+                        ⚠ **사람이 아니라 자리를 센다.** "친구 3명"은 카운터고 "판을 같이 키우는 자리 3명"은
+                          분포다. 곁탭IA §5 의 개수 금지를 뒤집은 게 아니라, 금지가 막으려던 것
+                          (수집 경쟁)을 안 만드는 방식으로 창업자 지시를 받은 것이다. */}
+                    {sum.rows.length > 0 && (<>
+                      <p className="gsumh">네 곁은 이렇게 생겼어</p>
+                      <svg className="gsum" viewBox={`0 0 320 ${sum.rows.length * 22 + 6}`} width="100%"
+                           height={sum.rows.length * 22 + 6} role="img" aria-label="자리별 곁 분포">
+                        {/* ⚠ 라벨을 오른쪽 정렬로 132px 안에 넣었더니 **제일 긴 자리 이름이 잘렸다**
+                            ("…쥐고 있어야 안 흔들리는 자리" → "가 쥐고…"). 자리 이름은 줄일 수 없는 값이라
+                            (줄이면 표와 그래프가 같은 것을 다르게 부른다) 막대를 좁히고 라벨 칸을 넓혔다. */}
+                        {sum.rows.map((r, i) => {
+                          const y = i * 22, w = Math.max(3, 112 * (r.people.length / (sum.max || 1)));
+                          return (<g key={r.ss}>
+                            <text x="0" y={y + 12} fontSize="9.5" fill="#b6aacc">{r.label}</text>
+                            <rect x="176" y={y + 3} width="112" height="11" rx="2" fill="#6f658022" />
+                            <rect x="176" y={y + 3} width={w} height="11" rx="2" className="gsumfill" style={{ "--i": i }} />
+                            <text x="294" y={y + 12} fontSize="9.5" fill="#8f84a8">{r.people.length}명</text>
+                          </g>);
+                        })}
+                      </svg>
+                      {/* ── 써머리 ② 표 — 그 자리가 **무슨 쓸모인지**. 그래프만 있으면 숫자만 남는다 ── */}
+                      <ul className="gsumtable">
+                        {sum.rows.map((r) => (
+                          <li key={r.ss}>
+                            <b>{r.label}</b><i>{r.people.length}명</i>
+                            <span dangerouslySetInnerHTML={{ __html: r.use }} />
+                          </li>
+                        ))}
+                      </ul>
+                    </>)}
+                    {sum.unread > 0 && <p className="fine">{sum.unread}명은 자리를 아직 못 읽었어 — 궁합을 다시 보면 읽혀.</p>}
+                  </>);
+                })()}
+                {/* ── 리스트 — **여기는 최근순 그대로다.** 위 표의 순서를 절대 안 따라간다.
+                       따라가면 "1등 자리의 사람"이 맨 위에 서고, 그 순간 목록이 순위가 된다(v134.2 방어 ①). */}
                 <p className="fine gorderline">요즘 주고받은 순서야 — <b>잘 맞는 순서가 아니야.</b></p>
                 <ul className="gyeotlist">
-                  {gyeotSorted.map((g) => (
+                  {gyeotSorted.map((g) => {
+                    const r = Number.isInteger(g.dg) && Number.isInteger(saju?.idx?.dG) ? roleOf(saju.idx.dG, g.dg) : null;
+                    return (
                     <li key={g.key} className={g.tier === GY_STANDING ? "" : "called"}>
                       <i className="gdot" style={{ background: (EL_COLOR[g.el] || EL_COLOR.토)[1] }} aria-hidden="true" />
                       <div className="gbody">
-                        <input className="galias" value={g.alias || ""} maxLength={12} placeholder="별칭을 붙일래"
-                          aria-label="이 곁의 별칭"
-                          onChange={(e) => setGyeot((p) => gyeotRename(p, g.key, e.target.value))} />
-                        <span className="grel">{GYEOT_REL_LINE[String(gyeotRel(saju?.main, g.el))]}</span>
-                        {/* ⚠ 여기에 「부른 곁」 라벨을 글자로 붙이지 않는다(곁탭IA 어휘확장:
-                            "라벨은 필요할 때만 붙인다. 밝기·거리만으로 갈리면 그게 제일 좋다").
-                            회신 레그가 없어 **지금은 전원이 부른 곁**이라 라벨이 모든 줄에 똑같이 붙는다 —
-                            정보가 0인데 자리만 먹는다. 그리고 "아직 답을 기다리는"은 **결핍의 서술**이라
-                            §5 개수 표기 금지의 정신을 문장으로 어긴다. 층은 흐리기(.called)로만 말한다. */}
+                        <input className="galias" value={g.name || ""} maxLength={12} placeholder="이름을 적어 둘래"
+                          aria-label="이 곁을 부를 이름"
+                          onChange={(e) => setGyeot((p) => gyeotSetName(p, g.key, e.target.value))} />
+                        <span className="grel">{r ? r.name : GYEOT_REL_LINE[String(gyeotRel(saju?.main, g.el))]}</span>
                       </div>
                       <button className="gdrop" aria-label="이 곁을 지운다"
                         onClick={() => { setGyeot((p) => gyeotDrop(p, g.key)); track("gyeot_dropped", {}); }}>지울래</button>
-                    </li>
-                  ))}
+                    </li>);
+                  })}
                 </ul>
-                {/* 상대에게서 받은 건 생년월일뿐이고 그마저 안 쌓는다 — 그 사실을 여기서 한 번 말한다 */}
-                <p className="fine">별칭은 <b>네가 붙이는 말</b>이고 이 기기에만 남아. 상대 이름도 생년월일도 여기 없어.</p>
+                <p className="fine">이름도 생년월일도 <b>이 기기에만</b> 있어 — 서버로도, 통계로도 안 나가.</p>
+                <button className="btn ghost mt" onClick={() => { setGyeotOpen(false); track("gyeot_roster_closed", {}); }}>접어둘게</button>
               </>)}
             </div>
           )}
@@ -5923,14 +6078,14 @@ export default function App() {
                     <p className="split">지표가 갈라섰다 · {res.total - res.against} : {res.against}</p>
                   )}
                   {/* L1 결론 */}
-                  <p className={`vv ${res.direction === "GO" ? "go" : res.direction === "HOLD" ? "hold" : ""} ${(res.verdict || "").length > 40 ? "s" : (res.verdict || "").length > 22 ? "m" : ""}`}>{res.verdict}</p>
+                  <p className={`vv ${res.direction === "GO" ? "go" : res.direction === "HOLD" ? "hold" : ""} ${(res.verdict || "").length > 40 ? "s" : (res.verdict || "").length > 22 ? "m" : ""}`}>{gyeotFillNames(res.verdict, gyeotSorted)}</p>
                   {/* L2 왜 (클릭) */}
                   {!why ? (
                     <button className="whybtn" onClick={(e) => { e.stopPropagation(); track("why_opened"); setWhy(true); }}>왜 이렇게 봤어?</button>
                   ) : (
                     <div className="l2 fade">
                       {detail && !detail._err
-                        ? <p className="vs">"{detail.subline}"</p>
+                        ? <p className="vs">"{gyeotFillNames(detail.subline, gyeotSorted)}"</p>
                         : detailBusy ? <p className="vs dim">수호신이 이유를 고르는 중…</p>
                         : <p className="vs dim">— 이유를 불러오지 못했어 —<button className="retrybtn" onClick={(e) => { e.stopPropagation(); if (detailArgsRef.current) { setDetail(null); fetchDetail(...detailArgsRef.current, true); } }}>다시 시도</button></p>}
                       {/* v105.3 — against 는 '이 판결에 반대한 지표 수'다. GO에서 이걸 '찬성'이라고 써서
@@ -5953,7 +6108,7 @@ export default function App() {
                   <div className="vscroll">
                     {/* 괘 이름은 뒷면(지표 이름을 짚어도 되는 자리)에만 — 앞면에선 유저가 못 알아듣는 한자였다 */}
                     {hexInfo && <p className="vhex">卦 {hexInfo.name}{hexInfo.moving.length > 0 && ` → ${hexInfo.toName}`}</p>}
-                    {detail?.reasons ? <ul className="vr">{detail.reasons.map((r, i) => <li key={i}><b>{r.axis}</b>{r.vote && <em className="vote">{r.vote}</em>}<p>{r.text}</p></li>)}</ul> : <p className="gathering">조각들이 근거를 모으고 있어<span className="dots"><i>.</i><i>.</i><i>.</i></span></p>}
+                    {detail?.reasons ? <ul className="vr">{detail.reasons.map((r, i) => <li key={i}><b>{r.axis}</b>{r.vote && <em className="vote">{r.vote}</em>}<p>{gyeotFillNames(r.text, gyeotSorted)}</p></li>)}</ul> : <p className="gathering">조각들이 근거를 모으고 있어<span className="dots"><i>.</i><i>.</i><i>.</i></span></p>}
                     {saju && saju.idx && <MyeongsikReport saju={saju} sex={birth.sex} birth={birth} />}
                     {detail?.disclaimer && <p className="disc">{detail.disclaimer}</p>}
                   </div>
@@ -6023,7 +6178,7 @@ export default function App() {
             <div className="fade bwrap">
               <BujeokCanvas saju={saju} direction={res.direction} seed={q + (res.verdict || "")} />
               <p className="fine">오늘의 판결을 지키는 부적 — 같은 질문·같은 판결에서만 같은 문양이 나와.</p>
-              <button className="btn ghost sm" onClick={() => saveOrShareBujeok({ saju, direction: res.direction, seed: q + (res.verdict || ""), tosses, hexInfo, category: res.category, against: res.against || 0, total: res.total || 0, verdict: res.verdict || "", guardian: grabGuardianFrame() })}>부적 간직하기 — 이미지로</button>
+              <button className="btn ghost sm" onClick={() => saveOrShareBujeok({ saju, direction: res.direction, seed: q + (res.verdict || ""), tosses, hexInfo, category: res.category, against: res.against || 0, total: res.total || 0, verdict: gyeotMaskNames(res.verdict || ""), guardian: grabGuardianFrame() })}>부적 간직하기 — 이미지로</button>
               <p className="fine">질문은 이미지에 담기지 않아 — 수호신과 판결만.</p>
             </div>
           )}
@@ -6318,6 +6473,32 @@ const CSS = `
    ⚠ 여기에 순번·개수·게이지를 그리지 마라(곁탭IA §5). 행은 **전부 같은 높이·같은 굵기**다 —
       한 행만 크게 만드는 순간 목록이 순위가 된다. '대기' 층만 흐려지고, 그건 서열이 아니라 상태다. */
 .gorderline{margin:2px 0 8px;color:#8f84a8}
+/* ── 곁 써머리 (v136) — 그래프는 자리(역할)를 세지 사람을 안 센다 ─────────────── */
+.gyeothint{margin-top:10px}
+/* ⚠ 패널은 아래에 고정돼 **위로 자란다.** 써머리가 붙으면서 실측 top:-90px — 화면 위로 잘렸고
+   페이지 스크롤도 안 붙는 자리라 잘린 부분에 영영 못 닿았다(4명에서 이미 그랬다. 상한은 24명이다).
+   열렸을 때만 패널 자체를 스크롤 컨테이너로 만든다. 목록에 따로 스크롤을 주면 **중첩 스크롤**이 되어
+   모바일에서 안쪽이 먼저 먹고 바깥이 안 움직인다 — 그래서 안쪽 상한은 없앤다. */
+.gyeot .gyeotpanel.open{max-height:calc(100dvh - var(--tabh) - var(--tabscrim) - 96px);overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
+.gyeot .gyeotpanel.open .gyeotlist{max-height:none;overflow:visible}
+.gsumh{font-size:12px;letter-spacing:.12em;color:#cfc4e2;margin:2px 0 6px}
+/* ⚠ 'flex:none' 이 없으면 **그래프가 통째로 사라진다.** 패널이 max-height 를 갖는 flex 컬럼이 되면
+   자식들이 기본 flex-shrink:1 로 눌리는데, <svg> 는 대체요소라 0 까지 눌린다(실측 340x0 — 막대는
+   제 크기인데 상자만 0 이라 화면엔 아무것도 안 남았다). 스크롤은 패널이 맡고 자식은 안 줄인다. */
+.gyeot .gyeotpanel.open > *{flex:none}
+.gsum{max-width:340px;margin:0 auto 6px;flex:none}
+.gsumfill{fill:#6f6580;animation:gsumIn .5s cubic-bezier(.22,.7,.25,1) both;animation-delay:calc(var(--i)*.06s);transform-origin:176px 0;transform-box:fill-box}
+@keyframes gsumIn{from{transform:scaleX(0);opacity:.2}to{transform:scaleX(1);opacity:1}}
+@media (prefers-reduced-motion:reduce){.gsumfill{animation:none}}
+.gsumtable{list-style:none;margin:0 0 10px;padding:0;width:100%;max-width:340px;text-align:left}
+.gsumtable li{padding:7px 0;border-top:1px solid rgba(159,143,196,.16);font-size:11.5px;line-height:1.65;color:#a99dc2}
+.gsumtable li b{display:inline;color:#efe6ff;font-size:12.5px}
+.gsumtable li i{float:right;font-style:normal;color:#8f84a8;font-size:11px}
+.gsumtable li span{display:block;margin-top:2px}
+.gsumtable li span b{font-size:11.5px}
+.impname{background:none;border:none;border-bottom:1px dashed rgba(159,143,196,.34);color:#efe6ff;font-family:inherit;font-size:14px;padding:2px 0;width:96px}
+.impname:focus{outline:none;border-bottom-color:rgba(245,217,139,.6)}
+.impname::placeholder{color:#6f658a;font-size:12px}
 /* 패널이 화면 아래에 고정돼 있어 목록은 **위로** 자란다 — 상한을 안 주면 상한(24명)에 가까워질수록
    화면 밖으로 밀려 올라가 위쪽 행이 잘린다. 넘치면 목록 안에서 스크롤한다. */
 .gyeotlist{list-style:none;margin:0;padding:0;width:100%;max-width:340px;display:flex;flex-direction:column;gap:6px;max-height:44vh;overflow-y:auto;-webkit-overflow-scrolling:touch}

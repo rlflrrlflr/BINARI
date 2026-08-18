@@ -231,16 +231,19 @@ await onboard(page);
 
   /* ⚠ **판결을 던지기 전에** 검사해야 한다. 로비의 두 진입점은 `!ritual && !res` 조건이라
      판결이 한 번 돌고 나면 사라진다 — 뒤에 두면 "진입점이 없다"고 헛울음이 난다(실제로 그랬다). */
-  /* ── v125 궁합 — 각인의 애드온. 상대 생년월일만 받고 이름·연락처는 안 받는다 ── */
+  /* ── v125 궁합 — 각인의 애드온. 생년월일 + (v136부터) 부를 이름을 받고 연락처는 안 받는다 ── */
   {
     const mb = page.getByRole("button", { name: /궁합 — 그 사람과 너/ });
     ck("궁합 진입점이 로비에 있다", (await mb.count()) === 1);
     if (await mb.count()) {
       await mb.first().click(); await page.waitForTimeout(350);
       const ask = await page.locator(".imp").innerText();
-      ck("궁합 — 상대 생년월일을 묻는다", /상대의 생년월일만 알려줘/.test(ask));
-      ck("궁합 — 이름·연락처는 안 받는다", /이름도 연락처도 안 받아/.test(ask) &&
-        (await page.locator(".imp input[type=text]").count()) === 0);
+      ck("궁합 — 상대 생년월일을 묻는다", (await page.locator(".imp .impnum").count()) >= 3);
+      /* v136 — 이름은 **받는다**(창업자 결정). 대신 지켜야 하는 두 가지를 여기서 본다:
+         ①이름은 선택이라 비워도 돌아간다 ②연락처는 여전히 안 받고, 저장 범위를 화면이 밝힌다. */
+      ck("궁합 — 부를 이름 칸이 있다(선택)", (await page.locator(".imp .impname").count()) === 1);
+      ck("궁합 — 연락처는 안 받고 저장 범위를 밝힌다",
+        /연락처는 안 받아/.test(ask) && /이 기기에만 남아/.test(ask) && /계산에 안 쓰고/.test(ask));
       ck("궁합 — 연인 말고도 쓰라고 안내한다", /같이 일하는 사람|가족|동업자/.test(ask));
       /* 실제로 돌려 본다 */
       const ins = page.locator(".imp .impnum");

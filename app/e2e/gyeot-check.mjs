@@ -115,6 +115,11 @@ ck("③ 판결 화면 문구 보존 — 판결을 청한다",
   await p3.waitForTimeout(700);
   await p3.getByRole("button", { name: "곁", exact: true }).click();
   await p3.waitForTimeout(1100);
+  /* v136 — 명부는 **두 번 두드려야 열린다**(판결 탭 awake 와 같은 문법). 닫힌 채로는 목록이 없다.
+     이름이 적힌 화면이라 한 번의 의도적인 동작 뒤에 두는 게 맞다. */
+  ck("⑥ 명부는 두드리기 전엔 안 열린다", (await p3.locator(".gyeotlist li").count()) === 0);
+  await p3.locator("canvas").first().dblclick();
+  await p3.waitForTimeout(900);
   ck("⑥ 궁합을 보면 그 사람이 실제로 곁에 선다", (await p3.locator(".gyeotlist li").count()) === 1);
   ck("⑥ 곁이 서면 '비었다' 안내는 사라진다", (await p3.getByRole("button", { name: /부르게 돼/ }).count()) === 0);
   /* 창업자 결정 1(절충안) — 궁합만 본 사람은 정식 자리가 아니라 '답 대기'로 흐리게 선다 */
@@ -124,6 +129,56 @@ ck("③ 판결 화면 문구 보존 — 판결을 청한다",
   const panel2 = await p3.locator(".gyeotpanel").innerText();
   ck("⑥ 기각된 「답 대기」·「대기」가 화면에 없다", !/대기/.test(panel2), panel2.replace(/\n/g, " ").slice(0, 50));
   await p3.close();
+}
+
+/* ── ⑦ 이름은 기기 밖으로 안 나간다 (2026-08-17 결정의 **조건**) ────────────────
+   결정은 "이름을 받는다"였지 "이름을 내보낸다"가 아니다. 그리고 그 약속을 **화면에 적어 놨다**
+   ("서버로도, 통계로도 안 나가"). 이 리포엔 약속을 먼저 쓰고 코드가 안 따라간 사고가 있었다(v127.7,
+   PostHog 로 질문 원문이 22건 샜다). 그래서 소스 검사가 아니라 **실제로 돌려서** 확인한다:
+   모델에 간 프롬프트와 계측에 나간 값을 직접 열어 본다. */
+{
+  const C1 = JSON.stringify({ category: "A", scope: "S1", votes: [{ axis: "사주", v: "GO" }, { axis: "달", v: "GO" }, { axis: "별자리", v: "STOP" }], tone: "단호", direction: "GO", verdict: "곁1한테 먼저 말해." });
+  const C2 = JSON.stringify({ subline: "곁1이 뒤를 받쳐 줄 거야.", reasons: [{ axis: "사주", vote: "GO", text: "편재 — 곁1과 붙으면 커져." }], funLine: "가 봐.", disclaimer: "" });
+  const NAME = "홍길동테스트";
+  const p4 = await b.newPage({ viewport: { width: 430, height: 932 } });
+  p4.setDefaultTimeout(15000);
+  await p4.addInitScript(({ c1, c2 }) => {
+    window.__prompts = [];
+    window.claude = { complete: async (p) => { window.__prompts.push(p); return p.includes("[이미 확정된 판결]") ? c2 : c1; } };
+  }, { c1: C1, c2: C2 });
+  await onboard(p4, BASE, "?trackdebug");
+  await p4.getByRole("button", { name: /궁합|그 사람과/ }).first().click();
+  await p4.waitForTimeout(600);
+  await p4.locator(".impname").fill(NAME);
+  const ins = p4.locator(".impask input.impnum");
+  await ins.nth(0).fill("1997"); await ins.nth(1).fill("4"); await ins.nth(2).fill("22");
+  await p4.getByRole("button", { name: "둘을 맞대 볼게" }).click(); await p4.waitForTimeout(900);
+  await p4.getByRole("button", { name: /닫을게/ }).last().click(); await p4.waitForTimeout(600);
+  await p4.locator("canvas").first().dblclick();
+  await p4.waitForSelector("textarea.qbox", { timeout: 12000 });
+  await p4.locator("textarea.qbox").fill("내 사업에 도움이 될 사람이 있을까?");
+  await p4.getByRole("button", { name: "판결을 청한다" }).click();
+  await p4.waitForTimeout(3000);
+  await p4.getByRole("button", { name: "왜 이렇게 봤어?" }).click().catch(() => {});
+  await p4.waitForTimeout(2000);
+
+  const prompts = await p4.evaluate(() => (window.__prompts || []).join("\n"));
+  ck("⑦ 모델에 간 프롬프트에 이름이 없다", !prompts.includes(NAME));
+  ck("⑦ 프롬프트엔 자리표와 역할이 간다", /\[곁\][^\n]*곁1=/.test(prompts), (prompts.match(/\[곁\][^\n]{0,60}/) || [""])[0]);
+  const evs = await p4.evaluate(() => JSON.stringify(window.__binariEvents || []));
+  ck("⑦ 계측 어디에도 이름이 없다", !evs.includes(NAME));
+  ck("⑦ 계측엔 자리표가 그대로 남는다(치환 전 값)", /곁\s*1/.test(evs));
+  /* 그런데 **화면에는 이름이 보여야** 한다 — 안 보이면 기능이 없는 것과 같다 */
+  ck("⑦ 화면 판결문엔 이름이 보인다", ((await p4.locator(".vv").innerText().catch(() => "")) || "").includes(NAME));
+  ck("⑦ 화면 근거에도 이름이 보인다",
+     (await p4.locator(".vr li p").allTextContents()).join(" ").includes(NAME));
+  /* 밖으로 나가는 면(공유 문안)엔 이름 대신 가림말 — 상대는 미동의 제3자다 */
+  const shareTxt = await p4.evaluate(() => {
+    const el = [...document.querySelectorAll("button")].find((b) => /공유|보내/.test(b.textContent || ""));
+    return el ? "있음" : "없음";
+  });
+  ck("⑦ 공유 경로가 화면에 존재한다(가림말 검사의 전제)", shareTxt === "있음", shareTxt);
+  await p4.close();
 }
 
 await b.close();

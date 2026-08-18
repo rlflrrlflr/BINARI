@@ -836,12 +836,15 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
   const noAvg = /합산 점수를 앞세우지 않는다/.test(m);              // 총점을 앞세우지 않는다
   const noBreak = /헤어지라고 말하지 않는다/.test(m);                // 금지선이 파일에 남아 있다
   const nine = (m.match(/put\(/g) || []).length >= 9;                // 아홉 축이 분업한다
-  const noName = /이름도 연락처도 안 받아/.test(app);                // 남의 개인정보를 안 들고 있는다
+  /* 2026-08-17 창업자 결정으로 **이름은 받는다**(도령 관찰: 심부름인 줄 알아도 관계가 궁금해 적는다).
+     그래서 이 검사가 지키는 것이 바뀐다 — "안 받는다"가 아니라 **"받되 기기 밖으로 안 나간다"**.
+     ⚠ 연락처는 여전히 안 받는다. 그 선까지 같이 무너뜨리지 마라. */
+  const noName = /연락처는 안 받아/.test(app) && /이 기기에만 남아/.test(app);
   const ok = split && noAvg && noBreak && nine && noName;
   add(ok ? "정상" : "심각",
     ok ? "궁합 — 갈림을 말하고 총점을 앞세우지 않음" : "궁합이 점수 한 줄로 뭉개짐",
-    ok ? "아홉 축 분업 · 갈림 절 · 총점 후치 · 헤어짐 금지선 · 상대 이름 미수집"
-       : `갈림절=${split} 총점후치=${noAvg} 금지선=${noBreak} 아홉축=${nine} 이름미수집=${noName}`,
+    ok ? "아홉 축 분업 · 갈림 절 · 총점 후치 · 헤어짐 금지선 · 이름은 기기에만·연락처 미수집"
+       : `갈림절=${split} 총점후치=${noAvg} 금지선=${noBreak} 아홉축=${nine} 이름은기기에만=${noName}`,
     "\"87점, 잘 맞아요\"는 어디서든 살 수 있습니다. 우리가 파는 건 어디가 갈리는가입니다. 그리고 상대의 이름·연락처는 받지 않습니다 — 남의 개인정보를 우리가 들고 있을 이유가 없습니다.");
 }
 
@@ -913,7 +916,10 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
   /* 처리방침에 제3자 항목이 있는가 */
   const pv = readFileSync("public/privacy.html", "utf8");
   if (!/상대방의 생년월일/.test(pv)) bad.push("처리방침에 제3자 항목 없음");
-  if (!/이름·연락처는 받지 않습니다/.test(pv)) bad.push("처리방침에 제3자 미수집 범위 없음");
+  /* 2026-08-17 — 이름은 받게 됐다. 지킬 선이 "안 받는다"에서 **"연락처는 안 받고,
+     받은 이름은 기기 밖으로 안 나간다"**로 바뀌었다. 방침이 그 둘을 말하는지 본다. */
+  if (!/연락처는 받지 않습니다/.test(pv)) bad.push("처리방침에 연락처 미수집이 없음");
+  if (!/서버·분석 도구·AI 어느 쪽으로도 전송되지 않습니다/.test(pv)) bad.push("처리방침에 곁 이름의 전송 범위가 없음");
 
   add(bad.length ? "심각" : "정상",
     bad.length ? "저장 키가 규칙 밖으로 샘 — 리셋에도 안 지워짐" : "저장 키 규칙 — 전부 binari. 접두 · 리셋이 전량 스윕",

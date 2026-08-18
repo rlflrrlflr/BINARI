@@ -39,6 +39,7 @@ const M = new Function("store", "hex2rgb", `
   ${grab("const GY_CALLED =", "const")}
   ${grab("const GY_STANDING =", "const")}
   ${grab("const GYEOT_MAX =", "const")}
+  ${grab("const GYEOT_NAME_MAX =", "const")}
   ${grab("const GYEOT_SAENG =", "const")}
   ${grab("const GYEOT_GEUK ", "const")}
   ${grab("const GYEOT_REL_LINE = {")}
@@ -51,11 +52,11 @@ const M = new Function("store", "hex2rgb", `
   ${grab("function writeGyeot(")}
   ${grab("function gyeotAdd(")}
   ${grab("function gyeotDrop(")}
-  ${grab("function gyeotRename(")}
+  ${grab("function gyeotSetName(")}
   ${grab("function gyeotOrder(")}
   ${grab("function gyeotView(")}
   return { GYEOT_KEY, GYEOT_MAX, GY_CALLED, GY_STANDING, GYEOT_REL_LINE, gyeotFingerprint, gyeotSeat, gyeotRel,
-           readGyeot, writeGyeot, gyeotAdd, gyeotDrop, gyeotRename, gyeotOrder, gyeotView };
+           readGyeot, writeGyeot, gyeotAdd, gyeotDrop, gyeotSetName, gyeotOrder, gyeotView };
 `)(store, hex2rgb);
 
 const reset = () => disk.clear();
@@ -74,10 +75,10 @@ const fp = (y, m, d) => M.gyeotFingerprint(y, m, d);
   ck("① 같은 사람을 두 번 안 센다", again.length === 2, `재실행 후 ${again.length}명`);
   ck("① 다시 만나면 시각만 갱신된다", again.find((x) => x.key === fp(1997, 4, 22)).at === 3000);
 
-  const named = M.gyeotRename(again, fp(1988, 1, 3), "같이 일하는 사람");
-  ck("① 별칭이 붙는다", named.find((x) => x.key === fp(1988, 1, 3)).alias === "같이 일하는 사람");
-  ck("① 별칭은 12자에서 끊긴다", M.gyeotRename(named, fp(1988, 1, 3), "가".repeat(30))
-      .find((x) => x.key === fp(1988, 1, 3)).alias.length === 12);
+  const named = M.gyeotSetName(again, fp(1988, 1, 3), "민수");
+  ck("① 이름이 붙는다", named.find((x) => x.key === fp(1988, 1, 3)).name === "민수");
+  ck("① 이름은 12자에서 끊긴다", M.gyeotSetName(named, fp(1988, 1, 3), "가".repeat(30))
+      .find((x) => x.key === fp(1988, 1, 3)).name.length === 12);
 
   ck("① 지우면 준다", M.gyeotDrop(named, fp(1988, 1, 3)).length === 1);
   ck("① 지운 건 저장에서도 빠진다", M.readGyeot().length === 1);
@@ -103,7 +104,7 @@ const fp = (y, m, d) => M.gyeotFingerprint(y, m, d);
   ck("② 저장된 문자열에 생년월일이 없다",
      !/1997/.test(raw) && !/"y"/.test(raw) && !/"d"/.test(raw) && !/birth/.test(raw), raw);
   const keys = Object.keys(l[0]).sort().join(",");
-  ck("② 남는 필드는 파생값 넷뿐", keys === "alias,at,el,key,tier", keys);
+  ck("② 남는 필드는 파생값 + 이름뿐(생년월일 없음)", keys === "at,dg,el,key,name,tier", keys);
   ck("② 지문은 같은 날짜에 같고 다른 날짜에 다르다",
      fp(1997, 4, 22) === fp(1997, 4, 22) && fp(1997, 4, 22) !== fp(1997, 4, 23));
 }
@@ -194,10 +195,23 @@ const fp = (y, m, d) => M.gyeotFingerprint(y, m, d);
 /* ── ⑤ 소스 규약 — 화면 쪽 금지 (곁탭IA §5) ───────────────────────────────── */
 {
   const panel = src.slice(src.indexOf('<ul className="gyeotlist">'), src.indexOf("</ul>", src.indexOf('<ul className="gyeotlist">')));
-  ck("⑤ 목록에 개수·순번을 안 찍는다", !/\.length\}|\bindex\b|\bidx\b|\bi \+ 1\b/.test(panel));
+  /* ⚠ 예전엔 `\bidx\b` 도 금칙에 넣었다가 **명식의 `saju.idx`** 에 걸려 오탐이 났다.
+     여기서 막고 싶은 건 "목록의 몇 번째"를 화면에 찍는 것이지 idx 라는 낱말이 아니다. */
+  ck("⑤ 목록에 개수·순번을 안 찍는다",
+     !/\.length\}|\{\s*i\s*\+\s*1\s*\}|map\(\([^)]*,\s*i\)\s*=>/.test(panel), panel.slice(0, 0));
   ck("⑤ 저장 키가 binari. 규칙을 따른다 — 초기화 스윕이 지운다", /^binari\./.test(M.GYEOT_KEY), M.GYEOT_KEY);
   /* 명부를 기기 밖으로 내보내는 배선이 생기면 위 ② 의 전제가 무너진다(지문은 역산 가능하다).
      지금 0인지 본다 — 나중에 붙일 땐 이 검사를 먼저 고치게 된다. */
+  /* ── 이름은 기기 밖으로 한 걸음도 안 나간다 (2026-08-17 결정의 **조건**) ────────
+     결정은 "이름을 받는다"였지 "이름을 내보낸다"가 아니다. 화면에 그렇게 적어 놨으므로
+     이건 카피가 아니라 **지켜야 하는 약속**이다(v127.7: 약속을 먼저 쓰고 코드가 안 따라간 사고). */
+  ck("⑤ 프롬프트엔 이름 대신 자리표가 간다",
+     /곁\$\{i \+ 1\}=/.test(src) && !/gyeotPromptLine[\s\S]{0,600}x\.name/.test(src));
+  ck("⑤ 판결 응답을 이름으로 바꾸기 전 r1 을 안 건드린다 — convo·계측·콜2 가 r1 을 탄다",
+     !/r1\.verdict = gyeotFillNames/.test(src));
+  ck("⑤ 밖으로 나가는 면(공유·부적)엔 이름 대신 가림말",
+     (src.match(/gyeotMaskNames\(/g) || []).length >= 4);
+  ck("⑤ 계측엔 이름이 아니라 적었는지 여부만", /named: !!\(f\.nm/.test(src) && !/track\([^)]*\bname:\s*[^)]*nm/.test(src));
   ck("⑤ 명부를 서버로 보내는 경로가 0",
      !new RegExp("(fetch|XMLHttpRequest|navigator\\.sendBeacon)[^\\n]*GYEOT_KEY").test(src)
      && !/track\([^)]*gyeot[^)]*el\b/.test(src));
