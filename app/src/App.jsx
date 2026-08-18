@@ -1649,6 +1649,35 @@ function MatchDoc({ saju, birth, onClose, onMet }) {
         <p className="impsub">{f.y}년 {f.m}월 {f.d}일생과 맞대 봤어. {f.h == null ? "태어난 시를 몰라 그만큼 얕게 읽었어." : ""}</p>
       </div>
 
+      {/* ── 「같은 날, 다른 하늘」 (v137 · 유인동기와루프설계 §3-B) ────────────────
+          이 절이 문서 **머리에** 있는 이유: 갈림은 지금까지 인도 여덟 자리 **다음**에 문단으로 있었고,
+          거기까지 내려가는 사람이 없었다. 논문 근거는 Berger & Milkman(2012) — 전파는 각성도를 타고,
+          우리가 쓸 수 있는 고각성 **긍정** 감정은 사실상 **경외** 하나다.
+          그 재료가 이거다: **같은 두 사람을 두고 아홉이 다르게 말한다.**
+          경쟁 8사가 전원 만세력 단일 엔진이라 **이 그림은 우리만 만들 수 있다.**
+          ⚠ 총점을 여기 두지 않는다. 세는 건 "얼마나 맞나"가 아니라 **몇이 갈렸나**다. */}
+      <div className="chorus">
+        <p className="chorush"><H t={r.chorus.head} /></p>
+        {/* 한 문명 안에서 갈리는 경우가 **70.7%**다(실측). 머리글로 올리면 단조로워서 덧줄로 둔다 —
+            "아홉이 다르게 본다"의 정면은 문명 **사이**의 대비고, 이건 그 위에 얹는 한 겹이다. */}
+        {r.chorus.inner && <p className="chorusinner"><H t={r.chorus.inner} /></p>}
+        <ul className="choruscells">
+          {r.chorus.cells.map((c, i) => (
+            <li key={i} className={c.v >= 1 ? "up" : c.v <= -1 ? "dn" : ""} style={{ "--i": i }}>
+              <b>{c.civ}</b><i>{c.what}</i><span>{c.say}</span>
+            </li>
+          ))}
+        </ul>
+        {r.chorus.rare
+          ? <p className="chorusnote">아홉이 한 목소리를 내는 건 흔치 않아. 그래서 <b>이것 자체가 하나의 사실</b>이야.</p>
+          : <p className="chorusnote">같은 두 사람인데 하늘마다 다르게 봐. 이건 흠이 아니라 <b>알맹이야</b> — 평균을 내면 이게 사라져.</p>}
+      </div>
+      {/* ⚠ `clash` 를 **여기로 올렸다.** 예전엔 인도 여덟 자리 **다음**에 있었는데,
+          위 그림과 **같은 말**을 문단으로 한 번 더 하는 꼴이라 ①아무도 거기까지 안 내려가고
+          ②내려간 사람에겐 중복이었다. 그림 바로 뒤에 두면 「사건 → 왜 → 상세」 순서가 된다. */}
+      <p className="imph">{r.clash.t}</p>
+      <div className="impclash"><p><H t={r.clash.w} /><Ref n={r.clash.n} /></p></div>
+
       <p className="imph">아홉 하늘이 각각 뭐라고 하는가</p>
       {r.rows.map((x, i) => (
         <div className={"impsky" + (x.v >= 1 ? " up" : x.v <= -1 ? " dn" : "")} key={i}>
@@ -1666,9 +1695,6 @@ function MatchDoc({ saju, birth, onClose, onMet }) {
             <b>{x.label}</b><span><H t={x.w} /></span></div>
         ))}
       </div>
-
-      <p className="imph">{r.clash.t}</p>
-      <div className="impclash"><p><H t={r.clash.w} /><Ref n={r.clash.n} /></p></div>
 
       {/* v128 — 궁합을 연애에만 쓰지 않게 하는 절. 진입 안내는 "동료·가족·동업자에게도 쓰라"고
           말해 왔는데 정작 **일 축이 없었다.** 각인의 「같이 일하면 좋은 사람」이 오행 한 줄로 끝나던 것을
@@ -3200,7 +3226,7 @@ function Guardian(props) {
 /* 돌아올 주소 — 부적·각인 카드·공유 링크가 같은 값을 쓴다. 자체 도메인을 붙이는 날 **여기 한 곳만** 고친다.
    예전엔 세 곳에 따로 박혀 있어서, 한 곳만 고치면 나머지가 옛 주소로 남는 종류의 사고가 예약돼 있었다. */
 const SHARE_HOST = "https://binari-sepia.vercel.app";
-const APP_VER = "v136 · 곁에 이름";
+const APP_VER = "v137 · 다른 하늘";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -6498,6 +6524,27 @@ const CSS = `
    모바일에서 안쪽이 먼저 먹고 바깥이 안 움직인다 — 그래서 안쪽 상한은 없앤다. */
 .gyeot .gyeotpanel.open{max-height:calc(100dvh - var(--tabh) - var(--tabscrim) - 96px);overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
 .gyeot .gyeotpanel.open .gyeotlist{max-height:none;overflow:visible}
+/* ── 「같은 날, 다른 하늘」 (v137) — 문서 머리의 아홉 칸 ────────────────────────
+   ⚠ 칸을 **점수처럼 보이게 만들지 마라.** 막대·게이지·퍼센트를 넣는 순간 이 절은 총점이 되고,
+     그러면 "평균 내면 사라진다"고 바로 아래서 말하는 것과 화면이 서로 어긋난다.
+     상태는 **글자와 색**으로만 말한다(맞는다 / 갈린다 / 그 사이). */
+.chorus{width:100%;margin:0 0 22px}
+.chorush{font-size:16px;line-height:1.72;color:#efe6ff;margin:0 0 10px;text-align:center;text-wrap:balance;word-break:keep-all}
+.chorush b{color:#ffe9ad}
+.choruscells{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.choruscells li{padding:8px 6px;border:1px solid rgba(159,143,196,.2);border-radius:9px;background:rgba(20,15,38,.5);text-align:center;animation:fd .5s cubic-bezier(.22,.7,.25,1) both;animation-delay:calc(var(--i)*.05s)}
+.choruscells li b{display:block;font-size:11.5px;color:#cfc4e2;letter-spacing:.02em}
+.choruscells li i{display:block;font-style:normal;font-size:9.5px;color:#7d7296;margin-top:1px;line-height:1.4}
+.choruscells li span{display:block;font-size:10.5px;margin-top:4px;color:#8f84a8}
+.choruscells li.up{border-color:rgba(91,143,212,.38)}
+.choruscells li.up span{color:#8fb8ea}
+.choruscells li.dn{border-color:rgba(168,50,41,.42)}
+.choruscells li.dn span{color:#e08a80}
+@media (prefers-reduced-motion:reduce){.choruscells li{animation:none}}
+.chorusinner{font-size:12.5px;line-height:1.7;color:#b6aacc;margin:-4px 0 10px;text-align:center;text-wrap:balance;word-break:keep-all}
+.chorusinner b{color:#cfc4e2}
+.chorusnote{font-size:11.5px;line-height:1.7;color:#8f84a8;margin:10px 0 0;text-align:center;text-wrap:balance;word-break:keep-all}
+.chorusnote b{color:#b6aacc}
 .gsumh{font-size:12px;letter-spacing:.12em;color:#cfc4e2;margin:2px 0 6px}
 /* ⚠ 'flex:none' 이 없으면 **그래프가 통째로 사라진다.** 패널이 max-height 를 갖는 flex 컬럼이 되면
    자식들이 기본 flex-shrink:1 로 눌리는데, <svg> 는 대체요소라 0 까지 눌린다(실측 340x0 — 막대는

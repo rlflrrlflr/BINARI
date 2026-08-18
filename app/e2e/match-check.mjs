@@ -204,6 +204,58 @@ ck("시(時)를 몰라도 죽지 않는다",
   }
 }
 
+/* ── ⑩ 「같은 날, 다른 하늘」 (v137 · 유인동기와루프설계 §3-B) ─────────────────
+   이 절의 존재 이유는 **경외**다 — 같은 두 사람을 두고 아홉이 다르게 말한다는 사실.
+   그래서 지켜야 할 게 둘이고 둘 다 조용히 깨진다:
+     ① 아홉을 **묶지 않는다**(문명별로 합치면 "동아시아 안에서도 갈린다"가 사라진다)
+     ② **총점이 여기 안 들어간다**(평균을 내면 이 절이 부정하는 바로 그것이 된다) */
+{
+  const c = r.chorus;
+  ck("⑩ 아홉을 그대로 편다(문명별로 안 묶는다)", c.cells.length === r.rows.length, `${c.cells.length}칸 / ${r.rows.length}축`);
+  ck("⑩ 같은 문명이 여러 칸에 나오는 걸 허용한다(그게 정보다)",
+     new Set(c.cells.map((x) => x.civ)).size < c.cells.length,
+     [...new Set(c.cells.map((x) => x.civ))].join(","));
+  ck("⑩ 칸마다 상태가 셋 중 하나", c.cells.every((x) => ["맞는다", "갈린다", "그 사이"].includes(x.say)));
+  ck("⑩ 상태가 축 판정과 일치한다",
+     c.cells.every((x, i) => x.say === (r.rows[i].v >= 1 ? "맞는다" : r.rows[i].v <= -1 ? "갈린다" : "그 사이")));
+  /* 총점 금지 — chorus 에 점수 계열 필드가 있으면 안 된다. 있으면 화면이 곧 그걸 쓴다. */
+  ck("⑩ 총점이 chorus 에 없다",
+     !("score" in c) && !("band" in c) && !("ratio" in c) && !("pct" in c), Object.keys(c).join(","));
+  ck("⑩ 세는 건 '몇이 갈렸나'뿐", typeof c.agree === "number" && typeof c.differ === "number"
+     && c.agree === r.rows.filter((x) => x.v >= 1).length && c.differ === r.rows.filter((x) => x.v <= -1).length);
+
+  /* 머리글 세 갈래가 **다 도달 가능한가.** 특히 「같은 문명 안에서 갈림」은 첫 판에 문장이
+     "동아시아는 맞다 하고 동아시아는 갈린다"로 나와 버그처럼 읽혔던 자리다. */
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+    /* ⚠ 「같은 문명 안에서만 갈림」을 **머리글로 쓰는 폴백은 40,000쌍에서 0건**이었다 —
+     도달 불가라 그걸 "네 갈래 다 나온다"로 검사하면 **영영 붉게 뜨는 검사**가 된다.
+     대신 그 사실을 `inner` 덧줄로 옮겼고(실측 70.7%), 그건 도달 가능하므로 그걸 잰다. */
+  const kinds = { 갈림: 0, 한목소리: 0, 다어렵다: 0, 머리글이내부갈림: 0, 덧줄: 0 };
+  for (let i = 0; i < 3000; i++) {
+    const x = readMatch({
+      a: P(0 | rnd() * 10, 0 | rnd() * 12, 1950 + (0 | rnd() * 70), 1 + (0 | rnd() * 12), 1 + (0 | rnd() * 28), 0 | rnd() * 24),
+      b: P(0 | rnd() * 10, 0 | rnd() * 12, 1950 + (0 | rnd() * 70), 1 + (0 | rnd() * 12), 1 + (0 | rnd() * 28), 0 | rnd() * 24) });
+    if (!x) continue;
+    const h = st(x.chorus.head);
+    if (/같은 쪽/.test(h)) kinds.한목소리++;
+    else if (/다 어렵다/.test(h)) kinds.다어렵다++;
+    else if (/안에서도 갈려/.test(h)) kinds.머리글이내부갈림++;
+    else kinds.갈림++;
+    if (x.chorus.inner) kinds.덧줄++;
+    /* ⚠ 절대 나오면 안 되는 모양 — 같은 문명 이름이 양쪽에 오는 문장 */
+    const m = h.match(/^(.+?)(?:은|는) 맞는다고 하고, (.+?)(?:은|는) 갈린다고 해/);
+    if (m && m[1] === m[2]) { kinds.버그 = (kinds.버그 || 0) + 1; }
+  }
+  ck("⑩ 머리글 세 갈래가 전부 도달 가능하다",
+     kinds.갈림 > 0 && kinds.한목소리 > 0 && kinds.다어렵다 > 0, JSON.stringify(kinds));
+  /* 70.7% — 이게 0 이면 덧줄이 죽은 코드다(앞판이 정확히 그랬다) */
+  ck("⑩ '안에서도 갈려' 덧줄이 실제로 붙는다", kinds.덧줄 > 500, `${kinds.덧줄}/3000`);
+  ck("⑩ 덧줄이 머리글과 같은 말을 반복하지 않는다",
+     kinds.머리글이내부갈림 === 0 || kinds.덧줄 < 3000, JSON.stringify(kinds));
+  ck("⑩ '동아시아는 맞다 하고 동아시아는 갈린다' 같은 문장이 안 나온다", !kinds.버그, `${kinds.버그 || 0}건`);
+}
+
 const pass = R.filter(Boolean).length;
 console.log(`\n=== 궁합 엔진: ${pass}/${R.length} PASS ===`);
 process.exit(pass === R.length ? 0 : 1);

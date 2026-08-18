@@ -319,6 +319,54 @@ export function readMatch({ a, b, lat = 37.5665, lon = 126.978 } = {}) {
      아무 말도 안 하는 것과 같다. 위험이 안 잡히면 **위험이 없다고 말하지 말고, 이런 사이가 무너지는 방식**을 말한다. */
   if (!care.length) care.push("이 조합은 <b>싸워서 무너지지 않아.</b> 서로를 당연하게 여기기 시작할 때 무너져 — 고맙다는 말을 아끼지 마.");
 
+  /* ── 「같은 날, 다른 하늘」 — 불일치를 문서 **머리로** 올린다 (v137, 유인동기와루프설계 §3-B) ──
+     근거는 Berger & Milkman(2012): 전파는 감정의 **각성도**를 탄다. 우리가 쓸 수 있는 고각성 **긍정**
+     감정은 사실상 **경외(awe)** 하나고, 그 재료를 우리는 이미 갖고 있었다 —
+     **같은 두 사람을 두고 아홉이 서로 다른 말을 한다**는 사실. 그런데 그게 문서 한참 아래
+     `clash` 문단에 묻혀 있었다(인도 여덟 자리 다음). 아무도 거기까지 안 내려간다.
+
+     ⚠ **총점을 만들지 않는다.** 여기서 세는 건 "얼마나 잘 맞나"가 아니라 **몇이 갈렸나**다 —
+       갈림은 관계의 **성질**이지 점수가 아니다. 평균을 내는 순간 이 절의 존재 이유가 사라진다.
+     ⚠ 문명 이름이 겹치는 건 **버그가 아니라 정보**다(동아시아가 셋, 서양이 둘).
+       한 문명 안에서도 축이 갈리면 그것도 볼거리다 — 묶지 말고 그대로 아홉을 편다. */
+  const _civ = (x) => x.from.split(" · ")[0];
+  const _what = (x) => x.from.split(" · ")[1] || x.from;
+  const chorus = (() => {
+    const cells = rows.map((x) => ({ civ: _civ(x), what: _what(x), ask: x.ask, v: x.v,
+      say: x.v >= 1 ? "맞는다" : x.v <= -1 ? "갈린다" : "그 사이" }));
+    const up = rows.filter((x) => x.v >= 1), dn = rows.filter((x) => x.v <= -1);
+    /* 머리글은 **실제로 갈린 문명의 이름**을 넣는다. "3개가 갈렸어"는 숫자고,
+       "인도는 맞다 하고 서양은 갈린다고 해"는 장면이다. 경외는 장면에서 온다. */
+    /* ── 머리글 ──────────────────────────────────────────────────────────────
+       처음엔 "문명이 다른 짝을 못 찾으면 같은 문명 안의 갈림을 말한다"로 썼는데,
+       **그 폴백이 40,000쌍에서 0건이었다**(도달 불가 — 축⑨ `same?1:1` 과 같은 종류의 죽은 코드).
+       재 보니 정작 버리고 있던 사실이 컸다: **한 문명 안에서 갈리는 경우가 70.7%**다.
+       그래서 구조를 뒤집었다 —
+         · `head`  = 문명이 **다른** 둘의 대비. 제품이 파는 이야기("아홉이 각각 다른 걸 본다")의 정면이다
+         · `inner` = 있으면 덧붙이는 한 줄("동아시아는 안에서도 갈려"). 70%라 이게 머리글이 되면 단조로워진다
+       문명이 다른 짝이 아예 없으면(측정 0%지만 이론상 가능) up·dn 이 전부 한 문명이라는 뜻이므로
+       `inner` 가 반드시 있다 — 그때는 그걸 머리글로 올린다. 폴백이 **도달 가능한 경로를 탄다.** */
+    const splitCiv = up.map(_civ).find((cv) => dn.some((d) => _civ(d) === cv));
+    const innerPair = splitCiv
+      ? [up.find((u) => _civ(u) === splitCiv), dn.find((d) => _civ(d) === splitCiv)]
+      : null;
+    const inner = innerPair
+      ? `<b>${splitCiv}</b>${jong(splitCiv) ? "은" : "는"} 안에서도 갈려 — ${_what(innerPair[0])}${jong(_what(innerPair[0])) ? "은" : "는"} 맞는다 하고 ${_what(innerPair[1])}${jong(_what(innerPair[1])) ? "은" : "는"} 갈린다고 해.`
+      : null;
+    let head;
+    if (!dn.length) head = "아홉이 <b>같은 쪽</b>을 봐. 이런 건 드물어.";
+    else if (!up.length) head = "아홉이 <b>다 어렵다</b>고 해. 이것도 드물어.";
+    else {
+      const pair = up.flatMap((u) => dn.map((d) => [u, d])).find(([u, d]) => _civ(u) !== _civ(d));
+      head = pair
+        ? `<b>${_civ(pair[0])}</b>${jong(_civ(pair[0])) ? "은" : "는"} 맞는다고 하고, <b>${_civ(pair[1])}</b>${jong(_civ(pair[1])) ? "은" : "는"} 갈린다고 해.`
+        : inner;
+    }
+    return { cells, agree: up.length, differ: dn.length, head, inner: head === inner ? null : inner,
+      /* 한 목소리(드묾)와 갈림(보통)을 **둘 다 사건으로** 만든다 — 어느 쪽이든 할 말이 생긴다 */
+      rare: !dn.length || !up.length };
+  })();
+
   /* 총점은 맨 뒤에 둔다 — 앞에 두면 나머지를 안 읽는다 */
   const score = rows.reduce((t, x) => t + x.v, 0);
   const band = score >= 6 ? "아홉 중 여럿이 맞는다고 한다" : score >= 2 ? "맞는 쪽이 조금 더 많다"
@@ -362,7 +410,7 @@ export function readMatch({ a, b, lat = 37.5665, lon = 126.978 } = {}) {
   };
 
   return {
-    rows, akRows, ak, clash, care, split, work, card,
+    rows, akRows, ak, clash, care, split, work, card, chorus,
     score, band, scoreMax: rows.length * 2,
     n: fn(`아홉 축의 판정을 −2~+2 로 세어 ${score}점. <b>이 숫자를 문서 앞에 두지 않는다</b> — 궁합은 총점이 아니라 <b>어느 축이 어긋나는가</b>로 읽는 것이다.`),
     notes,
