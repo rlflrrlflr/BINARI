@@ -29,6 +29,7 @@ const stripProfile = (p) => { const o = {}; for (const k in p) if (!PROFILE_KEYS
 const INTERNAL_KEY = "binari.internal.v1";
 const FIRSTTOUCH_KEY = "binari.firsttouch.v1";
 let _superProps = {};
+const PRICING_MODE = "free_trial";   // 결정 8 — 아래 markFreeIssue 주석 참조. 결제 붙는 날 "paid" 로.
 
 function _initSuperProps() {
   if (typeof window === "undefined") return;
@@ -70,7 +71,7 @@ function _initSuperProps() {
     const dn = Date.parse(new Date().toISOString().slice(0, 10) + "T00:00:00Z");
     if (!isNaN(d0) && !isNaN(dn)) dsf = Math.max(0, Math.round((dn - d0) / 86400000));
   } catch (_) {}
-  _superProps = { is_internal: internal, ...ft, days_since_first: dsf };
+  _superProps = { is_internal: internal, ...ft, days_since_first: dsf, pricing_mode: PRICING_MODE };
   const b = readBelief();                     // D3 — 답했으면 이후 모든 이벤트에 따라붙는다
   if (b) _superProps.belief = b;
 }
@@ -246,6 +247,33 @@ function track(ev, props) {
   } catch (_) {}
 }
 if (typeof window !== "undefined" && /[?&]trackdebug/.test(window.location.search)) window.__binariTrackDebug = true;
+
+/* ── 결정 8 (창업자 2026-08-17) — 무료 발행 코호트 표식 ─────────────────────
+   지금 서신·각인·궁합은 **값을 표시하고도 실물을 무료로 준다.** 그래서 가격 노출 26 →
+   확인 25(96%)가 지불 의사처럼 보이는데, 실제로는 확인 버튼이 지불 관문이 아니라
+   **무료 콘텐츠 관문**이라 나온 숫자다.
+   결제가 붙는 날 초기 표본 전원이 "공짜로 받아 본 사람"이 된다 — 같은 물건을 공짜로
+   받아 본 사람에게 돈을 받아 보는 실험은 **처음 사는 사람의 지불 의사를 못 잰다.**
+   ⚠ 그 코호트를 나중에 갈라내려면 지금 표식을 남겨야 한다. **소급이 안 된다.**
+
+     · PRICING_MODE — 모든 이벤트에 붙는 체제 표시. **결제를 붙이는 날 "paid" 로 바꾼다.**
+       이벤트를 새로 만들지 않는 이유는 belief 와 같다(§D3): 어떤 지표든 체제로 쪼갤 수 있게 된다.
+     · free_issued  — 한 번이라도 무료로 받은 사람에게 붙는 **person 속성**.
+       register 는 기기 단위라 기기를 바꾸면 끊긴다. 그래서 $set 으로 person 에 박는다.
+       첫 수령 시점·종류는 $set_once 라 덮이지 않는다.
+   ⚠ 개인정보 아님 — 체제 라벨과 불리언뿐이고 유저 입력은 한 글자도 안 실린다. */
+function markFreeIssue(kind) {
+  if (_superProps.free_issued) return;                 // 사람당 한 번이면 된다
+  try {
+    _superProps.free_issued = true;
+    if (_ph) _ph.register({ free_issued: true });
+  } catch (_) {}
+  track("free_issue", {
+    kind,
+    $set: { free_issued: true },
+    $set_once: { free_issued_first_kind: kind, free_issued_first_at: new Date().toISOString() },
+  });
+}
 
 /* D3 — 신자/비신자 1문항. 첫 판결 직후 1탭으로 한 번만 묻고, 이후 모든 이벤트에 따라붙는다.
    G2 게이트("비신자도 돌아오는가")를 재는 유일한 축이다.
@@ -978,7 +1006,7 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
         metAge: extra.metAge ?? null });
     } catch (e) { return null; }
   }, [saju, birth, sex, extra.married, extra.kids, extra.timeAcc, extra.metAge]);
-  useEffect(() => { track("imprint_opened", { has_sex: !!sex, has_hour: !!(saju?.idx && saju.idx.hG != null), has_extra: extra.married != null }); }, []);
+  useEffect(() => { track("imprint_opened", { has_sex: !!sex, has_hour: !!(saju?.idx && saju.idx.hG != null), has_extra: extra.married != null }); markFreeIssue("imprint"); }, []);   // 결정 8
   /* 9,900원짜리 문서가 안 나오는 사고가 지금은 화면에만 뜨고 우리한테는 안 온다.
      유저는 "각인을 읽지 못했어"를 보고 나가는데 우리는 그런 일이 있었다는 것조차 모른다. */
   const failed = !r;
@@ -1564,7 +1592,7 @@ function MatchDoc({ saju, birth, onClose, onMet }) {
           궁합은 <b>연인만이 아니야</b> — 같이 일하는 사람, 가족, 동업자에게도 그대로 써.</p>
         <button className="btn mt" disabled={!ok} onClick={() => {
           try { localStorage.setItem(MATCH_LAST_KEY, JSON.stringify(f)); } catch {}
-          track("match_run", { has_hour: f.h != null });
+          track("match_run", { has_hour: f.h != null }); markFreeIssue("match");   // 결정 8
           /* 곁 명부에 한 자리 — **명부에 사람이 생기는 유일한 입구**다.
              위로 올려 보내는 건 파생값 둘(지문·오행)뿐이다. 생년월일은 이 콜백 밖으로 안 나간다. */
           try {
@@ -4981,6 +5009,7 @@ export default function App() {
       setLetterDoc(doc);
       // 판결 기록에 붙여 둔다 — 홈 서신함에서 언제든 다시 열 수 있고, 새로고침에도 살아남는다
       setRecords((prev) => { if (!prev.length) return prev; const nx = prev.slice(); nx[nx.length - 1] = { ...nx[nx.length - 1], letter: doc }; return nx; });
+      markFreeIssue("letter");   // 결정 8 — 값을 표시하고 무료로 준 시점
       track("letter_written", { ..._base(), ms: Math.round(performance.now() - t0), chapters: doc.chapters.length, chars: doc.chapters.reduce((a, c) => a + c.body.length, 0),
         price: LETTER_PRICE, tok_in: doc.tok ? doc.tok.in : null, tok_out: doc.tok ? doc.tok.out : null,   // 4,900원짜리 한 통의 원가
         /* 서신도 '답변'이다(창업자 지시 2026-08-15). 장(章)마다 가명본으로 싣는다 —
