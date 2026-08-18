@@ -4317,8 +4317,18 @@ function gyeotSummary(list, myDG) {
     if (!g.has(r.ss)) g.set(r.ss, { ss: r.ss, label: r.name, use: r.use, people: [] });
     g.get(r.ss).people.push(x);
   }
-  const rows = [...g.values()].sort((a, b) => b.people.length - a.people.length || (a.ss < b.ss ? -1 : 1));
-  return { rows, unread, max: rows.length ? rows[0].people.length : 0, counted: list.length - unread };
+  const sorted = [...g.values()].sort((a, b) => b.people.length - a.people.length || (a.ss < b.ss ? -1 : 1));
+  /* ── 색인 — **표와 목록을 눈으로 잇는 유일한 장치** ─────────────────────────
+     써머리와 이름 목록이 따로 놀아서 "이 사람이 저 자리 중 어느 것인지"를 맞출 수가 없었다
+     (창업자: "요약과 리스트의 매칭이 어렵네"). 자리 이름이 길어 두 번 읽어야 짝이 지어졌다.
+
+     ⚠ **이 번호는 자리에 붙지 사람에게 안 붙는다.** 그게 순번 금지(v134.2 방어 ③)와 갈리는 지점이다 —
+       같은 자리의 사람은 **같은 번호**를 달고, 번호가 큰 사람이 뒤에 있는 게 아니다. 범례(legend)지 순위가 아니다.
+       사람마다 다른 번호를 매기는 순간(1번 민수, 2번 팀장님) 그건 줄 세우기가 된다. 그렇게 하지 마라. */
+  const rows = sorted.map((r, i) => ({ ...r, i: i + 1 }));
+  const index = new Map();                    // key → 색인 번호
+  for (const r of rows) for (const p of r.people) index.set(p.key, r.i);
+  return { rows, index, unread, max: rows.length ? rows[0].people.length : 0, counted: list.length - unread };
 }
 /* ── 판결이 곁을 볼 수 있게 (2026-08-17 창업자 지시: "내 사업에 도움이 될 사람이 있을까?") ──
    ⚠ **이름을 모델에 안 보낸다.** 보내는 건 `곁1`·`곁2` 자리표와 그 사람의 **역할 이름**뿐이다.
@@ -4791,6 +4801,9 @@ export default function App() {
      명부의 유일한 입구는 궁합을 돌리는 순간이다(MatchDoc onMet). 저장·정렬·파생은 전부 위 모듈 함수에 있다. */
   const [gyeot, setGyeot] = useState(() => readGyeot());
   const gyeotSorted = useMemo(() => (saju ? gyeotOrder(gyeot) : []), [gyeot, saju]);
+  /* 써머리를 **한 번만** 계산해 표와 목록이 같은 색인을 쓰게 한다. 각자 계산하면 정렬이 어긋나는 날
+     같은 자리에 다른 번호가 붙고, 그때 색인은 짝을 이어 주는 게 아니라 **틀린 짝을 이어 준다.** */
+  const gySum = useMemo(() => gyeotSummary(gyeotSorted, saju?.idx?.dG), [gyeotSorted, saju]);
   const gyeotRef = useRef([]);
   useEffect(() => {
     /* `?gyeot=1~3` 은 그림만 보는 **디버그 진입**으로 남긴다(`?r=sim` 과 같은 성격).
@@ -5737,7 +5750,7 @@ export default function App() {
                 <p className="wakehint gyeothint">두 번 두드려봐 — 누가 있는지 보여줄게</p>
               </>) : (<>
                 {(() => {
-                  const sum = gyeotSummary(gyeotSorted, saju?.idx?.dG);
+                  const sum = gySum;
                   return (<>
                     {/* ── 써머리 ① 그래프 — 자리별 몇이나 되나 ──────────────────────
                         ⚠ **사람이 아니라 자리를 센다.** "친구 3명"은 카운터고 "판을 같이 키우는 자리 3명"은
@@ -5753,7 +5766,8 @@ export default function App() {
                         {sum.rows.map((r, i) => {
                           const y = i * 22, w = Math.max(3, 112 * (r.people.length / (sum.max || 1)));
                           return (<g key={r.ss}>
-                            <text x="0" y={y + 12} fontSize="9.5" fill="#b6aacc">{r.label}</text>
+                            <text x="0" y={y + 12} fontSize="9.5" fill="#7d7296">{r.i}</text>
+                            <text x="12" y={y + 12} fontSize="9.5" fill="#b6aacc">{r.label}</text>
                             <rect x="176" y={y + 3} width="112" height="11" rx="2" fill="#6f658022" />
                             <rect x="176" y={y + 3} width={w} height="11" rx="2" className="gsumfill" style={{ "--i": i }} />
                             <text x="294" y={y + 12} fontSize="9.5" fill="#8f84a8">{r.people.length}명</text>
@@ -5764,7 +5778,7 @@ export default function App() {
                       <ul className="gsumtable">
                         {sum.rows.map((r) => (
                           <li key={r.ss}>
-                            <b>{r.label}</b><i>{r.people.length}명</i>
+                            <em className="gsumix" aria-hidden="true">{r.i}</em><b>{r.label}</b><i>{r.people.length}명</i>
                             <span dangerouslySetInnerHTML={{ __html: r.use }} />
                           </li>
                         ))}
@@ -5775,7 +5789,7 @@ export default function App() {
                 })()}
                 {/* ── 리스트 — **여기는 최근순 그대로다.** 위 표의 순서를 절대 안 따라간다.
                        따라가면 "1등 자리의 사람"이 맨 위에 서고, 그 순간 목록이 순위가 된다(v134.2 방어 ①). */}
-                <p className="fine gorderline">요즘 주고받은 순서야 — <b>잘 맞는 순서가 아니야.</b></p>
+                <p className="fine gorderline">번호는 <b>위 표의 자리</b>를 가리켜 — 요즘 주고받은 순서고, <b>잘 맞는 순서가 아니야.</b></p>
                 <ul className="gyeotlist">
                   {gyeotSorted.map((g) => {
                     const r = Number.isInteger(g.dg) && Number.isInteger(saju?.idx?.dG) ? roleOf(saju.idx.dG, g.dg) : null;
@@ -5786,7 +5800,10 @@ export default function App() {
                         <input className="galias" value={g.name || ""} maxLength={12} placeholder="이름을 적어 둘래"
                           aria-label="이 곁을 부를 이름"
                           onChange={(e) => setGyeot((p) => gyeotSetName(p, g.key, e.target.value))} />
-                        <span className="grel">{r ? r.name : GYEOT_REL_LINE[String(gyeotRel(saju?.main, g.el))]}</span>
+                        <span className="grel">
+                          {gySum.index.has(g.key) && <em className="gsumix sm" aria-hidden="true">{gySum.index.get(g.key)}</em>}
+                          {r ? r.name : GYEOT_REL_LINE[String(gyeotRel(saju?.main, g.el))]}
+                        </span>
                       </div>
                       <button className="gdrop" aria-label="이 곁을 지운다"
                         onClick={() => { setGyeot((p) => gyeotDrop(p, g.key)); track("gyeot_dropped", {}); }}>지울래</button>
@@ -6494,6 +6511,10 @@ const CSS = `
 .gsumtable li{padding:7px 0;border-top:1px solid rgba(159,143,196,.16);font-size:11.5px;line-height:1.65;color:#a99dc2}
 .gsumtable li b{display:inline;color:#efe6ff;font-size:12.5px}
 .gsumtable li i{float:right;font-style:normal;color:#8f84a8;font-size:11px}
+/* 색인 칩 — **자리에 붙는 번호지 사람에 붙는 번호가 아니다.** 같은 자리면 같은 번호를 단다.
+   사람마다 다른 번호를 매기는 순간 목록이 순위가 된다(v134.2 방어 ③). */
+.gsumix{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;margin-right:6px;border:1px solid rgba(159,143,196,.4);border-radius:50%;font-style:normal;font-size:9.5px;color:#a99dc2;vertical-align:1px}
+.gsumix.sm{width:13px;height:13px;font-size:8.5px;margin-right:5px}
 .gsumtable li span{display:block;margin-top:2px}
 .gsumtable li span b{font-size:11.5px}
 .impname{background:none;border:none;border-bottom:1px dashed rgba(159,143,196,.34);color:#efe6ff;font-family:inherit;font-size:14px;padding:2px 0;width:96px}

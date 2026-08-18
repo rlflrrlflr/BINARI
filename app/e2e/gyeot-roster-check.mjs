@@ -31,9 +31,10 @@ const grab = (head, kind = "fn") => {
    writeGyeot 이 실제로 무엇을 적는지 봐야 "원값을 안 쌓는다"를 검사할 수 있다. */
 const disk = new Map();
 const store = { getItem: (k) => (disk.has(k) ? disk.get(k) : null), setItem: (k, v) => disk.set(k, String(v)), removeItem: (k) => disk.delete(k) };
+const { roleOf } = await import("../src/lib/match.js");
 const hex2rgb = (h) => [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255];
 
-const M = new Function("store", "hex2rgb", `
+const M = new Function("store", "hex2rgb", "roleOf", `
   ${grab("const EL_COLOR = {", "const")}
   ${grab("const GYEOT_KEY =", "const")}
   ${grab("const GY_CALLED =", "const")}
@@ -54,10 +55,11 @@ const M = new Function("store", "hex2rgb", `
   ${grab("function gyeotDrop(")}
   ${grab("function gyeotSetName(")}
   ${grab("function gyeotOrder(")}
+  ${grab("function gyeotSummary(")}
   ${grab("function gyeotView(")}
-  return { GYEOT_KEY, GYEOT_MAX, GY_CALLED, GY_STANDING, GYEOT_REL_LINE, gyeotFingerprint, gyeotSeat, gyeotRel,
+  return { GYEOT_KEY, GYEOT_MAX, GY_CALLED, GY_STANDING, gyeotSummary, GYEOT_REL_LINE, gyeotFingerprint, gyeotSeat, gyeotRel,
            readGyeot, writeGyeot, gyeotAdd, gyeotDrop, gyeotSetName, gyeotOrder, gyeotView };
-`)(store, hex2rgb);
+`)(store, hex2rgb, roleOf);
 
 const reset = () => disk.clear();
 const fp = (y, m, d) => M.gyeotFingerprint(y, m, d);
@@ -190,6 +192,33 @@ const fp = (y, m, d) => M.gyeotFingerprint(y, m, d);
   ck("④ 흐린 것도 꺼지지는 않는다", vw[1].col[0] > 0);
   ck("④ 셰이더가 받는 모양은 {rel,ang,col} 뿐",
      Object.keys(vw[0]).sort().join(",") === "ang,col,rel", Object.keys(vw[0]).sort().join(","));
+}
+
+/* ── ⑥ 써머리 색인 — 표와 목록을 잇는 장치 (2026-08-17) ─────────────────────
+   창업자: "요약과 리스트의 매칭이 어렵네. 색인으로 매칭하면 좋겠다."
+   ⚠ 여기서 지켜야 하는 건 **번호가 자리에 붙지 사람에 붙지 않는 것**이다.
+     같은 자리의 사람은 같은 번호를 단다 — 사람마다 다른 번호면 그건 줄 세우기다. */
+{
+  const me = 0;                                  // 갑(甲)
+  const L = [
+    { key: "a", el: "토", dg: 4, name: "가", tier: "called", at: 400 },
+    { key: "b", el: "토", dg: 4, name: "나", tier: "called", at: 300 },   // a 와 같은 자리
+    { key: "c", el: "화", dg: 2, name: "다", tier: "called", at: 200 },
+    { key: "d", el: "수", dg: 9, name: "라", tier: "called", at: 100 },
+  ];
+  const sum = M.gyeotSummary(L, me);
+  ck("⑥ 색인이 1부터 빠짐없이 붙는다",
+     sum.rows.map((r) => r.i).join(",") === sum.rows.map((_, i) => i + 1).join(","), sum.rows.map((r) => r.i).join(","));
+  ck("⑥ 같은 자리는 같은 번호를 단다", sum.index.get("a") === sum.index.get("b"),
+     `가=${sum.index.get("a")} 나=${sum.index.get("b")}`);
+  ck("⑥ 다른 자리는 다른 번호를 단다", sum.index.get("a") !== sum.index.get("c"));
+  ck("⑥ 번호 가짓수 = 자리 가짓수 (사람 수가 아니다)",
+     new Set([...sum.index.values()]).size === sum.rows.length, `번호 ${new Set([...sum.index.values()]).size}종 · 자리 ${sum.rows.length}종`);
+  ck("⑥ 자리를 못 읽은 곁은 번호를 안 받는다",
+     !M.gyeotSummary([{ key: "z", el: "토", tier: "called", at: 1 }], me).index.has("z"));
+  /* 표는 개수 내림차순(범주의 분포), 목록은 최근순 — 둘이 같은 순서면 목록이 순위가 된다 */
+  ck("⑥ 표는 개수 내림차순", sum.rows.every((r, i) => i === 0 || sum.rows[i - 1].people.length >= r.people.length),
+     sum.rows.map((r) => r.people.length).join(">="));
 }
 
 /* ── ⑤ 소스 규약 — 화면 쪽 금지 (곁탭IA §5) ───────────────────────────────── */
