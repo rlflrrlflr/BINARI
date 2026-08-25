@@ -4137,6 +4137,13 @@ const isReask = (s) => REASK_RE.test((s || "").trim());
    그대로 둬서, 모델은 시킨 대로 MBTI 표를 보내고 이 줄이 조용히 버렸다(모델은 여섯 축, 앱은 다섯 축).
    그래서 이제 **검진이 프롬프트의 축 나열과 이 Set 을 맞대어 본다** — 한쪽만 고치면 빨개진다. */
 const VOTE_AX = new Set(["사주", "달", "별자리", "수비학", "주역", "삼재", "토정비결", "마야"]);
+/* 앞면(판결문)에 나오면 안 되는 용어 — **`eval/run-eval.mjs` 의 JARGON 과 같은 목록이어야 한다.**
+   둘이 갈리면 하네스는 잡는데 앱은 안 잡거나(누출이 조용히 나감) 그 반대가 된다 — 검진 A-5 가 대조한다.
+   ⚠ 이 목록은 v134.4 에서 **프롬프트로 막으려다 실패한 것**이다: 보강 후 재실행(60칸)에서 오히려 3→4 건으로
+   늘었고 P7-Q17 은 같은 칸에서 같은 단어(「임오 대운」)가 재발했다. 원인은 뒷면(콜2) 지시문이 근거를 
+   「용어 — 쉬운 풀이」로 쓰라며 예시로 "무오 대운"을 드는 것 — 앞면 금지와 옆자리 권장이 부딪힌다.
+   **그래서 규칙을 말로 한 번 더 조이는 대신 코드로 잡는다.** 프롬프트는 지켜지는지 알 수 없지만 코드는 잰다. */
+const FRONT_JARGON = /(대운|간지|납음|나크샤트라|괘|변효|[0-9]효|무오|무진|촐킨|라이프패스|오행|납읍)/;
 function tallyVotes(r1) {
   const raw = Array.isArray(r1?.votes) ? r1.votes : [];
   // 같은 축을 두 번 세지 않는다(모델이 '달 위상'·'달 별자리'를 쪼개 넣는 일이 있다)
@@ -5337,6 +5344,27 @@ export default function App() {
          화면 바로 아래에 "서버로도 통계로도 안 나가"라고 적어 놓고 그러면 그건 거짓말이 된다
          (v127.7 에 실제로 그런 사고가 있었다 — 약속을 먼저 쓰고 코드가 안 따라갔다).
          그래서 치환은 **화면과 기기 저장에서만** 한다. 아래 records 와 렌더 지점 참조. */
+      /* ── A-5 앞면 용어 가드 (재실행 실측 4/60 — 세션지시문 §검증 결과) ────────
+         앞면은 **맨말**이 원칙인데 「대운」·「괘」 같은 말이 샌다. 방향 가드와 달리 여기선
+         **다시 판정하지 않는다** — 콜1 을 새로 부르면 direction 이 바뀔 수 있고, 그건 용어 하나
+         고치자고 판결을 갈아치우는 것이다. 문장만 고쳐 받고, 실패하면 **원문을 그대로 둔다**
+         (용어가 섞인 판결은 아쉽지만, 뜻이 어긋난 판결은 제품 실패다). */
+      const _jg = (r1.verdict || "").match(FRONT_JARGON);
+      if (_jg) {
+        track("verdict_jargon", { hit: _jg[1], retry: 0 });
+        try {
+          const { json: _rw } = await callClaude(system, [...priorConvo, concludeMsg,
+            { role: "assistant", content: JSON.stringify({ verdict: r1.verdict }) },
+            { role: "user", content: `방금 판결문에 유저가 모르는 말(「${_jg[1]}」)이 들어갔어. **판정은 그대로 두고 문장만** 쉬운 말로 다시 써. 뜻·어조·길이(45자 이내) 유지, 지표 이름은 빼고 그 값이 말하는 바만 남겨. 아래 JSON만: {"verdict":"한 문장 단답"}` }], 200);
+          const _v = (_rw?.verdict || "").trim();
+          if (_v && !FRONT_JARGON.test(_v) && _v.length <= 45) {
+            r1.verdict = _v;
+            track("verdict_jargon", { hit: _jg[1], retry: 1, recovered: true });
+          } else {
+            track("verdict_jargon", { hit: _jg[1], retry: 1, gave_up: true, why: !_v ? "empty" : FRONT_JARGON.test(_v) ? "still_jargon" : "too_long" });
+          }
+        } catch (_) { track("verdict_jargon", { hit: _jg[1], retry: 1, gave_up: true, why: "call_failed" }); }
+      }
       // L1 등장 연출(짧게)
       agitateRef.current = true; setRes(r1);
       // scope_level(모델 판정) vs scope_hint(규칙) — 둘이 어긋난 건이 경계 케이스다. 그 목록이 다음 규칙 개정의 근거가 된다.

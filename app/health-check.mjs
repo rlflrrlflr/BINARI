@@ -1130,9 +1130,24 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
     if (!/if \(go === stop\) return "";/.test(ev)) bad.push("A-4 하네스가 동률을 불일치로 잡음");
   }
 
+  /* A-5 — 앞면 용어 가드. **프롬프트로 막으려다 실패한 자리**라(보강 후 재실행 60칸에서 3→4 로
+     늘고 P7-Q17 은 같은 칸에서 같은 단어가 재발) 코드로 옮겼다. 둘을 본다:
+     ① 가드가 살아 있는가 ② **앱과 하네스가 같은 목록을 쓰는가** — 갈리면 한쪽만 잡는다.
+     ⚠ 목록 문자열을 못 박지 않고 **두 파일에서 뽑아 맞댄다** — 목록을 늘려도 검사가 안 깨지고,
+       그러면서 "둘이 갈렸다"는 원래 잡으려던 것은 그대로 잡는다(CLAUDE.md 가상명식 규칙과 같은 이유).
+     (같은 파일 882행의 A-5 는 다른 검사 블록의 연번이다 — 이 블록은 A-0~A-4 를 잇는다.) */
+  if (!/verdict_jargon/.test(app)) bad.push("A-5 앞면 용어 가드가 없음(「대운」 류가 그대로 나감)");
+  if (ev) {
+    const pickList = (t, n) => { const m = t.match(new RegExp("const " + n + " = (/\\([^\\n]*?\\)/);")); return m ? m[1] : null; };
+    const aL = pickList(app, "FRONT_JARGON"), hL = pickList(ev, "JARGON");
+    if (!aL) bad.push("A-5 앱에 FRONT_JARGON 목록이 없음");
+    else if (!hL) bad.push("A-5 하네스에 JARGON 목록이 없음");
+    else if (aL !== hL) bad.push("A-5 앱·하네스 용어 목록이 갈림 — 앱 " + aL + " vs 하네스 " + hL);
+  }
+
   add(bad.length ? "심각" : "정상",
-    bad.length ? "새고 있던 넷 중 되살아난 것이 있음" : "새던 넷이 막혀 있음 — 유료티어 잠금 · 고지 문구 · 궁합 버그 셋 · 방향 가드/하네스 정합",
-    bad.length ? bad.join(" · ") : "PAID_ENABLED=false · 내부 TODO 비노출 · 축⑨/납음/축⑥ 교정 · verdict_nodir 가드 · 하네스 시진·동률 규칙 일치",
+    bad.length ? "새고 있던 다섯 중 되살아난 것이 있음" : "새던 다섯이 막혀 있음 — 유료티어 잠금 · 고지 문구 · 궁합 버그 셋 · 방향 가드/하네스 정합 · 앞면 용어 가드",
+    bad.length ? bad.join(" · ") : "PAID_ENABLED=false · 내부 TODO 비노출 · 축⑨/납음/축⑥ 교정 · verdict_nodir 가드 · 하네스 시진·동률 규칙 일치 · verdict_jargon 가드와 목록 일치",
     "이 넷은 전부 **화면이 멀쩡한 채로 틀려 있던** 것들입니다. tier 는 요청 본문에 들어 있어 Origin 검사로는 못 막습니다(결제 전까지 서버에서 잠급니다). 하네스가 앱과 다른 프롬프트·다른 규칙을 쓰면 평가가 오탐을 만들고, 오탐은 진짜 실패를 가립니다.");
 }
 
