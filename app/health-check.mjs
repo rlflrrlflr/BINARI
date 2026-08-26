@@ -806,42 +806,43 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
    그래서 규칙이 아니라 **예시를 검사한다.** */
 {
   const app = readFileSync(APP, "utf8");
-  const sys = app.slice(app.indexOf("[너는 누구인가]") >= 0 ? app.indexOf("[너는 누구인가]") : 0);
+  /* ⚠ 예전엔 `app.slice(indexOf("[너는 누구인가]"))` — 즉 **거기서 파일 끝까지** 훑었다.
+     프롬프트만 보려던 건데 실제로는 뒤따르는 코드와 **주석까지 전부** 검사 대상이었다.
+     그래서 이 검사를 설명하려고 주석에 `(O)"무오 대운…"` 을 인용했더니 **검사가 제 주석에 걸렸다**
+     (이 리포에서 세 번째 자기 오탐이다 — 앞선 둘도 "주석이 인용한 문자열"이 원인이었다).
+     `SYS` 템플릿 리터럴만 정확히 잘라 낸다 — `eval/run-eval.mjs` 가 프롬프트를 뽑는 방식과 같다. */
+  const _s0 = app.indexOf("const SYS = `");
+  const sys = _s0 >= 0 ? app.slice(_s0 + 13, app.indexOf("`;", _s0)) : app;
   /* (O)"..." 형태의 모범 예시를 전부 뽑는다 */
   const good = [...sys.matchAll(/\(O\)\s*"([^"]{4,120})"/g)].map((m) => m[1]);
   /* 어디에 쓰이든 금지된 은유 — 읽고 나서 아무것도 모르는 말 */
   const VAGUE = /(그릇이|그릇이야|쥘\s*팔|팔\s*힘|기운이\s*흐르|자리가\s*비었어)/;
   const bad = good.filter((g) => VAGUE.test(g));
-  /* ── 0-f 앞면 금칙어 (작업배분 §6-2 · 2026-08-17 실측 반증) ────────────────
-     A-3 에서 프롬프트를 보강했는데 **60칸 재실행에서 용어 누출이 3→4로 늘었고
-     P7-Q17 은 같은 칸에서 같은 단어(「임오 대운」)가 그대로 재발했다.**
-     원인을 찾아보니 규칙이 약해서가 아니었다 — **SYS 의 (O) 예시 자체가 「무오 대운」을 쓰고 있었다.**
-     SYS 는 콜1(앞면)·콜2(뒷면) 공용이라, 뒷면용으로 쓴 그 예시를 모델이 앞면에도 적용한다.
-     이 검사(5-g)는 (O) 예시를 **은유로만** 재고 있어서 그게 그대로 통과했다.
+  /* ── 0-f 앞면 금칙어가 **(O) 예시 안에** 있는가 (2026-08-17) ────────────────
+     A-5 가 "가드가 살아 있나 · 앱과 하네스 목록이 같나"를 본다면, 여기는 **원인**을 본다.
+     실측 반증이 있었다: 프롬프트를 보강했는데 60칸 재실행에서 3→4 로 늘고 같은 단어가 재발했다.
+     파 보니 범인은 규칙이 아니라 **`SYS` 의 (O) 예시 자체**였다 —
+       (O)"**무오 대운** — 앞으로 십 년…"
+     뒷면용 예시인데 `SYS` 는 콜1(앞면)·콜2(뒷면) 공용이라 모델이 앞면에도 적용한다.
+     그리고 이 검사(5-g)는 (O) 예시를 **은유로만** 재고 있어서 그대로 통과시켰다 —
+     "모델은 규칙보다 예시를 따른다"는 원칙으로 만든 검사가 정작 그 원칙의 절반만 보고 있었다.
 
-     그래서 규칙을 하나 더 세운다: **층 표시가 없는 (O) 예시는 앞면에도 적용될 수 있으므로
-     앞면 금칙어를 담으면 안 된다.** 뒷면 전용 예시는 `(O·뒷면)` 으로 표시하고 이 검사에서 뺀다.
-     ⚠ 금칙어 목록은 `eval/run-eval.mjs` 의 JARGON 과 **같은 것을 쓴다** — 검사와 평가가 다른 잣대를
-       쓰면 한쪽이 통과시킨 걸 다른 쪽이 잡고, 그 오탐이 진짜 실패를 가린다(A-4 에서 겪었다). */
-  const FRONT_JARGON = /(대운|간지|납음|나크샤트라|괘|변효|[0-9]효|무오|무진|촐킨|라이프패스|오행|납읍)/;
-  const jargonBad = good.filter((g) => FRONT_JARGON.test(g));
-  /* 하네스와 같은 목록인지 실제로 대조한다 — 주석으로만 "같다"고 적어 두면 갈린다 */
-  let sameAsEval = true;
-  try {
-    const ev = readFileSync("eval/run-eval.mjs", "utf8");
-    const m = ev.match(/const JARGON = (\/[^\n]*\/);/);
-    sameAsEval = !!m && m[1] === String(FRONT_JARGON);
-  } catch (_) {}
+     규칙: **층 표시가 없는 (O) 는 앞면에도 적용되므로 앞면 금칙어를 담으면 안 된다.**
+     뒷면 전용 예시는 `(O·뒷면)` 으로 표시하고 여기서 뺀다.
+     ⚠ 목록은 **App.jsx 에서 뽑아 쓴다** — 여기 문자열로 박아 두면 목록을 넓히는 날 이 검사가
+       엉뚱하게 깨진다(A-5 가 같은 이유로 두 파일에서 뽑아 맞댄다). 목록 동일성은 A-5 담당이다. */
+  const FJ = (app.match(/const FRONT_JARGON = \/\(([^\n]*?)\)\/;/) || [])[1];
+  const jargonBad = FJ ? good.filter((g) => new RegExp("(" + FJ + ")").test(g)) : [];
+  if (!FJ) jargonBad.push("(App.jsx 에서 FRONT_JARGON 목록을 못 찾음)");
   /* 뒷면 모호함 금지 규칙 넷이 실재하는가 */
   const backRules = ["뜻이 안 서는 은유를 서술어로", "개수만 던지기", "추상명사로 도망가기", "판정을 유예하는 어미"]
     .filter((k) => sys.includes(k));
-  const ok = bad.length === 0 && jargonBad.length === 0 && sameAsEval && good.length >= 15 && backRules.length === 4;
+  const ok = bad.length === 0 && jargonBad.length === 0 && good.length >= 15 && backRules.length === 4;
   add(ok ? "정상" : "심각",
     ok ? `판결 프롬프트 — 모범 예시 ${good.length}개가 자기 금칙을 안 어김` : "판결 프롬프트의 모범 예시가 자기 금칙을 어김",
-    ok ? `(O) 예시 ${good.length}개 검사(은유 + 앞면 금칙어) · 하네스와 같은 목록 · 뒷면 모호함 규칙 4종 있음`
+    ok ? `(O) 예시 ${good.length}개 검사(은유 + 앞면 금칙어) · 뒷면 모호함 규칙 4종 있음`
        : [bad.length ? `은유 위반 ${bad.length}건: "${bad[0].slice(0, 34)}…"` : "",
           jargonBad.length ? `앞면 금칙어 ${jargonBad.length}건: "${jargonBad[0].slice(0, 34)}…"` : "",
-          sameAsEval ? "" : "금칙어 목록이 eval 하네스와 다름",
           good.length >= 15 ? "" : `예시 ${good.length}개(부족)`,
           backRules.length === 4 ? "" : `뒷면규칙 ${backRules.length}/4`].filter(Boolean).join(" · "),
     "모델은 금지 조항보다 (O) 예시를 강하게 따릅니다 — 예시 한 줄이 규칙 열 줄을 이깁니다. 실측 반증이 있습니다: A-3 에서 프롬프트를 보강했는데 같은 칸에서 같은 단어가 재발했고, 원인은 **(O) 예시 자체가 그 단어를 쓰고 있던 것**이었습니다. 뒷면 전용 예시는 `(O·뒷면)` 으로 표시해 앞면과 갈라 두세요.");
@@ -1154,9 +1155,24 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
     if (!/if \(go === stop\) return "";/.test(ev)) bad.push("A-4 하네스가 동률을 불일치로 잡음");
   }
 
+  /* A-5 — 앞면 용어 가드. **프롬프트로 막으려다 실패한 자리**라(보강 후 재실행 60칸에서 3→4 로
+     늘고 P7-Q17 은 같은 칸에서 같은 단어가 재발) 코드로 옮겼다. 둘을 본다:
+     ① 가드가 살아 있는가 ② **앱과 하네스가 같은 목록을 쓰는가** — 갈리면 한쪽만 잡는다.
+     ⚠ 목록 문자열을 못 박지 않고 **두 파일에서 뽑아 맞댄다** — 목록을 늘려도 검사가 안 깨지고,
+       그러면서 "둘이 갈렸다"는 원래 잡으려던 것은 그대로 잡는다(CLAUDE.md 가상명식 규칙과 같은 이유).
+     (같은 파일 882행의 A-5 는 다른 검사 블록의 연번이다 — 이 블록은 A-0~A-4 를 잇는다.) */
+  if (!/verdict_jargon/.test(app)) bad.push("A-5 앞면 용어 가드가 없음(「대운」 류가 그대로 나감)");
+  if (ev) {
+    const pickList = (t, n) => { const m = t.match(new RegExp("const " + n + " = (/\\([^\\n]*?\\)/);")); return m ? m[1] : null; };
+    const aL = pickList(app, "FRONT_JARGON"), hL = pickList(ev, "JARGON");
+    if (!aL) bad.push("A-5 앱에 FRONT_JARGON 목록이 없음");
+    else if (!hL) bad.push("A-5 하네스에 JARGON 목록이 없음");
+    else if (aL !== hL) bad.push("A-5 앱·하네스 용어 목록이 갈림 — 앱 " + aL + " vs 하네스 " + hL);
+  }
+
   add(bad.length ? "심각" : "정상",
-    bad.length ? "새고 있던 넷 중 되살아난 것이 있음" : "새던 넷이 막혀 있음 — 유료티어 잠금 · 고지 문구 · 궁합 버그 셋 · 방향 가드/하네스 정합",
-    bad.length ? bad.join(" · ") : "PAID_ENABLED=false · 내부 TODO 비노출 · 축⑨/납음/축⑥ 교정 · verdict_nodir 가드 · 하네스 시진·동률 규칙 일치",
+    bad.length ? "새고 있던 다섯 중 되살아난 것이 있음" : "새던 다섯이 막혀 있음 — 유료티어 잠금 · 고지 문구 · 궁합 버그 셋 · 방향 가드/하네스 정합 · 앞면 용어 가드",
+    bad.length ? bad.join(" · ") : "PAID_ENABLED=false · 내부 TODO 비노출 · 축⑨/납음/축⑥ 교정 · verdict_nodir 가드 · 하네스 시진·동률 규칙 일치 · verdict_jargon 가드와 목록 일치",
     "이 넷은 전부 **화면이 멀쩡한 채로 틀려 있던** 것들입니다. tier 는 요청 본문에 들어 있어 Origin 검사로는 못 막습니다(결제 전까지 서버에서 잠급니다). 하네스가 앱과 다른 프롬프트·다른 규칙을 쓰면 평가가 오탐을 만들고, 오탐은 진짜 실패를 가립니다.");
 }
 
