@@ -102,7 +102,10 @@ const b = await chromium.launch((process.env.CHROME_PATH || process.env.PW_CHROM
   const off = await pick(page, "daily_offered");
   ck("문안이 떴으면 daily_offered 가 남는다(열림의 분모)", off.length >= 1, `${off.length}건`);
   ck("daily_offered 는 방문당 1회", off.length <= 1, `${off.length}건`);
-  ck("되물음에 자리를 뺏겼는지 구분한다", off[0] && "blocked_by_askback" in off[0].props);
+  /* 2026-08-26 우선순위 교체 — 문안(당김형)이 먼저, 되물음(push)이 미뤄진다.
+     속성도 방향이 바뀌었다: blocked_by_askback(문안이 밀림) → askback_deferred(되물음이 밀림). */
+  ck("미뤄진 되물음을 구분한다(문안 우선)", off[0] && "askback_deferred" in off[0].props);
+  ck("옛 속성(blocked_by_askback)은 더 안 나간다", off[0] && !("blocked_by_askback" in off[0].props));
 
   const knock = page.getByRole("button", { name: /오늘의 하늘을 봐뒀어/ });
   if (await knock.count()) {

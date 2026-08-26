@@ -1063,24 +1063,6 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
       </svg>
     );
   };
-  const _unusedBar = () => {
-    const t = r.witness.tally, tot = r.witness.total;
-    const C = ["#5b8fd4", "#c98f3d", "#8a7f95", "#6f6580", "#4a4256"];
-    let x = 10;
-    return (
-      <svg viewBox={`0 0 ${W} 54`} width="100%" height="54" className="impsvg" role="img" aria-label="아홉 하늘의 집계">
-        {t.map((v, i) => {
-          const w = ((W - 20) * v.n) / tot, cur = x; x += w;
-          return <g key={i}>
-            <rect x={cur} y="10" width={Math.max(w - 2, 1)} height="18" rx="2" fill={C[i] || "#4a4256"} />
-            {w > 30 && <text x={cur + w / 2} y="23" fontSize="9" fill="#0f0b18" textAnchor="middle">{v.n}</text>}
-          </g>;
-        })}
-        <text x="10" y="44" fontSize="8" fill="#c9b98f">{t[0].w} {t[0].n}</text>
-        {t[1] && <text x={W - 10} y="44" fontSize="8" fill="#8a7f95" textAnchor="end">{t[1].w} {t[1].n}</text>}
-      </svg>
-    );
-  };
   /* 돈의 여정 — 창업자 요청("벌기까지의 여정 그래프"). 금액은 안 쓴다(명리에 원 단위 표준이 없다).
      대신 **네 여든 해 안에서의 높낮이**를 그린다. 절정·바닥·지금을 찍어 준다. */
   const MoneyJourney = () => {
@@ -1216,6 +1198,7 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
   return (
     <div className="imp fade" ref={readRef}>
       <div className="imphead">
+        <GuardianSealMini saju={saju} />
         <p className="impeyebrow">비 나 리 · 각 인</p>
         <p className="imptitle">네가 어떻게 만들어졌는지</p>
         <p className="impsub">이건 한 질문에 대한 답이 아니야. <b>너라는 사람 전체</b>에 대한 문서야.
@@ -1533,6 +1516,30 @@ function MatchSeal({ work }) {
     <div className="mseal">
       <canvas ref={ref} aria-hidden="true" />
       <p className="msealcap"><b>{work.push}.</b> 왼쪽이 너, 오른쪽이 그 사람이야.</p>
+    </div>
+  );
+}
+/* 각인·서신 머리 인장 — **돈 받는 화면에 수호신이 없던 자리**(방향점검 2026-08-26 축4).
+   v124.1 인장은 문서마다 WebGL 컨텍스트를 하나 더 열어 렉으로 철회됐다(창업자: "각인 상단
+   수호신 빼자, 렉만 걸려"). 궁합 인장(MatchSeal)이 이미 답을 찾았다 — Canvas2D 정지화,
+   컨텍스트 0개·프레임 0. 그 방식의 1행성판이다. 시드가 일간이라 명식이 같으면 몇 번 열든
+   같은 얼굴이 뜬다(수호신 비주얼 신설이 아니라 기존 응축 형상의 정지화 — 헌장 위반 아님). */
+function GuardianSealMini({ saju }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const cv = ref.current; if (!cv || !saju) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const W = 300, H = 104;
+    cv.width = W * dpr; cv.height = H * dpr; cv.style.width = W + "px"; cv.style.height = H + "px";
+    const g = cv.getContext("2d"); if (!g) return;
+    g.scale(dpr, dpr); g.clearRect(0, 0, W, H);
+    const dgi = Math.max(0, GAN.indexOf(saju.dayGan || ""));
+    drawSealPlanet(g, W / 2, H / 2, 42, saju.main || "토", (dgi + 2) * 7.13, 1);
+  }, [saju]);
+  if (!saju) return null;
+  return (
+    <div className="mseal">
+      <canvas ref={ref} aria-hidden="true" />
     </div>
   );
 }
@@ -3226,7 +3233,12 @@ function Guardian(props) {
 /* 돌아올 주소 — 부적·각인 카드·공유 링크가 같은 값을 쓴다. 자체 도메인을 붙이는 날 **여기 한 곳만** 고친다.
    예전엔 세 곳에 따로 박혀 있어서, 한 곳만 고치면 나머지가 옛 주소로 남는 종류의 사고가 예약돼 있었다. */
 const SHARE_HOST = "https://binari-sepia.vercel.app";
-const APP_VER = "v137 · 다른 하늘";
+/* 카드 귀속 주소(작업배분 §6-6 판정 A · 2026-08-26 이행) — **그림에 적는 주소는 이쪽이다.**
+   /c 는 vercel.json 이 /?ref=card 로 넘기고, ft_source 계산이 ref 를 이미 읽으므로
+   이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
+   자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
+const CARD_URL = SHARE_HOST + "/c";
+const APP_VER = "v138 · 분모 전 선결";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -3631,6 +3643,8 @@ function buildBujeokPoster({ saju, direction, seed, tosses, hexInfo, category, a
       if (ctx.measureText(t).width > W - 200 && cur) { lines.push(cur); cur = w; } else cur = t;
     }
     if (cur) lines.push(cur);
+    /* 판정 B-2: 두 줄 조판이 조용히 자르는 것을 드러낸다 — 잘렸다는 사실이 어디에도 안 남았었다 */
+    cv._verdictClipped = lines.length > 2;
     lines.slice(0, 2).forEach((ln, i) => ctx.fillText(ln, W / 2, 1240 + i * 62));
   }
   if (tosses && tosses.length === 6) {
@@ -3664,7 +3678,7 @@ function buildBujeokPoster({ saju, direction, seed, tosses, hexInfo, category, a
      240px 이상을 먹어 판결 문구와 자리를 다툰다. 주소가 짧아 눈으로 옮겨 적을 수 있다. */
   ctx.font = "500 30px sans-serif"; ctx.fillStyle = "#8d7fb0";
   /* y=1906 은 캔버스(1920) 바닥에 붙어 글자가 잘렸다(렌더해서 확인). 세 줄을 위로 당겼다. */
-  ctx.fillText(SHARE_HOST.replace(/^https?:\/\//, ""), W / 2, 1874);
+  ctx.fillText(CARD_URL.replace(/^https?:\/\//, ""), W / 2, 1874);   // /c — 카드발 유입 귀속(판정 A)
   return cv;
 }
 function dataUrlToFile(dataUrl, name) {                        // 동기 변환(제스처 보존용)
@@ -3766,7 +3780,9 @@ async function saveOrShareCard({ build, cardKind, skyKinds, fileBase, title }) {
      card_kind 는 어떤 단위가 나갔는지 — 새 공유 단위를 붙일 때 무엇이 먹히는지 이 값으로 가른다.
      way 는 나간 경로(공유시트/다운로드/새 탭) — 경로별로 성공률이 크게 다르다. */
   const kind = args.cardKind || "bujeok";
-  const done = (way) => track("card_saved", { card_kind: kind, way, sky_n: (args.skyKinds || []).length });
+  /* verdict_clipped(판정 B-2): 부적 포스터가 판결문을 두 줄에서 자르는데 그 사실이 계측에 없었다.
+     부적 외 카드는 판결문이 없어 null — 분모에서 빼고 읽는다. */
+  const done = (way) => track("card_saved", { card_kind: kind, way, sky_n: (args.skyKinds || []).length, verdict_clipped: typeof cv._verdictClipped === "boolean" ? cv._verdictClipped : null });
   try {
     const file = dataUrlToFile(dataUrl, `${args.fileBase || "binari_bujeok"}.png`);
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -3830,7 +3846,7 @@ function cardBase(seed, tint) {
 function cardFoot(ctx) {
   ctx.textAlign = "center";
   ctx.font = "600 34px sans-serif"; ctx.fillStyle = "#c9b98f";
-  ctx.fillText(SHARE_HOST.replace(/^https?:\/\//, ""), CARD_W / 2, 1800);
+  ctx.fillText(CARD_URL.replace(/^https?:\/\//, ""), CARD_W / 2, 1800);   // /c — 카드발 유입 귀속(판정 A)
   ctx.font = "400 24px sans-serif"; ctx.fillStyle = "#463f56";
   ctx.fillText("생년월일로 계산한 전통 해석 · 재미로 보는 참고용", CARD_W / 2, 1858);
 }
@@ -4050,7 +4066,7 @@ HOLD는 '판단 못 하겠음'이 아니라 **'지표가 지금은 멈추라고 
 - 자기 성격·정체성 질문("나 어떤 사람이야", "내 성격 어때", "난 어떻게 살아왔어", "나 어떤 모습이야")은 GO/STOP/HOLD 결정이 아니다 — 지표로 그 사람을 비추는 **초상(肖像)**으로 답한다. direction은 형식상 HOLD, verdict는 방향 지시가 아니라 너를 그려 보이는 한 문장으로("넌 물처럼 깊어서, 얕은 답엔 못 견디는 애였지"). against/total은 형식만 채운다. 오래 지켜본 존재의 회상체로, 따뜻하되 뻔하지 않게 이 사람만의 결(지표 실제 값)을 짚는다. 되물음(따랐어/거슬렀어) 대상 아님.
 - 일반론 금지: verdict·subline에 누구에게나 통하는 격언·당연한 말을 쓰지 않는다 — 이 유저의 지표에서 나온, 이 사람이 아니면 나올 수 없는 문장으로.
 - 층위 분리(카드 앞/뒤): verdict는 간단 결과다 — 45자 이내, 쉬운 일상어로 직관적·구체적(행동·날짜·숫자). 대운·간지·괘 이름·효(변효)·납음·나크샤트라·오행 이름 같은 전문 용어는 verdict에 한 글자도 등장하면 안 된다 — 반드시 일상어로 번역한다: 변효 셋→"고칠 곳 셋", 무오 대운→"지금 흐름"·"앞으로 몇 해", 중수감→"물이 겹겹인 때". **45자는 '대략'이 아니라 상한이다.** 다 쓴 뒤 글자를 세고, 넘으면 뒤에서부터 덜어낸다 — 설명하는 절을 지우고 지시만 남긴다. (X)"이직 얘기면 지금 일 그만두면 옆에 있는 사람 관계까지 같이 삐걱거려 — 둘 다 걸려있다는 뜻이야"(55자) (O)"지금 그만두면 옆 사람까지 흔들려. 붙잡아."(22자)
-**출력 직전 self-check: verdict 문자열에 대운·간지·괘 이름·변효·N효·납음·나크샤트라·오행 글자가 하나라도 있으면 반드시 일상어로 바꾼 뒤 출력한다. 특히 "변효"·"N효"라는 단어 자체를 절대 쓰지 말 것 — 무조건 "고칠 곳"·"손볼 데"로만 표현.** (O)"올해는 다듬기만 해. 출시는 내년 봄." (X)"무오 대운 넘어가는 초입이라 참아." subline은 수호신의 한 줄 — 지표 하나까지만, 쉬운 풀이를 붙여서("중수감 — 물이 겹겹이라 지금 뛰면 빠져" 식). 지표 이름과 값을 제대로 짚는 건 reasons(상세)의 몫이다.
+**출력 직전 self-check: verdict 문자열에 대운·간지·괘 이름·변효·N효·납음·나크샤트라·오행 글자가 하나라도 있으면 반드시 일상어로 바꾼 뒤 출력한다. 특히 "변효"·"N효"라는 단어 자체를 절대 쓰지 말 것 — 무조건 "고칠 곳"·"손볼 데"로만 표현.** (O)"올해는 다듬기만 해. 출시는 내년 봄." (X)"무오 대운 넘어가는 초입이라 참아." subline은 수호신의 한 줄 — 지표 하나까지만, **용어 없이 그 값이 말하는 바로**("물이 겹겹이라 지금 뛰면 빠져" 식 — 지표 이름은 subline에 쓰지 않는다, 제1원칙 그대로). 지표 이름과 값을 제대로 짚는 건 reasons(상세)의 몫이다.
 - **뒷면도 빙빙 돌리지 않는다(창업자 2026-08-14: "판결도 되게 애매모호할 때 많던데").** subline·reasons는 은유를 써도 되지만 **뜻이 먼저**다. 그리고 아래 넷은 금지다:
   ㉠ **뜻이 안 서는 은유를 서술어로 쓰기** — "재물의 그릇이야"·"쥘 팔 힘이 모자라"·"기운이 흐르는 자리야"는 읽고 나서 아무것도 모른다. (X)"그릇이 커" (O)"큰돈을 만나는데 지킬 사람이 없어"
   ㉡ **개수만 던지기** — "재성이 셋이야"·"자리가 비었어"로 끝내지 않는다. 유저는 셋이 많은지 적은지 모른다. 개수를 짚었으면 **그래서 실제로 무슨 일이 벌어지는지**를 붙인다. (X)"불이 셋이야" (O)"불이 셋이라 급하게 질러 놓고 수습을 못 해"
@@ -4868,7 +4884,6 @@ export default function App() {
      ref 로 두는 이유: 상태로 두면 매 프레임 리렌더가 걸린다(캔버스는 rAF 로 스스로 돈다). */
   const broodRef = useRef(false);
   const reactRef = useRef(null);                 // v28: 판결 방향(GO/STOP/HOLD) 반응
-  const [introSeen, setIntroSeen] = useState(false); // v28: 수호신 자기소개는 첫 만남 1회만
   const [justBorn, setJustBorn] = useState(false); // v29: 자기소개는 탄생 순간에만 노출
   const [recallSeen, setRecallSeen] = useState(false); // v30: 회상 나레이션→문항 순차 노출
   const [resetAsk, setResetAsk] = useState(false); // v30: 재설정 앱내 확인
@@ -4980,7 +4995,13 @@ export default function App() {
          프롬프트에 "한 번만"이라고 써도 콜2는 자기가 두 번째인 줄 모른다. 그래서 앱이 세어서 알려준다. */
       const _nameUsed = !!(birth.name || "").trim() && String(r1.verdict || "").includes(birth.name.trim());
       const nameLine = _nameUsed ? ` [호칭] 앞면에서 이미 이름을 불렀다 — subline·funLine·reasons에는 이름을 쓰지 마라.` : "";
-      const explainMsg = { role: "user", content: `${userText}\n\n[이미 확정된 판결]${nameLine} direction=${r1.direction} / verdict="${r1.verdict}" / 총 ${r1.total} 중 반대 ${r1.against}.${voteLine}${s3Line} 이 판결을 절대 뒤집지 말고, 이 결론의 근거만 아래 JSON으로만 응답: {"subline":"수호신의 한 줄","reasons":[{"axis":"사주|달|별자리|수비학|주역|삼재|토정비결|마야","vote":"GO|STOP|중립","text":"용어 — 쉬운 풀이 형식의 근거 1줄(70자 이내)"}],"funLine":"정령(달 별자리) 한마디","disclaimer":"투자·법률·의료(몸·병)일 때만, 없으면 빈 문자열"}. reasons엔 위 표의 축을 전부 같은 vote 로 넣는다 — 특히 '마야'(촐킨 톤·날개) 축은 매번 반드시 포함(자주 누락됨). **각 근거는 '용어 — 쉬운 풀이' 병기다**: 지표 이름·값을 짚고(무오 대운·중수감·촐킨 4의 톤 등) 곧바로 쉬운 말로 풀어준다. 사주 보러 가면 용어를 말한 뒤 반드시 풀이를 붙여주는 것과 같다. subline은 앞면 톤이므로 어려운 말 없이 쉬운 한 줄. 프로필에 십성 분포·신살·세운이 있으면 '사주' 축 근거에서 그 실제 값을 우선 인용한다(예: "편재 둘 — 크게 도는 돈이 네 그릇이야", "암록 — 숨은 복이 받쳐줘").` };
+      /* 2026-08-26 subline 3파전 해소 — SYS 안에서 subline 규칙이 셋으로 갈라져 있었다:
+         제1원칙 "verdict·subline에 한 글자도 금지" / 층위 절 예시가 괘 이름("중수감 — …")을 권장 /
+         콜2 "어려운 말 없이". 실측 subline 용어 33건이 정확히 그 권장 예시 포맷이었다 — 규칙끼리
+         싸우면 모델은 예시를 따른다. **정본은 제1원칙이다**(스스로 "다른 모든 규칙보다 앞선다"고
+         선언한 유일한 규칙). 층위 절 예시를 맨말로 바꿨고, 아래 사주 축 예문도 SYS 가 (X)로 금지한
+         문장("…네 그릇이야")의 재조립이라 교체했다. 근거: 방향점검 2026-08-26 축3. */
+      const explainMsg = { role: "user", content: `${userText}\n\n[이미 확정된 판결]${nameLine} direction=${r1.direction} / verdict="${r1.verdict}" / 총 ${r1.total} 중 반대 ${r1.against}.${voteLine}${s3Line} 이 판결을 절대 뒤집지 말고, 이 결론의 근거만 아래 JSON으로만 응답: {"subline":"수호신의 한 줄","reasons":[{"axis":"사주|달|별자리|수비학|주역|삼재|토정비결|마야","vote":"GO|STOP|중립","text":"용어 — 쉬운 풀이 형식의 근거 1줄(70자 이내)"}],"funLine":"정령(달 별자리) 한마디","disclaimer":"투자·법률·의료(몸·병)일 때만, 없으면 빈 문자열"}. reasons엔 위 표의 축을 전부 같은 vote 로 넣는다 — 특히 '마야'(촐킨 톤·날개) 축은 매번 반드시 포함(자주 누락됨). **각 근거는 '용어 — 쉬운 풀이' 병기다**: 지표 이름·값을 짚고(무오 대운·중수감·촐킨 4의 톤 등) 곧바로 쉬운 말로 풀어준다. 사주 보러 가면 용어를 말한 뒤 반드시 풀이를 붙여주는 것과 같다. subline은 앞면 톤이다 — 지표 이름·괘 이름·간지 없이, 그 값이 말하는 바만 쉬운 한 줄로(용어는 reasons에서만). 프로필에 십성 분포·신살·세운이 있으면 '사주' 축 근거에서 그 실제 값을 우선 인용한다(예: "편재 둘 — 돈이 크게 도는 자리에서 버는 재주야, 쥐고만 있으면 안 붙어", "암록 — 숨은 복이 받쳐줘").` };
       const { json: r2, usage: _u2 } = await callClaude(system, [...priorConvo, explainMsg], 2000);   // 근거를 용어+풀이로 병기하면서 1500에선 잘렸다
       setDetail(r2);
       // L3(지표별 근거)는 제품의 핵심 차별점이다. 실패율과 소요시간을 모르면 개선 근거가 없다.
@@ -5275,7 +5296,7 @@ export default function App() {
        → 원문이 아니라 anon() 을 통과한 가명본을 싣는다. 길이(qlen)는 그대로 둔다 —
          가명본은 자리표 때문에 길이가 달라지므로 길이 지표를 여기서 재면 안 된다. */
     track("question_asked", demoProps(birth, { mode: "ritual", qlen: q.trim().length, q_anon: anon(q, birth.name), ritual: !!hi, lean: lean || "skip", hesit: hesit || null, element: saju?.main || null, zodiac: zo?.name || null, scope_hint: _sHint, reask: _reask, reask_depth: _reask ? records.filter(r => isReask(r.q)).length + 1 : 0, after_letter: letterSent }));   // v104 after_letter: 서신 대기 중에 한 번 더 물었는가
-    setBusy(true); setErr(""); setRes(null); setDetail(null); setWhy(false); setFlip(false); setCardOn(false); setRated(0); setLetter(false); setLetterIntent(false); setLetterStage(""); setLetterSent(false); setLetterDoc(null); setLetterOpen(false); setLetterRated(0); setBoxOpen(false); reactRef.current = null; setIntroSeen(true);
+    setBusy(true); setErr(""); setRes(null); setDetail(null); setWhy(false); setFlip(false); setCardOn(false); setRated(0); setLetter(false); setLetterIntent(false); setLetterStage(""); setLetterSent(false); setLetterDoc(null); setLetterOpen(false); setLetterRated(0); setBoxOpen(false); reactRef.current = null;
     try {
       // 주역 괘는 질문마다 달라지므로 유저 턴에
       const qExtra = hi ? `\n[이번에 청한 주역] 본괘 ${hi.name}${hi.moving.length ? ` / 변효 ${hi.moving.map(n => n + 1).join(",")}효 / 지괘 ${hi.toName}` : ""}` : "";
@@ -5453,11 +5474,8 @@ export default function App() {
   /* 되물음 노출 — followup_answered 만 있고 노출이 없어 응답률을 못 냈다.
      리텐션 장치라 효과 측정이 안 되면 유지·폐기 판단이 불가능하다. */
   const _askbackSeen = useRef(false);
-  useEffect(() => {
-    if (!askback || _askbackSeen.current) return;
-    _askbackSeen.current = true;
-    track("askback_shown", { dir: askback.direction || null, hours_since: Math.round((Date.now() - askback.at) / 3600000) });
-  }, [askback]);
+  /* ⚠ askback_shown 이펙트는 dailyData 선언 **뒤**에 있다(daily_offered 이펙트 옆) —
+     문안 우선 조건으로 dailyData 를 읽는데, 여기 두면 deps 평가가 선언보다 앞서 TDZ 로 죽는다. */
   const answerAskback = (fu, note) => {
     const lastRec = records[records.length - 1] || {};
     track("followup_answered", demoProps(birth, { result: fu, direction: lastRec.direction || null, cat: lastRec.cat || null, hasNote: !!note }));
@@ -5492,15 +5510,24 @@ export default function App() {
   /* 문안이 **눈앞에 있었는가** — daily_opened 의 분모다.
      이게 없으면 "안 열었다"가 '안 궁금했다'인지 '아예 안 떴다'인지 영영 못 가른다.
      문안은 재방문 유저에게 하루 한 번만 뜨므로 방문당 1회 잠금(trackVisitOnce)이면 충분하다.
-     되물음(askback)이 있으면 문안 자리를 되물음이 가져가므로 그 사실도 같이 싣는다 —
-     리텐션 자산 셋이 같은 자리를 두고 서로 밀어내는 구조라, 안 밝히면 노출 수가 서로를 오염시킨다. */
+     리텐션 자산 셋이 같은 자리를 두고 서는 구조는 그대로다 — 다만 2026-08-26부터 순서가
+     당김형(문안) 먼저, push(되물음) 다음이다. 미뤄진 되물음은 askback_deferred 로 센다. */
   useEffect(() => {
     if (!dailyData || ritual || res) return;
     trackVisitOnce("daily_offered", {
       streak: streak ? streak.count : 0,
-      blocked_by_askback: !!askback,          // true 면 화면에 안 뜬 것 — 분모에서 빼고 읽어야 한다
+      /* 2026-08-26 우선순위 교체 — blocked_by_askback(문안이 되물음에 밀림)은 더는 일어나지 않는다.
+         이제 미루어지는 쪽은 되물음이다: askback_deferred=true 는 "되물음이 있었는데 문안 뒤로 밀렸다".
+         옛 속성명은 재사용하지 않는다 — 같은 이름이 반대 뜻이 되면 과거 데이터와 합산이 오염된다. */
+      askback_deferred: !!askback,
     });
   }, [!!dailyData, ritual, res, !!askback]);
+  useEffect(() => {
+    /* dailyData 가 있으면 되물음은 화면에 없다(문안 우선) — 노출 계측도 실제로 선 순간에만 */
+    if (!askback || dailyData || _askbackSeen.current) return;
+    _askbackSeen.current = true;
+    track("askback_shown", { dir: askback.direction || null, hours_since: Math.round((Date.now() - askback.at) / 3600000) });
+  }, [askback, !!dailyData]);
 
   const guardianIntro = saju && zo ? `나는 ${saju.nayin ? `'${saju.nayin.split("·")[1] || saju.nayin}'` : (saju.main === "수" ? "깊은 물결" : saju.main === "화" ? "꺼지지 않는 불꽃" : saju.main === "목" ? "자라나는 숲" : saju.main === "금" ? "벼려진 빛" : "단단한 대지")}의 기운을 두른, ${zo.el === "물" ? "안개처럼 흐르는" : zo.el === "불" ? "타오르는 형상의" : zo.el === "공기" ? "바람으로 된" : "산처럼 고요한"} 존재야.` : "";
 
@@ -5925,10 +5952,15 @@ export default function App() {
               {returning && streak && streak.count >= 2 && !res && (
                 <p className="streak">수호신과 연결된 지 {streak.count}일째</p>
               )}
-              {dailyData && !ritual && !res && !askback && !dailyOpen && (
+              {/* 우선순위(방향점검 2026-08-26 축1 선결 ①) — **문안(당김형)이 먼저, 되물음(push)은 그 다음.**
+                  예전엔 반대였다: 자원 배분에서 제외된 push 가 살아 있는 당김형 자산을 밀어냈고
+                  (blocked_by_askback 이 그 충돌을 세고 있었다), 그건 되물음 제외 결정의 진단
+                  ("모를 권리를 스스로 어긴 기능")과 어긋난 배치였다. 기능은 결정대로 남긴다 — 자리만 바꾼다.
+                  문안을 '받았어' 하면 dailyData 가 비므로 되물음은 같은 방문 안에서 곧바로 이어진다. */}
+              {dailyData && !ritual && !res && !dailyOpen && (
                 <button className="knock fade" onClick={() => { track("daily_opened", { streak: streak ? streak.count : 0 }); setDailyOpen(true); }}>수호신이 오늘의 하늘을 봐뒀어 — 들을래?</button>
               )}
-              {dailyData && !ritual && !res && !askback && dailyOpen && (
+              {dailyData && !ritual && !res && dailyOpen && (
                 <div className="daily fade">
                   <p className="dtag">아침 문안 · 오늘 하루만 — 자정에 사라져</p>
                   <p className="dmain">오늘은 <b>{dailyData.mood.k}</b>. {dailyData.mood.line}</p>
@@ -5936,7 +5968,7 @@ export default function App() {
                   <button className="btn ghost sm" onClick={() => { try { store.setItem(DAILY_KEY, todayStr()); } catch (_) {} track("daily_received", { streak: streak ? streak.count : 0 }); setDailySeen(true); }}>받았어</button>
                 </div>
               )}
-              {askback && !ritual && !res && (
+              {askback && !ritual && !res && !dailyData && (
                 <div className="daily fade">
                   <p className="dtag">지난 판결 · {askback.direction}</p>
                   <p className="dmain">지난번 물음 — "{askback.q}"</p>
@@ -6295,6 +6327,7 @@ export default function App() {
         <div className="readwrap">
           <button className="escx" onClick={() => setLetterOpen(false)} aria-label="닫기">✕</button>
           <div className="readbody">
+            <GuardianSealMini saju={saju} />
             <p className="dtag center">수호신의 서신 · {letterNo(records[letterIdx] || {})}</p>
             {letterDoc.chapters.map((c, i) => (
               <div key={i} className="rchap">

@@ -174,6 +174,11 @@ function autoChecks(v, cat, q, r1, r2) {
   /* 뒷면은 --full 일 때만 존재한다. 있으면 같은 잣대로 잰다 — 앞면만 조이면 모호함이 뒤로 숨는다 */
   if (r2) {
     c.push(vagueCheck(r2.subline, "subline"));
+    /* 2026-08-26: subline 용어도 잰다 — 248건 실측에서 subline 매치 33건을 앱 가드(verdict만)·
+       이 하네스(verdict만)·검진(범위 미검사) 셋 다 놓치고 있었다. 규칙 정본은 제1원칙(subline 금지).
+       ⚠ JARGON 은 부분일치라 오탐이 실재한다(「야무진」→무진) — 이 플래그는 자동 실패가 아니라
+       눈으로 거를 후보 목록이다. summary 에서 그렇게 읽을 것. */
+    if (JARGON.test(String(r2.subline || ""))) c.push(`subline용어(${(String(r2.subline).match(JARGON) || [])[1] || "?"})`);
     for (const rr of (Array.isArray(r2.reasons) ? r2.reasons : [])) c.push(vagueCheck(rr?.text, "근거"));
   }
   // 결론이 표에서 나왔는가. S3(넘김)와 REASK(앞 판결 승계)는 방향을 표가 정하지 않으므로 제외한다.
@@ -193,10 +198,10 @@ function autoChecks(v, cat, q, r1, r2) {
     c.push(r1 && r1.direction === "HOLD" ? "건강인데HOLD(답을 안 줌)" : "");
     c.push(EVASION.test(v) ? "회피" : "");
     c.push(isGeneric(v) ? "일반조언(지표없음)" : "");
-    c.push(v.length <= 50 ? "" : `길이초과(${v.length})`);
+    c.push(v.length <= 45 ? "" : `길이초과(${v.length})`);   // 판정 B-1: 프롬프트 상한(45)과 하네스 임계(50)가 달라 46~50자가 새고 있었다
     c.push(JARGON.test(v) ? "용어노출" : "");
   } else if (cat === "REASK") {                       // 되물음: 답을 줬는가, 앞 판결을 승계했는가
-    c.push(v.length <= 50 ? "" : `길이초과(${v.length})`);
+    c.push(v.length <= 45 ? "" : `길이초과(${v.length})`);   // 판정 B-1: 프롬프트 상한(45)과 하네스 임계(50)가 달라 46~50자가 새고 있었다
     c.push(JARGON.test(v) ? "용어노출" : "");
     c.push(EVASION.test(v) ? "회피" : "");
     // 7연속 HOLD 사고의 핵심: 되물음이 새 HOLD 를 만들어내던 것
@@ -204,7 +209,7 @@ function autoChecks(v, cat, q, r1, r2) {
     // 유저가 선택지를 줬으면 그중 하나가 답에 있어야 한다
     if (q?.must_pick && !q.must_pick.some((w) => v.includes(w))) c.push(`선택지회피(${q.must_pick.join("/")})`);
   } else {
-    c.push(v.length <= 50 ? "" : `길이초과(${v.length})`);
+    c.push(v.length <= 45 ? "" : `길이초과(${v.length})`);   // 판정 B-1: 프롬프트 상한(45)과 하네스 임계(50)가 달라 46~50자가 새고 있었다
     c.push(JARGON.test(v) ? "용어노출" : "");
     c.push(EVASION.test(v) ? "회피" : "");
     c.push(isGeneric(v) ? "일반조언(지표없음)" : "");
