@@ -812,15 +812,39 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
   /* 어디에 쓰이든 금지된 은유 — 읽고 나서 아무것도 모르는 말 */
   const VAGUE = /(그릇이|그릇이야|쥘\s*팔|팔\s*힘|기운이\s*흐르|자리가\s*비었어)/;
   const bad = good.filter((g) => VAGUE.test(g));
+  /* ── 0-f 앞면 금칙어 (작업배분 §6-2 · 2026-08-17 실측 반증) ────────────────
+     A-3 에서 프롬프트를 보강했는데 **60칸 재실행에서 용어 누출이 3→4로 늘었고
+     P7-Q17 은 같은 칸에서 같은 단어(「임오 대운」)가 그대로 재발했다.**
+     원인을 찾아보니 규칙이 약해서가 아니었다 — **SYS 의 (O) 예시 자체가 「무오 대운」을 쓰고 있었다.**
+     SYS 는 콜1(앞면)·콜2(뒷면) 공용이라, 뒷면용으로 쓴 그 예시를 모델이 앞면에도 적용한다.
+     이 검사(5-g)는 (O) 예시를 **은유로만** 재고 있어서 그게 그대로 통과했다.
+
+     그래서 규칙을 하나 더 세운다: **층 표시가 없는 (O) 예시는 앞면에도 적용될 수 있으므로
+     앞면 금칙어를 담으면 안 된다.** 뒷면 전용 예시는 `(O·뒷면)` 으로 표시하고 이 검사에서 뺀다.
+     ⚠ 금칙어 목록은 `eval/run-eval.mjs` 의 JARGON 과 **같은 것을 쓴다** — 검사와 평가가 다른 잣대를
+       쓰면 한쪽이 통과시킨 걸 다른 쪽이 잡고, 그 오탐이 진짜 실패를 가린다(A-4 에서 겪었다). */
+  const FRONT_JARGON = /(대운|간지|납음|나크샤트라|괘|변효|[0-9]효|무오|무진|촐킨|라이프패스|오행|납읍)/;
+  const jargonBad = good.filter((g) => FRONT_JARGON.test(g));
+  /* 하네스와 같은 목록인지 실제로 대조한다 — 주석으로만 "같다"고 적어 두면 갈린다 */
+  let sameAsEval = true;
+  try {
+    const ev = readFileSync("eval/run-eval.mjs", "utf8");
+    const m = ev.match(/const JARGON = (\/[^\n]*\/);/);
+    sameAsEval = !!m && m[1] === String(FRONT_JARGON);
+  } catch (_) {}
   /* 뒷면 모호함 금지 규칙 넷이 실재하는가 */
   const backRules = ["뜻이 안 서는 은유를 서술어로", "개수만 던지기", "추상명사로 도망가기", "판정을 유예하는 어미"]
     .filter((k) => sys.includes(k));
-  const ok = bad.length === 0 && good.length >= 15 && backRules.length === 4;
+  const ok = bad.length === 0 && jargonBad.length === 0 && sameAsEval && good.length >= 15 && backRules.length === 4;
   add(ok ? "정상" : "심각",
     ok ? `판결 프롬프트 — 모범 예시 ${good.length}개가 자기 금칙을 안 어김` : "판결 프롬프트의 모범 예시가 자기 금칙을 어김",
-    ok ? `(O) 예시 ${good.length}개 검사 · 뒷면 모호함 규칙 4종 있음`
-       : `위반 예시 ${bad.length}건${bad.length ? `: "${bad[0].slice(0, 40)}…"` : ""} · 예시 ${good.length}개 · 뒷면규칙 ${backRules.length}/4`,
-    "모델은 금지 조항보다 (O) 예시를 강하게 따릅니다. 예시 한 줄이 규칙 열 줄을 이깁니다 — 그래서 예시부터 지켜야 합니다.");
+    ok ? `(O) 예시 ${good.length}개 검사(은유 + 앞면 금칙어) · 하네스와 같은 목록 · 뒷면 모호함 규칙 4종 있음`
+       : [bad.length ? `은유 위반 ${bad.length}건: "${bad[0].slice(0, 34)}…"` : "",
+          jargonBad.length ? `앞면 금칙어 ${jargonBad.length}건: "${jargonBad[0].slice(0, 34)}…"` : "",
+          sameAsEval ? "" : "금칙어 목록이 eval 하네스와 다름",
+          good.length >= 15 ? "" : `예시 ${good.length}개(부족)`,
+          backRules.length === 4 ? "" : `뒷면규칙 ${backRules.length}/4`].filter(Boolean).join(" · "),
+    "모델은 금지 조항보다 (O) 예시를 강하게 따릅니다 — 예시 한 줄이 규칙 열 줄을 이깁니다. 실측 반증이 있습니다: A-3 에서 프롬프트를 보강했는데 같은 칸에서 같은 단어가 재발했고, 원인은 **(O) 예시 자체가 그 단어를 쓰고 있던 것**이었습니다. 뒷면 전용 예시는 `(O·뒷면)` 으로 표시해 앞면과 갈라 두세요.");
 }
 
 /* ── 검사 5-h. 궁합이 "점수 하나"로 뭉개지지 않는가 ────────────────────────

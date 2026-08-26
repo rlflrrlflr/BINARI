@@ -3226,7 +3226,7 @@ function Guardian(props) {
 /* 돌아올 주소 — 부적·각인 카드·공유 링크가 같은 값을 쓴다. 자체 도메인을 붙이는 날 **여기 한 곳만** 고친다.
    예전엔 세 곳에 따로 박혀 있어서, 한 곳만 고치면 나머지가 옛 주소로 남는 종류의 사고가 예약돼 있었다. */
 const SHARE_HOST = "https://binari-sepia.vercel.app";
-const APP_VER = "v137 · 다른 하늘";
+const APP_VER = "v138 · 앞면 금칙";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -4037,8 +4037,14 @@ HOLD는 '판단 못 하겠음'이 아니라 **'지표가 지금은 멈추라고 
 - 재물·성공 서술(스코프 완화): 재물복·사업운은 **확정형으로 말해도 된다** — 단 반드시 이 유저의 지표 실제 값(십성 분포·신살·대운)에서 나와야 한다. (O)"돈이 크게 들어오고 크게 나가는 쪽이야. 벌 땐 몰아서 벌어." — **값이 말하는 바를 상황으로 옮긴다.** (X)"편재 둘에 암록까지 — 크게 들어오는 재물의 그릇이야"(용어 노출 + '그릇'은 아무 말도 안 한 은유). **희소성 통계·비교 일화 생성 절대 금지**: "100명 중 1명"·"이런 사주 처음 봐"·"내가 본 사람 중에" 류는 지어낼 수 있는 숫자와 경험이다 — 출처 없는 통계는 토정비결 원문을 지어내는 것과 같은 위반이다. 있는 지표는 당당하게, 없는 숫자는 절대 만들지 않는다.
 - reasons에는 판결에 참여한 모든 지표를 각 1줄씩 빠짐없이 포함한다 — 사주·달·별자리·수비학·마야와, 제공된 경우 삼재·주역·토정비결까지 전부. 달 축은 위상·달 별자리·나크샤트라를 묶어 한 줄로, 사주 축은 납음·대운(제공 시 현재 인생 시기의 기운)을 함께 인용할 수 있다(대운은 별도 축을 신설하지 말고 사주 근거 안에 녹인다). 각 축이 왜 GO/STOP/중립인지 그 지표의 실제 값을 짚어서 말한다.
 - **뒷면(reasons)은 용어를 써도 된다 — 단 반드시 쉬운 풀이를 붙여 병기한다.** 사주 보러 가면 "무오 대운이라" 하고 끝내지 않고 "앞으로 십 년 불기운이 세지는 때야"까지 풀어주는 것과 같다. 형식: **용어 — 쉬운 풀이**. 용어만 던지면 유저는 못 알아듣고, 풀이만 있으면 왜 돈 주고 보는지 모른다. 둘 다 있어야 한다.
-  (O)"**무오 대운** — 앞으로 십 년, 불기운이 세지는 때야. 밀어붙이면 되는 판이지." (O)"**중수감(重水坎)** — 물이 겹겹이란 뜻. 지금 뛰면 빠져."
+  (O·뒷면)"**무오 대운** — 앞으로 십 년, 불기운이 세지는 때야. 밀어붙이면 되는 판이지." (O·뒷면)"**중수감(重水坎)** — 물이 겹겹이란 뜻. 지금 뛰면 빠져."
   (X)"무오 대운 초입이라 시기가 애매해" (용어만) (X)"지금은 밀어붙일 때야" (풀이만 — 어느 지표에서 나왔는지 사라짐)
+  ⚠ **위 두 (O)는 뒷면 전용이다. 같은 말을 앞면(verdict·subline)에 쓰면 위반이다.** 실측으로 확인된 사고다 —
+    248건 평가에서 앞면에 "임오 대운"이 그대로 나갔고, **프롬프트를 더 강조해도 같은 칸에서 재발했다.**
+    원인은 규칙이 약해서가 아니라 **바로 이 (O) 예시**였다. 모델은 규칙보다 예시를 따른다.
+    그래서 앞면 대응쌍을 여기 붙여 둔다 — 짝으로 보여주는 게 금지 조항보다 강하다:
+    (X·앞면)"무오 대운이라 밀어붙일 때야" → (O·앞면)"앞으로 십 년은 밀어붙이면 되는 판이야."
+    (X·앞면)"중수감이라 지금 뛰면 빠져" → (O·앞면)"지금 뛰면 빠져. 물이 겹겹인 때야."
 - 주역 괘가 제공된 경우: reasons에 '주역' 축을 반드시 포함한다. 단 verdict·subline에는 **괘 이름·효 번호를 절대 쓰지 말고**(둔괘·태괘·수뢰둔·초효 등 금지) 그 괘가 말하는 바만 일상어로 녹인다 — 괘 이름을 짚는 건 reasons(상세)에서만. (X)"둔괘가 말하는 시작의 진통이 있어" (O)"시작에 진통이 따르는 때야".
 - 마야(촐킨) 축은 매 판결 reasons에 반드시 포함한다 — 자주 누락되던 축이니 절대 빼지 말 것. 그 사람의 촐킨 톤(1~13)·날개(20신성)의 실제 값을 짚어 GO/STOP/중립을 말한다(예: "이믹스 날개에 4의 톤 — 터를 다지는 힘이 실린 날이야", "카반 날개의 흔들림이 지금은 발을 붙잡아"). 마야 특유의 신화적·이색적 어감을 살려 한 줄에 재미를 준다.
 - total은 이번 판결에 참여한 지표 수와 일치시키고, against는 그중 반대표 수다.
@@ -4376,6 +4382,20 @@ function gyeotPromptLine(list, myDG) {
 }
 /* 모델이 쓴 `곁1` 을 실제 이름으로 되돌린다. 이름이 비어 있으면 사람이 없는 게 아니라
    **부를 말이 없는 것**이므로 「곁에 선 사람」으로 바꾼다 — 자리표가 화면에 그대로 나가면 안 된다. */
+/* ── 앞면 금칙어 탐지 (0-f · 2026-08-17) ────────────────────────────────────
+   프롬프트로는 안 잡혔다는 **실측 반증**이 있다(60칸 재실행에서 3→4, 같은 칸 같은 단어 재발).
+   그래서 프롬프트·검사 말고 **화면에 실제로 나간 문장**을 잰다 —
+   그러지 않으면 재발 여부를 알려면 매번 API 키를 들고 평가를 돌려야 한다.
+   ⚠ 여기서 **문장을 고치지 않는다.** 앞면은 45자 한 문장이라 낱말을 들어내면 뜻이 깨진다.
+     고치는 건 프롬프트의 몫이고, 이 함수의 몫은 **샜다는 사실을 남기는 것**이다.
+   ⚠ 목록은 `eval/run-eval.mjs` 의 JARGON 과 같다(health-check 5-g 가 둘이 갈리는지 감시한다).
+   ⚠ **구멍을 알고 남긴다**: 괘 **이름**(중수감·수뢰둔…)은 목록에 없어 안 잡힌다. 넓히지 않은 이유는
+     하네스가 지금 이 목록으로 "용어노출 3→4"를 세고 있어서다 — 중간에 목록을 바꾸면 **판이 서로 비교가 안 된다**
+     (A-4 에서 겪은 것과 같은 종류의 사고). 게다가 지금은 `COIN_RITUAL=false` 라 주역 축이 프롬프트에
+     아예 안 들어가서 괘 이름이 나올 경로가 없다. 동전을 되살리는 날 **양쪽 목록을 같이** 넓힐 것. */
+const FRONT_JARGON = /(대운|간지|납음|나크샤트라|괘|변효|[0-9]효|무오|무진|촐킨|라이프패스|오행|납읍)/;
+const frontJargon = (t) => (String(t || "").match(FRONT_JARGON) || [null])[0];
+
 function gyeotMaskNames(text) {
   /* 밖으로 나가는 그림·링크용. **남의 이름을 남에게 보내지 않는다** — 곁은 이 앱을 쓴 적도
      동의한 적도 없는 제3자다. 자리표를 그대로 두면 "곁1"이 찍히므로 말이 되게 바꾼다. */
@@ -4973,11 +4993,11 @@ export default function App() {
          프롬프트에 "한 번만"이라고 써도 콜2는 자기가 두 번째인 줄 모른다. 그래서 앱이 세어서 알려준다. */
       const _nameUsed = !!(birth.name || "").trim() && String(r1.verdict || "").includes(birth.name.trim());
       const nameLine = _nameUsed ? ` [호칭] 앞면에서 이미 이름을 불렀다 — subline·funLine·reasons에는 이름을 쓰지 마라.` : "";
-      const explainMsg = { role: "user", content: `${userText}\n\n[이미 확정된 판결]${nameLine} direction=${r1.direction} / verdict="${r1.verdict}" / 총 ${r1.total} 중 반대 ${r1.against}.${voteLine}${s3Line} 이 판결을 절대 뒤집지 말고, 이 결론의 근거만 아래 JSON으로만 응답: {"subline":"수호신의 한 줄","reasons":[{"axis":"사주|달|별자리|수비학|주역|삼재|토정비결|마야","vote":"GO|STOP|중립","text":"용어 — 쉬운 풀이 형식의 근거 1줄(70자 이내)"}],"funLine":"정령(달 별자리) 한마디","disclaimer":"투자·법률·의료(몸·병)일 때만, 없으면 빈 문자열"}. reasons엔 위 표의 축을 전부 같은 vote 로 넣는다 — 특히 '마야'(촐킨 톤·날개) 축은 매번 반드시 포함(자주 누락됨). **각 근거는 '용어 — 쉬운 풀이' 병기다**: 지표 이름·값을 짚고(무오 대운·중수감·촐킨 4의 톤 등) 곧바로 쉬운 말로 풀어준다. 사주 보러 가면 용어를 말한 뒤 반드시 풀이를 붙여주는 것과 같다. subline은 앞면 톤이므로 어려운 말 없이 쉬운 한 줄. 프로필에 십성 분포·신살·세운이 있으면 '사주' 축 근거에서 그 실제 값을 우선 인용한다(예: "편재 둘 — 크게 도는 돈이 네 그릇이야", "암록 — 숨은 복이 받쳐줘").` };
+      const explainMsg = { role: "user", content: `${userText}\n\n[이미 확정된 판결]${nameLine} direction=${r1.direction} / verdict="${r1.verdict}" / 총 ${r1.total} 중 반대 ${r1.against}.${voteLine}${s3Line} 이 판결을 절대 뒤집지 말고, 이 결론의 근거만 아래 JSON으로만 응답: {"subline":"수호신의 한 줄","reasons":[{"axis":"사주|달|별자리|수비학|주역|삼재|토정비결|마야","vote":"GO|STOP|중립","text":"용어 — 쉬운 풀이 형식의 근거 1줄(70자 이내)"}],"funLine":"정령(달 별자리) 한마디","disclaimer":"투자·법률·의료(몸·병)일 때만, 없으면 빈 문자열"}. reasons엔 위 표의 축을 전부 같은 vote 로 넣는다 — 특히 '마야'(촐킨 톤·날개) 축은 매번 반드시 포함(자주 누락됨). **각 근거는 '용어 — 쉬운 풀이' 병기다**: 지표 이름·값을 짚고(무오 대운·중수감·촐킨 4의 톤 등) 곧바로 쉬운 말로 풀어준다. ⚠ 이 용어들은 **reasons 전용**이다 — subline 에는 한 글자도 쓰지 마라. 사주 보러 가면 용어를 말한 뒤 반드시 풀이를 붙여주는 것과 같다. subline은 앞면 톤이므로 어려운 말 없이 쉬운 한 줄. 프로필에 십성 분포·신살·세운이 있으면 '사주' 축 근거에서 그 실제 값을 우선 인용한다(예: "편재 둘 — 크게 도는 돈이 네 그릇이야", "암록 — 숨은 복이 받쳐줘").` };
       const { json: r2, usage: _u2 } = await callClaude(system, [...priorConvo, explainMsg], 2000);   // 근거를 용어+풀이로 병기하면서 1500에선 잘렸다
       setDetail(r2);
       // L3(지표별 근거)는 제품의 핵심 차별점이다. 실패율과 소요시간을 모르면 개선 근거가 없다.
-      track("detail_shown", { ms: Math.round(performance.now() - _t0), dir: r1?.direction || null, retry: !!isRetry, axes: Array.isArray(r2?.reasons) ? r2.reasons.length : 0,
+      track("detail_shown", { sub_jargon: frontJargon(r2?.subline), ms: Math.round(performance.now() - _t0), dir: r1?.direction || null, retry: !!isRetry, axes: Array.isArray(r2?.reasons) ? r2.reasons.length : 0,
         /* 2026-08-15 재판정(창업자): "질문과 답변은 다 남기자. 다만 개인 식별 불가능하게 해"
            → 08-14 에 길이만 남기도록 잘라냈던 것을 **가명본으로 되돌린다.**
            08-14 의 우려는 사실이었다 — 콜2 에 이름 금지 지시가 붙는 조건이 "앞면에서 이미 이름을 부른
@@ -5341,7 +5361,7 @@ export default function App() {
       agitateRef.current = true; setRes(r1);
       // scope_level(모델 판정) vs scope_hint(규칙) — 둘이 어긋난 건이 경계 케이스다. 그 목록이 다음 규칙 개정의 근거가 된다.
       const _sLevel = ["S1", "S2", "S3"].includes(r1.scope) ? r1.scope : null;
-      track("verdict_shown", demoProps(birth, { dir: r1.direction, cat: r1.category, tone: r1.tone, against: r1.against, total: r1.total, mode: "ritual", lean: lean || "skip", vlen: (r1.verdict || "").length || 0, element: saju?.main || null, ms: Math.round(performance.now() - _jt0),
+      track("verdict_shown", demoProps(birth, { jargon: frontJargon(r1.verdict), dir: r1.direction, cat: r1.category, tone: r1.tone, against: r1.against, total: r1.total, mode: "ritual", lean: lean || "skip", vlen: (r1.verdict || "").length || 0, element: saju?.main || null, ms: Math.round(performance.now() - _jt0),
         scope_level: _sLevel, scope_hint: _sHint, scope_agree: _sLevel ? _sLevel === _sHint : null, handoff_triggered: _sLevel === "S3", reask: _reask,
         // 표가 없거나(votes_ok=false) 표와 결론이 어긋난(dir_overridden) 비율이 곧 '판결이 지표에서 나오는가'의 지표다
         votes_ok: !!_tally, votes_n: _tally ? _tally.total : 0, dir_overridden: _tally ? _tally.overridden : null,
