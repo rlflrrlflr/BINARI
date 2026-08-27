@@ -3459,18 +3459,40 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v141.2 · 밝은 판 글자";
+const APP_VER = "v142.1 · 밝은 판 글자";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
    분업: 무료 카드는 '어느 쪽'(방향)에 답하고, 서신은 '언제·누구와·무엇을 걸고'에 답한다. */
-/* ── 동전 의식 스위치 (v129.2, 창업자 지시 "일단 없애보자 허들같아보여서") ──────
+/* ── 동전 의식 (v140, 창업자 지시 "C 다시 넣자 · 확실한 엔터테인먼트 요소가 되도록") ──────
+   ⚠ **켠 이유가 둘이다. 둘 다 적어 둔다 — 하나만 알면 다음 세션이 잘못 끈다.**
+     ① **재미** — 운세가 줄 수 있는 재미 넷(나에 대한 서술 / 단언 / 우연의 연출 / 관계) 중
+        '우연의 연출'을 담당한다. **재미가 결과 전에 일어나는 유일한 축**이다(슬롯을 당기는 손맛).
+        그리고 이것만이 데일리 리텐션 조건 ①을 정직하게 채운다 — **명식은 평생 안 바뀌지만
+        오늘 던진 동전은 매일 다르다.** 게다가 유저가 던지므로 조건 ②(유저가 넣은 것)도 일부 붙는다.
+     ② **마찰** — 창업자 판단(2026-08-27): *"무료로 바꾼 이상 일정 허들은 남겨야겠어."*
+        지금 세 상품이 전부 값을 표시하고 무료로 나간다. **여기서 마찰은 버그가 아니라 기능이다.**
+        돈이 아니라 주의(注意)로 값을 받는 자리다. 그래서 **「한 번에 던지기」를 없앴다** —
+        그 버튼이 있으면 재미도 마찰도 둘 다 무너진다.
+
+   ⚠ **끄기 전 기준선(v129.2 시점, 60일·외부)**: 사람 14명 · 판결 요청 103 · 성사 101(98%).
+     당시 껐던 사유는 *"허들같아보여서"* 였는데, **중도 이탈이 계측에 안 잡혀 검증이 불가능한 추측이었다.**
+     지금은 잰다 — `ritual_started` · `ritual_tossed`(회차·변효 여부·쥔 시간) · `ritual_abandoned`.
+     **다시 끄려면 이 셋을 먼저 읽어라.** 감으로 껐다 켰다 하지 않는다.
+
+   ⚠ **수호신 렌더와 결합하지 않았다 (2026-08-27).** 디자인 세션이 수호신을 도트→홀로그램으로
+     바꾸는 것을 검토 중이다. 그래서 의식의 시각 요소는 전부 `.hexpanel` 안에서 자족한다 —
+     캔버스·셰이더·`texture()` 를 참조하지 않는다. 유일한 접점은 기존 `agitateRef`(낙착마다 존재가
+     일렁인다) 하나뿐이고, 그건 없어도 의식이 성립한다. **수호신이 바뀌어도 이 화면은 안 고쳐도 된다.**
+
+   ── 아래는 v129.2 당시 기록(보존) ──────────────────────────────────────
    질문을 적고 '판결을 청한다'를 누르면 동전 셋을 여섯 번 던지는 화면이 끼어 있었다.
    지금은 건너뛰고 곧장 판결로 간다. 주역 괘는 그 던지기에서 나오므로 **주역 축이 함께 빠진다**
    (SYS 가 "주역 괘[유저가 동전으로 청한 경우만]"이라 hexInfo 가 null 이면 자연히 제외된다).
 
    ⚠ 되돌리려면 이 한 줄만 true 로. 의식 화면·던지기 함수·괘 계산은 지우지 않고 그대로 뒀다 —
      "일단"이라는 지시라 언제든 되돌릴 수 있어야 하고, 지웠다가 되살리면 같은 물건이 안 나온다.
+     → **그 판단이 옳았다.** 2026-08-27 에 한 줄로 되살렸고 같은 물건이 그대로 나왔다.
 
    측정 주의: 예전엔 question_asked 가 **던지기가 끝난 뒤에** 발사돼서, 동전 화면에서 이탈한
    사람은 아무 흔적도 안 남겼다 — 허들인지 잴 방법 자체가 없었다. 그래서 버튼을 누른 순간
@@ -3478,7 +3500,7 @@ const APP_VER = "v141.2 · 밝은 판 글자";
    끄기 직전 기준선(60일·외부): 사람 14명 · 판결 요청 103건 · 판결 성사 101건.
    person 단위로는 막힌 사람이 0명이었다(깨운 14명 전원이 결국 질문함) — 다만 중도 이탈은
    위 이유로 안 보였으므로, '허들이 아니었다'는 증거는 아니다. */
-const COIN_RITUAL = false;
+const COIN_RITUAL = true;
 
 const LETTER_PRICE = 4900;
 const LETTER_SECTIONS = ["네가 망설인 자리", "여덟 글자가 이 일을 보는 눈", "언제 — 흐름과 움직일 날", "누구와 — 도울 사람, 몫을 갈라 둘 자리", "무엇을 걸고 — 이 판결이 틀릴 조건까지"];
@@ -5071,6 +5093,9 @@ export default function App() {
   const [tosses, setTosses] = useState([]);
   const [hexInfo, setHexInfo] = useState(null);
   const [tossing, setTossing] = useState(false);   // v22: 동전이 공중에 떠 있는 0.75초
+  const [charging, setCharging] = useState(false); // v140: 쥐고 있는 동안 — 손 안에서 구른다
+  const [flyMs, setFlyMs] = useState(750);         // v140: 이번 던지기의 체공 시간(쥔 시간에 비례)
+  const chargeRef = useRef(0);
   /* v132 곁 탭 (곁탭IA v01 §6 단계 1) — 하단 탭 둘. 판결 탭은 **문구 하나도 안 바꾼다**, 껍데기만 씌운다.
      탭 도입은 이 리포에서 충돌면이 제일 넓은 변경이라(App.jsx 렌더 루트) 단계를 쪼개 올린다.
      지금 단계는 껍데기 + 곁 탭 1층(내 수호신)까지다. 곁 목록·부르기·궁합 이동은 다음 단계. */
@@ -5219,8 +5244,38 @@ export default function App() {
       setTimeout(() => judge(hi), 800);
     }
   };
-  const toss = () => { if (tosses.length >= 6 || busy || tossing) return; setTossing(true); setTimeout(() => { setTossing(false); agitateRef.current = true; setTimeout(() => { agitateRef.current = false; }, tosses.length >= 5 ? 1400 : 600); finalize([...tosses, oneCoin()]); }, 750); }; // v23: 낙착마다 존재가 일렁인다
-  const tossAll = () => { if (tosses.length >= 6 || busy || tossing) return; setTossing(true); setTimeout(() => { setTossing(false); agitateRef.current = true; setTimeout(() => { agitateRef.current = false; }, 1400); const nt = [...tosses]; while (nt.length < 6) nt.push(oneCoin()); finalize(nt); }, 900); }; // 한 번에
+  /* v140 던지기 — 쥐었다 놓는다.
+     ⚠ **쥔 시간은 결과에 영향을 주지 않는다.** 체공 시간만 늘어난다.
+       손맛을 위해 결과를 손에 맡기는 척하면, 그건 우리가 프롬프트에서 금지하는 '지어낸 숫자'와 같다.
+       그래서 `oneCoin()` 은 held 를 아예 안 받는다 — 실수로도 섞이지 않게 인자에서 끊어 둔다.
+     ⚠ 마지막 여섯 번째만 뜸을 더 들인다(+260ms). 절정은 길어야 절정이다. */
+  const toss = (held = 0) => {
+    if (tosses.length >= 6 || busy || tossing) return;
+    const last = tosses.length === 5;
+    const fly = 620 + Math.round(Math.min(held, 1200) * 0.28) + (last ? 260 : 0);
+    setFlyMs(fly); setTossing(true);
+    setTimeout(() => {
+      setTossing(false);
+      agitateRef.current = true;                                   // v23: 낙착마다 존재가 일렁인다(수호신이 바뀌어도 무해)
+      setTimeout(() => { agitateRef.current = false; }, last ? 1400 : 600);
+      const c = oneCoin();
+      track("ritual_tossed", { n: tosses.length + 1, v: c.v, moving: c.v === 6 || c.v === 9, held_ms: Math.min(held, 1200) });
+      finalize([...tosses, c]);
+    }, fly);
+  };
+  const startCharge = () => { if (tosses.length >= 6 || busy || tossing) return; chargeRef.current = Date.now(); setCharging(true); };
+  const cancelCharge = () => { chargeRef.current = 0; setCharging(false); };
+  /* onClick 이 실제 던지기다 — pointerup 이든 키보드(Enter/Space)든 항상 온다.
+     pointerdown 은 '쥐는 연출'만 켠다. 둘을 나눠야 접근성이 안 깨진다. */
+  const doThrow = () => {
+    const held = chargeRef.current ? Date.now() - chargeRef.current : 0;
+    chargeRef.current = 0; setCharging(false);
+    toss(held);
+  };
+  const abandonRitual = () => {
+    track("ritual_abandoned", { thrown: tosses.length, qlen: q.trim().length });
+    setRitual(false); setTosses([]); setHexInfo(null); cancelCharge();
+  };
 
   // v15: 콜2 — 확정된 판결의 '근거'만 풀어쓴다(백그라운드, 클릭 전에 미리 로드)
   const fetchDetail = async (system, priorConvo, userText, r1, isRetry = false) => {
@@ -5728,6 +5783,14 @@ export default function App() {
   };
 
   const asking = phase >= 1 && awake && !res && !busy && !ritual;   // v55: 수호신이 물러난 순수 질문입력 구간
+  /* v140 — 방금 떨어진 한 번. 변효(6=노음·9=노양)면 그 자리를 짚어 준다.
+     ⚠ 뜻을 먼저, 이름은 안 붙인다(§용어 은닉 v112). "노양이야"는 아무 말도 안 한 것과 같다. */
+  const lastToss = tosses.length ? tosses[tosses.length - 1] : null;
+  const moveCue = !lastToss ? "" : lastToss.v === 9
+    ? "셋 다 앞이야 — 가득 찼다는 뜻이고, 가득 찬 건 다음에 기울어. 이 자리는 이미 돌기 시작했어."
+    : lastToss.v === 6
+      ? "셋 다 뒤야 — 바닥까지 닿았다는 뜻이고, 바닥에 닿은 건 되올라와. 여기가 접히는 자리야."
+      : "";
   /* v104: 몸·병·임신출산(S3)에는 서신을 팔지 않는다.
      S3에서 우리가 하는 일은 '판단을 넘기는 것'인데, 넘긴 판단에 4,900원을 받으면 그건 파는 게 아니라 등치는 거다.
      모델 판정(res.scope)과 규칙 판정(scopeHint) 중 하나라도 S3면 버튼을 숨긴다 — 안전 쪽으로 틀린다. */
@@ -6265,10 +6328,11 @@ export default function App() {
                       if (!q.trim()) { setErr("먼저 질문을 적어줘."); return; }
                       setErr("");
                       track("judge_requested", { ritual: COIN_RITUAL, qlen: q.trim().length });
-                      if (COIN_RITUAL) setRitual(true); else { setTosses([]); setHexInfo(null); judge(null); }
+                      if (COIN_RITUAL) { track("ritual_started", { qlen: q.trim().length, nth_verdict: records.length }); setRitual(true); }
+                      else { setTosses([]); setHexInfo(null); judge(null); }
                     }} disabled={busy}>판결을 청한다</button>
                   </div>
-                  <p className="fine">{COIN_RITUAL ? "동전 셋을 던져 하늘의 뜻을 묻는다 — 무엇을 묻든 같은 무게로 본다." : "무엇을 묻든 같은 무게로 본다."}</p>
+                  <p className="fine">{COIN_RITUAL ? "동전 셋을 여섯 번 던져서 묻는다 — 무엇을 묻든 같은 무게로 본다. 값은 안 받지만 손은 빌려줘야 해." : "무엇을 묻든 같은 무게로 본다."}</p>
                 </div>
               )}
               {/* v105.2 서신함 — 유료로 산 것이니 홈에서 언제든 다시 열린다.
@@ -6373,26 +6437,42 @@ export default function App() {
                   <label className="resetlink" style={{ cursor: "pointer" }}>기억 불러오기<input type="file" accept="application/json" style={{ display: "none" }} onChange={(e) => e.target.files && e.target.files[0] && importMemory(e.target.files[0])} /></label>
                 </div>
               )}
+              {/* v140 의식 — 재미와 마찰을 같은 동작 하나로 받는다(위 COIN_RITUAL 주석 참조).
+                  ⚠ 이 블록은 **수호신 렌더에 의존하지 않는다.** 디자인 세션이 도트→홀로그램으로 바꿔도
+                    여기는 안 고쳐도 된다. 색은 오행 하나(--elc)만 빌리고 형상은 안 빌린다. */}
               {ritual && !res && (
                 <div className="hexpanel fade">
                   <p className="qquote">“{q}”</p>
                   <p className="sub2">물음을 마음에 붙들고 — 동전 셋, 여섯 번.</p>
                   <div className="coinstage">
-                    {tossing && <><span className="coin fly" /><span className="coin fly c2" /><span className="coin fly c3" /></>}
-                    {!tossing && tosses.length > 0 && <p className="coins">{tosses[tosses.length - 1].coins.map((c, i) => <span key={i}>{c === 3 ? "● 앞" : "○ 뒤"}</span>)}</p>}
+                    {tossing
+                      ? <>{[0, 1, 2].map((i) => <span key={i} className={"coin fly" + (i ? " c" + (i + 1) : "")} style={{ animationDuration: flyMs + "ms" }} />)}</>
+                      : charging
+                        ? <>{[0, 1, 2].map((i) => <span key={i} className={"coin charge" + (i ? " c" + (i + 1) : "")} />)}</>
+                        : lastToss && <p className="coins">{lastToss.coins.map((c, i) => <span key={i} className={c === 3 ? "cface" : "cback"}>{c === 3 ? "● 앞" : "○ 뒤"}</span>)}</p>}
                   </div>
                   <div className="hexlines">
                     {tosses.map((l, idx) => (
-                      <div key={idx} className="hline on drop">
+                      <div key={idx} className={"hline on drop" + (l.v === 6 || l.v === 9 ? " mvline" : "")}>
                         {l.v % 2 ? <span className="yang" /> : <span className="yin" />}
                         {(l.v === 6 || l.v === 9) && <i className="mv">●</i>}
                       </div>
                     ))}
                   </div>
+                  {/* 변효(6·9)는 네 번에 한 번꼴로 나온다 — 절정이 될 만큼 드물고, 기다릴 만큼 잦다.
+                      뜻을 먼저 말하고 이름은 안 붙인다(§용어 은닉). */}
+                  {!tossing && moveCue && <p className="movecue fade">{moveCue}</p>}
                   {tosses.length < 6
-                    ? <div className="row gap center"><button className="btn gold" onClick={toss} disabled={busy || tossing}>{tossing ? "동전이 공중에…" : `동전을 던진다 (${tosses.length}/6)`}</button><button className="btn ghost" onClick={tossAll} disabled={busy || tossing}>한 번에 던지기</button></div>
-                    : <p className="sub2 mt">{busy ? "조각들이 합의하는 중…" : hexInfo && (<>괘가 맺혔어 — <b>{hexInfo.name}</b>{hexInfo.moving.length > 0 && <> · 기운은 <b>{hexInfo.toName}</b> 쪽으로 움직이고 있어</>}</>)}</p>}
-                  {!busy && !tossing && tosses.length < 6 && <button className="resetlink" onClick={() => { setRitual(false); setTosses([]); setHexInfo(null); }}>물음을 고칠래</button>}
+                    ? <div className="w100">
+                        <button className="btn gold throwbtn" onPointerDown={startCharge} onPointerLeave={cancelCharge} onPointerCancel={cancelCharge} onClick={doThrow} disabled={busy || tossing}>
+                          {tossing ? "동전이 공중에…" : charging ? "손 안에서 구르는 중… 놓으면 던져져" : `쥐었다 놓아 던진다 (${tosses.length}/6)`}
+                        </button>
+                        <p className="fine">{tosses.length === 5 ? "마지막 한 번이야." : "오래 쥐고 있어도 돼 — 손에 머무는 시간만 길어지고, 나오는 건 하늘이 정해."}</p>
+                      </div>
+                    /* ⚠ 대기 문구를 여기서 반복하지 않는다 — 위 `.brooding` 이 의식과 무관하게 이미 띄운다.
+                         v140 에서 둘이 같은 문장을 동시에 그려 검사가 strict mode 로 깨졌다(brood-check ②·④). */
+                    : hexInfo && <p className="sub2 mt">괘가 맺혔어 — <b>{hexInfo.name}</b>{hexInfo.moving.length > 0 && <> · 기운은 <b>{hexInfo.toName}</b> 쪽으로 움직이고 있어</>}</p>}
+                  {!busy && !tossing && tosses.length < 6 && <button className="resetlink" onClick={abandonRitual}>물음을 고칠래</button>}
                 </div>
               )}
               {err && (
@@ -7001,6 +7081,23 @@ const CSS = `
 .coinstage{min-height:34px;display:flex;align-items:center;justify-content:center;gap:14px}
 .coin.fly{animation:coinFly .75s ease-out both}
 .coin.fly.c2{animation-delay:.09s}.coin.fly.c3{animation-delay:.17s}
+/* v140 쥐는 연출 — 손 안에서 굴러 모인다. 결과와 무관한 순수 연출이다(App 주석 참조) */
+.coin.charge{animation:coinCharge .42s ease-in-out infinite}
+.coin.charge.c2{animation-delay:.07s}.coin.charge.c3{animation-delay:.14s}
+@keyframes coinCharge{0%,100%{transform:translateY(0) rotate(0);filter:brightness(1)}25%{transform:translateY(-3px) rotate(-15deg);filter:brightness(1.35)}75%{transform:translateY(2px) rotate(13deg);filter:brightness(1.1)}}
+/* 눌러서 던지는 버튼 — 스크롤·길게눌러 선택이 끼어들면 손맛이 죽는다 */
+.throwbtn{touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.throwbtn:active{transform:scale(.97)}
+/* ⚠ 클래스명 .cf 는 쓰지 마라 — 이미 확신도 꼬리표 컴포넌트가 그 이름을 쓴다(테두리 있는 작은 칩).
+   v140 에서 실제로 충돌해 동전 「앞」에 남의 테두리가 붙어 나왔다(실물 스샷에서 잡았다).
+   ⚠⚠ 그리고 이 주석 자체가 두 번째 사고를 냈다 — 처음엔 백틱으로 감쌌는데,
+      이 CSS 는 **템플릿 리터럴 안**이라 백틱이 리터럴을 끊어 버려 빌드가 죽었다.
+      **CSS 블록 안 주석에는 백틱을 쓰지 마라.** */
+.coins .cface{color:#ffe9ad;text-shadow:0 0 10px rgba(255,233,173,.5)}
+.coins .cback{color:#8a7f95}
+/* 변효 — 이 효만 밝게. 절정이 절정으로 보여야 한다 */
+.hline.mvline .yang,.hline.mvline .yin{box-shadow:0 0 18px rgba(255,233,173,.95);filter:brightness(1.4)}
+.movecue{font-size:13.5px;line-height:1.65;color:#ffe9ad;margin:2px 0 0;text-align:center;max-width:280px}
 @keyframes coinFly{0%{transform:translateY(26px) rotateX(0);opacity:0}18%{opacity:1}55%{transform:translateY(-24px) rotateX(540deg)}100%{transform:translateY(0) rotateX(1080deg);opacity:1}}
 .hline.drop{animation:hexDrop .5s cubic-bezier(.2,.8,.3,1.25) both}
 @keyframes hexDrop{from{opacity:0;transform:translateY(-16px) scaleX(.6);filter:brightness(2.6)}to{opacity:1;transform:none;filter:none}}
@@ -7298,7 +7395,7 @@ sup.impfx{font-size:9px;color:#c98f3d;vertical-align:super;margin-left:2px}
 .vlogmeta b{font-weight:600}.lgo{color:#3dc98f}.lstop{color:#e05a5a}.lhold{color:#7f8fd4}
 .vlogrow{cursor:pointer;transition:border-color .2s}.vlogrow:hover{border-color:rgba(201,143,61,.4)}.vlogrow.open .vlogq{white-space:normal;overflow:visible}.vlogverdict{margin:5px 0 0;font-size:13px;color:#e7dcf5;line-height:1.55;border-top:1px solid rgba(255,255,255,.09);padding-top:5px}
 @media(max-width:520px){.stage{padding:20px 10px 72px}.scene{max-width:100%}.gpanel{width:95vw;padding:0}.grid16{gap:6px}}
-@media(prefers-reduced-motion:reduce){.fade,.line,.spark,.mcard,.chip.on,.halo.busy,.brooding,.forming,.persp.cardIn,.hline .mv,.rv,.gateflash{animation:none;transition:none;opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.fade,.line,.spark,.mcard,.chip.on,.halo.busy,.brooding,.forming,.persp.cardIn,.hline .mv,.rv,.gateflash,.coin.charge,.coin.fly,.hline.drop{animation:none;transition:none;opacity:1;transform:none}}
 `;
 
 export { calcSaju, sunLongitude, equationOfTime, cityLon, cityLat, moonLongitude, tzolkin, moonPlacements,

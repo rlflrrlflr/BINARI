@@ -2,6 +2,7 @@
 // 비나리 v16 런타임 스모크 테스트 — 모바일 뷰포트, 온보딩→수호신→의식 실패 복구→재회(localStorage)
 import { createRequire } from "node:module";
 import { mkdirSync } from "node:fs";
+import { throwCoins } from "./ritual.mjs";   // v140: 의식이 켜져 있으면 여섯 번 던져 통과
 const require = createRequire(import.meta.url);
 let pw; try { pw = require("playwright"); } catch { pw = require("/opt/node22/lib/node_modules/playwright"); }
 const { chromium } = pw;
@@ -71,6 +72,7 @@ try {
   await page.locator("textarea.qbox").fill("이직할까?");
   await page.waitForTimeout(300);
     await page.getByRole("button", { name: "판결을 청한다" }).click();
+    await throwCoins(page);
   await page.waitForSelector("text=판결이 닿지 못했어", { timeout: 12000 });
   check("의식 실패: '다시 청하기' 노출", await page.getByRole("button", { name: "다시 청하기" }).isVisible());
   check("의식 실패: '질문을 고칠래' 노출", await page.getByRole("button", { name: "질문을 고칠래" }).isVisible());

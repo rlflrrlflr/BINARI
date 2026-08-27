@@ -1,6 +1,7 @@
 // v29 회귀 — ①회상 나레이션 선택 시작하면 숨김 ②자기소개 탄생 순간에만 ③정독 스로틀 하에도 판결 렌더 정상
 // 실행: preview 기동 후 node e2e/v29-check.mjs
 import { createRequire } from "node:module";
+import { throwCoins } from "./ritual.mjs";   // v140: 의식이 켜져 있으면 여섯 번 던져 통과
 const require = createRequire(import.meta.url);
 let pw; try { pw = require("playwright"); } catch { pw = require("/opt/node22/lib/node_modules/playwright"); }
 const { chromium } = pw;
@@ -51,6 +52,7 @@ await page.waitForTimeout(300);
 // ── ③ 정독 스로틀 하에서 판결 렌더 정상 ──
 await page.locator("textarea.qbox").fill("이 길로 가도 될까?"); await page.waitForTimeout(300);
 await page.getByRole("button", { name: "판결을 청한다" }).click();
+await throwCoins(page);
 let verdictOk = false;
 for (let i = 0; i < 40; i++) { if (((await page.locator(".vv").allTextContents())[0] || "").includes("망설이지 마")) { verdictOk = true; break; } await page.waitForTimeout(300); }
 ck("③ 스로틀 중에도 판결 L1 렌더", verdictOk);

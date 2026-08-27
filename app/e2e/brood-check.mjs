@@ -9,6 +9,7 @@
    ⚠ 여기서 제일 중요한 검사는 ②다 — 셰이더 좌표계 부호를 잘못 잡으면 '하강'이 조용히
      '상승'이 된다. 코드는 멀쩡히 돌고 화면도 그럴듯해서 눈으로는 못 잡는다. 픽셀로 잰다. */
 import { createRequire } from "node:module";
+import { throwCoins } from "./ritual.mjs";   // v140: 의식이 켜져 있으면 여섯 번 던져 통과
 const require = createRequire(import.meta.url);
 let pw; try { pw = require("playwright"); } catch { pw = require("/opt/node22/lib/node_modules/playwright"); }
 const { chromium } = pw;
@@ -64,6 +65,7 @@ ck("① 대기 전 수호신이 그려진다", band.length >= 6 && lumAvg > 0,
 
 await page.locator("textarea.qbox").fill("이직할까?");
 await page.getByRole("button", { name: "판결을 청한다" }).click();
+await throwCoins(page);
 await page.waitForTimeout(2200);                       // 벼름이 거의 다 잠긴 시점
 
 ck("② 대기 문구가 뜬다(동전 끄면서 사라졌던 것)",
@@ -109,6 +111,7 @@ if (idle && after) {
   const base = await (async () => { const m = measure; return null; })();
   await p2.locator("textarea.qbox").fill("이직할까?");
   await p2.getByRole("button", { name: "판결을 청한다" }).click();
+  await throwCoins(p2);
   await p2.waitForTimeout(2000);
   const brood = await p2.evaluate(() => {
     const cv = document.querySelector("canvas"); if (!cv) return null;
