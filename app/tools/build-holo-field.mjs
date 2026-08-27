@@ -20,9 +20,8 @@ const EL_COLOR = new Function("return " + SRC.match(/const EL_COLOR = (\{[\s\S]*
 
 const FIELD_FRAG = `
 precision highp float;
-uniform vec2  u_res;
+uniform vec2  u_res, u_off;
 uniform float u_t, u_form, u_orb, u_warm, u_speed, u_lum, u_sink, u_grain;
-uniform vec2  u_off;   // 칸의 좌하단 원점 — gl_FragCoord 는 **창 기준**이라 빼 줘야 칸마다 중심이 맞는다
 uniform vec3  u_c1, u_c2, u_c3, u_bg;
 
 float hash(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453123); }
@@ -30,55 +29,50 @@ float vnoise(vec2 p){
   vec2 i=floor(p), f=fract(p); vec2 u=f*f*(3.0-2.0*f);
   return mix(mix(hash(i),hash(i+vec2(1,0)),u.x), mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),u.x), u.y);
 }
-float fbm(vec2 p){
-  float s=0.0, a=0.5;
-  for(int i=0;i<5;i++){ s+=a*vnoise(p); p*=2.02; a*=0.5; }
-  return s;
-}
+/* ⚠ **옥타브를 3으로 줄였다.** 5옥타브 fbm 은 고주파가 살아 연기·대리석처럼 보인다 —
+   레퍼런스는 **매끄러운 저주파 그라데이션**이다. 결이 아니라 '면'이 흘러야 한다. */
+float fbm(vec2 p){ float s=0.0,a=0.55; for(int i=0;i<3;i++){ s+=a*vnoise(p); p*=2.03; a*=0.5; } return s; }
+
 void main(){
   vec2 uv=(gl_FragCoord.xy-u_off-0.5*u_res)/min(u_res.x,u_res.y);
-  uv.y += u_sink*0.10;                                  // 무거운 날은 내려앉는다
+  uv.y += u_sink*0.06;
+  vec2 p = uv*2.35;
 
-  /* 오행 = 비등방. 색만 다르면 다섯이 같은 공으로 보인다. 응축하면 다섯 다 둥글어진다. */
-  vec2 an = u_form<0.5 ? vec2(1.30,0.74)                // 화 — 세로로 솟는다
-          : u_form<1.5 ? vec2(0.72,1.34)                // 수 — 옆으로 눕는다
-          : u_form<2.5 ? vec2(1.14,0.84)                // 목 — 위로 뻗는다
-          : u_form<3.5 ? vec2(1.00,1.00)                // 금 — 매끈한 구
-                       : vec2(0.86,1.16);               // 토 — 넓고 낮게
-  an = mix(an, vec2(1.0), u_orb*0.85);
-  vec2 p = uv*an*2.50;                                  // 줌아웃 — 바탕이 보여야 오라가 된다
+  float t = u_t*u_speed*0.45;
+  /* 저주파 워핑 — 색 경계를 천천히 밀어 준다(유기적 유영). 진폭만 크고 주파수는 낮다. */
+  vec2 w = vec2(fbm(p*0.52+vec2(0.0,t*0.30)), fbm(p*0.52+vec2(6.3,2.1)-t*0.24));
 
-  float t = u_t*u_speed;
-  /* 도메인 워핑 — 이 세 줄이 "유기체처럼 흘러다님"의 전부다 */
-  vec2 q = vec2(fbm(p+vec2(0.0,t*0.13)), fbm(p+vec2(5.2,1.3)-t*0.10));
-  vec2 r = vec2(fbm(p+1.9*q+vec2(1.7,9.2)+t*0.08), fbm(p+1.9*q+vec2(8.3,2.8)-t*0.06));
-  float f = fbm(p+2.1*r);
+  /* 색 띠 두 장 — 이게 레퍼런스의 '3색 메시 그라데이션'이다.
+     방향은 오행마다 다르다(형태를 못 쓰는 대신 결의 방향으로 가른다). */
+  vec2 d1 = u_form<0.5 ? vec2( 0.55, 0.84) : u_form<1.5 ? vec2( 0.95,-0.30)
+          : u_form<2.5 ? vec2(-0.30, 0.95) : u_form<3.5 ? vec2( 0.72, 0.69) : vec2(-0.80,-0.60);
+  vec2 d2 = vec2(-d1.y, d1.x);
+  float g1 = smoothstep(-1.05, 1.05, dot(p,d1) + (w.x-0.5)*2.4);
+  float g2 = smoothstep(-0.85, 1.15, dot(p,d2) + (w.y-0.5)*2.2);
+  vec3 col = mix(u_c1, u_c2, g1);
+  col = mix(col, u_c3, g2*0.72);
+  col += vec3(u_warm*0.10, u_warm*0.03, -u_warm*0.09);
 
-  /* 마스크 — 가장자리를 노이즈로 흔들어 원이 아니게. 응축하면 흔들림이 줄어 공이 된다. */
-  float rad  = length(p);
-  float wob  = (f-0.5)*mix(0.44,0.12,u_orb) + (r.x-0.5)*mix(0.22,0.05,u_orb);
-  float edge = mix(0.62, 0.50, u_orb);
-  float m    = smoothstep(edge+0.34, edge-0.26, rad+wob);
+  /* 구(球) — 위에서 빛이 든다.
+     ⚠ normalize(p) 로 각도를 쓰면 **중심에 특이점**이 생기고(뾰족한 얼룩) 원뿔형 그라데이션이 된다.
+        첫 판이 그랬다. 정규화 없이 **선형 방향광**으로 쓴다. */
+  float R = mix(0.86, 0.72, u_orb);
+  float d = length(p);
+  float nz = 1.0 - clamp(d/R, 0.0, 1.0);
+  float lit = 0.5 + 0.5*dot(p/max(R,0.001), vec2(-0.40, 0.64));
+  col *= 0.74 + 0.44*smoothstep(-0.15, 1.10, lit + nz*0.30);
 
-  /* 색 — **파스텔로 눕힌다.** 오행 원색을 그대로 밝은 바탕에 얹으면 잉크처럼 탁해진다
-     (첫 시도가 그랬다). 흰색 쪽으로 밀어 오라의 투명감을 만들고, 가장 어두운 c3 는
-     결의 그림자로만 아주 조금 쓴다. */
-  vec3 A = mix(u_c1, vec3(1.0), 0.04);
-  vec3 B = u_c2;
-  vec3 C = mix(u_c3, vec3(1.0), 0.38);
-  vec3 col = mix(A, B, smoothstep(0.20,0.80,f));
-  col = mix(col, C, smoothstep(0.62,1.00,f*1.05+r.y*0.30)*0.55);
-  /* 속이 밝은 핵 — 레퍼런스의 '안에서 빛나는' 느낌 */
-  col = mix(col, mix(u_c1, B, 0.35), pow(max(0.0,1.0-rad/max(edge,0.001)),2.4)*0.62);   // 코어는 **채도**로 진하게(흰색으로 빼면 레퍼런스의 뜨거운 중심이 사라진다)
-  col += vec3(u_warm*0.11, u_warm*0.035, -u_warm*0.10);
+  /* **선명한 원형 경계** — 레퍼런스 1의 핵심. 가장자리만 아주 살짝 부드럽게. */
+  float ball  = smoothstep(R+0.028, R-0.028, d);
+  float bloom = smoothstep(R+0.60, R+0.02, d)*(1.0-ball);
 
-  float a = clamp(m*u_lum, 0.0, 1.0);
-  vec3 outc = mix(u_bg, col, a);
-  /* 바깥 헤일로 — 레퍼런스의 '번져 나가는 빛' */
-  float halo = smoothstep(edge+0.80, edge+0.02, rad+wob*0.6)*(1.0-a);
-  outc = mix(outc, mix(u_bg, col, 0.34), halo*0.75);
-  outc += (hash(gl_FragCoord.xy+fract(u_t)*0.01)-0.5)*u_grain;   // 필름 그레인
-  gl_FragColor = vec4(outc, 1.0);
+  /* ⚠ 바깥 번짐에 **음영 먹은 색을 쓰면 안 된다** — 공 밖이 새까매진다(첫 판이 그랬다).
+     번짐은 밝은 쪽 색으로 따로 만든다. */
+  vec3 glow = mix(u_c2, vec3(1.0), 0.28);
+  vec3 outc = mix(glow, col, ball);
+  outc += (hash(gl_FragCoord.xy+fract(u_t)*0.01)-0.5)*u_grain;
+  float alp = clamp(ball*u_lum + bloom*0.34, 0.0, 1.0);
+  gl_FragColor = vec4(outc*alp, alp);   // 프리멀티플라이드
 }`;
 
 const ELS = [
@@ -94,7 +88,16 @@ const COLS = [
 /* ⚠ 밝은 바탕용 보정 — **원색(EL_COLOR)은 안 건드린다.** 금의 c2(#e8f2ff)는 거의 흰색이라
    밝은 회색 바탕에서 통째로 사라진다(첫 판에서 금 줄이 안 보였다). 이 화면에서만 한 칸 낮춘다. */
 const LIGHT_FIX = { 금: ["#5b76b8", "#8fb0e6", "#1d2436"] };
-const DATA = { els: ELS.map(e => ({ ...e, c: LIGHT_FIX[e.key] || EL_COLOR[e.key] })), cols: COLS };
+/* ⚠ 오행 세 색은 **같은 계열**이라 셋을 섞어도 단색으로 보인다(첫 판이 그랬다).
+   레퍼런스는 대비되는 색 두세 개가 만난다. 그래서 셋째 색을 **나를 생하는 오행의 밝은 색**으로 바꾼다 —
+   임의의 예쁜 색이 아니라 근거가 있는 색이다(목생화·화생토…). */
+const SAENG = { 화: "목", 토: "화", 금: "토", 수: "금", 목: "수" };
+const pal = (k) => {
+  const base = LIGHT_FIX[k] || EL_COLOR[k];
+  const acc = (LIGHT_FIX[SAENG[k]] || EL_COLOR[SAENG[k]])[1];
+  return [base[0], base[1], acc];
+};
+const DATA = { els: ELS.map(e => ({ ...e, c: pal(e.key) })), cols: COLS };
 
 const HTML = `<!doctype html><meta charset="utf-8">
 <title>홀로그램 색장 — 입자 없음</title>
@@ -146,7 +149,7 @@ b.insertAdjacentHTML("beforeend",'<div style="display:flex;flex-direction:column
    렌더 실패했다. 캔버스 하나에 scissor 로 칸을 나눈다(보드 생성기가 쓰는 것과 같은 수법). */
 const cv=document.getElementById("one"), dpr=Math.min(devicePixelRatio||1,2);
 const W=NC*CELL*dpr, H=NR*CELL*dpr; cv.width=W; cv.height=H;
-const gl=cv.getContext("webgl",{alpha:false,antialias:false});
+const gl=cv.getContext("webgl",{alpha:true,premultipliedAlpha:true,antialias:false});
 const mk=(t,s)=>{const sh=gl.createShader(t);gl.shaderSource(sh,s);gl.compileShader(sh);
   if(!gl.getShaderParameter(sh,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(sh));return sh};
 const pg=gl.createProgram();
@@ -159,12 +162,13 @@ const la=gl.getAttribLocation(pg,"a"); gl.enableVertexAttribArray(la); gl.vertex
 const U=n=>gl.getUniformLocation(pg,n);
 gl.uniform3fv(U("u_bg"),BG); gl.uniform1f(U("u_grain"),0.014); gl.uniform1f(U("u_speed"),1);
 gl.uniform2f(U("u_res"),CELL*dpr,CELL*dpr);
+gl.enable(gl.BLEND); gl.blendFunc(gl.ONE,gl.ONE_MINUS_SRC_ALPHA); gl.clearColor(0,0,0,0);
 const T0=performance.now(); let stop=false; setTimeout(()=>{stop=true;window.__frozen=true;},2500);
 (function loop(){
   if(!stop) requestAnimationFrame(loop);
   const t=(performance.now()-T0)/1000;
   gl.uniform1f(U("u_t"),t);
-  gl.enable(gl.SCISSOR_TEST);
+  gl.enable(gl.SCISSOR_TEST); gl.disable(gl.SCISSOR_TEST); gl.clear(gl.COLOR_BUFFER_BIT); gl.enable(gl.SCISSOR_TEST);
   for(let r=0;r<NR;r++) for(let c=0;c<NC;c++){
     const el=DATA.els[r], col=DATA.cols[c];
     const x=c*CELL*dpr, y=(NR-1-r)*CELL*dpr, sz=CELL*dpr;
