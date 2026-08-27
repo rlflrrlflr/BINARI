@@ -3459,7 +3459,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v141.1 · 구체";
+const APP_VER = "v141.2 · 밝은 판 글자";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -6796,7 +6796,43 @@ const CSS = `
 .stage.holo{background:radial-gradient(120% 90% at 50% 15%,#f2f1f6,#e4e3ea 55%,#dcdbe4);color:#2f2b3a}
 .stage.holo .gsay,.stage.holo .gintro,.stage.holo .forming{color:#3a3547}
 .stage.holo .gname,.stage.holo .imptitle{color:#2f2b3a}
-.stage.holo .wakehint{color:#6b6478;text-shadow:none}
+/* ── 밝은 판 전용 타이포 ────────────────────────────────────────────────
+   ⚠ **검은 판 글자를 그대로 쓰면 안 된다.** 어두운 배경용 글자는 뒤에 빛번짐(text-shadow)과
+      어두운 알약 배경을 깔아 뜨게 만든 것인데, 밝은 바탕에선 그게 **얼룩**으로 보인다.
+      그리고 넓은 자간 + 가는 획은 검은 배경에서 또렷하지만 밝은 배경에선 흐려진다 —
+      밝은 판은 **획을 조금 굵게, 자간을 좁게, 그림자는 0** 이 맞다. 대신 위계는
+      크기와 서체(수호신 말=명조 / 메타=고딕)로 만든다. */
+.stage.holo,.stage.holo *{text-shadow:none}
+.stage.holo .gname,.stage.holo .forming{background:none;padding:0}
+.stage.holo .gsay{font-size:16px;letter-spacing:-.004em;color:#2c2836;font-weight:500;line-height:1.85}
+.stage.holo .gsay.born{color:#201c2b;font-weight:600}
+.stage.holo .gintro.dim2{color:#4a4458;font-size:15px}
+.stage.holo .forming{color:#4a4458;letter-spacing:.06em}
+.stage.holo .gname{color:#2c2836}
+.stage.holo .gname.under{color:#2c2836;letter-spacing:.02em;font-weight:600}
+.stage.holo .wakehint{font-size:11px;letter-spacing:.22em;color:#8b8499;animation:none}
+.stage.holo .fine{font-size:11.5px;letter-spacing:0;color:#6f6980;line-height:1.75}
+.stage.holo .moodline{font-family:'Noto Serif KR',serif;font-size:14px;color:#3a3547;letter-spacing:0}
+.stage.holo .moodline b{font-size:17px;color:#a8571a;font-weight:600}
+.stage.holo .moodline span{font-family:sans-serif;font-size:10px;letter-spacing:.04em;color:#8b8499}
+.stage.holo .verbadge{color:#a8a2b5}
+/* ── 검은 판용 그림자·어두운 패널을 걷어낸다 ────────────────────────────────
+   text-shadow 만 끄면 절반이다. 검은 배경 UI 는 **박스 그림자와 어두운 판**으로 요소를 띄우는데,
+   밝은 바탕에선 그게 그대로 **검은 얼룩**이 된다. 실제로 질문 화면에 큰 검은 타원이 남았다
+   (.gpanel::before 가 radial 로 깔던 것). 밝은 판에서는 **얇은 테두리와 흰 면**으로 띄운다. */
+.stage.holo .gpanel::before{display:none}
+.stage.holo .qbox{background:rgba(255,255,255,.78);border-color:#c9c4d6;color:#2c2836;box-shadow:0 1px 2px rgba(40,34,60,.06)}
+.stage.holo .qbox:focus{border-color:#8d7fb8;box-shadow:0 0 0 2px rgba(141,127,184,.18)}
+.stage.holo .qbox::placeholder{color:#9a94ab}
+.stage.holo .btn{box-shadow:none}
+.stage.holo .btn.gold{box-shadow:0 2px 10px rgba(168,120,40,.22)}
+.stage.holo .btn.ghost{background:rgba(255,255,255,.72);border-color:#c9c4d6;color:#4a4458;box-shadow:0 1px 2px rgba(40,34,60,.06)}
+.stage.holo .btn.ghost b{color:#2c2836}
+.stage.holo .in.box{background:rgba(255,255,255,.8);border-color:#c9c4d6;color:#2c2836;box-shadow:none}
+.stage.holo .resetlink{color:#6f6980}
+/* 탭 스크림이 밝은 판에서도 아래 글자를 먹는다 — 여기선 더 얕게 깐다 */
+.stage.holo{--tabscrim:22px}
+.stage.holo .gpanel.asking .gintro.dim2{color:#3a3547}
 .stage.holo .fine,.stage.holo .dim2,.stage.holo .whosub{color:#6f6980}
 .stage.holo .moodline{color:#4a4458}
 .stage.holo .moodline b{color:#b0651f}
