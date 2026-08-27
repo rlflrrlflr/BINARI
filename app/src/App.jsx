@@ -7052,8 +7052,11 @@ const CSS = `
 /* 눌러서 던지는 버튼 — 스크롤·길게눌러 선택이 끼어들면 손맛이 죽는다 */
 .throwbtn{touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .throwbtn:active{transform:scale(.97)}
-/* ⚠ `.cf` 는 쓰지 마라 — 이미 확신도 꼬리표(`<Cf/>`, 테두리 있는 작은 칩)가 그 이름을 쓴다.
-   v140 에서 실제로 충돌해 동전 「앞」에 남의 테두리가 붙어 나왔다(실물 스샷에서 잡았다). */
+/* ⚠ 클래스명 .cf 는 쓰지 마라 — 이미 확신도 꼬리표 컴포넌트가 그 이름을 쓴다(테두리 있는 작은 칩).
+   v140 에서 실제로 충돌해 동전 「앞」에 남의 테두리가 붙어 나왔다(실물 스샷에서 잡았다).
+   ⚠⚠ 그리고 이 주석 자체가 두 번째 사고를 냈다 — 처음엔 백틱으로 감쌌는데,
+      이 CSS 는 **템플릿 리터럴 안**이라 백틱이 리터럴을 끊어 버려 빌드가 죽었다.
+      **CSS 블록 안 주석에는 백틱을 쓰지 마라.** */
 .coins .cface{color:#ffe9ad;text-shadow:0 0 10px rgba(255,233,173,.5)}
 .coins .cback{color:#8a7f95}
 /* 변효 — 이 효만 밝게. 절정이 절정으로 보여야 한다 */
