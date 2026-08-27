@@ -7,6 +7,7 @@
 
    §5 금지: 판결 탭 변경 · 결제벽 · 개수 표기 · 하트/커플/핑크 · 신규 캐릭터 · 상대 이름 받기 */
 import { createRequire } from "node:module";
+import { throwCoins } from "./ritual.mjs";   // v140: 의식이 켜져 있으면 여섯 번 던져 통과
 const require = createRequire(import.meta.url);
 let pw; try { pw = require("playwright"); } catch { pw = require("/opt/node22/lib/node_modules/playwright"); }
 const { chromium } = pw;
@@ -158,6 +159,7 @@ ck("③ 판결 화면 문구 보존 — 판결을 청한다",
   await p4.waitForSelector("textarea.qbox", { timeout: 12000 });
   await p4.locator("textarea.qbox").fill("내 사업에 도움이 될 사람이 있을까?");
   await p4.getByRole("button", { name: "판결을 청한다" }).click();
+  await throwCoins(p4);
   await p4.waitForTimeout(3000);
   await p4.getByRole("button", { name: "왜 이렇게 봤어?" }).click().catch(() => {});
   await p4.waitForTimeout(2000);

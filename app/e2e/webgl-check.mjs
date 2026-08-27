@@ -1,6 +1,7 @@
 // v31 WebGL 수호신 검증 — ①WebGL 경로 활성 ②실제 픽셀 그려짐 ③강제 폴백(Canvas2D) ④판결 반응 무오류
 // 실행: preview 기동 후 node e2e/webgl-check.mjs
 import { createRequire } from "node:module";
+import { throwCoins } from "./ritual.mjs";   // v140: 의식이 켜져 있으면 여섯 번 던져 통과
 const require = createRequire(import.meta.url);
 let pw; try { pw = require("playwright"); } catch { pw = require("/opt/node22/lib/node_modules/playwright"); }
 const { chromium } = pw;
@@ -50,6 +51,7 @@ const b = await chromium.launch({ executablePath: process.env.CHROME_PATH || und
   ck("① 입자 실제 렌더(평균 밝기 > 1)", lum1 > 1, "avg=" + lum1.toFixed(2));
   await page.locator("textarea.qbox").fill("이 길로 가도 될까?"); await page.waitForTimeout(200);
   await page.getByRole("button", { name: "판결을 청한다" }).click();
+  await throwCoins(page);
   let ok = false;
   for (let i = 0; i < 40; i++) { if (((await page.locator(".vv").allTextContents())[0] || "").includes("망설이지 마")) { ok = true; break; } await page.waitForTimeout(300); }
   ck("① WebGL 하에서 판결 L1 렌더", ok);
