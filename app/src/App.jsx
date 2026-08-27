@@ -709,7 +709,7 @@ function lifeDomains(ctx) {
   const nextBy = (g, none) => {
     if (!ladder.length) return "흐름의 방향이 안 서서 못 펼쳤어";
     const d = nextOf(KS[g]);
-    return d ? `*${at(d)}* — ${SS_KO[ssOf(d)]}가 오는 열 해야. ${SS_EVENT[ssOf(d)]}` : none;
+    return d ? `*${at(d)}* — ${SS_KO[ssOf(d)]}${josa(SS_KO[ssOf(d)], "이", "가")} 오는 열 해야. ${SS_EVENT[ssOf(d)]}` : none;
   };
   const D = [];
   const put = (k, t, cf, a, b, c, d) => D.push({ k, t, cf, s: [["새겨질 때", a], ["자라면서", b], ["지금", c], ["앞으로", d]] });
@@ -721,8 +721,8 @@ function lifeDomains(ctx) {
     const [maxEl, maxN] = sorted[sorted.length - 1];
     const beaten = weak.filter((w) => GEUK[maxEl] === w);
     const born = weak.map((w) => `*${EL_KO[w]}의 기운이 ${lackEl.includes(w) ? "비어 있어" : "가장 얇아"}* — 그 자리는 ${IYA(EL_ORGAN[w].organ)}`).join(". ")
-      + (maxN >= 3 ? `. 반대로 *${EL_KO[maxEl]}가 ${maxN}개*로 몰려 있어` : "")
-      + (beaten.length ? `. 그리고 ${EL_KO[maxEl]}는 ${EL_KO[beaten[0]]}를 치는 기운이라, *가장 얇은 자리를 가장 센 힘이 때리는 배치*야` : "");
+      + (maxN >= 3 ? `. 반대로 *${EL_KO[maxEl]}${josa(EL_KO[maxEl], "이", "가")} ${maxN}개*로 몰려 있어` : "")
+      + (beaten.length ? `. 그리고 ${EL_KO[maxEl]}${josa(EL_KO[maxEl], "은", "는")} ${EL_KO[beaten[0]]}${josa(EL_KO[beaten[0]], "을", "를")} 치는 기운이라, *가장 얇은 자리를 가장 센 힘이 때리는 배치*야` : "");
     const grew = weak.map((w) => EL_ORGAN[w].lack).join(" 그리고 ") + (maxN >= 4 ? `. 여기에 ${EL_ORGAN[maxEl].over}` : "");
     const helps = cur && (weak.includes(cur.el) || SAENG[cur.el] === weak[0]);
     const hurts = cur && GEUK[cur.el] === weak[0];
@@ -750,7 +750,7 @@ function lifeDomains(ctx) {
           ? `가장 두꺼운 게 *${tops.map(([k]) => SS_KO[k]).join("·")} ${topV}개씩*이야 — 동률이라 어느 쪽이 앞이라고 못 잘라. ${tops.map(([k]) => SS_TIP[k].r).join(" 그리고 ")}`
           : `가장 두꺼운 게 *${SS_KO[tops[0][0]]} ${topV}개*야 — ${SS_TIP[tops[0][0]].r}. 그늘도 같이 왔어: ${SS_TIP[tops[0][0]].s}`,
       !cur ? (ladder.length ? "아직 첫 열 해가 시작되기 전이야" : "성별이 없어서 지금 열 해를 못 짚어")
-        : `*${at(cur)}* — ${SS_KO[ssOf(cur)]}가 도는 열 해야. ${SS_TIP[ssOf(cur)].r}`,
+        : `*${at(cur)}* — ${SS_KO[ssOf(cur)]}${josa(SS_KO[ssOf(cur)], "이", "가")} 도는 열 해야. ${SS_TIP[ssOf(cur)].r}`,
       (() => { const d = ladder.find((x) => x.startAge > (nowAge || 0)); return d ? `*${at(d)}부터* ${RO(SS_KO[ssOf(d)])} 결이 바뀌어. ${SS_EVENT[ssOf(d)]}` : "여든까지의 흐름은 아래 근거 절에 전부 펼쳐 뒀어"; })());
   }
   /* 3. 배움 */
@@ -772,7 +772,7 @@ function lifeDomains(ctx) {
     const key = tied[0], sh = JOB_SHAPE[key];
     put("일", "일 — 어디서 밥을 버나", "m",
       `*${sh.born}*으로 새겨졌어 (${["관성", "식상", "재성", "비겁"].map((k) => `${GRP_KO[k]} ${G[k]}`).join(" · ")})`
-      + (tied.length > 1 ? `. 다만 *${tied.map((k) => GRP_KO[k]).join("·")}가 ${best}개로 동률*이라 한쪽으로 못 잘라 — ${tied.map((k) => JOB_SHAPE[k].born).join("과 ")}이 둘 다 네 결이야` : "")
+      + (tied.length > 1 ? `. 다만 *${tied.map((k) => GRP_KO[k]).join("·")}${josa(GRP_KO[tied[tied.length - 1]], "이", "가")} ${best}개로 동률*이라 한쪽으로 못 잘라 — ${tied.map((k) => JOB_SHAPE[k].born).join(", ")}${josa(JOB_SHAPE[tied[tied.length - 1]].born, "이", "가")} 둘 다 네 결이야` : "")
       + `. 그리고 네 기운은 ${EL_KO[me]} — ${JOB_EL[me]}`,
       `${sh.grew}. 맞는 판은 *${sh.ex}*이야`,
       nowBy(key, "네 방식이 그대로 먹히는 열 해야. 판을 바꾸려면 지금이야", "네 결이 아닌 쪽이 힘을 쓰는 열 해라, 억지로 밀기보다 배우는 데 쓰는 게 남아"),
@@ -1191,8 +1191,14 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
       <path d="M152 48 L144 53 L152 58" fill="none" stroke="#e8a06a" strokeWidth="1.6" />
       <line x1="160" y1="34" x2="160" y2="72" stroke="#a83229" strokeWidth="3" />
       <line x1="152" y1="40" x2="168" y2="66" stroke="#a83229" strokeWidth="1.6" />
-      <text x="160" y="86" fontSize="8" fill="#f0b6ab" textAnchor="middle">{r.core.block.t}이 얇다</text>
-      <text x="160" y="106" fontSize="7.5" fill="#6f6580" textAnchor="middle">그래서 안에서만 돈다</text>
+      {/* ⚠ 조사를 「이」로 박아 두면 **받침 없는 자리 이름에서 깨진다** — 다섯 중 둘이 그렇다
+          ("돈 쥐기**이** 얇다" · "도움받기**이** 얇다"). 같은 파일에 josa() 가 이미 있는데 여기만 안 썼다. */}
+      <text x="160" y="86" fontSize="8" fill="#f0b6ab" textAnchor="middle">{r.core.block.t}{josa(r.core.block.t, "이", "가")} 얇다</text>
+      {/* ⚠ 둘째 줄은 **"그래서 안에서만 돈다"가 박혀 있었다.** 그건 식상(말) 한 축의 말이다
+          — 그 축의 s 가 "할 말이 안에서만 돌아"다. 나머지 넷에는 안 맞는다:
+          재성이면 "돈 쥐기가 얇다 / 그래서 안에서만 돈다"가 되어 앞뒤가 따로 논다.
+          축마다 있는 한 줄(block.s)을 그대로 쓴다 — 그게 이 자리에 있어야 할 말이다. */}
+      <text x="160" y="106" fontSize="7.5" fill="#6f6580" textAnchor="middle">{r.core.block.s}</text>
     </svg>
   );
   return (
@@ -1249,7 +1255,7 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
         <p className="impcw">{r.core.inner.d}. {r.core.split ? "겉으로 보이는 모습과 속이 다른 사람이야." : "겉과 속이 같은 방향이라 오해는 덜 받아."}</p>
       </div>
       <CoreFig />
-      <p className="impp"><b>그리고 네게는 {r.core.block.t}이 얇아.</b><Ref n={r.core.n3} /> {r.core.block.s}. {r.core.block.w}</p>
+      <p className="impp"><b>그리고 네게는 {r.core.block.t}{josa(r.core.block.t, "이", "가")} 얇아.</b><Ref n={r.core.n3} /> {r.core.block.s}. {r.core.block.w}</p>
       {/* fix 는 imprint.js 에서 `<b>` 를 품고 온다(burn·d·w 와 같은 계열). `{}` 로 꽂으면 React 가
           이스케이프해서 **화면에 태그가 글자로 보인다** — 실제로 그랬다(값을 치른 문서에서, 가장 강조한 줄에서).
           같은 파일의 다른 필드는 전부 <H> 를 거치고 있었고 이 한 줄만 빠져 있었다. */}
@@ -3238,7 +3244,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v140 · 초대 배관";
+const APP_VER = "v140.1 · 조사 교정";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
