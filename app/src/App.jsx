@@ -2741,6 +2741,143 @@ function glDetect() {
     return !!(c.getContext("webgl") || c.getContext("experimental-webgl"));
   } catch (_) { return false; }
 }
+/* ── v141 홀로그램 색장 렌더러 — **입자를 안 쓴다** ─────────────────────────
+   창업자 지적(2026-08-27): "뿌리부터 바꿔야지. 홀로그램은 아예 레퍼런스 그대로."
+   v140 은 입자 엔진에 필터를 씌운 것이라 레퍼런스가 아니었다. 레퍼런스의 조건 셋 —
+     ① 밝은 배경 ② 가산 발광이 아니라 **바탕 위에 얹히는 색** ③ 낱알이 아예 없는 **연속 장**
+   그래서 파티클을 버리고 전면 사각형 + 프래그먼트 셰이더로 다시 짰다.
+   시제품·튜닝 근거: `app/public/holo-field.html`(생성기 tools/build-holo-field.mjs)
+
+   ⚠ **기존 GuardianCanvasGL 은 그대로 산다.** `?skin=holo` 일 때만 이 렌더러가 대신 선다. */
+const FIELD_VERT = `attribute vec2 a; void main(){ gl_Position=vec4(a,0.0,1.0); }`;
+const FIELD_FRAG = `
+precision highp float;
+uniform vec2  u_res;
+uniform float u_t, u_form, u_orb, u_warm, u_speed, u_lum, u_sink, u_grain;
+uniform vec2  u_off;   // 칸의 좌하단 원점 — gl_FragCoord 는 **창 기준**이라 빼 줘야 칸마다 중심이 맞는다
+uniform vec3  u_c1, u_c2, u_c3, u_bg;
+
+float hash(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453123); }
+float vnoise(vec2 p){
+  vec2 i=floor(p), f=fract(p); vec2 u=f*f*(3.0-2.0*f);
+  return mix(mix(hash(i),hash(i+vec2(1,0)),u.x), mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),u.x), u.y);
+}
+float fbm(vec2 p){
+  float s=0.0, a=0.5;
+  for(int i=0;i<5;i++){ s+=a*vnoise(p); p*=2.02; a*=0.5; }
+  return s;
+}
+void main(){
+  vec2 uv=(gl_FragCoord.xy-u_off-0.5*u_res)/min(u_res.x,u_res.y);
+  uv.y += u_sink*0.10;                                  // 무거운 날은 내려앉는다
+
+  /* 오행 = 비등방. 색만 다르면 다섯이 같은 공으로 보인다. 응축하면 다섯 다 둥글어진다. */
+  vec2 an = u_form<0.5 ? vec2(1.30,0.74)                // 화 — 세로로 솟는다
+          : u_form<1.5 ? vec2(0.72,1.34)                // 수 — 옆으로 눕는다
+          : u_form<2.5 ? vec2(1.14,0.84)                // 목 — 위로 뻗는다
+          : u_form<3.5 ? vec2(1.00,1.00)                // 금 — 매끈한 구
+                       : vec2(0.86,1.16);               // 토 — 넓고 낮게
+  an = mix(an, vec2(1.0), u_orb*0.85);
+  vec2 p = uv*an*2.50;                                  // 줌아웃 — 바탕이 보여야 오라가 된다
+
+  float t = u_t*u_speed;
+  /* 도메인 워핑 — 이 세 줄이 "유기체처럼 흘러다님"의 전부다 */
+  vec2 q = vec2(fbm(p+vec2(0.0,t*0.13)), fbm(p+vec2(5.2,1.3)-t*0.10));
+  vec2 r = vec2(fbm(p+1.9*q+vec2(1.7,9.2)+t*0.08), fbm(p+1.9*q+vec2(8.3,2.8)-t*0.06));
+  float f = fbm(p+2.1*r);
+
+  /* 마스크 — 가장자리를 노이즈로 흔들어 원이 아니게. 응축하면 흔들림이 줄어 공이 된다. */
+  float rad  = length(p);
+  float wob  = (f-0.5)*mix(0.44,0.12,u_orb) + (r.x-0.5)*mix(0.22,0.05,u_orb);
+  float edge = mix(0.62, 0.50, u_orb);
+  float m    = smoothstep(edge+0.34, edge-0.26, rad+wob);
+
+  /* 색 — **파스텔로 눕힌다.** 오행 원색을 그대로 밝은 바탕에 얹으면 잉크처럼 탁해진다
+     (첫 시도가 그랬다). 흰색 쪽으로 밀어 오라의 투명감을 만들고, 가장 어두운 c3 는
+     결의 그림자로만 아주 조금 쓴다. */
+  vec3 A = mix(u_c1, vec3(1.0), 0.04);
+  vec3 B = u_c2;
+  vec3 C = mix(u_c3, vec3(1.0), 0.38);
+  vec3 col = mix(A, B, smoothstep(0.20,0.80,f));
+  col = mix(col, C, smoothstep(0.62,1.00,f*1.05+r.y*0.30)*0.55);
+  /* 속이 밝은 핵 — 레퍼런스의 '안에서 빛나는' 느낌 */
+  col = mix(col, mix(u_c1, B, 0.35), pow(max(0.0,1.0-rad/max(edge,0.001)),2.4)*0.62);   // 코어는 **채도**로 진하게(흰색으로 빼면 레퍼런스의 뜨거운 중심이 사라진다)
+  col += vec3(u_warm*0.11, u_warm*0.035, -u_warm*0.10);
+
+  float a = clamp(m*u_lum, 0.0, 1.0);
+  /* 바깥 헤일로 — 레퍼런스의 '번져 나가는 빛' */
+  float halo = smoothstep(edge+0.80, edge+0.02, rad+wob*0.6)*(1.0-a);
+  /* ⚠ **바탕을 칠하지 않는다.** u_bg 를 섞어 내보내면 캔버스가 불투명한 사각/원 자국으로 남는다
+     (첫 이식에서 그랬다). 알파로 내보내면 페이지 배경이 그대로 비쳐 경계가 아예 없다. */
+  float alp = clamp(a + halo*0.34, 0.0, 1.0);   // ⚠ 이름을 A 로 쓰면 위 팔레트 vec3 A 와 충돌한다(실제로 컴파일 실패)
+  vec3 outc = col + (hash(gl_FragCoord.xy+fract(u_t)*0.01)-0.5)*u_grain;
+  gl_FragColor = vec4(outc*alp, alp);   // 프리멀티플라이드
+}`;
+/* 밝은 바탕용 보정 — **원색(EL_COLOR)은 안 건드린다.** 금의 c2(#e8f2ff)는 거의 흰색이라
+   밝은 바탕에서 통째로 사라진다(시제품 첫 판에서 금 줄이 안 보였다). 이 렌더러에서만 한 칸 낮춘다. */
+const HOLO_FIX = { 금: ["#5b76b8", "#8fb0e6", "#1d2436"] };
+const HOLO_BG = [0.878, 0.878, 0.894];
+
+function GuardianField({ saju, mood, orbRef, size = 340, onFail }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const cv = ref.current; if (!cv || !saju) return;
+    let gl = null, raf = 0, dead = false;
+    const fail = () => { if (!dead) { dead = true; if (raf) cancelAnimationFrame(raf); onFail && onFail(); } };
+    try {
+      gl = cv.getContext("webgl", { alpha: true, premultipliedAlpha: true, antialias: false, preserveDrawingBuffer: true });
+      if (!gl) { fail(); return; }
+      const mk = (t, src) => { const sh = gl.createShader(t); gl.shaderSource(sh, src); gl.compileShader(sh);
+        if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh) || "shader"); return sh; };
+      const pg = gl.createProgram();
+      gl.attachShader(pg, mk(gl.VERTEX_SHADER, FIELD_VERT)); gl.attachShader(pg, mk(gl.FRAGMENT_SHADER, FIELD_FRAG));
+      gl.linkProgram(pg);
+      if (!gl.getProgramParameter(pg, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pg) || "link");
+      gl.useProgram(pg);
+      const vb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vb);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+      const la = gl.getAttribLocation(pg, "a"); gl.enableVertexAttribArray(la);
+      gl.vertexAttribPointer(la, 2, gl.FLOAT, false, 0, 0);
+      const U = {}; ["u_res","u_off","u_t","u_form","u_orb","u_warm","u_speed","u_lum","u_sink","u_grain","u_c1","u_c2","u_c3","u_bg"]
+        .forEach((k) => { U[k] = gl.getUniformLocation(pg, k); });
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const S = Math.round(size * dpr); cv.width = S; cv.height = S;
+      const pal = (HOLO_FIX[saju.main] || EL_COLOR[saju.main] || EL_COLOR.토).map(hex2rgb);
+      gl.uniform2f(U.u_res, S, S); gl.uniform2f(U.u_off, 0, 0);
+      gl.uniform3fv(U.u_c1, pal[0]); gl.uniform3fv(U.u_c2, pal[1]); gl.uniform3fv(U.u_c3, pal[2]);
+      gl.uniform3fv(U.u_bg, HOLO_BG);
+      gl.uniform1f(U.u_form, ({ 화: 0, 수: 1, 목: 2, 금: 3, 토: 4 })[saju.main] ?? 4);
+      gl.uniform1f(U.u_grain, 0.014);
+      gl.uniform1f(U.u_warm, mood ? mood.warm : 0);
+      gl.uniform1f(U.u_speed, mood ? mood.sp : 1);
+      gl.uniform1f(U.u_lum, mood ? Math.min(1.12, mood.lum) : 1);
+      gl.uniform1f(U.u_sink, mood ? mood.sink * 2.2 : 0);
+      gl.viewport(0, 0, S, S);
+      gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);   // 프리멀티플라이드 알파
+      gl.clearColor(0, 0, 0, 0);
+      /* 응축 보간 — v133 과 같은 규칙(끊기면 교체, 이어지면 자세). 1.25초 */
+      let orb = 0, last = performance.now();
+      const T0 = performance.now();
+      const draw = () => {
+        raf = requestAnimationFrame(draw);
+        const now = performance.now(), dt = Math.min(0.05, (now - last) / 1000); last = now;
+        orb += ((orbRef && orbRef.current ? 1 : 0) - orb) * (1 - Math.exp(-dt / 1.25));
+        gl.uniform1f(U.u_orb, orb < 0.0004 ? 0 : orb);
+        gl.uniform1f(U.u_t, (now - T0) / 1000);
+        gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLES, 0, 3);
+      };
+      draw();
+    } catch (e) {
+      /* 조용히 폴백하면 **왜 떨어졌는지 영영 모른다** — 실제로 한 번 그렇게 헤맸다. 이유를 남긴다. */
+      try { console.error("[GuardianField] 색장 렌더 실패 → 입자로 폴백:", e && e.message); } catch (_) {}
+      fail(); return;
+    }
+    return () => { if (raf) cancelAnimationFrame(raf); dead = true;
+      try { const e = gl && gl.getExtension("WEBGL_lose_context"); e && e.loseContext(); } catch (_) {} };
+  }, [saju, mood, size]);
+  return <canvas ref={ref} className="gcv" style={{ width: size, height: size }} aria-hidden="true" />;
+}
+
 function GuardianCanvasGL({ saju, zo, num, moon, birth, agitateRef, reactRef, restRef, broodRef, orbRef, gyeotRef, mood, size = 340, onFail }) {
   const ref = useRef(null);
   useEffect(() => {
@@ -3287,6 +3424,10 @@ function GuardianCanvasSim({ saju, zo, num, moon, birth, agitateRef, reactRef, r
 }
 /* WebGL 우선: 상태보존 시뮬(v68) → stateless(v67) → Canvas2D. 각 단계 실패 시 자동 강등 */
 function Guardian(props) {
+  /* v141 `?skin=holo` → **입자가 아니라 색장**. 실패하면 기존 입자 경로로 떨어진다. */
+  /* ⚠ **훅을 조기 반환보다 먼저 전부 부른다.** 처음엔 여기서 바로 return 했더니 아래
+     useState(mode) 가 건너뛰어져 React #310(훅 개수 불일치)로 화면이 죽었다. */
+  const [holoDead, setHoloDead] = useState(false);
   // v91: 기본 렌더러 = GL(v67 계열) — 무상태 직접계산이라 지연·링이 없고 중앙 발산 레이가 살아 있다.
   //      ?r=sim → 상태보존 FBO 엔진 / ?r=2d → Canvas2D (비교·폴백용)
   const [mode, setMode] = useState(() => {
@@ -3296,6 +3437,11 @@ function Guardian(props) {
     } catch (_) {}
     return glDetect() ? "gl" : "2d";
   });
+  if (SKIN === "holo" && !holoDead && props.saju) {
+    if (typeof window !== "undefined") window.__BINARI_R = "field";
+    return <GuardianField saju={props.saju} mood={props.mood} orbRef={props.orbRef}
+      size={props.size} onFail={() => setHoloDead(true)} />;
+  }
   if (typeof window !== "undefined") window.__BINARI_R = mode;   // 버전 배지용 — 실제 렌더러(sim/gl/2d) 노출
   if (mode === "sim") return <GuardianCanvasSim {...props} onFail={() => setMode("gl")} />;
   if (mode === "gl") return <GuardianCanvasGL {...props} onFail={() => setMode("2d")} />;
@@ -3311,7 +3457,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v140 · 홀로그램 A/B";
+const APP_VER = "v141 · 색장";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -5631,7 +5777,7 @@ export default function App() {
     /* v127.4 오행 색 연동 — 사람마다 다른 건 수호신뿐이고 화면 크롬은 전 유저 같은 금색이었다.
        골드 기조는 그대로 두고(가독성) **글로우만** 그 사람의 오행 색으로 물들인다.
        경쟁 8개사는 브랜드 컬러가 고정이라 구조적으로 못 하는 개인화다. */
-    <div className="stage" style={saju ? { "--elc": (EL_COLOR[saju.main] || [])[0] || "#f5d98b", "--elc2": (EL_COLOR[saju.main] || [])[1] || "#ffe9ad" } : undefined}>
+    <div className={`stage${SKIN === "holo" ? " holo" : ""}`} style={saju ? { "--elc": (EL_COLOR[saju.main] || [])[0] || "#f5d98b", "--elc2": (EL_COLOR[saju.main] || [])[1] || "#ffe9ad" } : undefined}>
       <style>{CSS}</style>
       <VerBadge />
 
@@ -6639,6 +6785,37 @@ const CSS = `
    전에는 판결만 absolute(bottom:14vh)이고 곁은 문서 흐름이라 문구 높이가 서로 달랐고(실기 지적),
    14vh 는 탭 스크림 안쪽이라 "두드려봐" 가 페이드에 먹혔다. 이제 탭이 차지하는 높이 위에 세운다. */
 .lobbypanel,.gyeot .gyeotpanel{position:absolute;left:0;right:0;bottom:calc(var(--tabh) + var(--tabscrim) + 10px);z-index:2;display:flex;flex-direction:column;align-items:center;width:100%;padding:0 16px;text-align:center;margin:0}
+/* ── v141 홀로그램 스킨의 밝은 바탕 ────────────────────────────────────────
+   레퍼런스가 밝은 회색 위의 파스텔 오라다. 검은 바탕 + 가산 발광으로는 그 룩이 안 나온다
+   (v140 이 그래서 네온이 됐다). 여기서는 **바탕을 뒤집는다** — 이 스킨에서만.
+   ⚠ 기존(플래그 없음) 화면은 한 줄도 안 바뀐다. 아래 규칙은 전부 .stage.holo 아래에만 있다.
+   ⚠⚠ 이 CSS 는 **템플릿 리터럴 안**이다 — 주석에 백틱을 쓰면 문자열이 거기서 끊기고
+      뒤가 JS 로 해석된다. 실제로 그렇게 터졌다(.stage.holo 를 멤버 접근으로 읽었다). 백틱 금지. */
+.stage.holo{background:radial-gradient(120% 90% at 50% 15%,#f2f1f6,#e4e3ea 55%,#dcdbe4);color:#2f2b3a}
+.stage.holo .gsay,.stage.holo .gintro,.stage.holo .forming{color:#3a3547}
+.stage.holo .gname,.stage.holo .imptitle{color:#2f2b3a}
+.stage.holo .wakehint{color:#6b6478;text-shadow:none}
+.stage.holo .fine,.stage.holo .dim2,.stage.holo .whosub{color:#6f6980}
+.stage.holo .moodline{color:#4a4458}
+.stage.holo .moodline b{color:#b0651f}
+.stage.holo .moodline span{color:#7d7690}
+.stage.holo .qbox{background:rgba(255,255,255,.72);border-color:#c6c2d4;color:#2f2b3a}
+.stage.holo .qbox::placeholder{color:#9a94ab}
+.stage.holo .btn.ghost{color:#4a4458;border-color:#bdb8cc}
+.stage.holo .tabbar::before{background:linear-gradient(to top,#dcdbe4 0%,#dcdbe4 55%,rgba(220,219,228,.72) 80%,rgba(220,219,228,0) 100%)}
+.stage.holo .tabbtn{background:rgba(255,255,255,.66);color:#6b6478;border-color:rgba(90,78,130,.22)}
+.stage.holo .tabbtn.on{background:#fff;color:#7a4a12;border-color:rgba(122,74,18,.42)}
+.stage.holo .verbadge{color:#9a94ab}
+.stage.holo .halo{filter:none}
+/* .scene.lobby 가 **어두운 radial** 을 깔고 있다 — 이걸 안 뒤집으면 밝은 바탕 위에 검은 타원이 남는다(실제로 그랬다) */
+.stage.holo .scene.lobby{background:radial-gradient(80% 52% at 50% 42%,rgba(255,255,255,.55) 0%,rgba(255,255,255,.22) 50%,rgba(255,255,255,0) 100%)}
+.stage.holo .gyeotpanel .gname{color:#2f2b3a}
+.stage.holo .btn.gold{background:linear-gradient(180deg,#f4dfa6,#d8ae57);color:#2a1e05}
+.stage.holo .impbadge{color:#7a4a12;border-color:rgba(122,74,18,.32)}
+/* 색장은 캔버스를 스스로 채운다 — 입자용 확대율(1.85/1.72)을 그대로 얹으면 화면을 뒤덮는다 */
+.stage.holo .halo.wide.lobbyscale{transform:translateY(2vh) scale(1)}
+.stage.holo .halo.wide.gyeotscale{transform:translateY(1vh) scale(1)}
+.stage.holo .gcv{mix-blend-mode:normal}
 .moodline{font-family:sans-serif;font-size:13px;letter-spacing:.06em;color:#cfc4e2;margin:0 0 2px;text-align:center;line-height:1.7}
 .moodline b{color:#f5d98b;font-weight:600;font-size:15px}
 .moodline span{display:block;font-size:10.5px;color:#8a7f95;letter-spacing:.02em;margin-top:2px}
