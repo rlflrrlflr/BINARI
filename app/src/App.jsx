@@ -2689,6 +2689,50 @@ function useViewport() {
 /* 수호신 지름 — **판결·곁이 같은 식을 쓴다**(곁탭IA §4 크기 규칙). 차이는 CSS 확대율로만 준다. */
 const guardianSize = (vp) => Math.min(vp.w * 1.1, vp.h * 0.57, 640);
 
+/* ── v140 A/B 스킨 — `?skin=holo` (2026-08-27 창업자 지시) ────────────────────
+   "수호신 디자인을 아예 다르게 한 걸 테스트 서버에 올려줘. 기존 껀 놔두고."
+   **기존 경로는 한 줄도 안 바꾼다.** 플래그가 없으면 예전 코드가 그대로 돈다 —
+   A/B 는 같은 기기에서 주소 하나로 갈려야 비교가 된다.
+
+   홀로그램 = 낱알을 없애는 게 아니라 **겹쳐서 안 보이게** 하는 것이다.
+   점을 키우고 알파를 낮추면 같은 셰이더가 연속 그라데이션이 된다(실측: guardian-holo.html).
+   그래서 형태 축(u_form)·색 체계·오행 규칙은 전부 그대로 살아 있다. */
+const SKIN = (() => { try { return /[?&]skin=holo(&|$)/.test(window.location.search) ? "holo" : ""; } catch (_) { return ""; } })();
+
+/* ── 오늘의 상태 — **운세 방법론에서 나온다. 지어내지 않는다** ─────────────
+   축 둘만 쓴다(새 축을 늘리지 않는다 — 설계 헌장 §판결문 형식 보존):
+     ① 오늘 일진의 일간을 **내 일간이 보는 십성** — 날마다 바뀌고 사람마다 다르다
+     ② 달 위상 — 밝기에만 아주 약하게
+   ⚠ 이 값은 **판결에 안 들어간다.** 화면 상태(색·속도·밝기)만 만든다.
+      판결 축에 얹으면 그건 축을 늘리는 것이고 헌장 위반이다. */
+const MOOD = {
+  비견: { l: "단단함", warm: 0.00, sp: 0.92, lum: 1.00, ch: 0.85, sink: 0.00 },
+  겁재: { l: "들썩임", warm: 0.18, sp: 1.22, lum: 1.06, ch: 1.30, sink: -0.05 },
+  식신: { l: "활기참", warm: 0.30, sp: 1.16, lum: 1.12, ch: 1.00, sink: -0.10 },
+  상관: { l: "번뜩임", warm: 0.22, sp: 1.34, lum: 1.10, ch: 1.45, sink: -0.08 },
+  정재: { l: "또렷함", warm: 0.05, sp: 0.90, lum: 1.04, ch: 0.70, sink: 0.00 },
+  편재: { l: "펼쳐짐", warm: 0.24, sp: 1.10, lum: 1.06, ch: 1.20, sink: -0.06 },
+  정관: { l: "반듯함", warm: -0.05, sp: 0.86, lum: 0.98, ch: 0.62, sink: 0.04 },
+  편관: { l: "버거움", warm: -0.22, sp: 0.74, lum: 0.84, ch: 1.15, sink: 0.16 },
+  정인: { l: "포근함", warm: 0.12, sp: 0.82, lum: 1.02, ch: 0.72, sink: 0.02 },
+  편인: { l: "잠김",   warm: -0.18, sp: 0.70, lum: 0.88, ch: 0.80, sink: 0.14 },
+};
+function todayMood(saju) {
+  try {
+    if (!saju?.idx) return null;
+    const n = new Date();
+    const td = calcSaju(n.getFullYear(), n.getMonth() + 1, n.getDate(), 12, 0, true, 126.978);
+    if (!td?.idx) return null;
+    const ss = sipseong(saju.idx.dG, td.idx.dG);            // 내 일간이 오늘 일간을 보는 관계
+    const m = MOOD[ss]; if (!m) return null;
+    /* 달 나이 — moonPhase() 는 이름·해설만 돌려주므로(frac 없음) 같은 식으로 직접 잰다 */
+    const age = ((jdn(n.getFullYear(), n.getMonth() + 1, n.getDate()) - 2451550) % 29.53059 + 29.53059) % 29.53059;
+    const full = 1 - Math.abs(age / 29.53059 - 0.5) * 2;      // 보름=1 · 그믐=0
+    const moon = moonPhase(n.getFullYear(), n.getMonth() + 1, n.getDate());
+    return { ss, day: GAN[td.idx.dG], moon: moon && moon.name, ...m, lum: m.lum * (0.94 + 0.12 * full) };
+  } catch (_) { return null; }
+}
+
 function glDetect() {
   try {
     if (typeof window === "undefined") return false;
@@ -2697,7 +2741,7 @@ function glDetect() {
     return !!(c.getContext("webgl") || c.getContext("experimental-webgl"));
   } catch (_) { return false; }
 }
-function GuardianCanvasGL({ saju, zo, num, moon, birth, agitateRef, reactRef, restRef, broodRef, orbRef, gyeotRef, size = 340, onFail }) {
+function GuardianCanvasGL({ saju, zo, num, moon, birth, agitateRef, reactRef, restRef, broodRef, orbRef, gyeotRef, mood, size = 340, onFail }) {
   const ref = useRef(null);
   useEffect(() => {
     const cv = ref.current; if (!cv) return;
@@ -2770,17 +2814,37 @@ function GuardianCanvasGL({ saju, zo, num, moon, birth, agitateRef, reactRef, re
       const R0 = 0.8 * (E ? 1.0 : 0.9);
       gl.uniform1f(L.u_R, R0);
       gl.uniform1f(L.u_arms, arms); gl.uniform1f(L.u_strands, strands); gl.uniform1f(L.u_twist, twist);
-      gl.uniform1f(L.u_speed, P ? 0.42 : 0.30); gl.uniform1f(L.u_chaos, T ? 0.6 : 1.35); gl.uniform1f(L.u_focal, E ? 0.12 : 0.88); // v65 명상 템포(2차 감속) // I=구심점·E=무구심점
+      /* ── v140 홀로그램 스킨 ────────────────────────────────────────────────
+         "유기체처럼 이리저리 흘러다니게"(창업자). 흘러다님은 두 값에서 온다 —
+         u_focal 을 낮추면 구심점이 풀려 **오프센터로 유동**하고, u_chaos 를 올리면
+         컬노이즈 결이 굵어진다. 형태 축은 그대로 두고 **운동만** 바꾼다. */
+      const HOLO = SKIN === "holo";
+      const MD = (HOLO && mood) ? mood : null;
+      const spd = (P ? 0.42 : 0.30) * (HOLO ? 1.15 : 1) * (MD ? MD.sp : 1);
+      const cha = (T ? 0.6 : 1.35) * (HOLO ? 1.35 : 1) * (MD ? MD.ch : 1);
+      const foc = HOLO ? 0.10 : (E ? 0.12 : 0.88);
+      gl.uniform1f(L.u_speed, spd); gl.uniform1f(L.u_chaos, cha); gl.uniform1f(L.u_focal, foc); // v65 명상 템포(2차 감속) // I=구심점·E=무구심점
       gl.uniform1f(L.u_nayF, nayF); gl.uniform1f(L.u_nayA, nayA);
       const F_AL = { 화: 0.36, 수: 0.31, 목: 0.32, 금: 0.29, 토: 0.26 }[saju.main] || 0.31;  // v64 노출 예산(백화 해소, 낱알 위계)
       const F_PS = { 금: 0.82, 토: 0.9 }[saju.main] || 1;
-      gl.uniform1f(L.u_ps, (T ? 1.6 : 2.0) * dpr * F_PS); gl.uniform1f(L.u_psMul, 1); gl.uniform1f(L.u_lum, lum); gl.uniform1f(L.u_twk, N ? 1 : 0);
+      /* ⚠ **노출 예산**을 다시 잡아야 한다. 점을 k 배 키우면 한 픽셀에 쌓이는 알파가 대략 k² 배다 —
+         첫 시도(5.6배·0.185)는 코어가 흰색으로 타서 **오행 색이 통째로 사라졌다**(리포가 F_AL 로
+         이미 한 번 싸운 그 백화다). 4.2² ≈ 17.6 이므로 알파를 1/17 쯤으로 내리고 조금만 위로 준다. */
+      const PSK = HOLO ? 4.4 : 1, ALK = HOLO ? 0.145 : 1;
+      gl.uniform1f(L.u_ps, (T ? 1.6 : 2.0) * dpr * F_PS * PSK); gl.uniform1f(L.u_psMul, 1);
+      gl.uniform1f(L.u_lum, lum * (MD ? MD.lum : 1)); gl.uniform1f(L.u_twk, HOLO ? 0 : (N ? 1 : 0));   // 홀로그램은 반짝임을 끈다(낱알을 드러내므로)
       // v94 심장박동 세기 — ?beat=0(끔) / 1(기본) / 2(강하게)
       let _beat = 3; try { const mb = /[?&]beat=([\d.]+)/.exec(window.location.search); if (mb) _beat = Math.max(0, Math.min(3, parseFloat(mb[1]))); } catch (_) {}
       gl.uniform1f(L.u_beat, _beat);
       // v93 실험: A 겉결 — 최신(sim)의 '소프트 헤일로' 패스 세기. ?soft=0(끔·기존 GL) / 1(sim과 동일) / 2(강하게)
       let _soft = 1; try { const m = /[?&]soft=([\d.]+)/.exec(window.location.search); if (m) _soft = Math.max(0, Math.min(3, parseFloat(m[1]))); } catch (_) {}
-      gl.uniform3fv(L.u_c1, c1); gl.uniform3fv(L.u_c2, c2); gl.uniform3fv(L.u_acc, acc);
+      /* 오늘 상태는 **색을 갈아치우지 않는다** — 오행 색을 유지한 채 온도만 민다.
+         갈아치우면 "내 수호신 색"이라는 소유 감각이 날마다 흔들린다. */
+      const warmK = MD ? MD.warm : 0;
+      const wtint = (c) => warmK === 0 ? c : [
+        Math.min(1, Math.max(0, c[0] + warmK * 0.16)), Math.min(1, Math.max(0, c[1] + warmK * 0.05)),
+        Math.min(1, Math.max(0, c[2] - warmK * 0.13))];
+      gl.uniform3fv(L.u_c1, wtint(c1)); gl.uniform3fv(L.u_c2, wtint(c2)); gl.uniform3fv(L.u_acc, wtint(acc));
       gl.uniform2f(L.u_touch, 0, 0); gl.uniform2f(L.u_touchVel, 0, 0); gl.uniform1f(L.u_touchAmt, 0);
       gl.uniform1f(L.u_breath, 0); gl.uniform1f(L.u_trailLive, 0); gl.uniform1f(L.u_zodiac, saju.yJ ?? 0);
       gl.uniform3fv(L.u_wispCol, [0.50 + c1[0] * 0.28, 0.55 + c1[1] * 0.26, 0.66 + c1[2] * 0.20]); // 달빛 은백(#D8E0EA 톤, LED 백색 방지)
@@ -2869,16 +2933,25 @@ function GuardianCanvasGL({ saju, zo, num, moon, birth, agitateRef, reactRef, re
            응집이 벌어들이는 밝기를 이겨야 '가라앉는다'로 읽힌다. */
         gl.uniform1f(L.u_lum, lum * (1 - 0.45 * brood + 0.75 * bur));
         gl.uniform1f(L.u_R, R0 * (1 - 0.26 * brood + 0.18 * bur));   // 오그라들었다가 도착에 펼쳐진다
-        gl.uniform1f(L.u_sink, brood * 1.0 - bur * 1.35);
+        gl.uniform1f(L.u_sink, brood * 1.0 - bur * 1.35 + (MD ? MD.sink : 0));   // v140 오늘 상태의 무게(버거움·잠김이면 가라앉는다)
         // v96 파면 확장: 누른 뒤 경과 시간(초) — 파동이 밀려나가며 끝이 형성되게. 떼면 touch.amt를 따라 사그라듦
         const _hold = touch.pressed ? Math.min(2.4, (now - (touch.t0 || now)) / 1000) : 0;
         gl.uniform1f(L.u_hold, _hold);
         gl.clear(gl.COLOR_BUFFER_BIT);
+        if (HOLO) {
+          /* ⚠ 큰 소프트 점은 **fill-bound** 다 — 패스를 늘리면 저가 기기에서 프레임이 죽는다.
+             그래서 기존 5패스가 아니라 **3패스**로 줄이고, 대신 점을 키워 겹치게 한다. */
+          gl.uniform1f(L.u_t, t); gl.uniform1f(L.u_psMul, 2.6); gl.uniform1f(L.u_alpha, 0.055 * F_AL * ALK); gl.drawArrays(gl.POINTS, 0, n);
+          gl.uniform1f(L.u_psMul, 1.35); gl.uniform1f(L.u_alpha, 0.24 * F_AL * ALK); gl.drawArrays(gl.POINTS, 0, n);
+          gl.uniform1f(L.u_psMul, 1); gl.uniform1f(L.u_alpha, 0.72 * F_AL * ALK); gl.drawArrays(gl.POINTS, 0, n);
+          gl.uniform1f(L.u_t, t - 0.38); gl.uniform1f(L.u_alpha, 0.26 * F_AL * ALK * 0.8); gl.drawArrays(gl.POINTS, 0, n);   // 흐르는 잔상
+        } else {
         gl.uniform1f(L.u_t, t); gl.uniform1f(L.u_psMul, 3.6); gl.uniform1f(L.u_alpha, 0.05 * F_AL); gl.drawArrays(gl.POINTS, 0, n); // 광휘(더 넓고 어둡게)
         if (_soft > 0) { gl.uniform1f(L.u_psMul, 1.8); gl.uniform1f(L.u_alpha, 0.22 * _soft * F_AL); gl.drawArrays(gl.POINTS, 0, n); } // v93 소프트 헤일로(최신 sim 겉결)
         gl.uniform1f(L.u_psMul, 1); gl.uniform1f(L.u_alpha, 0.72 * F_AL); gl.drawArrays(gl.POINTS, 0, n);        // 본체
         gl.uniform1f(L.u_t, t - 0.22); gl.uniform1f(L.u_alpha, 0.30 * F_AL); gl.drawArrays(gl.POINTS, 0, n);   // 비단결 꼬리 1
         gl.uniform1f(L.u_t, t - 0.50); gl.uniform1f(L.u_alpha, 0.13 * F_AL); gl.drawArrays(gl.POINTS, 0, n);    // 비단결 꼬리 2
+        }
         raf = requestAnimationFrame(draw);
       };
       draw();
@@ -3238,7 +3311,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v139 · 예시가 범인";
+const APP_VER = "v140 · 홀로그램 A/B";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -4865,6 +4938,10 @@ export default function App() {
   /* v133 응축 — 곁 탭이면 행성, 판결 탭이면 펼친 형상. ref 로 넘겨 **리렌더 없이** 셰이더만 따라가게 한다
      (state 로 넘기면 size 처럼 deps 를 건드려 WebGL 컨텍스트가 재생성된다). */
   const orbRef = useRef(false);
+  /* v140 오늘의 상태 — `?skin=holo` 에서만 쓴다. **날짜+명식이 같으면 같은 값**이라
+     useMemo 로 굳힌다(매 렌더 새 객체면 size 처럼 deps 를 건드려 WebGL 이 재생성된다). */
+  const _today = new Date().toDateString();
+  const mood = useMemo(() => (SKIN === "holo" ? todayMood(saju) : null), [saju, _today]);
   /* v134.2 곁 명부 — 이제 **실제 데이터가 붙는다**(작업지시_역할과초대 §D).
      명부의 유일한 입구는 궁합을 돌리는 순간이다(MatchDoc onMet). 저장·정렬·파생은 전부 위 모듈 함수에 있다. */
   const [gyeot, setGyeot] = useState(() => readGyeot());
@@ -5813,7 +5890,7 @@ export default function App() {
           <div className={`halo wide ${tab === "gyeot" ? "gyeotscale" : `${!awake && phase >= 1 && !res ? "lobbyscale" : ""} ${asking ? "asking" : ""} ${ritual ? "ritualfade" : ""} ${busy || (res && !cardOn) ? "busy" : ""} ${res && cardOn ? "dimmed" : ""}`}`}>
             {phase === 0
               ? <BirthCanvas tint={saju ? EL_COLOR[saju.main] : undefined} size={guardianSize(vp)} />
-              : <div className="fade"><Guardian saju={saju} zo={zo} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} restRef={restRef} orbRef={orbRef} gyeotRef={gyeotRef} broodRef={broodRef} size={guardianSize(vp)} /></div>}
+              : <div className="fade"><Guardian saju={saju} zo={zo} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} restRef={restRef} orbRef={orbRef} gyeotRef={gyeotRef} mood={mood} broodRef={broodRef} size={guardianSize(vp)} /></div>}
             <div className="gtext up">
               {phase === 0 && <div className="formwrap"><p className="forming">{birth.name ? `${birth.name}, 흩어져 있던 조각들이` : "흩어져 있던 조각들이"}<br />너를 향해 모이고 있어…<br />너의 수호신이 돌아오는 중이야.</p><ul className="formsteps">{FORM_STEPS.map((s, i) => <li key={i} className={i < formStep ? "done" : i === formStep ? "now" : ""}>{i < formStep ? "✓" : i === formStep ? "✦" : "·"} {s}{i === formStep ? "…" : ""}</li>)}</ul></div>}
             </div>
@@ -5946,6 +6023,12 @@ export default function App() {
               ) : justBorn ? (
                 <div><p className="gsay born fade">— 다시 만났네. 내가 너의 수호신이야.</p><p className="gsay fade" style={{ animationDelay: ".95s" }}>{guardianIntro}</p><p className="gsay sprite fade" style={{ animationDelay: "1.9s" }}>아, 조각 하나는 달빛에 물들어 곁에 남았어. 까불 거야 — '정령'이야.</p></div>
               ) : null}
+              {/* v140 오늘의 상태 — **`?skin=holo` 에서만** 뜬다. 기존 화면엔 안 붙는다.
+                  ⚠ 근거를 같이 적는다. 안 적으면 지어낸 말로 읽히고, 실제로 지어낸 게 아니다 —
+                     오늘 일진의 일간을 내 일간이 보는 십성이다. 판결에는 안 들어간다. */}
+              {SKIN === "holo" && mood && (
+                <p className="moodline fade">오늘은 <b>{mood.l}</b><span>오늘 일진 {mood.day} · 네 일간이 보면 {mood.ss}{mood.moon ? " · " + mood.moon : ""}</span></p>
+              )}
               <p className="wakehint">{letterSent ? "두드려봐 — 하나 더 물어도 돼" : "두드려봐 — 답은 거기 있어"}</p>
             </div>
           )}
@@ -6556,6 +6639,9 @@ const CSS = `
    전에는 판결만 absolute(bottom:14vh)이고 곁은 문서 흐름이라 문구 높이가 서로 달랐고(실기 지적),
    14vh 는 탭 스크림 안쪽이라 "두드려봐" 가 페이드에 먹혔다. 이제 탭이 차지하는 높이 위에 세운다. */
 .lobbypanel,.gyeot .gyeotpanel{position:absolute;left:0;right:0;bottom:calc(var(--tabh) + var(--tabscrim) + 10px);z-index:2;display:flex;flex-direction:column;align-items:center;width:100%;padding:0 16px;text-align:center;margin:0}
+.moodline{font-family:sans-serif;font-size:13px;letter-spacing:.06em;color:#cfc4e2;margin:0 0 2px;text-align:center;line-height:1.7}
+.moodline b{color:#f5d98b;font-weight:600;font-size:15px}
+.moodline span{display:block;font-size:10.5px;color:#8a7f95;letter-spacing:.02em;margin-top:2px}
 .wakehint{font-family:sans-serif;font-size:12px;letter-spacing:.16em;color:#d8c79a;margin-top:22px;animation:wakePulse 2.4s ease-in-out infinite;text-shadow:0 1px 10px rgba(4,3,10,.85)}
 /* v75: 공유 판결 랜딩 — 링크로 들어온 사람이 '실제 판결 카드'를 그대로 본다 */
 .sharedwrap{position:fixed;inset:0;z-index:60;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:34px 20px;background:radial-gradient(120% 78% at 50% 14%,#161029,#0b0817 58%,#060409);text-align:center;overflow-y:auto}
