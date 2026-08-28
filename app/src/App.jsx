@@ -2800,7 +2800,7 @@ const FIELD_FRAG = `
 precision highp float;
 uniform vec2  u_res, u_off;
 uniform float u_t, u_form, u_orb, u_warm, u_speed, u_lum, u_sink, u_grain;
-uniform float u_born, u_touchAmt, u_ex, u_squash;
+uniform float u_born, u_touchAmt, u_ex, u_squash, u_tailK;
 uniform vec2  u_touch, u_wisp;
 uniform vec2  u_trail[6];
 uniform vec3  u_c1, u_c2, u_c3, u_bg;
@@ -2846,6 +2846,14 @@ void main(){
   vec2  p0 = p;                              // 캔버스 좌표(꼬리를 그릴 자리)
   float tk = clamp(u_touchAmt, 0.0, 1.0);
   p -= u_wisp;
+  /* ── 손끝에 모이면 **형태를 버린다** (창업자 2026-08-28) ────────────────────
+     "그대로 형태 유지하면서 오니까 이상해서" — 맞다. 지금까지는 오행 비율·불꽃 혀·
+     각도 굴곡을 다 지닌 채 위치만 옮겼으니 **덩어리가 끌려오는** 것으로 보였다.
+     모임은 위치 이동이 아니라 **형태의 포기**다. 곁 응축(원)과 같은 계열이되
+     손끝은 더 나아가 **하나의 점**까지 간다.
+     ⚠ 접는 계수를 하나로 묶는다 — 접을 곳이 일곱 군데라 따로 두면 또 하나를 빠뜨린다
+        (곁이 둥근 삼각형이던 게 정확히 그 사고였다). */
+  float fold = max(clamp(u_orb, 0.0, 1.0), tk);
 
   /* ── 형태 — 오행마다 세로/가로 비율. 레퍼런스는 정원이 아니라 **부드러운 타원·물방울**이다 */
   /* 불꽃은 **세로로 길다**. x 를 키우면 가로가 좁아져 세로로 선다(정규화 반경이라 반대다). */
@@ -2857,7 +2865,7 @@ void main(){
   else                agp = vec2(0.98, 1.00);   // 토 — 넓고 낮다
   /* ⚠ **곁은 완전한 원이다**(창업자 2026-08-28). 0.7 만 섞으면 불꽃 모양이 남아
      "둥근 디자인"이 안 된다. 응축이 끝나면 비율도 일렁임도 전부 0 으로 간다. */
-  agp = mix(agp, vec2(1.0), clamp(u_orb, 0.0, 1.0));   // 응축하면 다섯이 다 둥글어진다
+  agp = mix(agp, vec2(1.0), fold);           // 응축·모임이면 다섯이 다 둥글어진다
   /* 푸딩의 **눌림** — 모일 땐 납작, 퍼질 땐 옆으로. 부호가 반대인 한 쌍이라
      넓이는 거의 보존된다(젤리가 찌그러져도 양은 그대로인 것과 같다). */
   agp *= vec2(1.0 + u_squash*0.55, 1.0 - u_squash*0.55);
@@ -2876,22 +2884,22 @@ void main(){
   /* ⚠ **이 굴곡이 곁에서도 살아 있어 둥근 삼각형이 됐다**(실기 재확인 2026-08-28).
      2차는 타원, **3차는 삼각형**을 만든다. 비율·일렁임·혀·물방울은 다 u_orb 에 물렸는데
      이것만 빠져 있었다 — 곁이 안 둥근 진짜 이유. 응축이 끝나면 굴곡도 0 으로 간다. */
-  float sh = 1.0 + (0.085*sin(ang*2.0 + t*0.21) + 0.050*sin(ang*3.0 - t*0.17)) * (1.0 - u_orb);
+  float sh = 1.0 + (0.085*sin(ang*2.0 + t*0.21) + 0.050*sin(ang*3.0 - t*0.17)) * (1.0 - fold);
   /* ⚠ 곁 전이가 "느리다"는 건 시간만의 문제가 아니었다 — **줄어드는 양이 19% 뿐**이라
      0.5초 안에 다 끝나도 변화가 안 보였다. 응축 폭을 키운다(면적으로는 -57%). */
-  float R  = mix(0.52, 0.34, u_orb) * mix(1.0, 0.44, tk) * mix(0.90, 1.12, zc) * (1.0 + 0.020*sin(t*0.85)) * sh;
+  float R  = mix(0.52, 0.34, clamp(u_orb,0.0,1.0)) * mix(1.0, 0.20, tk) * mix(0.90, 1.12, zc) * (1.0 + 0.020*sin(t*0.85)) * sh;
 
   /* 물방울 — 위로 갈수록 좁아진다. 상하대칭 타원은 눈알이나 세포로 읽힌다.
      ⚠ **이 변형만 u_orb 에 안 물려 있어** 곁에서도 위가 좁아졌다(실측 세로/가로 0.93).
         비율·일렁임·혀는 다 껐는데 물방울 하나가 남아 "둥근 디자인"이 안 됐다. */
   vec2 w = e;
-  w.y *= 1.0 + 0.20*smoothstep(-0.3, 1.3, e.y/max(R,1e-3)) * (1.0 - u_orb);
+  w.y *= 1.0 + 0.20*smoothstep(-0.3, 1.3, e.y/max(R,1e-3)) * (1.0 - fold);
   /* ── 불꽃의 일렁임 (창업자 2026-08-28: "세포보다는 불꽃의 일렁임 느낌이여") ──────
      세포와 불꽃을 가르는 건 **방향**이다. 세포는 사방이 같고, 불꽃은 아래가 뭉치고
      위로 흐르며 끝이 흔들린다. y 좌표에서 시간을 빼면 무늬가 **위로 올라간다**.
      그리고 흔들림을 위쪽일수록 크게 준다 — 불꽃 끝이 더 흔들리는 게 그 이유다. */
   float up  = smoothstep(-0.9, 1.1, w.y/max(R,1e-3));
-  float sway = mix(1.0, 0.0, u_orb) * mix(0.35, 1.0, u_born);   // 곁이면 완전히 멎고, 갓 태어났을 땐 아직 약하다
+  float sway = (1.0 - fold) * mix(0.35, 1.0, u_born);   // 곁이면 완전히 멎고, 갓 태어났을 땐 아직 약하다
   float fx = fbm(vec2(w.x*1.9,       w.y*0.95 - t*0.85));
   float fy = fbm(vec2(w.x*1.4 + 3.7, w.y*0.80 - t*0.62));
   w.x += (fx-0.5) * R * (0.14 + 0.46*up) * sway;
@@ -2913,7 +2921,7 @@ void main(){
      즉 **삼각형**이고 그게 헤일로 반경(r3·r4)에 곱해진다. 곁에서도 감정 가중치가 살아 있어
      헤일로가 삼각으로 부풀었다. 굴곡·비율·물방울·층 어긋남을 다 껐는데도 각져 보인 게 이것 때문.
      곁에서는 **형태 변조만** 접는다 — 감정은 밝기·색으로 계속 실린다. */
-  float puffK = 1.0 + lobe*u_puffP.z*1.35*u_wt.y*(1.0 - u_orb*0.92);   // ⚠ 2.2 는 헤일로를 세잎클로버로 갈랐다
+  float puffK = 1.0 + lobe*u_puffP.z*1.35*u_wt.y*(1.0 - fold*0.92);   // ⚠ 2.2 는 헤일로를 세잎클로버로 갈랐다
   float ph   = floor(t*u_flkP.x);
   float fl   = 1.0 - u_flkP.y*hash(vec2(ph, 7.3));
   fl *= mix(0.34, 1.0, step(u_flkP.z, hash(vec2(ph, 19.1))));
@@ -2926,7 +2934,7 @@ void main(){
   /* ⚠ **층의 어긋남도 곁에서는 접는다.** 어긋남은 판결(불꽃)이 동심원=세포로 보이지 않게
      하려고 넣은 것인데, 곁은 응축된 구슬이라 동심이어야 둥글다. 남겨 두면 층 경계가
      엇갈리며 **한쪽이 각져 보인다**(실기에서 둥근 삼각형으로 읽혔다). */
-  float orbC = mix(1.0, 0.18, u_orb);
+  float orbC = mix(1.0, 0.18, fold);
   vec2 c0 = vec2( 0.07*sin(t*0.23),        -0.12 + 0.04*cos(t*0.19)) * R * orbC;   // 반사광은 한쪽으로 치우친다
   vec2 c1 = vec2( 0.05*sin(t*0.19+0.7),    -0.01 + 0.035*cos(t*0.15)) * R * orbC;
   vec2 c2 = vec2(-0.09*sin(t*0.15+1.1),     0.065*cos(t*0.13+0.4))    * R * orbC;
@@ -2943,11 +2951,13 @@ void main(){
   float rBase = length(w)/max(R,1e-3);
   /* ⚠ 흩어짐 배율을 크게 잡았더니 바깥 층이 캔버스를 넘어 **사각 자국**이 났다(실기).
      조각이 흩어져 보이는 데는 이 정도면 충분하다 — 넘치면 형태가 아니라 얼룩이 된다. */
+  /* 모이면 **층 간격도 좁아진다** — 반경만 줄이면 작은 오라일 뿐이고, 층이 겹쳐야 점이 된다 */
+  float lay = mix(1.0, 0.62, tk);
   float r0 = length(w-c0*(1.0+bScat*0.4))/(R*0.46*(1.0 + bScat*0.22));
-  float r1 = length(w-c1*(1.0+bScat*1.8))/(R*0.86*(1.0 + bScat*0.55));
-  float r2 = length(w-c2*(1.0+bScat*2.6))/(R*0.98*(1.0 + bScat*0.80));
-  float r3 = length(w-c3*(1.0+bScat*3.2))/(R*1.22*puffK*zg*(1.0 + bScat*0.90));
-  float r4 = length(w-c4*(1.0+bScat*3.6))/(R*1.56*puffK*zg*(1.0 + bScat*0.95));
+  float r1 = length(w-c1*(1.0+bScat*1.8))/(R*mix(0.86,0.68,tk)*(1.0 + bScat*0.55));
+  float r2 = length(w-c2*(1.0+bScat*2.6))/(R*0.98*lay*(1.0 + bScat*0.80));
+  float r3 = length(w-c3*(1.0+bScat*3.2))/(R*1.22*puffK*zg*lay*(1.0 + bScat*0.90));
+  float r4 = length(w-c4*(1.0+bScat*3.6))/(R*1.56*puffK*zg*lay*(1.0 + bScat*0.95));
 
   /* ⚠ **심을 하얗게 뒤집었더니 눈알이 됐다**(한 판 날렸다). 레퍼런스를 다시 보면
      WARMTH 는 중심이 오히려 **진한 자홍**이다 — 진한 중심 자체는 죄가 없다.
@@ -2959,7 +2969,7 @@ void main(){
   float a3 = ring(r3, 0.78, 0.50) * 0.52;   // ⚠ 좁고 세면 **과녁**이 된다 — 넓게 번지게                  // 대비색 헤일로 — 레퍼런스의 시안·연두 자리
   float a4 = ring(r4, 0.84, 0.52) * 0.26;                  // 옅은 바깥
   float aRay = sray * smoothstep(mix(1.95,1.60,u_orb), 1.02, rBase)
-                    * smoothstep(1.00, 1.20, rBase) * u_wt.x * 0.46 * (1.0 - u_orb*0.75);   // 빛살도 곁에선 접는다(각져 보인다)
+                    * smoothstep(1.00, 1.20, rBase) * u_wt.x * 0.46 * (1.0 - fold*0.75);   // 빛살도 곁에선 접는다(각져 보인다)
 
   /* ── 색 여정 — 다섯 자리에서 색상이 네 번 돈다 ───────────────────────── */
   vec3 heart = mix(u_c2, vec3(1.0), 0.66);                 // 반사광 — 작고 치우친 밝은 점
@@ -2971,9 +2981,10 @@ void main(){
   float spark = 0.0;
   for(int i=0;i<7;i++){
     float fi=float(i);
-    vec2 sp = vec2(sin(t*0.31+fi*2.1)*0.40, cos(t*0.27+fi*1.7)*0.44)
-            + vec2(hash(vec2(fi,1.0))-0.5, hash(vec2(fi,2.0))-0.5)*0.62;
-    spark += smoothstep(0.040,0.0,length(p-sp))*(0.50+0.50*sin(t*1.6+fi*2.4));
+    vec2 sp = (vec2(sin(t*0.31+fi*2.1)*0.40, cos(t*0.27+fi*1.7)*0.44)
+            + vec2(hash(vec2(fi,1.0))-0.5, hash(vec2(fi,2.0))-0.5)*0.62)
+            * mix(1.0, 0.26, fold);   // ⚠ 반짝임만 제자리에 남으면 점 주위가 어수선해진다
+    spark += smoothstep(0.034*mix(1.0,0.55,fold),0.0,length(p-sp))*(0.50+0.50*sin(t*1.6+fi*2.4));
   }
   float aSp = spark*0.60*(1.0 + u_ex*0.9);   // 들뜨면 반짝임이 는다
 
@@ -2988,7 +2999,10 @@ void main(){
        위습은 꼬리가 본체만큼 중요하다 — 넉넉히 퍼지게 두고 뒤로 갈수록만 줄인다. */
     tail += exp(-dot(dq,dq) * (3.8 + fi*1.5)) * (0.34 - 0.048*fi);
   }
-  tail *= (0.30 + 0.70*tk) * (1.0 + u_ex*0.6);
+  /* ⚠ 꼬리를 **속도에 물리지 않으면** 위습이 멈춘 순간 여섯 점이 같은 자리에 겹쳐
+     커다란 원이 된다 — 손끝에 모인 점을 그 원이 통째로 가렸다(실기에서 그랬다).
+     꼬리는 **지나간 자국**이므로 지나갈 때만 있어야 한다. */
+  tail *= u_tailK * (1.0 + u_ex*0.6);
 
   vec4 L = vec4(mist, a4);
   L = ov(vec4(mix(u_c2, vec3(1.0), 0.70), tail), L);   // 꼬리는 **빛의 잔상** — 색보다 밝기다
@@ -3057,7 +3071,7 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
       const la = gl.getAttribLocation(pg, "a"); gl.enableVertexAttribArray(la);
       gl.vertexAttribPointer(la, 2, gl.FLOAT, false, 0, 0);
-      const U = {}; ["u_res","u_off","u_t","u_form","u_orb","u_warm","u_speed","u_lum","u_sink","u_grain","u_c1","u_c2","u_c3","u_bg","u_wt","u_bite","u_rayP","u_puffP","u_flkP","u_baseP","u_born","u_touch","u_touchAmt","u_wisp","u_ex","u_trail","u_squash"]
+      const U = {}; ["u_res","u_off","u_t","u_form","u_orb","u_warm","u_speed","u_lum","u_sink","u_grain","u_c1","u_c2","u_c3","u_bg","u_wt","u_bite","u_rayP","u_puffP","u_flkP","u_baseP","u_born","u_touch","u_touchAmt","u_wisp","u_ex","u_trail","u_squash","u_tailK"]
         .forEach((k) => { U[k] = gl.getUniformLocation(pg, k); });
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const S = Math.round(size * dpr); cv.width = S; cv.height = S;
@@ -3177,6 +3191,9 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
         gl.uniform1f(U.u_touchAmt, gather);
         gl.uniform2f(U.u_wisp, wisp.x, wisp.y);
         gl.uniform1f(U.u_ex, wisp.ex);
+        /* 꼬리 세기 = 지금 얼마나 빨리 움직이는가. 멈추면 0 이라 꼬리가 사라진다. */
+        const spd = Math.hypot(wisp.vx, wisp.vy);
+        gl.uniform1f(U.u_tailK, Math.min(1, spd * 0.55));
         gl.uniform2fv(U.u_trail, new Float32Array(trail.flat()));
         gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLES, 0, 3);
       };
@@ -3803,7 +3820,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v159 · 푸딩";
+const APP_VER = "v160 · 점으로 모인다";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
