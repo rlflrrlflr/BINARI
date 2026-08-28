@@ -2858,9 +2858,11 @@ void main(){
   float sh = 1.0 + 0.085*sin(ang*2.0 + t*0.21) + 0.050*sin(ang*3.0 - t*0.17);
   float R  = mix(0.52, 0.42, u_orb) * mix(0.94, 1.07, zc) * (1.0 + 0.020*sin(t*0.85)) * sh;
 
-  /* 물방울 — 위로 갈수록 좁아진다. 상하대칭 타원은 눈알이나 세포로 읽힌다 */
+  /* 물방울 — 위로 갈수록 좁아진다. 상하대칭 타원은 눈알이나 세포로 읽힌다.
+     ⚠ **이 변형만 u_orb 에 안 물려 있어** 곁에서도 위가 좁아졌다(실측 세로/가로 0.93).
+        비율·일렁임·혀는 다 껐는데 물방울 하나가 남아 "둥근 디자인"이 안 됐다. */
   vec2 w = e;
-  w.y *= 1.0 + 0.20*smoothstep(-0.3, 1.3, e.y/max(R,1e-3));
+  w.y *= 1.0 + 0.20*smoothstep(-0.3, 1.3, e.y/max(R,1e-3)) * (1.0 - u_orb);
   /* ── 불꽃의 일렁임 (창업자 2026-08-28: "세포보다는 불꽃의 일렁임 느낌이여") ──────
      세포와 불꽃을 가르는 건 **방향**이다. 세포는 사방이 같고, 불꽃은 아래가 뭉치고
      위로 흐르며 끝이 흔들린다. y 좌표에서 시간을 빼면 무늬가 **위로 올라간다**.
@@ -3707,7 +3709,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v152 · 부르면 답이 온다";
+const APP_VER = "v153 · 온보딩 전 과정";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -6620,7 +6622,12 @@ export default function App() {
       {step === 2 && saju && (
         <section className="scene fade">
           <div className="halo">
-            <DustOrb size={210} stage={recallSeen ? 3 : 1} tint={saju ? EL_COLOR[saju.main] : undefined} />
+            {/* ⚠ step 2 는 홀로 분기가 아예 없어 **어두운 판용 먼지 오브**가 미색 바탕에 그대로 떴다
+                (실기 재확인 2026-08-28). 여기는 사주가 이미 나온 뒤라 **제 오행 색**으로 뜨고,
+                기억이 돌아오는 중이므로 아직 다 안 모인 상태(0.62)로 둔다. */}
+            {SKIN === "holo"
+              ? <Guardian saju={saju} scatter={recallSeen ? 0.78 : 0.62} size={Math.min(vp.w * 0.66, 260)} />
+              : <DustOrb size={210} stage={recallSeen ? 3 : 1} tint={saju ? EL_COLOR[saju.main] : undefined} />}
             <div className="gtext">
               {reveal >= 5 && <p className="gname fade">기억이 다 돌아왔어</p>}
             </div>
@@ -7613,6 +7620,25 @@ const CSS = `
 .stage.holo .ainote{color:#7f7663}
 .stage.holo .unit{color:#8a8271}
 .stage.holo .in{color:#262218}
+/* ⚠ 온보딩 중반(회상·기억) 화면이 통째로 빠져 있었다 — 어두운 판용 노랑·보라 글자가
+   미색 바탕에 그대로 떴다(실기 재확인 2026-08-28). 아래 여섯이 그 화면들의 글자다. */
+.stage.holo .confirmline{color:#5d5544;border-color:rgba(140,110,40,.30);background:rgba(255,253,246,.5)}
+.stage.holo .bar b{color:#8c4a12}
+.stage.holo .chk{color:#6b6252}
+.stage.holo .chk em{color:#8a8271}
+.stage.holo .gathering{color:#6b6252}
+.stage.holo .mtag{color:#8a8271}
+.stage.holo .coins{color:#6b6252}
+.stage.holo .rvbig span{color:#8a8271}
+.stage.holo .rvbig b{color:#8c4a12;text-shadow:none}
+.stage.holo .rvlunar{color:#8a8271}
+.stage.holo .mention{color:#3c3527}
+.stage.holo .mention b{color:#8c4a12}
+.stage.holo .formsteps li{color:#a09883}
+.stage.holo .formsteps li.done{color:#6b6252}
+.stage.holo .formsteps li.now{color:#8c4a12}
+.stage.holo .dimq{color:#3c3527}
+.stage.holo .msrh{color:#8a8271 !important}
 .stage.holo .btn.ghost{color:#4d4535;border-color:#bab392}
 .stage.holo .tabbar::before{background:linear-gradient(to top,#cfcbc0 0%,#cfcbc0 55%,rgba(207,203,192,.72) 80%,rgba(207,203,192,0) 100%)}
 .stage.holo .tabbtn{background:rgba(255,253,246,.70);color:#6b6252;border-color:rgba(120,96,40,.26)}
