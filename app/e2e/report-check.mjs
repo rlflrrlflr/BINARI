@@ -15,7 +15,9 @@ const CALL1 = JSON.stringify({ category: "B", votes: [{ axis: "사주", v: "GO" 
 const CALL2 = JSON.stringify({ subline: "밤이 널 속이는 거야.", reasons: [{ axis: "사주", vote: "STOP", text: "화기가 널 밀어." }], funLine: "욱하지 마.", disclaimer: "" });
 
 async function onboard(page) {
-  await page.goto(BASE); await page.waitForTimeout(900);
+  /* v143: 「타고난 그릇」은 무료 표면에서 내렸다(App 의 MSR_FREE 주석 참조).
+     검사는 디버그 문으로 들어간다 — 숨긴 동안에도 122항이 계속 회귀를 잡아야 한다. */
+  await page.goto(BASE + (BASE.includes("?") ? "&" : "?") + "msr=1"); await page.waitForTimeout(900);
   await page.getByRole("button", { name: "조각을 모으러 갈래" }).click(); await page.waitForTimeout(400);
   await page.getByRole("button", { name: "이름 없이 갈래" }).click();
   const ins = page.locator("input.in:not(.wide)");

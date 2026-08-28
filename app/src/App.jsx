@@ -2841,6 +2841,22 @@ const guardianSize = (vp) => (SKIN === "holo"
    홀로그램 = 낱알을 없애는 게 아니라 **겹쳐서 안 보이게** 하는 것이다.
    점을 키우고 알파를 낮추면 같은 셰이더가 연속 그라데이션이 된다(실측: guardian-holo.html).
    그래서 형태 축(u_form)·색 체계·오행 규칙은 전부 그대로 살아 있다. */
+/* ── 「타고난 그릇」 무료 노출 스위치 (v143, 창업자 지시 2026-08-27) ──────────────
+   *"타고난 그릇은 우리 리포트 9,900원짜리의 일부로 보여질 정도로 너무 상세한데,
+     일단은 보여주지 않는 걸로 하자."*
+
+   ⚠ **§알 권리(헌장 2026-08-06)와 충돌하지 않는다 — 국면이 다르다.** 그 조항은
+     *"값을 치른 문서를 여는 유저"* 에게 정보를 클릭 뒤에 숨기지 말라는 것이다.
+     여기는 **값을 안 치른 판결 카드 뒷면**이고, 문제는 은닉이 아니라 **반대로 과잉 무상 제공**이다 —
+     각인(9,900원)이 팔려는 두께를 판결 카드가 공짜로 먼저 준다.
+     ⚠ 단 v109 주석이 이 블록을 §알 권리 근거로 '기본 펼침'으로 만들었다.
+       **그 결정을 뒤집는 것이므로, 되돌릴 때 v109 의 근거(실유저 지적 2건)를 같이 읽어라.**
+
+   ⚠ **컴포넌트는 지우지 않는다.** COIN_RITUAL 과 같은 이유다 —
+     지웠다가 되살리면 같은 물건이 안 나온다. 각인에 편입하든 여기로 되돌리든 원본이 있어야 한다.
+   ⚠ `?msr=1` 로 열린다. 검사(report-check 122항)가 그 문으로 들어가므로
+     **숨긴 동안에도 회귀가 계속 잡힌다.** 안 그러면 122항이 통째로 잠든다. */
+const MSR_FREE = (() => { try { return /[?&]msr=1(&|$)/.test(window.location.search); } catch (_) { return false; } })();
 const SKIN = (() => { try { return /[?&]skin=holo(&|$)/.test(window.location.search) ? "holo" : ""; } catch (_) { return ""; } })();
 
 /* ── 오늘의 상태 — **운세 방법론에서 나온다. 지어내지 않는다** ─────────────
@@ -3960,7 +3976,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v165 · 커졌다 작아진다";
+const APP_VER = "v165.1 · 동전 카피·그릇 내림";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -7505,9 +7521,9 @@ export default function App() {
                   {tosses.length < 6
                     ? <div className="w100">
                         <button className="btn gold throwbtn" onPointerDown={startCharge} onPointerLeave={cancelCharge} onPointerCancel={cancelCharge} onClick={doThrow} disabled={busy || tossing}>
-                          {tossing ? "동전이 공중에…" : charging ? "손 안에서 구르는 중… 놓으면 던져져" : `쥐었다 놓아 던진다 (${tosses.length}/6)`}
+                          {tossing ? "공중에…" : charging ? "놓으면 던져져" : `던진다 (${tosses.length}/6)`}
                         </button>
-                        <p className="fine">{tosses.length === 5 ? "마지막 한 번이야." : "오래 쥐고 있어도 돼 — 손에 머무는 시간만 길어지고, 나오는 건 하늘이 정해."}</p>
+                        <p className="fine">{tosses.length === 5 ? "마지막 한 번이야." : "오래 쥐어도 결과는 안 바뀌어."}</p>
                       </div>
                     /* ⚠ 대기 문구를 여기서 반복하지 않는다 — 위 `.brooding` 이 의식과 무관하게 이미 띄운다.
                          v140 에서 둘이 같은 문장을 동시에 그려 검사가 strict mode 로 깨졌다(brood-check ②·④). */
@@ -7582,7 +7598,7 @@ export default function App() {
                     {/* 괘 이름은 뒷면(지표 이름을 짚어도 되는 자리)에만 — 앞면에선 유저가 못 알아듣는 한자였다 */}
                     {hexInfo && <p className="vhex">卦 {hexInfo.name}{hexInfo.moving.length > 0 && ` → ${hexInfo.toName}`}</p>}
                     {detail?.reasons ? <ul className="vr">{detail.reasons.map((r, i) => <li key={i}><b>{r.axis}</b>{r.vote && <em className="vote">{r.vote}</em>}<p>{gyeotFillNames(r.text, gyeotSorted)}</p></li>)}</ul> : <p className="gathering">조각들이 근거를 모으고 있어<span className="dots"><i>.</i><i>.</i><i>.</i></span></p>}
-                    {saju && saju.idx && <MyeongsikReport saju={saju} sex={birth.sex} birth={birth} />}
+                    {MSR_FREE && saju && saju.idx && <MyeongsikReport saju={saju} sex={birth.sex} birth={birth} />}
                     {detail?.disclaimer && <p className="disc">{detail.disclaimer}</p>}
                   </div>
                 </div>

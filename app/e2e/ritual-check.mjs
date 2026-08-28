@@ -41,13 +41,13 @@ try {
   await p.getByRole("button", { name: "판결을 청한다" }).click();
   await p.waitForTimeout(400);
 
-  ck(await p.getByRole("button", { name: /쥐었다 놓아 던진다/ }).isVisible(), "의식 화면이 뜬다");
+  ck(await p.getByRole("button", { name: /^던진다 \(/ }).isVisible(), "의식 화면이 뜬다");
   ck((await p.getByRole("button", { name: /한 번에/ }).count()) === 0, "건너뛸 버튼이 화면에 없다");
   ck((await p.getByText("물음을 고칠래").count()) === 1, "빠져나갈 길은 있다 — 마찰이지 감금이 아니다");
 
   for (let i = 0; i < 6; i++) {
     ck((await p.locator(".hline").count()) === i, `${i + 1}번째 던지기 전 효가 ${i}개`);
-    await p.getByRole("button", { name: /쥐었다 놓아 던진다/ }).click({ timeout: 15000 });
+    await p.getByRole("button", { name: /^던진다 \(/ }).click({ timeout: 15000 });
     await p.waitForTimeout(1150);
   }
   ck((await p.locator(".hline").count()) === 6, "여섯 번 던져야 괘가 맺힌다");

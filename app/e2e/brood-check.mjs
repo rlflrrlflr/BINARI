@@ -66,7 +66,9 @@ ck("① 대기 전 수호신이 그려진다", band.length >= 6 && lumAvg > 0,
 await page.locator("textarea.qbox").fill("이직할까?");
 await page.getByRole("button", { name: "판결을 청한다" }).click();
 await throwCoins(page);
-await page.waitForTimeout(2200);                       // 벼름이 거의 다 잠긴 시점
+/* v143: 의식이 켜진 뒤로는 마지막 낙착의 일렁임(agitateRef, 1.4s)이 이 측정에 겹친다.
+   가라앉음을 재려면 그 흔들림이 완전히 잠긴 뒤여야 한다 — 2.2s 로는 모자랐다(간헐 실패). */
+await page.waitForTimeout(3400);                       // 벼름이 거의 다 잠긴 시점
 
 ck("② 대기 문구가 뜬다(동전 끄면서 사라졌던 것)",
    await page.getByText("조각들이 합의하는 중…").isVisible().catch(() => false));
