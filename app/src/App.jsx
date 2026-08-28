@@ -2790,6 +2790,14 @@ float vnoise(vec2 p){
   return mix(mix(hash(i),hash(i+vec2(1,0)),u.x), mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),u.x), u.y);
 }
 float fbm(vec2 p){ float s=0.0,a=0.55; for(int i=0;i<4;i++){ s+=a*vnoise(p); p*=2.03; a*=0.5; } return s; }
+/* 층 합성 — **가중평균이 아니라 over**. 가중평균은 겹칠 때마다 색을 섞어 채도를 죽인다
+   (금의 파랑 코어 + 토의 노랑 헤일로가 회청색이 된 게 그 때문이었다).
+   레퍼런스의 링들은 서로 섞이지 않고 **위에 얹혀** 있다. */
+/* 링 — 반경 c 에서 최대인 종 모양. ⚠ smoothstep 두 개를 곱해 링을 만들면
+   **링 한복판에서도 값이 0.15 밖에 안 나온다**(실측). 대비색 헤일로가 안 보이던 진짜 이유였다. */
+float ring(float r, float c, float w){ float x=(r-c)/w; return exp(-x*x); }
+vec4 ov(vec4 s, vec4 d){ float a = s.a + d.a*(1.0-s.a);
+  return vec4((s.rgb*s.a + d.rgb*d.a*(1.0-s.a))/max(a,1e-4), a); }
 
 void main(){
   vec2 uv=(gl_FragCoord.xy-u_off-0.5*u_res)/min(u_res.x,u_res.y);
@@ -2797,8 +2805,8 @@ void main(){
   float t = u_t*u_speed;
 
   /* ── xyz — x·y 로 떠다니고 z 로 앞뒤 ─────────────────────────────────── */
-  vec2 drift = vec2(sin(t*0.23)*0.075 + sin(t*0.41+1.3)*0.028,
-                    cos(t*0.19)*0.062 + sin(t*0.33+0.6)*0.024);
+  vec2 drift = vec2(sin(t*0.23)*0.042 + sin(t*0.41+1.3)*0.016,
+                    cos(t*0.19)*0.035 + sin(t*0.33+0.6)*0.014);
   float zc = 0.5 + 0.5*sin(t*0.147);
   vec2  p  = (uv - drift)*2.35;
 
@@ -2813,13 +2821,22 @@ void main(){
   vec2 e = p*agp;
   float ang = atan(e.y, e.x);
 
-  /* ⚠ 굴곡은 **아주 낮은 주파수만**. 고주파를 얹는 순간 세포막이 된다(v143·v145 가 그랬다).
-     레퍼런스의 형태는 큰 덩어리 둘셋이 겹친 물방울이지 아메바가 아니다. */
+  /* ── 왜 자꾸 세포로 보였나 (2026-08-28 3차 분석) ────────────────────────
+     v146 은 막을 없앴는데도 세포였다. 레퍼런스와 층별로 대조해 보니 원인은 막이 아니라 셋이었다.
+       ① **중심이 가장 진하다** → 그건 발광체가 아니라 **핵(nucleus)** 으로 읽힌다.
+          레퍼런스는 다수가 중심이 **밝고**, 진한 색은 그 바깥 **링**에 있다.
+       ② **완전한 동심원** → 세포는 동심이고 오라는 아니다. 레퍼런스의 WARMTH 는 어두운 코어가
+          아래로 치우쳐 있고 노란 헤일로는 위로 쏠려 있다 — **층마다 중심이 어긋난다.**
+       ③ **색 여정이 짧다** → 레퍼런스는 진홍→핑크→노랑→연두→시안으로 색상이 서너 번 돈다.
+          두 색만 오가면 "안이 진한 동그라미"가 되고 그건 세포다.
+     그래서 층을 **다섯**으로 늘리고, 중심을 층마다 어긋내고, 심을 밝게 뒤집는다. */
   float sh = 1.0 + 0.085*sin(ang*2.0 + t*0.21) + 0.050*sin(ang*3.0 - t*0.17);
-  float R  = mix(0.62, 0.50, u_orb) * mix(0.94, 1.07, zc) * (1.0 + 0.020*sin(t*0.85));
-  float rr = length(e) / max(R*sh, 1e-3);
-  /* 아주 느린 큰 얼룩 하나 — 좌우 대칭을 깨는 용도. 무늬로 보이면 안 된다 */
-  rr *= 1.0 + (fbm(p*0.46 + vec2(t*0.05, -t*0.04)) - 0.5)*0.16;
+  float R  = mix(0.52, 0.42, u_orb) * mix(0.94, 1.07, zc) * (1.0 + 0.020*sin(t*0.85)) * sh;
+
+  /* 물방울 — 위로 갈수록 좁아진다. 상하대칭 타원은 눈알이나 세포로 읽힌다 */
+  vec2 w = e;
+  w.y *= 1.0 + 0.20*smoothstep(-0.3, 1.3, e.y/max(R,1e-3));
+  w *= 1.0 + (fbm(p*0.46 + vec2(t*0.05, -t*0.04)) - 0.5)*0.10;
 
   /* ── 감정은 **빛에만** ────────────────────────────────────────────────── */
   float jit  = (fbm(vec2(ang*2.1, t*0.7))-0.5)*u_rayP.w*3.0;
@@ -2831,28 +2848,45 @@ void main(){
   float fl   = 1.0 - u_flkP.y*hash(vec2(ph, 7.3));
   fl *= mix(0.34, 1.0, step(u_flkP.z, hash(vec2(ph, 19.1))));
 
-  /* ── 색은 **반경에 따라 층으로 번진다. 경계선은 없다** ────────────────
-     ⚠ 여기가 세포와 갈리는 지점이다. v145 는 ①몸의 알파 경계 ②밝아지는 림 띠
-        ③자전하는 표면 결 — 셋을 다 갖고 있었고 그게 정확히 **세포막과 세포질**이었다.
-        레퍼런스에는 셋 다 없다. 안쪽이 진하고 바깥으로 갈수록 **색이 바뀌며 옅어질** 뿐이다.
-     층마다 색과 알파를 따로 쌓고 색은 알파로 가중평균한다(더하면 흰색으로 탄다). */
-  /* ⚠ 헤일로를 흰색으로 섞으면 **색이 안개에 묻힌다**(한 판 그렇게 날렸다).
-     레퍼런스는 코어(진한 자홍)와 헤일로(시안·연두)가 **대비색으로 뚜렷하다.**
-     흰빛은 맨 바깥에만 아주 얇게 둔다. */
-  vec3 acc  = u_c3;                                 // 나를 생하는 오행 — 대비색
-  vec3 mist = mix(u_c3, vec3(1.0), 0.55);
-  float zg  = mix(0.94, 1.10, zc);
+  /* ── 다섯 층. **중심이 저마다 어긋나고 저마다 다른 속도로 떠다닌다** ────
+     ⚠ 어긋남이 크면 코어가 화면 밖으로 밀려 **한쪽으로 쏠린 얼룩**이 된다(실기에서 그랬다).
+        비대칭은 '완벽한 동심원이 아니다'를 만들 만큼만 — 지금 폭은 반경의 5~12%. */
+  /* */
+  float zg = mix(0.94, 1.10, zc);
+  vec2 c0 = vec2( 0.07*sin(t*0.23),        -0.12 + 0.04*cos(t*0.19)) * R;   // 반사광은 한쪽으로 치우친다
+  vec2 c1 = vec2( 0.05*sin(t*0.19+0.7),    -0.01 + 0.035*cos(t*0.15)) * R;
+  vec2 c2 = vec2(-0.09*sin(t*0.15+1.1),     0.065*cos(t*0.13+0.4))    * R;
+  vec2 c3 = vec2( 0.12*sin(t*0.11+2.0),     0.11*cos(t*0.09+0.5))    * R;
+  vec2 c4 = vec2(-0.10*cos(t*0.08+1.4),     0.09*sin(t*0.07+2.2))    * R;
 
-  float aCore = pow(smoothstep(0.88, 0.00, rr), 1.22) * 1.00;
-  float aBody = pow(smoothstep(1.10, 0.34, rr), 1.20) * 0.42;
-  /* ⚠ 헤일로에 **안쪽 컷이 없으면 중심까지 차서** 코어와 섞여 탁해진다(금=파랑 코어에
-     토=노랑 헤일로가 겹쳐 회청색이 됐다 — 보색끼리 가중평균하면 회색이다).
-     레퍼런스의 헤일로는 코어를 덮는 안개가 아니라 **코어 바깥의 링**이다. */
-  float aHalo = pow(smoothstep(mix(1.78,1.48,u_orb)*puffK*zg, 0.60, rr), 1.20)
-              * smoothstep(0.34, 0.86, rr) * 0.62;
-  float aOut  = pow(smoothstep(mix(2.45,1.95,u_orb)*puffK*zg, 1.20, rr), 1.40)
-              * smoothstep(0.90, 1.45, rr) * 0.14;
-  float aRay  = sray * smoothstep(mix(2.40,1.90,u_orb), 1.00, rr) * smoothstep(0.85, 1.20, rr) * u_wt.x * 0.40;
+  /* ⚠ **비율을 레퍼런스에서 재서 맞춘다.** v146~ 은 오라가 칸을 덮을 만큼 크고 옅어서
+     회색 안개가 됐다. 레퍼런스는 진한 몸통이 칸 폭의 약 40%, 헤일로까지 합쳐 약 75% —
+     **작고 진하고, 바깥은 바탕이 그대로 남는다.** 그 여백이 오라를 오라로 보이게 한다. */
+  float rBase = length(w)/max(R,1e-3);
+  float r0 = length(w-c0)/(R*0.46);
+  float r1 = length(w-c1)/(R*0.74);
+  float r2 = length(w-c2)/(R*0.86);
+  float r3 = length(w-c3)/(R*1.22*puffK*zg);
+  float r4 = length(w-c4)/(R*1.56*puffK*zg);
+
+  /* ⚠ **심을 하얗게 뒤집었더니 눈알이 됐다**(한 판 날렸다). 레퍼런스를 다시 보면
+     WARMTH 는 중심이 오히려 **진한 자홍**이다 — 진한 중심 자체는 죄가 없다.
+     세포와 갈리는 건 ①색이 계속 바뀌고 ②층 중심이 어긋나 비대칭이고 ③형태가 물방울이며
+     ④바깥이 아주 넓고 부드럽게 사라진다는 것. 밝은 심은 **작은 반사광**으로만 남긴다. */
+  float a0 = ring(r0, 0.00, 0.62) * 0.16;                 // 작고 치우친 반사광
+  float a1 = pow(smoothstep(1.0, 0.00, r1), 1.20) * 0.95;  // 진한 코어 — 중심에서 최대
+  float a2 = ring(r2, 0.80, 0.46) * 0.38;                  // 중간 색 띠
+  float a3 = ring(r3, 0.78, 0.50) * 0.52;   // ⚠ 좁고 세면 **과녁**이 된다 — 넓게 번지게                  // 대비색 헤일로 — 레퍼런스의 시안·연두 자리
+  float a4 = ring(r4, 0.84, 0.52) * 0.26;                  // 옅은 바깥
+  float aRay = sray * smoothstep(mix(1.95,1.60,u_orb), 1.02, rBase)
+                    * smoothstep(1.00, 1.20, rBase) * u_wt.x * 0.42;
+
+  /* ── 색 여정 — 다섯 자리에서 색상이 네 번 돈다 ───────────────────────── */
+  vec3 heart = mix(u_c2, vec3(1.0), 0.66);                 // 반사광 — 작고 치우친 밝은 점
+  vec3 deep  = u_c1 + vec3(u_warm*0.11, u_warm*0.035, -u_warm*0.10);
+  vec3 warmc = mix(u_c1, u_c3, 0.42);                      // 진한 색과 대비색 사이 — 중간 색상
+  vec3 acc   = u_c3;                                       // 나를 생하는 오행 — 대비색
+  vec3 mist  = mix(u_c3, vec3(1.0), 0.26);
 
   float spark = 0.0;
   for(int i=0;i<7;i++){
@@ -2863,12 +2897,22 @@ void main(){
   }
   float aSp = spark*0.60;
 
-  vec3 core = u_c1 + vec3(u_warm*0.11, u_warm*0.035, -u_warm*0.10);
-  float sum = aCore+aBody+aHalo+aOut+aRay+aSp;
-  vec3 outc = (core*aCore + u_c2*aBody + acc*aHalo + mist*aOut + acc*aRay + vec3(1.0)*aSp) / max(sum, 1e-3);
+  vec4 L = vec4(mist, a4);
+  L = ov(vec4(mix(u_c3, vec3(1.0), 0.30), aRay), L);
+  L = ov(vec4(acc,   a3), L);
+  L = ov(vec4(warmc, a2), L);
+  L = ov(vec4(deep,  a1), L);
+  L = ov(vec4(heart, a0), L);
+  L = ov(vec4(vec3(1.0), aSp), L);
+  vec3  outc = L.rgb;
+  float sum  = L.a;
+
+  /* 그레인 — 레퍼런스는 필름 입자가 꽤 굵다. 이게 없으면 벡터 그라데이션처럼 매끈해서 인공적이다 */
   outc += (hash(gl_FragCoord.xy+fract(u_t)*0.01)-0.5)*u_grain;
 
-  float vig  = smoothstep(1.0, 0.60, max(abs(uv.x), abs(uv.y))*2.0);
+  /* ⚠ 마스크를 **사각형**(max(|x|,|y|))으로 잡으면 헤일로가 캔버스를 채울 때 그 사각 자국이
+     그대로 드러난다(실기에서 각진 얼룩으로 보였다). 원형으로 감싼다. */
+  float vig  = smoothstep(1.16, 0.66, length(uv)*2.0);
   float live = mix(1.0, fl, u_wt.z);
   gl_FragColor = vec4(outc, clamp(sum*u_lum*live*vig, 0.0, 1.0));
 }`;
@@ -3554,7 +3598,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v147 · 위성이 붙는다";
+const APP_VER = "v148 · 다섯 층 (위성이 붙는다)";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -7164,8 +7208,8 @@ const CSS = `
 .stage.holo .impbadge{color:#7a4a12;border-color:rgba(122,74,18,.32)}
 /* 색장은 캔버스를 스스로 채운다 — 입자용 확대율(1.85/1.72)을 그대로 얹으면 화면을 뒤덮는다 */
 /* ⚠ 색장은 입자 엔진과 배율이 다르다 — 오라 몸통이 이미 캔버스의 63% 라 1.85 를 그대로 쓰면 화면 밖으로 나간다 */
-.stage.holo .halo.wide.lobbyscale{transform:translateY(7vh) scale(1.14)}
-.stage.holo .halo.wide.gyeotscale{transform:translateY(6vh) scale(1.04)}
+.stage.holo .halo.wide.lobbyscale{transform:translateY(7vh) scale(0.98)}
+.stage.holo .halo.wide.gyeotscale{transform:translateY(6vh) scale(0.90)}
 .stage.holo .gcv{mix-blend-mode:normal}
 .moodline{font-family:sans-serif;font-size:13px;letter-spacing:.06em;color:#cfc4e2;margin:0 0 2px;text-align:center;line-height:1.7}
 .moodline b{color:#f5d98b;font-weight:600;font-size:15px}
