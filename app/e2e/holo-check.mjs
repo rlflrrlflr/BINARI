@@ -69,6 +69,39 @@ await step("⑦ 회상");
 await page.waitForTimeout(4500);    await step("⑧ 기억 완료");
 await click("응, 기억나"); await page.waitForTimeout(2200);
 await step("⑨ 탄생");
+
+/* ── ⑩ 곁은 **둥글어야** 한다 ────────────────────────────────────────────
+   ⚠ 처음엔 바운딩박스 가로/세로 비로 쟀다가 **0.98 이 나와 통과시켰는데 실기에선
+      둥근 삼각형이었다.** 삼각형도 가로세로 비는 1 에 가깝다 — 지표가 형태를 안 쟀다.
+   그래서 **무게중심에서 각도별 반경**을 재고 그 편차를 본다. 삼각형이면 3주기로 크게 흔들린다.
+   원인은 매번 달랐다(각도 굴곡 sin(ang*3) · 층 어긋남 · 뭉게 변조 lobes=3) —
+   전부 "각도에 3이 곱해진 항"이었고, 화면에는 똑같이 삼각형으로 나온다. */
+const rad = () => page.evaluate(() => {
+  const c = document.querySelector("canvas"), g = c.getContext("webgl");
+  const W = c.width, H = c.height, a = new Uint8Array(4 * W * H);
+  g.readPixels(0, 0, W, H, g.RGBA, g.UNSIGNED_BYTE, a);
+  const A = (x, y) => a[4 * (y * W + x) + 3];
+  let sx = 0, sy = 0, sw = 0;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const v = A(x, y); if (v > 60) { sx += x * v; sy += y * v; sw += v; } }
+  const cx = sx / sw, cy = sy / sw, rs = [];
+  for (let i = 0; i < 72; i++) {
+    const th = i / 72 * Math.PI * 2, dx = Math.cos(th), dy = Math.sin(th);
+    let r = 0;
+    for (let t = 1; t < W; t++) { const x = Math.round(cx + dx * t), y = Math.round(cy + dy * t);
+      if (x < 0 || y < 0 || x >= W || y >= H) break; if (A(x, y) < 90) break; r = t; }
+    rs.push(r);
+  }
+  /* 3주기 성분만 뽑는다 — 삼각형의 지문이다. 전체 편차는 층 구조 때문에 늘 크게 나온다. */
+  let re = 0, im = 0;
+  for (let i = 0; i < 72; i++) { const th = i / 72 * Math.PI * 2 * 3; re += rs[i] * Math.cos(th); im += rs[i] * Math.sin(th); }
+  const mean = rs.reduce((s, v) => s + v, 0) / rs.length;
+  return +(2 * Math.hypot(re, im) / 72 / mean).toFixed(3);
+});
+/* ⚠ 판결과 **비교**하지 않는다 — 판결 오라는 캔버스를 거의 채워서 등고선이 경계에 걸리고
+      3주기 성분이 0 으로 나온다(측정이 안 되는 것이지 둥근 게 아니다). 곁의 절대값만 본다. */
+await page.getByRole("button", { name: "곁" }).click(); await page.waitForTimeout(2400);
+const gyeot3 = await rad();
+ck("⑩ 곁이 둥글다 — 삼각(3주기) 성분", gyeot3 < 0.06, `${gyeot3} (0.06 미만이어야)`);
 await b.close();
 
 const pass = R.filter(Boolean).length;
