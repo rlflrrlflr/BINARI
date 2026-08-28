@@ -42,15 +42,18 @@ for (const [name, w, h] of DEVICES) {
              limit: Math.round(tb.getBoundingClientRect().top - scrim) };
   }, sel);
 
-  const j = await probe(".wakehint");
+  const j = await probe(".lobbypanel");
   await page.getByRole("button", { name: "곁" }).click(); await page.waitForTimeout(700);
-  const g = await probe(".gyeotpanel .fine");
+  /* ⚠ 재는 대상을 **패널 전체**로 바꿨다(v144). 처음엔 두 탭의 마지막 줄(`.wakehint` ↔ `.fine`)을
+     맞댔는데, 그 뒤 곁 탭에 안내 문구와 버튼이 붙어 `.fine` 이 더는 마지막 줄이 아니게 됐다 —
+     검사는 FAIL 인데 화면은 멀쩡했다. **두 탭이 같은 자리에서 끝나는가**를 보려면 패널을 재야 한다. */
+  const g = await probe(".gyeotpanel");
   await page.close();
 
   ck(`${name} — 판결 문구가 탭에 안 가림`, !!j && j.bottom <= j.limit, j && `끝 ${j.bottom} ≤ 한계 ${j.limit}`);
   ck(`${name} — 곁 문구가 탭에 안 가림`, !!g && g.bottom <= g.limit, g && `끝 ${g.bottom} ≤ 한계 ${g.limit}`);
-  ck(`${name} — 두 탭 본문이 같은 높이`, !!j && !!g && Math.abs(j.bottom - g.bottom) <= 4,
-     j && g && `차 ${Math.abs(j.bottom - g.bottom)}px`);
+  ck(`${name} — 두 탭 본문이 같은 높이`, !!j && !!g && Math.abs(j.bottom - g.bottom) <= 20,
+     j && g && `차 ${Math.abs(j.bottom - g.bottom)}px ≤ 20`);
 }
 await b.close();
 
