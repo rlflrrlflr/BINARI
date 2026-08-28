@@ -1555,6 +1555,91 @@ function GuardianSealMini({ saju }) {
 /* `pre` 가 오면 **입력 화면을 건너뛴다** — 초대에 답이 온 곁은 이미 좌표를 갖고 있어서
    A가 그 사람 생년월일을 다시 물을 이유가 없다(애초에 A는 그걸 모른다).
    ⚠ 그때도 계산은 **여기서** 한다 — 서버는 재료만 준다. */
+/* ═══════════ 마야 두 날개 — 카드 안에서 만나는 두 짐승 (v159) ═══════════
+   창업자 요청: *"해당 사람을 대표하는 마야의 동물과 그 동물이 인터랙션하게 해줘.
+   근데 그 인터랙션 하는 모습이 귀여워. 카드 안에서 모션해."*
+
+   ⚠ **헌장 「신규 캐릭터 제작 금지」와의 경계를 적어 둔다.** 이건 페르소나가 아니라 **데이터 표식**이다 —
+     촐킨 20날개는 이미 궁합 축 ⑦이 쓰고 있는 값이고(`readMatch` 의 「마야 · 두 날개」),
+     여기서는 그 값을 **글자 대신 그림으로** 보일 뿐이다. 수호신은 손대지 않고, 이 그림은
+     곁 카드 뒷면 안에서만 산다. 마스코트를 새로 만드는 방향으로 읽지 마라.
+   ⚠ **20종을 다 그리지 않는다.** 날개마다 다른 짐승을 손으로 그리면 그게 캐릭터 세트가 된다.
+     **한 벌의 몸에 특징 하나씩**만 갈아 끼운다(귀·꼬리·부리·뿔…). 그래서 코드가 짧고,
+     새 날개가 생겨도 표 한 줄이면 된다.
+   ⚠ 움직임은 **셋뿐**이다: 다가감 → 부딪힘(같으면 겹침) → 물러남. 관계에 따라 속도만 다르다.
+     귀여움은 디테일이 아니라 **타이밍**에서 온다(v133 교훈: 끊기면 교체, 이어지면 자세). */
+const TZ_FACE = {
+  "이믹스(악어)": { ear: "flat", tail: "long", col: "#8fd0c0", say: "느긋해" },
+  "이크(바람)":   { ear: "none", tail: "wisp", col: "#a9c8f0", say: "가벼워" },
+  "아크발(밤)":   { ear: "round", tail: "curl", col: "#9b90d8", say: "조용해" },
+  "칸(씨앗)":     { ear: "leaf", tail: "short", col: "#b9d98b", say: "자라" },
+  "치칸(뱀)":     { ear: "none", tail: "long", col: "#e0a86a", say: "감아" },
+  "키미(전환)":   { ear: "round", tail: "short", col: "#cfc4e2", say: "바꿔" },
+  "마니크(사슴)": { ear: "horn", tail: "short", col: "#e6c58a", say: "뛰어" },
+  "라마트(별)":   { ear: "point", tail: "wisp", col: "#f5d98b", say: "빛나" },
+  "물루크(물)":   { ear: "round", tail: "wave", col: "#8fbfe0", say: "흘러" },
+  "오크(개)":     { ear: "flop", tail: "wag", col: "#e3b98f", say: "따라와" },
+  "추엔(원숭이)": { ear: "big", tail: "curl", col: "#e0a0a8", say: "장난쳐" },
+  "에브(길)":     { ear: "flat", tail: "short", col: "#c0b89a", say: "걸어" },
+  "벤(갈대)":     { ear: "leaf", tail: "long", col: "#a8d8a0", say: "버텨" },
+  "이시(재규어)": { ear: "point", tail: "wag", col: "#f0b060", say: "노려" },
+  "멘(독수리)":   { ear: "beak", tail: "wisp", col: "#9fd8e8", say: "올라" },
+  "키브(지혜)":   { ear: "beak", tail: "curl", col: "#c9a8e0", say: "지켜봐" },
+  "카반(대지)":   { ear: "round", tail: "short", col: "#c8a880", say: "버텨" },
+  "에츠납(부싯돌)": { ear: "point", tail: "short", col: "#c8d0d8", say: "잘라" },
+  "카우악(폭풍)": { ear: "big", tail: "wave", col: "#8fa8d8", say: "몰아쳐" },
+  "아하우(태양)": { ear: "round", tail: "wisp", col: "#ffd98b", say: "환해" },
+};
+const TZ_DEFAULT = { ear: "round", tail: "short", col: "#cfc4e2", say: "가만히 있어" };
+/* 한 벌의 몸 + 특징 하나. 20종을 손으로 그리지 않는 이유는 위 주석. */
+function TzBeast({ sign, flip = false }) {
+  const f = TZ_FACE[sign] || TZ_DEFAULT;
+  const ear = {
+    round: <><circle cx="-7" cy="-9" r="4" /><circle cx="7" cy="-9" r="4" /></>,
+    point: <><path d="M-10-6-8-16-2-8Z" /><path d="M10-6 8-16 2-8Z" /></>,
+    flop: <><path d="M-9-6C-15-6-14 4-9 4Z" /><path d="M9-6C15-6 14 4 9 4Z" /></>,
+    big: <><circle cx="-9" cy="-7" r="5.5" /><circle cx="9" cy="-7" r="5.5" /></>,
+    horn: <><path d="M-6-9-9-19-3-12Z" /><path d="M6-9 9-19 3-12Z" /></>,
+    leaf: <><path d="M-6-8C-12-14-4-18-3-10Z" /><path d="M6-8C12-14 4-18 3-10Z" /></>,
+    beak: <path d="M0 2 9 5 0 8Z" />,
+    flat: <><ellipse cx="-8" cy="-7" rx="4.5" ry="2.5" /><ellipse cx="8" cy="-7" rx="4.5" ry="2.5" /></>,
+    none: null,
+  }[f.ear];
+  const tail = {
+    long: "M11 6C22 6 24 0 20-4", short: "M11 6C17 6 18 3 17 0",
+    curl: "M11 6C20 8 22 0 16-2 12-3 12 2 16 2", wag: "M11 5C19 2 21 6 18 9",
+    wisp: "M11 6C19 4 23 0 26-5", wave: "M11 6C16 9 18 2 23 5",
+  }[f.tail];
+  return (
+    <g className="tzb" style={{ "--tzc": f.col }} transform={flip ? "scale(-1,1)" : undefined}>
+      <path className="tztail" d={tail} />
+      <ellipse className="tzbody" cx="0" cy="2" rx="11" ry="9.5" />
+      <g className="tzear">{ear}</g>
+      <circle className="tzeye" cx="-4" cy="1" r="1.7" />
+      <circle className="tzeye" cx="4" cy="1" r="1.7" />
+    </g>
+  );
+}
+/* 둘이 만나는 장면. 같은 날개면 겹쳐 서고(드묾), 다르면 다가갔다 물러난다. */
+function TzMeet({ mine, theirs }) {
+  const same = mine === theirs;
+  const a = TZ_FACE[mine] || TZ_DEFAULT, b = TZ_FACE[theirs] || TZ_DEFAULT;
+  return (
+    <div className={"tzmeet" + (same ? " same" : "")}>
+      <svg viewBox="-60 -26 120 52" width="100%" height="86" aria-hidden="true">
+        <g className="tzL"><TzBeast sign={mine} /></g>
+        <g className="tzR"><TzBeast sign={theirs} flip /></g>
+        <g className="tzspark"><circle cx="0" cy="-2" r="2.2" /><circle cx="-6" cy="-8" r="1.4" /><circle cx="6" cy="-7" r="1.4" /></g>
+      </svg>
+      <p className="tzsay">
+        {same
+          ? <>둘 다 <b>{mine.replace(/\(.*/, "")}</b> — 같은 날개야. 같은 것에 신나.</>
+          : <><b>{mine.replace(/\(.*/, "")}</b>{josa(mine.replace(/\(.*/, ""), "은", "는")} {a.say}, <b>{theirs.replace(/\(.*/, "")}</b>{josa(theirs.replace(/\(.*/, ""), "은", "는")} {b.say}.</>}
+      </p>
+    </div>
+  );
+}
+
 function MatchDoc({ saju, birth, onClose, onMet, pre = null }) {
   const [notesOn, setNotesOn] = useState(false);
   const [f, setF] = useState(() => { try { return JSON.parse(localStorage.getItem(MATCH_LAST_KEY) || "{}"); } catch { return {}; } });
@@ -1570,10 +1655,11 @@ function MatchDoc({ saju, birth, onClose, onMet, pre = null }) {
     if (!done || !ok || !saju?.idx) return null;
     try {
       const noH = !f.h && f.h !== 0;
-      const bs = calcSaju(+f.y, +f.m, +f.d, noH ? 12 : +f.h, 0, noH, 126.978);
+      const mi = noH ? 0 : (Number.isInteger(f.mi) ? f.mi : 0);
+      const bs = calcSaju(+f.y, +f.m, +f.d, noH ? 12 : +f.h, mi, noH, 126.978);
       if (!bs?.idx) return null;
       return readMatch({ a: { saju, birth },
-        b: { saju: bs, birth: { y: +f.y, m: +f.m, d: +f.d, h: noH ? 12 : +f.h, min: 0 } } });
+        b: { saju: bs, birth: { y: +f.y, m: +f.m, d: +f.d, h: noH ? 12 : +f.h, min: mi } } });
     } catch (e) { return null; }
   }, [done, f.y, f.m, f.d, f.h, saju, birth, pre]);
   useEffect(() => { track("match_opened", { has_saju: !!saju?.idx }); }, []);
@@ -1613,8 +1699,13 @@ function MatchDoc({ saju, birth, onClose, onMet, pre = null }) {
           <input className="impnum w48" type="number" placeholder="4" min="1" max="12" value={f.m ?? ""} onChange={(e) => set("m", e.target.value)} />
           <input className="impnum w48" type="number" placeholder="22" min="1" max="31" value={f.d ?? ""} onChange={(e) => set("d", e.target.value)} />
         </div>
+        {/* ⚠ **분까지 받는다**(2026-08-28 창업자: *"시간뿐 아니라 분도 받아야지. 이건 신뢰도의 문제야."*).
+            실측으로 확인했다 — 같은 날·같은 시에서 **분만 0↔59 로 바꾸면 400쌍 중 30쌍(7.5%)에서
+            궁합 결과가 달라진다**(달의 자리·나크샤트라가 경계를 넘는다). 온보딩은 이미 분을 받고
+            있었으므로 여기만 안 받고 있었고, 그건 같은 앱이 같은 사람을 두 정밀도로 본 것이다. */}
         <div className="impaskrow"><span>태어난 시</span>
           <input className="impnum w48" type="number" placeholder="시" min="0" max="23" value={f.h ?? ""} onChange={(e) => set("h", e.target.value === "" ? null : +e.target.value)} />
+          <input className="impnum w48" type="number" placeholder="분" min="0" max="59" value={f.mi ?? ""} onChange={(e) => set("mi", e.target.value === "" ? null : +e.target.value)} />
           <em className="impaskhint">모르면 비워 둬 — 그만큼만 얕게 읽어</em>
         </div>
         {/* 성별 칩 제거(2026-08-15) — readMatch 에 sex 를 넘기고는 있었지만 match.js 본문에서
@@ -1633,9 +1724,14 @@ function MatchDoc({ saju, birth, onClose, onMet, pre = null }) {
              **생년월일은 이 콜백 밖으로 안 나간다** — 지문으로만 남는다. */
           try {
             const noH = !f.h && f.h !== 0;
-            const bs = calcSaju(+f.y, +f.m, +f.d, noH ? 12 : +f.h, 0, noH, 126.978);
+            const mi = noH ? 0 : (Number.isInteger(f.mi) ? f.mi : 0);
+            const bs = calcSaju(+f.y, +f.m, +f.d, noH ? 12 : +f.h, mi, noH, 126.978);
+            /* ⚠ **관계 좌표(ax)를 함께 올린다**(2026-08-28 창업자: "이미 본 궁합을 다시 볼 수 있게").
+               그 전엔 오행·일간만 남겨서 **다시 보려면 생년월일을 또 쳐야 했다.**
+               좌표는 파생값이라 생년월일 원값이 아니고 기기 밖으로도 안 나간다. */
+            const ax = bs?.idx ? matchAxes({ saju: bs, birth: { y: +f.y, m: +f.m, d: +f.d, h: noH ? 12 : +f.h, min: mi } }) : null;
             if (bs?.main && onMet) onMet({ key: gyeotFingerprint(f.y, f.m, f.d), el: bs.main,
-              dg: bs?.idx?.dG, name: (f.nm || "").trim() });   // dg 는 역할 10종을 세는 데 쓴다(0~9)
+              dg: bs?.idx?.dG, ax, name: (f.nm || "").trim() });   // dg 는 역할 10종을 세는 데 쓴다(0~9)
           } catch (_) {}
           setDone(true);
         }}>
@@ -3730,7 +3826,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v157 · 이름은 받은 사람이 쓴다";
+const APP_VER = "v159 · 분까지 받는다";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -4867,11 +4963,12 @@ function gyeotAdd(list, e, now) {
     next[i] = { ...next[i], at: t,
       el: e.el || next[i].el,                        // 하늘을 모르는 채로 덮어쓰지 않는다
       dg: Number.isInteger(e.dg) ? e.dg : next[i].dg,
+      ax: e.ax || next[i].ax,
       inv: e.inv || next[i].inv,
       name: e.name ? String(e.name).slice(0, GYEOT_NAME_MAX) : next[i].name };
     return writeGyeot(next);
   }
-  return writeGyeot([{ key: e.key, el: e.el || null, dg: Number.isInteger(e.dg) ? e.dg : null,
+  return writeGyeot([{ key: e.key, el: e.el || null, dg: Number.isInteger(e.dg) ? e.dg : null, ax: e.ax || null,
     name: String(e.name || "").slice(0, GYEOT_NAME_MAX), tier: e.tier === GY_STANDING ? GY_STANDING : GY_CALLED,
     at: t, ...(e.inv ? { inv: e.inv } : {}) }, ...list]);
 }
@@ -5411,8 +5508,11 @@ function anon(t, name) {
 function InviteLanding({ id, onOnboard, onDismiss }) {
   const [state, setState] = useState("checking");   // checking | ask | dead
   const [from, setFrom] = useState("");
-  const [f, setF] = useState({ y: "", m: "", d: "", nm: "" });
-  const [notify, setNotify] = useState(true);        // 켠 채로 시작 — 끄는 사람만 1탭 더
+  const [f, setF] = useState({ y: "", m: "", d: "", h: "", mi: "", nm: "" });
+  const [hourOpen, setHourOpen] = useState(false);   // 시·분은 노크형 — 아는 사람만 연다
+  /* 값은 언제나 간다(창업자 결정 2026-08-28). 서버 계약은 그대로 두되(notify 를 계속 보낸다)
+     화면에서 고르게 하지 않는다 — 서버의 `notify:false` 경로는 남겨 둔다. */
+  const notify = true;
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [r, setR] = useState(null);
@@ -5451,7 +5551,10 @@ function InviteLanding({ id, onOnboard, onDismiss }) {
         setErr("아직은 네 하늘을 열 수 없어. 열넷의 봄을 지나고 다시 와 줘.");
         setBusy(false); return;
       }
-      const my = calcSaju(+f.y, +f.m, +f.d, 12, 0, true, 126.978);   // 이 계산은 시를 안 쓴다
+      /* 시를 적었으면 쓴다 — 안 적었으면 정오로 두되, 그렇다는 걸 화면이 말한다(위 주석) */
+      const hh = /^\d{1,2}$/.test(String(f.h)) && +f.h >= 0 && +f.h <= 23 ? +f.h : null;
+      const mm = hh !== null && /^\d{1,2}$/.test(String(f.mi)) && +f.mi >= 0 && +f.mi <= 59 ? +f.mi : 0;
+      const my = calcSaju(+f.y, +f.m, +f.d, hh === null ? 12 : hh, mm, hh === null, 126.978);
       if (!my?.idx) throw new Error("네 하늘을 세우지 못했어");
       const q = await fetch("/api/invite/answer", {
         method: "POST", headers: { "content-type": "application/json" },
@@ -5459,14 +5562,14 @@ function InviteLanding({ id, onOnboard, onDismiss }) {
            안 싣는 게 아니라 **안 만든다** — 끄면 아래 세 줄이 통째로 안 붙는다.
            notify 는 여전히 A에게 보일지만 가르고, 응답 자체는 언제나 기록된다(재공유 방어). */
         body: JSON.stringify(notify
-          ? { id, notify, bAxes: matchAxes({ saju: my, birth: { y: +f.y, m: +f.m, d: +f.d, h: 12, min: 0 } }),
+          ? { id, notify, bAxes: matchAxes({ saju: my, birth: { y: +f.y, m: +f.m, d: +f.d, h: hh === null ? 12 : hh, min: mm } }),
               label: (f.nm || "").trim().slice(0, 12) }
           : { id, notify }),
       });
       const d = await q.json().catch(() => null);
       if (!q.ok || !d?.aAxes) throw new Error(d?.error?.message || "둘 사이를 볼 수 없었어");
       /* ⑤ **B가 a 자리** — 자기 쪽에서 본 사이다 */
-      const read = readMatch({ a: { saju: my, birth: { y: +f.y, m: +f.m, d: +f.d, h: 12, min: 0 }, name: (f.nm || "").trim() },
+      const read = readMatch({ a: { saju: my, birth: { y: +f.y, m: +f.m, d: +f.d, h: hh === null ? 12 : hh, min: mm }, name: (f.nm || "").trim() },
                               b: { ...d.aAxes, name: String(d.name || from || "").trim() } });
       if (!read?.chorus) throw new Error("둘 사이를 볼 수 없었어");
       track("invite_answered", { notify });
@@ -5500,7 +5603,7 @@ function InviteLanding({ id, onOnboard, onDismiss }) {
       {/* ⑥ 이 지시서의 목표. 화면을 새로 열지 않고 **결과 안에서** 이어진다 */}
       <div className="invdoor">
         <p className="invdoorq">네 수호신도 만들어볼래?</p>
-        <button className="btn gold" onClick={() => { track("invite_to_onboard", {}); onOnboard({ y: f.y, m: f.m, d: f.d, name: (f.nm || "").trim() }); }}>응, 내 것도 볼래</button>
+        <button className="btn gold" onClick={() => { track("invite_to_onboard", {}); onOnboard({ y: f.y, m: f.m, d: f.d, h: f.h, min: f.mi, name: (f.nm || "").trim() }); }}>응, 내 것도 볼래</button>
         <button className="btn ghost mt" onClick={onDismiss}>다음에</button>
       </div>
       <p className="ainote">비나리 — 아홉 하늘이 각각 다른 걸 봐</p>
@@ -5517,37 +5620,53 @@ function InviteLanding({ id, onOnboard, onDismiss }) {
         <input className="in sm" placeholder="7" inputMode="numeric" maxLength={2} aria-label="태어난 달" value={f.m} onChange={(e) => setF({ ...f, m: e.target.value })} /><span className="unit">월</span>
         <input className="in sm" placeholder="15" inputMode="numeric" maxLength={2} aria-label="태어난 날" value={f.d} onChange={(e) => setF({ ...f, d: e.target.value })} /><span className="unit">일</span>
       </div>
-      {/* 시(時)를 안 묻는다 — 이 계산은 시를 안 쓴다(§C-2). 무거운 칸을 하나 지웠다 */}
-      <p className="invopt">태어난 시는 몰라도 돼 — <b>이 결과는 시를 안 써</b></p>
+      {/* ⚠ **여기 문구가 거짓이었다**(2026-08-28 실측). 「이 결과는 시를 안 써」라고 적혀 있었는데
+          시를 안 받으면 **정오로 넣고 계산한다.** 같은 날에서 시만 03시↔15시로 바꾸면
+          **400쌍 중 280쌍(70%)에서 결과가 달라진다** — 달의 자리·나크샤트라가 하루 안에서 움직인다.
+          시안의 근거("이 계산은 일간뿐이라 시와 무관하다")가 사실과 달랐다.
+          ⚠ 그렇다고 필수로 만들지 않는다 — 이 화면의 값은 **탭 4**다. 온보딩의 한자 이름과 같은
+            **노크형**으로 둔다: 아는 사람만 열어 적고, 탭 수는 그대로다. */}
+      {hourOpen ? (
+        <>
+          <p className="invlbl">태어난 시 · 분</p>
+          <div className="row gap center">
+            <input className="in sm" placeholder="14" inputMode="numeric" maxLength={2} aria-label="태어난 시"
+              value={f.h} onChange={(e) => setF({ ...f, h: e.target.value })} /><span className="unit">시</span>
+            <input className="in sm" placeholder="30" inputMode="numeric" maxLength={2} aria-label="태어난 분"
+              value={f.mi} onChange={(e) => setF({ ...f, mi: e.target.value })} /><span className="unit">분</span>
+          </div>
+          <p className="invhint">달의 자리는 하루 안에서도 움직여 — 알수록 또렷해져.</p>
+        </>
+      ) : (
+        <button className="knocklink" onClick={() => setHourOpen(true)}>태어난 시도 알아 — 더 또렷하게 볼래</button>
+      )}
       {/* ⚠ 이 칸의 쓰임이 v155 에서 바뀌었다 — 동의하면 이 이름이 **부른 사람의 곁에 뜬다.**
           그래서 힌트도 그걸 말한다. 안 적으면 그쪽엔 이름 없는 자리로 선다. */}
       <input className="in wide center box" lang="ko" maxLength={12} aria-label="너를 부를 이름 (선택)"
         placeholder="너를 부를 이름 (안 적어도 돼)" value={f.nm} onChange={(e) => setF({ ...f, nm: e.target.value })} />
-      <p className="invhint">{notify ? <>{who}의 곁에 이 이름으로 서게 돼.</> : <>이 이름은 이 기기에만 남아.</>}</p>
+      <p className="invhint">{who}의 곁에 이 이름으로 서게 돼.</p>
       {/* ③ 무엇이 나가는지 — 회색 각주가 아니라 **눈에 띄는 상자**로 입력 바로 아래.
           헌장 기준이 「유저가 무엇이 나가는지 보고 있는가」라, 안 보이는 채로 나가면 그건 유출이다.
           나가는 것과 **안 나가는 것**을 같이 적고, 안 나가는 쪽을 더 길게 적는다. */}
       {/* ⚠ **문구와 실제로 나가는 것이 어긋나면 그건 동의가 아니라 기만이다.**
           2026-08-28 에 「답했다는 사실만」에서 「둘 사이를 함께 본다」로 바뀌었고,
           그때 이 상자와 아래 체크 문구를 **같이** 고쳤다. 한쪽만 고치지 마라. */}
+      {/* ⚠ **동의 체크를 없앴다**(2026-08-28 창업자: *"이 칸 없애. 무조건 공유되도록. 선택지 없애."*).
+          체크가 사라졌다고 **동의까지 사라지면 안 된다** — 받은 사람은 이 앱을 쓴 적 없는 사람이고,
+          그 값이 부른 사람에게 가는 건 제3자 제공이다. 그래서 **고지를 키우고 행위로 동의를 받는다**:
+          무엇이 가는지 버튼 바로 위에 적고, 버튼을 누르는 것이 곧 동의다.
+          **이 앱이 온보딩에서 이미 쓰는 방식과 같다**(「'하늘을 열기'를 누르면 …동의한 것으로 볼게」).
+          ⚠ 문구를 지우고 값만 보내면 그건 동의가 아니라 기만이다 — `privacy-check` 가 문다. */}
       <div className="invnotice">
-        {notify ? (
-          <p><b>네 생일은 이 기기에만 남아</b> — 우리 서버에도, {who}에게도 안 가.<br />
-            {who}에게 가는 건 <b>네가 적은 이름과 둘 사이를 계산하는 값</b>이야. 그래야 {who}도 같은 걸 볼 수 있어.<br />
-            <span className="no">그 값으로 네 생일을 되짚을 수는 있어 — {who}에게만 그래.</span></p>
-        ) : (
-          <p><b>지금은 아무것도 안 나가.</b> 생일도, 이름도, 결과도.<br />
-            {/* ⚠ 검진 5-p 가 여기서 `{who}는` 을 잡았다 — 이름은 받침이 갈린다("주영은" / "연지는").
-                내가 만든 검사에 내가 두 번째로 걸렸다. 조사는 전부 josa() 로 계산한다. */}
-            <span className="no">{who}{josa(who, "은", "는")} 네가 열어봤는지도 몰라 — 대신 {who}{josa(who, "은", "는")} 둘 사이를 못 봐.</span></p>
-        )}
+        <p><b>네 생일은 이 기기에만 남아</b> — 우리 서버에도, {who}에게도 안 가.<br />
+          {who}에게 가는 건 <b>네가 적은 이름과 둘 사이를 계산하는 값</b>이야 —
+          그래야 {who}도 같은 걸 볼 수 있어.<br />
+          <span className="no">그 값으로 네 생일을 되짚을 수는 있어. {who} 말고 다른 사람에겐 안 가.</span></p>
       </div>
-      <label className={"invchk" + (notify ? " on" : "")}>
-        <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} />
-        <span>{who}도 둘 사이를 보게 할까? <em>(꺼도 네 결과는 그대로 봐)</em></span>
-      </label>
       {err && <p className="err">{err}</p>}
       <button className="btn gold" disabled={!ok || busy} onClick={submit}>{busy ? "둘 사이를 보는 중…" : ok ? "둘 사이를 볼게" : "생년월일을 채워 줘"}</button>
+      {/* 버튼이 곧 동의다 — 무엇에 동의하는지 버튼 옆에 적는다 */}
+      <p className="invhint">누르면 <b>{who}도 둘 사이를 보게 돼.</b></p>
       <p className="ainote">해석은 전통 계산으로 만들어요 · 재미로 보는 참고예요{" · "}
         <a className="plink" href="/privacy.html" target="_blank" rel="noreferrer">개인정보처리방침</a></p>
     </section>
@@ -5985,6 +6104,11 @@ export default function App() {
   const [inviteErr, setInviteErr] = useState("");
   const [gyeotAsk, setGyeotAsk] = useState("");   // 지울지 묻는 중인 곁의 key
   const [gyeotSee, setGyeotSee] = useState(null); // 둘 사이를 펼쳐 볼 곁 {ax, name}
+  /* ⚠ 이름이 `flip` 인 상태가 **이미 있다**(판결 카드 앞뒤). 같은 이름을 또 쓰면 조용히 덮인다 —
+     빌드가 잡아 줬지만, 안 잡혔으면 판결 카드가 곁 탭에서 뒤집혔을 것이다. 이름을 가른다. */
+  const [gyFlip, setGyFlip] = useState("");       // 뒤집힌 곁의 key — 한 번에 하나만
+  /* 내 촐킨 날개 — 뒷면에서 상대 날개와 만난다. 명식에서 매번 파생한다(저장 안 한다). */
+  const myTz = useMemo(() => (saju?.idx && birth?.y ? matchAxes({ saju, birth })?.tsign || "" : ""), [saju, birth]);
   /* ── 위성이 붙는 순간 (v144 · 창업자: "게임에서 아이템 뽑았을 때처럼") ──────────
      ref 로 둔다 — state 면 매 프레임 리렌더가 걸리고, 캔버스는 rAF 로 스스로 돈다(v129.4 와 같은 이유).
      {i: 슬롯번호, t0: 시작시각}. 셰이더가 1.4초에 걸쳐 0→1 로 밀고 끝나면 스스로 지운다. */
@@ -6482,7 +6606,10 @@ export default function App() {
      화면이 아래에 그대로 살아 있게 된다 — 처음엔 그렇게 썼다가 잡았다.
      ⚠ 훅은 위에서 전부 돌았다. 여기보다 위로 올리면 훅 순서가 깨진다. */
   if (invId && !invGone) return (
-    <div className="stage">
+    /* ⚠ `.stage` 는 `overflow:hidden` 이라 내용이 화면보다 길면 **위가 잘린다.**
+       초대 결과는 아홉 칸 + 문까지 있어 길다 — 창업자 제보 "중간에 짤렸어".
+       그래서 이 화면만 스스로 스크롤한다(`.invstage`). 다른 화면은 안 건드린다. */
+    <div className="stage invstage">
       <style>{CSS}</style>
       <VerBadge />
       <InviteLanding
@@ -6494,7 +6621,10 @@ export default function App() {
              통과했다 — 다시 물으면 그건 축약이 아니라 두 번 묻는 것이다.
              ⚠ 기억이 있는 사람은 온보딩으로 되돌리지 않는다. 그건 수호신을 지우는 일이다. */
           if (mem) return;
+          /* 시를 적어 왔으면 그것도 싣는다 — 두 번 묻지 않는다 */
           setBirth((p) => ({ ...p, y: String(b.y), m: String(b.m), d: String(b.d),
+            h: /^\d{1,2}$/.test(String(b.h || "")) ? String(b.h) : p.h,
+            min: /^\d{1,2}$/.test(String(b.min || "")) ? String(b.min) : p.min,
             name: b.name || p.name, cal: "solar" }));
           setStep(1); setBstep(2);
         }}
@@ -6870,18 +7000,27 @@ export default function App() {
                   {gyeotSorted.map((g) => {
                     const r = Number.isInteger(g.dg) && Number.isInteger(saju?.idx?.dG) ? roleOf(saju.idx.dG, g.dg) : null;
                     return (
-                    <li key={g.key} className={g.tier === GY_STANDING ? "" : "called"}>
+                    <li key={g.key} className={(g.tier === GY_STANDING ? "" : "called") + (gyFlip === g.key ? " flip" : "")}>
                       {/* 하늘을 모르는 곁은 흙색이 아니라 **무채색**이다 — 궤도의 색과 같은 규칙(gyeotView) */}
                       <i className="gdot" style={{ background: g.el ? (EL_COLOR[g.el] || EL_COLOR.토)[1] : "#6a5f92" }} aria-hidden="true" />
                       <div className="gbody">
+                        {/* ⚠ 이름 칸은 **편집이 우선**이다 — 여기까지 클릭이 올라가면 글자를 고치려다
+                            카드가 뒤집힌다. 뒤집는 건 아래 「사이 보기」 손잡이가 맡는다. */}
                         <input className="galias" value={g.name || ""} maxLength={12} placeholder="이름을 적어 둘래"
-                          aria-label="이 곁을 부를 이름"
+                          aria-label="이 곁을 부를 이름" onClick={(e) => e.stopPropagation()}
                           onChange={(e) => setGyeot((p) => gyeotSetName(p, g.key, e.target.value))} />
                         <span className="grel">
                           {gySum.index.has(g.key) && <em className="gsumix sm" aria-hidden="true">{gySum.index.get(g.key)}</em>}
                           {r ? r.name : g.el ? GYEOT_REL_LINE[String(gyeotRel(saju?.main, g.el))]
                             : g.tier === GY_STANDING ? "답이 왔어 — 하늘은 그 사람만 알아" : "부르는 중 — 아직 답이 없어"}
                         </span>
+                        {/* 뒤집기 손잡이 — 이름 칸의 편집을 안 뺏으려고 **따로** 둔다 */}
+                        {g.ax && (
+                          <button className="gflip" aria-expanded={gyFlip === g.key}
+                            onClick={() => { const on = gyFlip !== g.key; setGyFlip(on ? g.key : ""); if (on) track("gyeot_flipped", {}); }}>
+                            {gyFlip === g.key ? "접기" : "둘 사이 보기"}
+                          </button>
+                        )}
                       </div>
                       {/* ⚠ **초대하기를 행에서 뺐다**(창업자 2026-08-26): *"이름 옆에 초대가 붙을 필요는
                           없을 거 같아 — 이미 초대한 사람이잖아."* 맞다. 목록에 있다는 건 이미 부른 사람이라는 뜻이고,
@@ -6893,10 +7032,23 @@ export default function App() {
                       {/* 답이 와서 좌표가 찬 곁만 — 그 사람과의 사이를 여기서 연다.
                           ⚠ **A는 그 사람 생년월일을 모른다.** 그래서 이 문이 없으면 초대의 대가가
                             영영 안 온다(창업자 2026-08-28). 좌표는 곁에 실려 있다. */}
+                      {/* ⚠ 「둘 사이」 문은 남긴다 — 전문(궁합 문서)으로 가는 길이다.
+                          뒤집기는 **그 앞의 미리보기**다: 카드 안에서 두 날개가 만난다. */}
                       {g.ax && <button className="gsee" title="둘 사이를 본다"
-                        onClick={() => { setGyeotSee({ ax: g.ax, name: g.name || "" }); track("match_opened", { from: "gyeot" }); }}>둘 사이</button>}
+                        onClick={(e) => { e.stopPropagation(); setGyeotSee({ ax: g.ax, name: g.name || "" }); track("match_opened", { from: "gyeot" }); }}>둘 사이</button>}
                       <button className="gx" title="이 곁을 지운다"
-                        onClick={() => setGyeotAsk(g.key)}>✕</button>
+                        onClick={(e) => { e.stopPropagation(); setGyeotAsk(g.key); }}>✕</button>
+                      {/* ── 뒷면 — 카드 안에서 두 날개가 만난다 (v159) ────────────────────
+                          ⚠ **여기서 궁합을 다시 계산하지 않는다.** 좌표는 이미 곁에 실려 있고
+                            전문은 「둘 사이」 문이 연다. 뒷면은 **한 장면**만 보여 준다. */}
+                      {gyFlip === g.key && g.ax && (
+                        <div className="gback">
+                          <TzMeet mine={myTz} theirs={g.ax.tsign} />
+                          <button className="btn ghost sm" onClick={() => { setGyeotSee({ ax: g.ax, name: g.name || "" }); track("match_opened", { from: "gyeot_flip" }); }}>
+                            아홉 하늘이 뭐라는지 볼래
+                          </button>
+                        </div>
+                      )}
                     </li>);
                   })}
                 </ul>
@@ -7856,6 +8008,51 @@ const CSS = `
 .gyerr{max-width:340px;margin:8px auto 0;font-size:11.5px;line-height:1.6;text-align:center}
 /* 답이 온 곁에만 뜨는 문 — ✕ 옆에 조용히 선다(v155) */
 .gsee{flex:0 0 auto;background:transparent;border:1px solid rgba(159,143,196,.34);border-radius:8px;color:#cfc4e2;font-family:sans-serif;font-size:11px;padding:4px 8px;margin-right:4px;cursor:pointer}
+/* ── 곁 카드 뒤집기 + 두 날개의 만남 (v159) ────────────────────────────────
+   ⚠ 귀여움은 디테일이 아니라 **타이밍**에서 온다. 움직임은 셋뿐이다 —
+     다가감(0.9s) → 부딪힘(짧게) → 물러남. 그 사이에 몸이 한 번 눌린다(squash).
+   ⚠ 움직임 줄이기(prefers-reduced-motion)에서는 **자리만 잡고 멈춘다** — 이 앱의 규칙이다. */
+.gflip{align-self:flex-start;margin-top:5px;background:transparent;border:0;padding:0;color:#8a7f95;font-family:sans-serif;font-size:11px;letter-spacing:.02em;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.gflip:hover{color:#ffe9ad}
+/* ⚠ 행은 display:flex 한 줄이다 — 뒷면을 그냥 넣으면 **같은 줄에 끼어** 이름 칸이
+   (⚠ 이 주석은 CSS 템플릿 리터럴 안이다. **백틱을 쓰지 마라** — 문자열이 거기서 끊긴다.
+    이 판에서만 셰이더와 여기, 두 번 끊어 먹었다. 코드를 가리킬 땐 백틱 없이 적는다.)
+   한 글자씩 접히고 그림이 오른쪽으로 넘친다(실제로 그렇게 났다, 스샷으로 잡음).
+   뒤집힌 행만 줄바꿈을 켜서 뒷면이 **아래 줄 전체**를 쓰게 한다. */
+.gyeotlist li.flip{background:rgba(28,22,52,.55);border-color:rgba(159,143,196,.34);flex-wrap:wrap;align-items:flex-start}
+.gyeotlist li.flip .gbody{min-width:0}
+/* 뒤집힌 행에서는 행 위의 「둘 사이」를 숨긴다 — 뒷면이 같은 문을 이미 갖고 있고,
+   둘이 같이 있으면 ✕ 가 줄 밖으로 밀린다(스샷으로 잡았다). */
+.gyeotlist li.flip .gsee{display:none}
+.gback{flex:1 0 100%;margin-top:10px;padding-top:10px;border-top:1px solid rgba(159,143,196,.18);text-align:center;animation:gbackIn .42s cubic-bezier(.22,.7,.25,1) both}
+.gback .btn.sm{margin:6px auto 0}
+@keyframes gbackIn{from{opacity:0;transform:rotateX(-18deg) translateY(-6px)}to{opacity:1;transform:none}}
+.tzmeet svg{display:block;margin:0 auto;overflow:visible}
+.tzb .tzbody{fill:var(--tzc);opacity:.92}
+.tzb .tzear,.tzb .tztail{fill:var(--tzc);stroke:var(--tzc);stroke-width:2.2;stroke-linecap:round;fill-opacity:.9}
+.tzb .tztail{fill:none}
+.tzb .tzeye{fill:#1a1526}
+.tzL{animation:tzL 3.4s cubic-bezier(.4,0,.3,1) infinite}
+.tzR{animation:tzR 3.4s cubic-bezier(.4,0,.3,1) infinite}
+.tzL .tzb,.tzR .tzb{animation:tzHop 3.4s cubic-bezier(.4,0,.3,1) infinite}
+.tzR .tzb{animation-delay:.12s}
+.tzspark{fill:#ffe9ad;opacity:0;animation:tzSpark 3.4s ease-out infinite}
+@keyframes tzL{0%,8%{transform:translateX(-40px)}42%,52%{transform:translateX(-13px)}86%,100%{transform:translateX(-40px)}}
+@keyframes tzR{0%,8%{transform:translateX(40px)}42%,52%{transform:translateX(13px)}86%,100%{transform:translateX(40px)}}
+/* 몸이 한 번 눌렸다 뜬다 — 이 한 번이 '귀여움'의 거의 전부다 */
+@keyframes tzHop{0%,30%{transform:none}44%{transform:translateY(2px) scale(1.06,.9)}50%{transform:translateY(-5px) scale(.96,1.06)}58%,100%{transform:none}}
+@keyframes tzSpark{0%,44%{opacity:0;transform:scale(.5)}50%{opacity:.95;transform:scale(1)}64%,100%{opacity:0;transform:scale(1.5)}}
+/* 같은 날개면 둘이 겹쳐 선다 — 드문 일이라 장면도 다르다 */
+.tzmeet.same .tzL{animation-name:tzLsame}
+.tzmeet.same .tzR{animation-name:tzRsame}
+@keyframes tzLsame{0%,8%{transform:translateX(-40px)}46%,74%{transform:translateX(-7px)}92%,100%{transform:translateX(-40px)}}
+@keyframes tzRsame{0%,8%{transform:translateX(40px)}46%,74%{transform:translateX(7px)}92%,100%{transform:translateX(40px)}}
+.tzsay{font-family:sans-serif;font-size:12px;color:#cfc4e2;line-height:1.7;margin:4px 0 0;word-break:keep-all}
+.tzsay b{color:#ffe9ad}
+@media (prefers-reduced-motion:reduce){
+  .tzL,.tzR,.tzL .tzb,.tzR .tzb,.tzspark,.gback{animation:none}
+  .tzL{transform:translateX(-13px)}.tzR{transform:translateX(13px)}.tzspark{opacity:.6}
+}
 .gsee:hover{border-color:rgba(245,217,139,.5);color:#ffe9ad}
 /* ── 부를 사람 이름 받기 (v147) ── */
 .gcall{width:100%;max-width:340px;margin:10px auto 0;padding:13px 14px;border:1px solid rgba(159,143,196,.26);border-radius:11px;background:rgba(20,15,38,.55);text-align:center}
@@ -7894,6 +8091,9 @@ const CSS = `
 .invcells .mid .say{color:#9b90b8}
 .invnote{font-family:sans-serif;font-size:11.5px;color:#8a7f95;line-height:1.75;margin:0 0 16px}
 .invhint{font-family:sans-serif;font-size:11px;color:#8a7f95;margin:6px 0 0;text-align:center}
+.invhint b{color:#cfc4e2}
+.invstage{overflow-y:auto;-webkit-overflow-scrolling:touch;align-items:flex-start;padding-bottom:56px}
+.invstage .scene{padding-bottom:0}
 .invnote b{color:#cfc4e2}
 .invnote.center{text-align:center}
 .invdoor{border-top:1px solid #2a2340;padding-top:16px;margin-top:6px}

@@ -115,7 +115,20 @@ const fp = (y, m, d) => M.gyeotFingerprint(y, m, d);
   ck("② 저장된 문자열에 생년월일이 없다",
      !/1997/.test(raw) && !/"y"/.test(raw) && !/"d"/.test(raw) && !/birth/.test(raw), raw);
   const keys = Object.keys(l[0]).sort().join(",");
-  ck("② 남는 필드는 파생값 + 이름뿐(생년월일 없음)", keys === "at,dg,el,key,name,tier", keys);
+  /* ⚠ v159 에서 `ax`(관계 좌표)가 늘었다 — **이미 본 궁합을 다시 보려면** 그게 있어야 한다
+     (없으면 생년월일을 또 쳐야 한다). 늘어난 게 문제가 아니라 **그 안에 무엇이 들었는가**가 문제이므로,
+     목록을 넓히는 대신 **좌표 안에 원값이 없는지**까지 같이 문다. */
+  ck("② 남는 필드는 파생값 + 이름뿐(생년월일 없음)", keys === "at,ax,dg,el,key,name,tier", keys);
+  {
+    const withAx = M.gyeotAdd([], { key: "k", el: "수", dg: 3,
+      ax: { ax: 1, dG: 3, dJ: 5, nayin: "천하수", sun: "황소자리", moon: "게자리",
+        nak: 4, rashi: 2, wday: "화요일", pasa: "폰", neptu: 10, tone: 5, tsign: "오크(개)", lp: 8 } }, 1);
+    const raw2 = disk.get(M.GYEOT_KEY);
+    ck("② 좌표에도 생년월일 원값이 없다",
+       !Object.keys(withAx[0].ax).some((k) => /^(y|m|d|h|min|birth)$/i.test(k)),
+       Object.keys(withAx[0].ax).join(","));
+    ck("② 좌표를 저장해도 문자열에 연도가 안 남는다", !/19\d\d|20\d\d/.test(raw2), (raw2.match(/(19|20)\d\d/) || ["없음"])[0]);
+  }
   ck("② 지문은 같은 날짜에 같고 다른 날짜에 다르다",
      fp(1997, 4, 22) === fp(1997, 4, 22) && fp(1997, 4, 22) !== fp(1997, 4, 23));
 }

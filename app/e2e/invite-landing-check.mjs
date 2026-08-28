@@ -76,7 +76,13 @@ ck("① 온보딩 전체가 아니라 생일 세 칸이다", (await ask.locator(
 ck("① 태어난 시를 안 묻는다", !/몇 시|태어난 시를/.test(await ask.innerText()));
 const notice = await page.locator(".invnotice").innerText().catch(() => "");
 ck("① 무엇이 나가는지 눈에 띄게 적혀 있다", /이 기기에만/.test(notice) && /안 가/.test(notice), notice.replace(/\n/g, " ").slice(0, 60));
-ck("① 동의 체크는 켠 채로 시작한다", await page.locator(".invchk input").isChecked());
+/* ⚠ **동의 체크가 2026-08-28 에 사라졌다**(창업자: "이 칸 없애. 무조건 공유되도록").
+   체크가 없어졌다고 검사까지 없애면 다음 판에 고지도 사라진다 — **자리를 옮겨** 문다:
+   고를 수 있는 척하는 것이 없고, 대신 **무엇이 가는지** 버튼 위에 적혀 있어야 한다. */
+ck("① 고를 수 있는 척하는 칸이 없다", (await page.locator(".invchk, input[type=checkbox]").count()) === 0);
+ck("① 무엇이 가는지 버튼 바로 위에 적혀 있다",
+   /누르면 .*둘 사이를 보게 돼/.test((await ask.innerText()).replace(/\n/g, " ")),
+   ((await ask.innerText()).match(/누르면[^\n]*/) || ["없음"])[0]);
 /* §4 — '궁합'은 유료 문서 이름이다. 무료 화면에 쓰면 값을 치른 것과 헷갈린다 */
 ck("① '궁합'이라는 말을 안 쓴다", !/궁합/.test(await ask.innerText()));
 /* 헌장 — 결과를 보기 전엔 아무 값도 안 나간다(엿보기 한 번뿐) */
@@ -91,6 +97,13 @@ await ask.locator("input.in").nth(0).fill("1987");
 await ask.locator("input.in").nth(1).fill("9");
 await ask.locator("input.in").nth(2).fill("3");
 await ask.locator("input.in.wide").fill("지은");
+/* 시·분은 노크형 — 열어서 적으면 실제로 계산에 실린다(「시를 안 쓴다」가 거짓이었다) */
+await page.getByRole("button", { name: /태어난 시도 알아/ }).click();
+await page.waitForTimeout(200);
+ck("① 시·분을 열면 두 칸이 선다", (await ask.locator("input.in.sm").count()) === 4,
+   `${await ask.locator("input.in.sm").count()}칸`);
+await ask.locator("input.in.sm").nth(2).fill("21");
+await ask.locator("input.in.sm").nth(3).fill("40");
 await page.getByRole("button", { name: "둘 사이를 볼게" }).click();
 await page.waitForTimeout(1200);
 
