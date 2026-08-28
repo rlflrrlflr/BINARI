@@ -18,98 +18,23 @@ const APPDIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const SRC = readFileSync(resolve(APPDIR, "src/App.jsx"), "utf8");
 const EL_COLOR = new Function("return " + SRC.match(/const EL_COLOR = (\{[\s\S]*?\});/)[1])();
 
-const FIELD_FRAG = `
-precision highp float;
-uniform vec2  u_res, u_off;
-uniform float u_t, u_form, u_orb, u_warm, u_speed, u_lum, u_sink, u_grain;
-uniform vec3  u_c1, u_c2, u_c3, u_bg;
+/* ⚠ 셰이더를 여기 베껴 두면 **보드가 앱과 어긋나 거짓말을 한다**(실제로 v143 에서 두 벌이 갈렸다).
+   App.jsx 에서 그대로 뽑고, 형태 값은 aura-spec.json 에서 읽는다 — 진실 원천이 각각 하나씩이다. */
+const { sliceConst } = await import("./lib/extract.mjs");
+const FIELD_FRAG = sliceConst(SRC, "FIELD_FRAG");
+const AURA = JSON.parse(readFileSync(resolve(APPDIR, "src/lib/aura-spec.json"), "utf8"));
 
-float hash(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453123); }
-float vnoise(vec2 p){
-  vec2 i=floor(p), f=fract(p); vec2 u=f*f*(3.0-2.0*f);
-  return mix(mix(hash(i),hash(i+vec2(1,0)),u.x), mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),u.x), u.y);
-}
-float fbm(vec2 p){ float s=0.0,a=0.55; for(int i=0;i<4;i++){ s+=a*vnoise(p); p*=2.03; a*=0.5; } return s; }
-
-void main(){
-  vec2 uv=(gl_FragCoord.xy-u_off-0.5*u_res)/min(u_res.x,u_res.y);
-  uv.y += u_sink*0.06;
-  vec2 p = uv*2.35;
-  float t = u_t*u_speed;
-
-  /* ── 1. 살아 있는 실루엣 ────────────────────────────────────────────────
-     매끈한 정원은 **죽어 보인다**(첫 판이 그랬다). 각도 기반 노이즈로 반경을 흔들면
-     이음새 없이 일렁이는 오라가 된다. 응축(곁)하면 흔들림이 줄어 단단해진다. */
-  float ang = atan(p.y, p.x);
-  vec2  ac  = vec2(cos(ang), sin(ang));
-  /* ⚠ 각도 노이즈의 **주파수를 낮게** 잡는다. 처음에 1.7·3.4 를 썼더니 방사형 가시가 돋아
-     성게처럼 됐다 — 레퍼런스는 굴곡이 크고 부드럽다. 큰 굴곡 하나 + 잔결 하나면 충분하다. */
-  float organic = mix(1.0, 0.30, u_orb);
-  float wob = fbm(ac*0.72 + vec2(t*0.30, -t*0.22)) - 0.5;
-  float wob2= fbm(ac*1.45 + vec2(-t*0.19, t*0.25)) - 0.5;
-  float breathe = 0.050*sin(t*0.85) + 0.032*sin(t*1.31+1.9);
-  float R = mix(0.80, 0.60, u_orb) * (1.0 + (wob*0.40 + wob2*0.13)*organic + breathe);
-
-  float d = length(p);
-  float nz = clamp(1.0 - d/max(R,1e-3), 0.0, 1.0);
-
-  /* ── 2. 다층 색 — 안에서 밖으로 네 겹 ──────────────────────────────────
-     두 색만 섞으면 단조롭다. 코어(진함) → 몸통 → 림(밝음) → 바깥 악센트로 겹친다. */
-  vec2 w1 = vec2(fbm(p*0.62+vec2(0.0,t*0.34)), fbm(p*0.62+vec2(5.1,2.3)-t*0.29));
-  float f  = fbm(p*0.9 + (w1-0.5)*2.2 + vec2(t*0.15,-t*0.12));
-  float f2 = fbm(p*1.5 - (w1-0.5)*1.8 + vec2(-t*0.19, t*0.23));
-
-  /* ⚠ 램프 방향이 생명이다. 처음엔 코어를 nz>0.92 에만 줬더니 **몸통 전체가 밝은 색**이 되어
-     밝은 바탕에서 통째로 하얗게 날아갔다. 레퍼런스는 반대다 — **안이 진하고 밖이 옅다.** */
-  vec3 core = u_c1;
-  vec3 mid  = mix(u_c1, u_c2, smoothstep(0.20,0.80,f));
-  vec3 rim  = mix(u_c2, vec3(1.0), 0.30);
-  float ramp = smoothstep(0.02, mix(0.62, 0.46, u_orb), nz);   // 응축하면 진한 코어가 더 넓게 찬다
-  vec3 col  = mix(rim, core, ramp);
-  col = mix(col, mid, smoothstep(0.28,0.72,f)*0.45);
-  col = mix(col, u_c3, smoothstep(0.55,0.95,f2)*0.30*(1.0-ramp*0.5));
-  col += vec3(u_warm*0.11, u_warm*0.035, -u_warm*0.10);
-
-  /* ── 3. 발광 — 반경이 다른 세 겹이 겹쳐야 '빛이 퍼진다'로 읽힌다 ────── */
-  float body  = smoothstep(R+0.26, R-0.46, d);        // 넓은 감쇠 — 오라는 경계가 없다
-  float glow1 = smoothstep(R*mix(2.05,1.45,u_orb), R*0.70, d);
-  float glow2 = smoothstep(R*mix(3.40,2.10,u_orb), R*1.00, d);
-  vec3  gcol  = mix(u_c2, vec3(1.0), 0.30);
-  vec3  gcol2 = mix(u_c3, vec3(1.0), 0.52);
-
-  /* ── 4. 반짝임 — 레퍼런스의 흰 점광. 몇 개만, 천천히 */
-  float spark = 0.0;
-  for(int i=0;i<5;i++){
-    float fi=float(i);
-    vec2 sp = vec2(sin(t*0.31+fi*2.1)*0.42, cos(t*0.27+fi*1.7)*0.42)
-            + vec2(hash(vec2(fi,1.0))-0.5, hash(vec2(fi,2.0))-0.5)*0.55;
-    float sd = length(p-sp);
-    float tw = 0.55+0.45*sin(t*1.6+fi*2.4);
-    spark += smoothstep(0.052,0.0,sd)*tw;
-  }
-
-  /* ⚠ 층의 색을 **더하면 안 된다** — 1을 넘어 흰색으로 타고 오행 색이 사라진다(실제로 그랬다).
-     층마다 알파를 따로 쌓고, 색은 그 알파로 **가중평균**한다. */
-  float aBody = body*u_lum;
-  float aG1   = glow1*0.26*(1.0-body);
-  float aG2   = glow2*0.13*(1.0-glow1);
-  float aSp   = spark*0.55*(1.0-body*0.6);
-  float sum   = aBody+aG1+aG2+aSp;
-  float alp   = clamp(sum, 0.0, 1.0);
-  vec3 outc = (col*aBody + gcol*aG1 + gcol2*aG2 + vec3(1.0)*aSp) / max(sum, 1e-3);
-  outc += (hash(gl_FragCoord.xy+fract(u_t)*0.01)-0.5)*u_grain;
-  gl_FragColor = vec4(outc, alp);   // 스트레이트 알파
-}`;
 
 const ELS = [
   { key: "화", form: 0 }, { key: "수", form: 1 }, { key: "목", form: 2 },
   { key: "금", form: 3 }, { key: "토", form: 4 },
 ];
 const COLS = [
-  { t: "펼침 · 판결", orb: 0, warm: 0 },
-  { t: "응축 · 곁", orb: 1, warm: 0 },
-  { t: "오늘 활기참", orb: 0, warm: 0.55 },
-  { t: "오늘 버거움", orb: 0, warm: -0.5, sink: 0.5, lum: 0.82 },
+  { t: "윤곽만 · 판결", orb: 0, w: [0.15, 0.35, 0.0] },
+  { t: "쐐기 · 예민함", orb: 0, w: [0.85, 0.15, 0.0], warm: 0.10 },
+  { t: "뭉게 · 기분좋음", orb: 0, w: [0.10, 0.90, 0.0], warm: 0.34 },
+  { t: "지지직 · 힘든 날", orb: 0, w: [0.14, 0.18, 0.70], warm: -0.24, sink: 0.42, lum: 0.84 },
+  { t: "응축 · 곁", orb: 1, w: [0.20, 0.70, 0.05] },
 ];
 /* ⚠ 밝은 바탕용 보정 — **원색(EL_COLOR)은 안 건드린다.** 금의 c2(#e8f2ff)는 거의 흰색이라
    밝은 회색 바탕에서 통째로 사라진다(첫 판에서 금 줄이 안 보였다). 이 화면에서만 한 칸 낮춘다. */
@@ -123,7 +48,7 @@ const pal = (k) => {
   const acc = (LIGHT_FIX[SAENG[k]] || EL_COLOR[SAENG[k]])[1];
   return [base[0], base[1], acc];
 };
-const DATA = { els: ELS.map(e => ({ ...e, c: pal(e.key) })), cols: COLS };
+const DATA = { els: ELS.map(e => ({ ...e, c: pal(e.key) })), cols: COLS, aura: AURA };
 
 const HTML = `<!doctype html><meta charset="utf-8">
 <title>홀로그램 색장 — 입자 없음</title>
@@ -145,9 +70,9 @@ const HTML = `<!doctype html><meta charset="utf-8">
   .note b{color:#2a2733} .note code{font-size:11px;color:#3d3a4d}
 </style>
 <div class="wrap">
-  <h1>홀로그램 색장 — 입자를 안 쓴다</h1>
+  <h1>오라 — 빛의 형태가 오늘을 말한다</h1>
   <p class="lead">전면 사각형 하나 + 프래그먼트 셰이더. <b>도메인 워핑 fbm</b>으로 결을 만들고,
-  마스크 가장자리를 노이즈로 흔들어 <b>원이 아닌 오라</b>로 만든다. 바탕 위에 <b>얹는</b> 합성(가산 아님).</p>
+  <b>퍼지되 윤곽이 남는다</b> — 경계는 선이 아니라 밝아지는 띠(림)다. 형태 값은 전부 <code>src/lib/aura-spec.json</code> 에 적혀 있고 셰이더는 그것만 읽는다.</p>
   <div class="board" id="b"></div>
   <div class="note">
     <p><b>오행은 색만이 아니라 형태로 갈린다</b> — 화는 세로로 솟고(1.30×0.74), 수는 옆으로 눕고(0.72×1.34),
@@ -186,7 +111,14 @@ const vb=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,vb);
 gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,3,-1,-1,3]),gl.STATIC_DRAW);
 const la=gl.getAttribLocation(pg,"a"); gl.enableVertexAttribArray(la); gl.vertexAttribPointer(la,2,gl.FLOAT,false,0,0);
 const U=n=>gl.getUniformLocation(pg,n);
-gl.uniform3fv(U("u_bg"),BG); gl.uniform1f(U("u_grain"),0.014); gl.uniform1f(U("u_speed"),1);
+gl.uniform3fv(U("u_bg"),BG); gl.uniform1f(U("u_speed"),1.2);
+const AB=DATA.aura.base, AR=DATA.aura.forms.ray, AP=DATA.aura.forms.puff, AF=DATA.aura.forms.flicker;
+gl.uniform1f(U("u_grain"),AB.grain);
+gl.uniform3f(U("u_bite"),AR.edgeBite,AP.edgeBite,AF.edgeBite);
+gl.uniform4f(U("u_rayP"),AR.spokes,AR.sharp,AR.reach,AR.amp);
+gl.uniform4f(U("u_puffP"),AP.lobes,AP.freq,AP.amp,AP.drift);
+gl.uniform4f(U("u_flkP"),AF.rate,AF.depth,AF.dropout,AF.amp);
+gl.uniform4f(U("u_baseP"),AB.edgeSoft["펼침"],AB.edgeSoft["응축"],AB.rimWidth,AB.rimLift);
 gl.uniform2f(U("u_res"),CELL*dpr,CELL*dpr);
 gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA); gl.clearColor(0,0,0,0);
 const T0=performance.now(); let stop=false; setTimeout(()=>{window.__frozen=true;},2500); window.__stop=()=>{stop=true};
@@ -203,6 +135,7 @@ const T0=performance.now(); let stop=false; setTimeout(()=>{window.__frozen=true
     gl.uniform1f(U("u_form"),el.form); gl.uniform1f(U("u_orb"),col.orb||0);
     gl.uniform1f(U("u_warm"),col.warm||0); gl.uniform1f(U("u_sink"),col.sink||0);
     gl.uniform1f(U("u_lum"),col.lum==null?1:col.lum);
+    gl.uniform3f(U("u_wt"),col.w[0],col.w[1],col.w[2]);
     gl.drawArrays(gl.TRIANGLES,0,3);
   }
 })();

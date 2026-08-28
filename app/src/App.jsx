@@ -1,6 +1,9 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { readImprint } from "./lib/imprint.js";
 import { readMatch, roleOf, ROLE } from "./lib/match.js";
+/* 오라 스펙 — 레퍼런스를 값으로 적은 단일 진실 원천. 셰이더 상수를 코드에 안 박는다.
+   시제품 보드(tools/build-holo-field.mjs)도 **같은 파일**을 읽는다 — 보드와 앱이 어긋날 수 없다. */
+import AURA from "./lib/aura-spec.json";
 
 /* ───── 계측(PostHog) — 휴면-준비: VITE_POSTHOG_KEY 없으면 완전 무동작 ───── */
 const AKEY = import.meta.env.VITE_POSTHOG_KEY;
@@ -2729,7 +2732,10 @@ function todayMood(saju) {
     const age = ((jdn(n.getFullYear(), n.getMonth() + 1, n.getDate()) - 2451550) % 29.53059 + 29.53059) % 29.53059;
     const full = 1 - Math.abs(age / 29.53059 - 0.5) * 2;      // 보름=1 · 그믐=0
     const moon = moonPhase(n.getFullYear(), n.getMonth() + 1, n.getDate());
-    return { ss, day: GAN[td.idx.dG], moon: moon && moon.name, ...m, lum: m.lum * (0.94 + 0.12 * full) };
+    /* 오늘 상태가 **빛의 형태**를 고른다 — 쐐기(예민)/뭉게(기분좋음)/지지직(힘듦).
+       매핑은 aura-spec.json §moods 에 있다. 없으면 뭉게 기본값. */
+    const w = AURA.moods[m.l] || { ray: 0.3, puff: 0.6, flicker: 0.1 };
+    return { ss, day: GAN[td.idx.dG], moon: moon && moon.name, ...m, w, lum: m.lum * (0.94 + 0.12 * full) };
   } catch (_) { return null; }
 }
 
@@ -2755,6 +2761,15 @@ precision highp float;
 uniform vec2  u_res, u_off;
 uniform float u_t, u_form, u_orb, u_warm, u_speed, u_lum, u_sink, u_grain;
 uniform vec3  u_c1, u_c2, u_c3, u_bg;
+/* ── 빛의 형태 — 값은 전부 src/lib/aura-spec.json 에서 온다(셰이더에 상수를 안 박는다) ──
+   u_wt    = (쐐기, 뭉게, 지지직) 가중치 — 오늘 상태가 정한다
+   u_rayP  = (살 수, 날카로움, 뻗는 길이, 진폭)
+   u_puffP = (덩어리 수, 주파수, 진폭, 흐름 속도)
+   u_flkP  = (깜빡임 빈도, 깊이, 꺼지는 비율, 진폭)
+   u_baseP = (윤곽 무름-펼침, 윤곽 무름-응축, 림 두께, 림 밝기)
+   u_bite  = 각 형태가 윤곽을 뚫고 나가는 정도 */
+uniform vec3  u_wt, u_bite;
+uniform vec4  u_rayP, u_puffP, u_flkP, u_baseP;
 
 float hash(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453123); }
 float vnoise(vec2 p){
@@ -2768,69 +2783,106 @@ void main(){
   uv.y += u_sink*0.06;
   vec2 p = uv*2.35;
   float t = u_t*u_speed;
-
-  /* ── 1. 살아 있는 실루엣 ────────────────────────────────────────────────
-     매끈한 정원은 **죽어 보인다**(첫 판이 그랬다). 각도 기반 노이즈로 반경을 흔들면
-     이음새 없이 일렁이는 오라가 된다. 응축(곁)하면 흔들림이 줄어 단단해진다. */
+  float d = length(p);
   float ang = atan(p.y, p.x);
   vec2  ac  = vec2(cos(ang), sin(ang));
-  /* ⚠ 각도 노이즈의 **주파수를 낮게** 잡는다. 처음에 1.7·3.4 를 썼더니 방사형 가시가 돋아
-     성게처럼 됐다 — 레퍼런스는 굴곡이 크고 부드럽다. 큰 굴곡 하나 + 잔결 하나면 충분하다. */
-  float organic = mix(1.0, 0.30, u_orb);
-  float wob = fbm(ac*0.72 + vec2(t*0.30, -t*0.22)) - 0.5;
-  float wob2= fbm(ac*1.45 + vec2(-t*0.19, t*0.25)) - 0.5;
-  float breathe = 0.050*sin(t*0.85) + 0.032*sin(t*1.31+1.9);
-  float R = mix(0.80, 0.60, u_orb) * (1.0 + (wob*0.40 + wob2*0.13)*organic + breathe);
+  float organic = mix(1.0, 0.34, u_orb);
 
-  float d = length(p);
+  /* ── 1. 빛살(쐐기) — 예민함 ────────────────────────────────────────────
+     중심에서 뻗는 날카로운 살. |sin| 을 높은 지수로 눌러 얇은 쐐기를 만든다.
+     살이 흔들려야 '예민'으로 읽히므로 각도에 노이즈 지터를 얹는다. */
+  float jit  = (fbm(vec2(ang*2.1, t*0.7))-0.5)*u_rayP.w*3.0;
+  float sray = pow(abs(sin(ang*u_rayP.x*0.5 + t*0.16 + jit)), u_rayP.y);
+
+  /* ── 2. 뭉게뭉게 — 기분 좋음 ───────────────────────────────────────────
+     큰 덩어리가 느리게 부풀고 꺼진다. 저주파여야 한다 — 주파수를 올리면 성게가 된다. */
+  float lobe = sin(ang*u_puffP.x + t*u_puffP.w)*0.5
+             + (fbm(ac*u_puffP.y + vec2(t*u_puffP.w, -t*u_puffP.w*0.8))-0.5)*1.4;
+
+  /* ── 3. 지지직 — 힘든 날 ───────────────────────────────────────────────
+     전구가 파르르. 시간을 계단으로 끊고 계단마다 밝기를 뽑는다. 가끔은 훅 꺼진다. */
+  float ph   = floor(t*u_flkP.x);
+  float fl   = 1.0 - u_flkP.y*hash(vec2(ph, 7.3));
+  float drop = step(u_flkP.z, hash(vec2(ph, 19.1)));
+  fl *= mix(0.34, 1.0, drop);
+  float grit = (fbm(ac*u_flkP.w*40.0 + vec2(ph*3.7, 0.0))-0.5);
+
+  /* ── 4. 윤곽 — 퍼지되 형태가 남아야 한다 ───────────────────────────────
+     v143 은 감쇠 폭이 0.72 라 통째로 날아갔다(창업자: "핵폭탄 터진 것처럼").
+     기본 굴곡은 작게 두고, **어느 형태가 켜졌느냐로** 실루엣이 달라지게 한다. */
+  float wob  = fbm(ac*0.72 + vec2(t*0.30,-t*0.22)) - 0.5;
+  float breathe = 0.042*sin(t*0.85) + 0.026*sin(t*1.31+1.9);
+  /* ⚠ 쐐기를 반경에 더하면 **몸통이 별 모양으로 깎인다**(첫 판이 톱니바퀴가 됐다).
+     레퍼런스의 빛살은 실루엣이 아니라 **몸 밖으로 새어 나가는 빛**이다 — 발광층으로만 쓴다.
+     실루엣에는 아주 얕게만 물린다(edgeBite). */
+  float dR = wob*0.16
+           + lobe*u_puffP.z*u_wt.y
+           + grit*u_flkP.w*u_wt.z
+           + (sray-0.5)*u_bite.x*u_wt.x;   // ⚠ 0.10 도 톱니로 보였다 → 스펙에서 0.03 으로 내렸다
+  float R = mix(0.74, 0.58, u_orb) * (1.0 + dR*organic + breathe);
+
+  float soft = mix(u_baseP.x, u_baseP.y, u_orb);
+  float body = smoothstep(R+soft, R-soft*0.7, d);
+  /* 림 — 레퍼런스의 '경계'는 선이 아니라 **밝아지는 띠**다. 이게 있어야 퍼져도 형태가 보인다. */
+  float rimB = smoothstep(u_baseP.z, 0.0, abs(d-R)) * u_baseP.w * (0.55+0.45*u_wt.y);
+
   float nz = clamp(1.0 - d/max(R,1e-3), 0.0, 1.0);
 
-  /* ── 2. 다층 색 — 안에서 밖으로 네 겹 ──────────────────────────────────
-     두 색만 섞으면 단조롭다. 코어(진함) → 몸통 → 림(밝음) → 바깥 악센트로 겹친다. */
+  /* ── 5. 색 — 안이 진하고 밖이 옅다(램프를 뒤집으면 통째로 하얘진다) ──── */
   vec2 w1 = vec2(fbm(p*0.62+vec2(0.0,t*0.34)), fbm(p*0.62+vec2(5.1,2.3)-t*0.29));
   float f  = fbm(p*0.9 + (w1-0.5)*2.2 + vec2(t*0.15,-t*0.12));
   float f2 = fbm(p*1.5 - (w1-0.5)*1.8 + vec2(-t*0.19, t*0.23));
-
-  /* ⚠ 램프 방향이 생명이다. 처음엔 코어를 nz>0.92 에만 줬더니 **몸통 전체가 밝은 색**이 되어
-     밝은 바탕에서 통째로 하얗게 날아갔다. 레퍼런스는 반대다 — **안이 진하고 밖이 옅다.** */
   vec3 core = u_c1;
   vec3 mid  = mix(u_c1, u_c2, smoothstep(0.20,0.80,f));
   vec3 rim  = mix(u_c2, vec3(1.0), 0.30);
-  float ramp = smoothstep(0.02, mix(0.62, 0.46, u_orb), nz);   // 응축하면 진한 코어가 더 넓게 찬다
+  float ramp = smoothstep(0.02, mix(0.60, 0.44, u_orb), nz);
   vec3 col  = mix(rim, core, ramp);
   col = mix(col, mid, smoothstep(0.28,0.72,f)*0.45);
   col = mix(col, u_c3, smoothstep(0.55,0.95,f2)*0.30*(1.0-ramp*0.5));
+  col = mix(col, rim, rimB*0.55);
   col += vec3(u_warm*0.11, u_warm*0.035, -u_warm*0.10);
 
-  /* ── 3. 발광 — 반경이 다른 세 겹이 겹쳐야 '빛이 퍼진다'로 읽힌다 ────── */
-  float body  = smoothstep(R+0.26, R-0.46, d);        // 넓은 감쇠 — 오라는 경계가 없다
-  float glow1 = smoothstep(R*mix(2.05,1.45,u_orb), R*0.70, d);
-  float glow2 = smoothstep(R*mix(3.40,2.10,u_orb), R*1.00, d);
+  /* ── 6. 발광 — 두 겹. v143 은 세 겹에 반경 3.4 라 화면을 덮었다 ───────── */
   vec3  gcol  = mix(u_c2, vec3(1.0), 0.30);
   vec3  gcol2 = mix(u_c3, vec3(1.0), 0.52);
+  float glow1 = smoothstep(R*mix(1.55,1.24,u_orb), R*0.72, d);
+  float glow2 = smoothstep(R*mix(2.60,1.85,u_orb), R*1.00, d);
 
-  /* ── 4. 반짝임 — 레퍼런스의 흰 점광. 몇 개만, 천천히 */
+  /* 빛살은 **발광층**이다 — 몸통을 밀어내는 게 아니라 밖으로 새어 나간다 */
+  /* 빛살은 **띠**다 — 몸 안쪽에서 시작해 밖으로 뻗다 사라진다. 안쪽 컷이 없으면
+     몸 전체가 살 무늬로 덮여 톱니바퀴처럼 보인다(두 판 연속 그랬다). */
+  float rayGlow = sray * smoothstep(R*u_rayP.z, R*0.88, d) * smoothstep(R*0.50, R*0.92, d) * u_wt.x;
+
+  /* ── 7. 반짝임 ─────────────────────────────────────────────────────── */
   float spark = 0.0;
   for(int i=0;i<5;i++){
     float fi=float(i);
     vec2 sp = vec2(sin(t*0.31+fi*2.1)*0.42, cos(t*0.27+fi*1.7)*0.42)
             + vec2(hash(vec2(fi,1.0))-0.5, hash(vec2(fi,2.0))-0.5)*0.55;
-    float sd = length(p-sp);
-    float tw = 0.55+0.45*sin(t*1.6+fi*2.4);
-    spark += smoothstep(0.052,0.0,sd)*tw;
+    spark += smoothstep(0.052,0.0,length(p-sp))*(0.55+0.45*sin(t*1.6+fi*2.4));
   }
 
-  /* ⚠ 층의 색을 **더하면 안 된다** — 1을 넘어 흰색으로 타고 오행 색이 사라진다(실제로 그랬다).
-     층마다 알파를 따로 쌓고, 색은 그 알파로 **가중평균**한다. */
   float aBody = body*u_lum;
-  float aG1   = glow1*0.26*(1.0-body);
-  float aG2   = glow2*0.13*(1.0-glow1);
+  float aRim  = rimB*(1.0-body*0.35);
+  float aG1   = glow1*0.20*(1.0-body);
+  float aG2   = glow2*0.10*(1.0-glow1);
+  float aRay  = rayGlow*0.60*(1.0-body*0.55);
   float aSp   = spark*0.55*(1.0-body*0.6);
-  float sum   = aBody+aG1+aG2+aSp;
-  float alp   = clamp(sum, 0.0, 1.0);
-  vec3 outc = (col*aBody + gcol*aG1 + gcol2*aG2 + vec3(1.0)*aSp) / max(sum, 1e-3);
+  float sum   = aBody+aRim+aG1+aG2+aRay+aSp;
+  /* ⚠ 빛살을 **흰색**으로 두면 흰 바탕에서 통째로 안 보인다(한 판 날렸다). 살은 색이 있어야 한다. */
+  vec3 rcol = mix(u_c1, u_c2, 0.35);
+  vec3 outc = (col*aBody + rim*aRim + gcol*aG1 + gcol2*aG2 + rcol*aRay + vec3(1.0)*aSp) / max(sum, 1e-3);
   outc += (hash(gl_FragCoord.xy+fract(u_t)*0.01)-0.5)*u_grain;
-  gl_FragColor = vec4(outc, alp);   // 스트레이트 알파
+
+  /* ⚠ 발광은 캔버스보다 넓다 — 그대로 두면 **가장자리에서 뚝 잘린다**(앱 실화면에서 그랬다).
+     테두리로 갈수록 알파를 0으로 눕혀 잘린 자국을 없앤다. 크기를 줄이는 대신 이걸 쓴다. */
+  float vig = smoothstep(1.0, 0.62, max(abs(uv.x), abs(uv.y))*2.0);
+
+  /* ⚠ 지지직은 **층마다 밝기를 깎으면 안 된다** — 몸통만 줄고 흰 발광 비중이 커져서
+     첫 판에서 통째로 창백해졌다. 색 비율은 그대로 두고 **불투명도만** 파르르 떨게 한다.
+     그래야 '전구가 나갈 듯 말 듯'이 되고 색이 안 빠진다. */
+  float live = mix(1.0, fl, u_wt.z);
+  gl_FragColor = vec4(outc, clamp(sum*live*vig, 0.0, 1.0));
 }`;
 /* 밝은 바탕용 보정 — **원색(EL_COLOR)은 안 건드린다.** 금의 c2(#e8f2ff)는 거의 흰색이라
    밝은 바탕에서 통째로 사라진다(시제품 첫 판에서 금 줄이 안 보였다). 이 렌더러에서만 한 칸 낮춘다. */
@@ -2866,7 +2918,7 @@ function GuardianField({ saju, mood, orbRef, size = 340, onFail }) {
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
       const la = gl.getAttribLocation(pg, "a"); gl.enableVertexAttribArray(la);
       gl.vertexAttribPointer(la, 2, gl.FLOAT, false, 0, 0);
-      const U = {}; ["u_res","u_off","u_t","u_form","u_orb","u_warm","u_speed","u_lum","u_sink","u_grain","u_c1","u_c2","u_c3","u_bg"]
+      const U = {}; ["u_res","u_off","u_t","u_form","u_orb","u_warm","u_speed","u_lum","u_sink","u_grain","u_c1","u_c2","u_c3","u_bg","u_wt","u_bite","u_rayP","u_puffP","u_flkP","u_baseP"]
         .forEach((k) => { U[k] = gl.getUniformLocation(pg, k); });
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const S = Math.round(size * dpr); cv.width = S; cv.height = S;
@@ -2875,12 +2927,21 @@ function GuardianField({ saju, mood, orbRef, size = 340, onFail }) {
       gl.uniform3fv(U.u_c1, pal[0]); gl.uniform3fv(U.u_c2, pal[1]); gl.uniform3fv(U.u_c3, pal[2]);
       gl.uniform3fv(U.u_bg, HOLO_BG);
       gl.uniform1f(U.u_form, ({ 화: 0, 수: 1, 목: 2, 금: 3, 토: 4 })[saju.main] ?? 4);
-      gl.uniform1f(U.u_grain, 0.014);
+      gl.uniform1f(U.u_grain, AURA.base.grain);
       gl.uniform1f(U.u_warm, mood ? mood.warm : 0);
       /* ⚠ 창업자 지적 "움직임이 없잖아" — 워핑이 느리면 정지화로 보인다. 기본 배속을 올린다. */
       gl.uniform1f(U.u_speed, 1.35 * (mood ? mood.sp : 1));
       gl.uniform1f(U.u_lum, mood ? Math.min(1.12, mood.lum) : 1);
       gl.uniform1f(U.u_sink, mood ? mood.sink * 2.2 : 0);
+      /* 스펙(JSON) → 유니폼. 손으로 옮긴 값이 하나도 없다 — 스펙을 고치면 화면이 바뀐다. */
+      const AB = AURA.base, AR = AURA.forms.ray, AP = AURA.forms.puff, AF = AURA.forms.flicker;
+      const w = (mood && mood.w) || { ray: 0.3, puff: 0.6, flicker: 0.1 };
+      gl.uniform3f(U.u_wt, w.ray, w.puff, w.flicker);
+      gl.uniform3f(U.u_bite, AR.edgeBite, AP.edgeBite, AF.edgeBite);
+      gl.uniform4f(U.u_rayP, AR.spokes, AR.sharp, AR.reach, AR.amp);
+      gl.uniform4f(U.u_puffP, AP.lobes, AP.freq, AP.amp, AP.drift);
+      gl.uniform4f(U.u_flkP, AF.rate, AF.depth, AF.dropout, AF.amp);
+      gl.uniform4f(U.u_baseP, AB.edgeSoft["펼침"], AB.edgeSoft["응축"], AB.rimWidth, AB.rimLift);
       gl.viewport(0, 0, S, S);
       gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);   // 스트레이트 알파
       gl.clearColor(0, 0, 0, 0);
@@ -3486,7 +3547,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v143 · 살아 있는 오라";
+const APP_VER = "v144 · 빛의 형태";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -6958,8 +7019,9 @@ const CSS = `
 .stage.holo .btn.gold{background:linear-gradient(180deg,#f4dfa6,#d8ae57);color:#2a1e05}
 .stage.holo .impbadge{color:#7a4a12;border-color:rgba(122,74,18,.32)}
 /* 색장은 캔버스를 스스로 채운다 — 입자용 확대율(1.85/1.72)을 그대로 얹으면 화면을 뒤덮는다 */
-.stage.holo .halo.wide.lobbyscale{transform:translateY(2vh) scale(1)}
-.stage.holo .halo.wide.gyeotscale{transform:translateY(1vh) scale(1)}
+/* ⚠ 색장은 입자 엔진과 배율이 다르다 — 오라 몸통이 이미 캔버스의 63% 라 1.85 를 그대로 쓰면 화면 밖으로 나간다 */
+.stage.holo .halo.wide.lobbyscale{transform:translateY(7vh) scale(1.14)}
+.stage.holo .halo.wide.gyeotscale{transform:translateY(6vh) scale(1.04)}
 .stage.holo .gcv{mix-blend-mode:normal}
 .moodline{font-family:sans-serif;font-size:13px;letter-spacing:.06em;color:#cfc4e2;margin:0 0 2px;text-align:center;line-height:1.7}
 .moodline b{color:#f5d98b;font-weight:600;font-size:15px}
