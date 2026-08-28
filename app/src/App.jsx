@@ -2709,16 +2709,20 @@ const SKIN = (() => { try { return /[?&]skin=holo(&|$)/.test(window.location.sea
    ⚠ 이 값은 **판결에 안 들어간다.** 화면 상태(색·속도·밝기)만 만든다.
       판결 축에 얹으면 그건 축을 늘리는 것이고 헌장 위반이다. */
 const MOOD = {
-  비견: { l: "단단함", warm: 0.00, sp: 0.92, lum: 1.00, ch: 0.85, sink: 0.00 },
-  겁재: { l: "들썩임", warm: 0.18, sp: 1.22, lum: 1.06, ch: 1.30, sink: -0.05 },
-  식신: { l: "활기참", warm: 0.30, sp: 1.16, lum: 1.12, ch: 1.00, sink: -0.10 },
-  상관: { l: "번뜩임", warm: 0.22, sp: 1.34, lum: 1.10, ch: 1.45, sink: -0.08 },
-  정재: { l: "또렷함", warm: 0.05, sp: 0.90, lum: 1.04, ch: 0.70, sink: 0.00 },
-  편재: { l: "펼쳐짐", warm: 0.24, sp: 1.10, lum: 1.06, ch: 1.20, sink: -0.06 },
-  정관: { l: "반듯함", warm: -0.05, sp: 0.86, lum: 0.98, ch: 0.62, sink: 0.04 },
-  편관: { l: "버거움", warm: -0.22, sp: 0.74, lum: 0.84, ch: 1.15, sink: 0.16 },
-  정인: { l: "포근함", warm: 0.12, sp: 0.82, lum: 1.02, ch: 0.72, sink: 0.02 },
-  편인: { l: "잠김",   warm: -0.18, sp: 0.70, lum: 0.88, ch: 0.80, sink: 0.14 },
+  /* ⚠ `l` 은 **화면에 그대로 나가는 말**이다. 창업자 지적(2026-08-28): "‘오늘은 또렷함’ 이게 무슨 말이야?
+     직관적으로 쓰라는 게 지침이잖아." 십성 이름(또렷함·잠김…)은 우리 내부 어휘지 유저 말이 아니다.
+     그래서 `l` 은 **그 기운이 오늘 뭘 하는지**를 짧은 서술로 적는다. 십성은 `ss` 로 따로 남는다.
+     `axis` 는 근거 줄에 쓰는 일상어 — 「…자리」 어휘는 곁 역할표와 같은 계열이다(match.js ROLE). */
+  비견: { l: "쉽게 안 흔들려",        axis: "같은 자리",     warm: 0.00, sp: 0.92, lum: 1.00, ch: 0.85, sink: 0.00 },
+  겁재: { l: "괜히 마음이 급해져",    axis: "같은 자리",     warm: 0.18, sp: 1.22, lum: 1.06, ch: 1.30, sink: -0.05 },
+  식신: { l: "손대는 게 잘 풀려",     axis: "내보내는 자리", warm: 0.30, sp: 1.16, lum: 1.12, ch: 1.00, sink: -0.10 },
+  상관: { l: "말이 잘 나와",          axis: "내보내는 자리", warm: 0.22, sp: 1.34, lum: 1.10, ch: 1.45, sink: -0.08 },
+  정재: { l: "계산이 잘 서",          axis: "쥐는 자리",     warm: 0.05, sp: 0.90, lum: 1.04, ch: 0.70, sink: 0.00 },
+  편재: { l: "판을 벌이고 싶어져",    axis: "쥐는 자리",     warm: 0.24, sp: 1.10, lum: 1.06, ch: 1.20, sink: -0.06 },
+  정관: { l: "정한 대로 가는 게 편해", axis: "누르는 자리",  warm: -0.05, sp: 0.86, lum: 0.98, ch: 0.62, sink: 0.04 },
+  편관: { l: "버텨야 하는 날이야",    axis: "누르는 자리",   warm: -0.22, sp: 0.74, lum: 0.84, ch: 1.15, sink: 0.16 },
+  정인: { l: "누가 받쳐 주는 느낌이야", axis: "받쳐 주는 자리", warm: 0.12, sp: 0.82, lum: 1.02, ch: 0.72, sink: 0.02 },
+  편인: { l: "혼자 파고들게 돼",      axis: "받쳐 주는 자리", warm: -0.18, sp: 0.70, lum: 0.88, ch: 0.80, sink: 0.14 },
 };
 function todayMood(saju) {
   try {
@@ -2734,7 +2738,7 @@ function todayMood(saju) {
     const moon = moonPhase(n.getFullYear(), n.getMonth() + 1, n.getDate());
     /* 오늘 상태가 **빛의 형태**를 고른다 — 쐐기(예민)/뭉게(기분좋음)/지지직(힘듦).
        매핑은 aura-spec.json §moods 에 있다. 없으면 뭉게 기본값. */
-    const w = AURA.moods[m.l] || { ray: 0.3, puff: 0.6, flicker: 0.1 };
+    const w = AURA.moods[ss] || { ray: 0.3, puff: 0.6, flicker: 0.1 };
     return { ss, day: GAN[td.idx.dG], moon: moon && moon.name, ...m, w, lum: m.lum * (0.94 + 0.12 * full) };
   } catch (_) { return null; }
 }
@@ -2761,13 +2765,6 @@ precision highp float;
 uniform vec2  u_res, u_off;
 uniform float u_t, u_form, u_orb, u_warm, u_speed, u_lum, u_sink, u_grain;
 uniform vec3  u_c1, u_c2, u_c3, u_bg;
-/* ── 빛의 형태 — 값은 전부 src/lib/aura-spec.json 에서 온다(셰이더에 상수를 안 박는다) ──
-   u_wt    = (쐐기, 뭉게, 지지직) 가중치 — 오늘 상태가 정한다
-   u_rayP  = (살 수, 날카로움, 뻗는 길이, 진폭)
-   u_puffP = (덩어리 수, 주파수, 진폭, 흐름 속도)
-   u_flkP  = (깜빡임 빈도, 깊이, 꺼지는 비율, 진폭)
-   u_baseP = (윤곽 무름-펼침, 윤곽 무름-응축, 림 두께, 림 밝기)
-   u_bite  = 각 형태가 윤곽을 뚫고 나가는 정도 */
 uniform vec3  u_wt, u_bite;
 uniform vec4  u_rayP, u_puffP, u_flkP, u_baseP;
 
@@ -2781,79 +2778,81 @@ float fbm(vec2 p){ float s=0.0,a=0.55; for(int i=0;i<4;i++){ s+=a*vnoise(p); p*=
 void main(){
   vec2 uv=(gl_FragCoord.xy-u_off-0.5*u_res)/min(u_res.x,u_res.y);
   uv.y += u_sink*0.06;
-  vec2 p = uv*2.35;
   float t = u_t*u_speed;
-  float d = length(p);
-  float ang = atan(p.y, p.x);
-  vec2  ac  = vec2(cos(ang), sin(ang));
-  float organic = mix(1.0, 0.34, u_orb);
 
-  /* ── 1. 빛살(쐐기) — 예민함 ────────────────────────────────────────────
-     중심에서 뻗는 날카로운 살. |sin| 을 높은 지수로 눌러 얇은 쐐기를 만든다.
-     살이 흔들려야 '예민'으로 읽히므로 각도에 노이즈 지터를 얹는다. */
-  float jit  = (fbm(vec2(ang*2.1, t*0.7))-0.5)*u_rayP.w*3.0;
-  float sray = pow(abs(sin(ang*u_rayP.x*0.5 + t*0.16 + jit)), u_rayP.y);
+  /* ── 1. xyz 로 떠다닌다 ────────────────────────────────────────────────
+     창업자 지적(2026-08-28): "움직임은 xyz 축으로 있어야 해."
+     x·y 는 자리를 옮기고, z 는 **앞뒤** — 가까워지면 커지고 밝아진다. 주기를 서로 나눠
+     떨어지지 않게 잡아야 왕복이 아니라 **떠다니는 것**으로 보인다. */
+  vec2 drift = vec2(sin(t*0.23)*0.085 + sin(t*0.41+1.3)*0.032,
+                    cos(t*0.19)*0.070 + sin(t*0.33+0.6)*0.028);
+  float zc = 0.5 + 0.5*sin(t*0.147);
+  vec2  p  = (uv - drift)*2.35;
+  float d  = length(p);
 
-  /* ── 2. 뭉게뭉게 — 기분 좋음 ───────────────────────────────────────────
-     큰 덩어리가 느리게 부풀고 꺼진다. 저주파여야 한다 — 주파수를 올리면 성게가 된다. */
-  float lobe = sin(ang*u_puffP.x + t*u_puffP.w)*0.5
-             + (fbm(ac*u_puffP.y + vec2(t*u_puffP.w, -t*u_puffP.w*0.8))-0.5)*1.4;
+  /* ── 2. 몸은 **구**다. 실루엣을 노이즈로 흔들지 않는다 ─────────────────
+     창업자 지적: "너무 세포 같이 생겼어." 각도 노이즈로 반경을 흔들면 아메바가 된다 —
+     레퍼런스는 둥근 발광체다. 흔들리는 건 실루엣이 아니라 **안의 결과 밖의 빛**이다. */
+  float R = mix(0.70, 0.56, u_orb) * mix(0.93, 1.08, zc) * (1.0 + 0.022*sin(t*0.85));
 
-  /* ── 3. 지지직 — 힘든 날 ───────────────────────────────────────────────
-     전구가 파르르. 시간을 계단으로 끊고 계단마다 밝기를 뽑는다. 가끔은 훅 꺼진다. */
-  float ph   = floor(t*u_flkP.x);
-  float fl   = 1.0 - u_flkP.y*hash(vec2(ph, 7.3));
-  float drop = step(u_flkP.z, hash(vec2(ph, 19.1)));
-  fl *= mix(0.34, 1.0, drop);
-  float grit = (fbm(ac*u_flkP.w*40.0 + vec2(ph*3.7, 0.0))-0.5);
+  /* ── 3. 자전 — 표면 결이 구를 따라 돈다(3D 로 읽히는 지점) ────────────
+     화면 좌표 대신 **구 표면의 법선**을 만들고 그걸 회전시켜 노이즈를 찍는다.
+     가장자리로 갈수록 결이 압축돼 보이는 게 공짜로 따라온다 — 평면 워핑엔 그게 없다. */
+  vec2  s  = p/max(R,1e-3);
+  float rr = clamp(dot(s,s), 0.0, 1.0);
+  vec3  n  = vec3(s, sqrt(max(0.0, 1.0-rr)));
+  float ay = t*0.20, ax = 0.34;
+  vec3  q  = vec3(n.x*cos(ay)+n.z*sin(ay), n.y, -n.x*sin(ay)+n.z*cos(ay));
+  q = vec3(q.x, q.y*cos(ax)-q.z*sin(ax), q.y*sin(ax)+q.z*cos(ax));
+  float ay2 = -t*0.13;
+  vec3  q2 = vec3(n.x*cos(ay2)+n.z*sin(ay2), n.y, -n.x*sin(ay2)+n.z*cos(ay2));
 
-  /* ── 4. 윤곽 — 퍼지되 형태가 남아야 한다 ───────────────────────────────
-     v143 은 감쇠 폭이 0.72 라 통째로 날아갔다(창업자: "핵폭탄 터진 것처럼").
-     기본 굴곡은 작게 두고, **어느 형태가 켜졌느냐로** 실루엣이 달라지게 한다. */
-  float wob  = fbm(ac*0.72 + vec2(t*0.30,-t*0.22)) - 0.5;
-  float breathe = 0.042*sin(t*0.85) + 0.026*sin(t*1.31+1.9);
-  /* ⚠ 쐐기를 반경에 더하면 **몸통이 별 모양으로 깎인다**(첫 판이 톱니바퀴가 됐다).
-     레퍼런스의 빛살은 실루엣이 아니라 **몸 밖으로 새어 나가는 빛**이다 — 발광층으로만 쓴다.
-     실루엣에는 아주 얕게만 물린다(edgeBite). */
-  float dR = wob*0.16
-           + lobe*u_puffP.z*u_wt.y
-           + grit*u_flkP.w*u_wt.z
-           + (sray-0.5)*u_bite.x*u_wt.x;   // ⚠ 0.10 도 톱니로 보였다 → 스펙에서 0.03 으로 내렸다
-  float R = mix(0.74, 0.58, u_orb) * (1.0 + dR*organic + breathe);
+  float f  = fbm(q.xy*1.45  + vec2(q.z*1.15, -q.z*0.85) + vec2(t*0.05, 0.0));
+  float f2 = fbm(q2.xy*2.30 - vec2(q2.z*0.90, q2.z*1.20) + vec2(0.0, -t*0.07));
+
+  /* ── 4. 구의 음영 — 방향광 하나. 이게 있어야 공으로 보인다 ───────────── */
+  float lit = 0.42 + 0.58*clamp(dot(normalize(vec3(-0.34, 0.52, 0.78)), n), 0.0, 1.0);
 
   float soft = mix(u_baseP.x, u_baseP.y, u_orb);
   float body = smoothstep(R+soft, R-soft*0.7, d);
-  /* 림 — 레퍼런스의 '경계'는 선이 아니라 **밝아지는 띠**다. 이게 있어야 퍼져도 형태가 보인다. */
-  float rimB = smoothstep(u_baseP.z, 0.0, abs(d-R)) * u_baseP.w * (0.55+0.45*u_wt.y);
+  float rimB = smoothstep(u_baseP.z, 0.0, abs(d-R)) * u_baseP.w;
 
-  float nz = clamp(1.0 - d/max(R,1e-3), 0.0, 1.0);
-
-  /* ── 5. 색 — 안이 진하고 밖이 옅다(램프를 뒤집으면 통째로 하얘진다) ──── */
-  vec2 w1 = vec2(fbm(p*0.62+vec2(0.0,t*0.34)), fbm(p*0.62+vec2(5.1,2.3)-t*0.29));
-  float f  = fbm(p*0.9 + (w1-0.5)*2.2 + vec2(t*0.15,-t*0.12));
-  float f2 = fbm(p*1.5 - (w1-0.5)*1.8 + vec2(-t*0.19, t*0.23));
+  /* ── 5. 색 — 안이 진하고 가장자리가 옅다 + 음영 ──────────────────────── */
   vec3 core = u_c1;
-  vec3 mid  = mix(u_c1, u_c2, smoothstep(0.20,0.80,f));
-  vec3 rim  = mix(u_c2, vec3(1.0), 0.30);
-  float ramp = smoothstep(0.02, mix(0.60, 0.44, u_orb), nz);
+  vec3 mid  = mix(u_c1, u_c2, smoothstep(0.22,0.78,f));
+  vec3 rim  = mix(u_c2, vec3(1.0), 0.28);
+  float ramp = smoothstep(0.04, mix(0.68, 0.52, u_orb), 1.0-rr);
   vec3 col  = mix(rim, core, ramp);
-  col = mix(col, mid, smoothstep(0.28,0.72,f)*0.45);
+  col = mix(col, mid, smoothstep(0.24,0.76,f)*0.70);
+  col *= 0.88 + 0.26*f2;                    // 자전하는 결이 몸 위를 지나간다
   col = mix(col, u_c3, smoothstep(0.55,0.95,f2)*0.30*(1.0-ramp*0.5));
-  col = mix(col, rim, rimB*0.55);
+  col = mix(col, rim, rimB*0.50);
+  col *= (0.74 + 0.34*lit);
   col += vec3(u_warm*0.11, u_warm*0.035, -u_warm*0.10);
 
-  /* ── 6. 발광 — 두 겹. v143 은 세 겹에 반경 3.4 라 화면을 덮었다 ───────── */
-  vec3  gcol  = mix(u_c2, vec3(1.0), 0.30);
-  vec3  gcol2 = mix(u_c3, vec3(1.0), 0.52);
-  float glow1 = smoothstep(R*mix(1.55,1.24,u_orb), R*0.72, d);
-  float glow2 = smoothstep(R*mix(2.60,1.85,u_orb), R*1.00, d);
+  /* ── 6. 감정은 **빛에만** 실린다 ──────────────────────────────────────
+     창업자 지적: "예민함일 때 본체가 움직이는 게 아니라 빛만 조정되는 거야."
+     그래서 아래 셋은 전부 발광층만 건드린다. 몸의 반경 R 은 위에서 이미 확정됐다. */
+  float ang  = atan(p.y, p.x);
+  float jit  = (fbm(vec2(ang*2.1, t*0.7))-0.5)*u_rayP.w*3.0;
+  float sray = pow(abs(sin(ang*u_rayP.x*0.5 + t*0.16 + jit)), u_rayP.y);       // 쐐기 — 예민함
+  float lobe = sin(ang*u_puffP.x + t*u_puffP.w)*0.5
+             + (fbm(vec2(cos(ang),sin(ang))*u_puffP.y + vec2(t*u_puffP.w,0.0))-0.5)*1.4;
+  float puffK = 1.0 + lobe*u_puffP.z*1.6*u_wt.y;                                // 뭉게 — 기분 좋음
+  float ph   = floor(t*u_flkP.x);
+  float fl   = 1.0 - u_flkP.y*hash(vec2(ph, 7.3));
+  fl *= mix(0.34, 1.0, step(u_flkP.z, hash(vec2(ph, 19.1))));                   // 지지직 — 힘든 날
 
-  /* 빛살은 **발광층**이다 — 몸통을 밀어내는 게 아니라 밖으로 새어 나간다 */
-  /* 빛살은 **띠**다 — 몸 안쪽에서 시작해 밖으로 뻗다 사라진다. 안쪽 컷이 없으면
-     몸 전체가 살 무늬로 덮여 톱니바퀴처럼 보인다(두 판 연속 그랬다). */
-  float rayGlow = sray * smoothstep(R*u_rayP.z, R*0.88, d) * smoothstep(R*0.50, R*0.92, d) * u_wt.x;
+  /* ── 7. 발광 — 바탕이 미색 회색이라 **흰빛이 보인다**(창업자 제안) ───── */
+  float zg = mix(0.90, 1.12, zc);
+  float glow1 = smoothstep(R*mix(1.60,1.26,u_orb)*puffK*zg, R*0.72, d);
+  float glow2 = smoothstep(R*mix(2.55,1.85,u_orb)*puffK*zg, R*1.00, d);
+  vec3  gcol  = mix(u_c2, vec3(1.0), 0.62);
+  vec3  gcol2 = mix(u_c3, vec3(1.0), 0.72);
+  vec3  rcol  = mix(u_c1, vec3(1.0), 0.30);
+  /* ⚠ 안쪽 컷을 **테두리에 걸치면 공이 각져 보인다**(실기에서 그랬다). 살은 몸이 끝난 뒤부터 시작한다. */
+  float rayGlow = sray * smoothstep(R*u_rayP.z, R*1.02, d) * smoothstep(R*1.00, R*1.16, d) * u_wt.x;
 
-  /* ── 7. 반짝임 ─────────────────────────────────────────────────────── */
   float spark = 0.0;
   for(int i=0;i<5;i++){
     float fi=float(i);
@@ -2862,25 +2861,18 @@ void main(){
     spark += smoothstep(0.052,0.0,length(p-sp))*(0.55+0.45*sin(t*1.6+fi*2.4));
   }
 
-  float aBody = body*u_lum;
+  float aBody = body*u_lum*mix(0.92,1.06,zc);
   float aRim  = rimB*(1.0-body*0.35);
-  float aG1   = glow1*0.20*(1.0-body);
-  float aG2   = glow2*0.10*(1.0-glow1);
+  float aG1   = glow1*0.24*(1.0-body);
+  float aG2   = glow2*0.12*(1.0-glow1);
   float aRay  = rayGlow*0.60*(1.0-body*0.55);
   float aSp   = spark*0.55*(1.0-body*0.6);
   float sum   = aBody+aRim+aG1+aG2+aRay+aSp;
-  /* ⚠ 빛살을 **흰색**으로 두면 흰 바탕에서 통째로 안 보인다(한 판 날렸다). 살은 색이 있어야 한다. */
-  vec3 rcol = mix(u_c1, u_c2, 0.35);
   vec3 outc = (col*aBody + rim*aRim + gcol*aG1 + gcol2*aG2 + rcol*aRay + vec3(1.0)*aSp) / max(sum, 1e-3);
   outc += (hash(gl_FragCoord.xy+fract(u_t)*0.01)-0.5)*u_grain;
 
-  /* ⚠ 발광은 캔버스보다 넓다 — 그대로 두면 **가장자리에서 뚝 잘린다**(앱 실화면에서 그랬다).
-     테두리로 갈수록 알파를 0으로 눕혀 잘린 자국을 없앤다. 크기를 줄이는 대신 이걸 쓴다. */
+  /* 발광은 캔버스보다 넓다 — 테두리에서 알파를 눕혀 잘린 자국을 없앤다 */
   float vig = smoothstep(1.0, 0.62, max(abs(uv.x), abs(uv.y))*2.0);
-
-  /* ⚠ 지지직은 **층마다 밝기를 깎으면 안 된다** — 몸통만 줄고 흰 발광 비중이 커져서
-     첫 판에서 통째로 창백해졌다. 색 비율은 그대로 두고 **불투명도만** 파르르 떨게 한다.
-     그래야 '전구가 나갈 듯 말 듯'이 되고 색이 안 빠진다. */
   float live = mix(1.0, fl, u_wt.z);
   gl_FragColor = vec4(outc, clamp(sum*live*vig, 0.0, 1.0));
 }`;
@@ -2896,7 +2888,7 @@ const holoPal = (k) => {
   const acc = (HOLO_FIX[HOLO_SAENG[k]] || EL_COLOR[HOLO_SAENG[k]] || EL_COLOR.토)[1];
   return [base[0], base[1], acc];
 };
-const HOLO_BG = [0.878, 0.878, 0.894];
+const HOLO_BG = [0.851, 0.835, 0.792];   // 미색 회색 #d9d5ca
 
 function GuardianField({ saju, mood, orbRef, size = 340, onFail }) {
   const ref = useRef(null);
@@ -3547,7 +3539,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v144 · 빛의 형태";
+const APP_VER = "v145 · 구와 미색";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -6326,7 +6318,7 @@ export default function App() {
                   ⚠ 근거를 같이 적는다. 안 적으면 지어낸 말로 읽히고, 실제로 지어낸 게 아니다 —
                      오늘 일진의 일간을 내 일간이 보는 십성이다. 판결에는 안 들어간다. */}
               {SKIN === "holo" && mood && (
-                <p className="moodline fade">오늘은 <b>{mood.l}</b><span>오늘 일진 {mood.day} · 네 일간이 보면 {mood.ss}{mood.moon ? " · " + mood.moon : ""}</span></p>
+                <p className="moodline fade">오늘은 <b>{mood.l}</b><span>오늘 하늘 기운 {mood.day} · 네 기운엔 {mood.axis}{mood.moon ? " · " + mood.moon : ""}</span></p>
               )}
               <p className="wakehint">{letterSent ? "두드려봐 — 하나 더 물어도 돼" : "두드려봐 — 답은 거기 있어"}</p>
             </div>
@@ -6961,9 +6953,11 @@ const CSS = `
    ⚠ 기존(플래그 없음) 화면은 한 줄도 안 바뀐다. 아래 규칙은 전부 .stage.holo 아래에만 있다.
    ⚠⚠ 이 CSS 는 **템플릿 리터럴 안**이다 — 주석에 백틱을 쓰면 문자열이 거기서 끊기고
       뒤가 JS 로 해석된다. 실제로 그렇게 터졌다(.stage.holo 를 멤버 접근으로 읽었다). 백틱 금지. */
-.stage.holo{background:radial-gradient(120% 90% at 50% 15%,#f2f1f6,#e4e3ea 55%,#dcdbe4);color:#2f2b3a}
-.stage.holo .gsay,.stage.holo .gintro,.stage.holo .forming{color:#3a3547}
-.stage.holo .gname,.stage.holo .imptitle{color:#2f2b3a}
+/* 바탕은 흰색이 아니라 **미색 회색**이다(창업자 제안 2026-08-28) — 흰 바탕에선 흰 발광이 안 보이고
+   글자도 뜬다. 반 톤 내리면 빛도 글자도 같이 산다. */
+.stage.holo{background:radial-gradient(120% 90% at 50% 12%,#e4e0d6,#d9d5ca 55%,#cfcbc0);color:#262218}
+.stage.holo .gsay,.stage.holo .gintro,.stage.holo .forming{color:#3c3527}
+.stage.holo .gname,.stage.holo .imptitle{color:#262218}
 /* ── 밝은 판 전용 타이포 ────────────────────────────────────────────────
    ⚠ **검은 판 글자를 그대로 쓰면 안 된다.** 어두운 배경용 글자는 뒤에 빛번짐(text-shadow)과
       어두운 알약 배경을 깔아 뜨게 만든 것인데, 밝은 바탕에선 그게 **얼룩**으로 보인다.
@@ -6972,50 +6966,51 @@ const CSS = `
       크기와 서체(수호신 말=명조 / 메타=고딕)로 만든다. */
 .stage.holo,.stage.holo *{text-shadow:none}
 .stage.holo .gname,.stage.holo .forming{background:none;padding:0}
-.stage.holo .gsay{font-size:16px;letter-spacing:-.004em;color:#2c2836;font-weight:500;line-height:1.85}
-.stage.holo .gsay.born{color:#201c2b;font-weight:600}
-.stage.holo .gintro.dim2{color:#4a4458;font-size:15px}
-.stage.holo .forming{color:#4a4458;letter-spacing:.06em}
-.stage.holo .gname{color:#2c2836}
-.stage.holo .gname.under{color:#2c2836;letter-spacing:.02em;font-weight:600}
-.stage.holo .wakehint{font-size:11px;letter-spacing:.22em;color:#8b8499;animation:none}
-.stage.holo .fine{font-size:11.5px;letter-spacing:0;color:#6f6980;line-height:1.75}
-.stage.holo .moodline{font-family:'Noto Serif KR',serif;font-size:14px;color:#3a3547;letter-spacing:0}
-.stage.holo .moodline b{font-size:17px;color:#a8571a;font-weight:600}
-.stage.holo .moodline span{font-family:sans-serif;font-size:10px;letter-spacing:.04em;color:#8b8499}
-.stage.holo .verbadge{color:#a8a2b5}
+.stage.holo .gsay{font-family:'Noto Serif KR',serif;font-size:17px;letter-spacing:-.01em;color:#241f14;font-weight:500;line-height:1.9}
+.stage.holo .gsay.born{color:#1d1810;font-weight:600}
+.stage.holo .gintro.dim2{color:#4d4535;font-size:15px}
+.stage.holo .forming{color:#4d4535;letter-spacing:.06em}
+.stage.holo .gname{color:#2a2419}
+.stage.holo .gname.under{color:#2a2419;letter-spacing:.02em;font-weight:600}
+.stage.holo .wakehint{font-size:11px;letter-spacing:.20em;color:#7f7663;font-weight:500;animation:none}
+.stage.holo .fine{font-size:11.5px;letter-spacing:0;color:#6b6252;line-height:1.75}
+/* 오늘 상태는 **한 문장**이다 — 명사 딱지가 아니라 사람 말이라 서체도 본문 격으로 올린다 */
+.stage.holo .moodline{font-family:'Noto Serif KR',serif;font-size:13px;color:#6b6252;letter-spacing:0;line-height:1.5}
+.stage.holo .moodline b{display:block;font-size:20px;color:#8c4a12;font-weight:600;letter-spacing:-.015em;margin:2px 0 5px}
+.stage.holo .moodline span{display:block;font-family:sans-serif;font-size:10.5px;letter-spacing:.02em;color:#8a8271}
+.stage.holo .verbadge{color:#a09883}
 /* ── 검은 판용 그림자·어두운 패널을 걷어낸다 ────────────────────────────────
    text-shadow 만 끄면 절반이다. 검은 배경 UI 는 **박스 그림자와 어두운 판**으로 요소를 띄우는데,
    밝은 바탕에선 그게 그대로 **검은 얼룩**이 된다. 실제로 질문 화면에 큰 검은 타원이 남았다
    (.gpanel::before 가 radial 로 깔던 것). 밝은 판에서는 **얇은 테두리와 흰 면**으로 띄운다. */
 .stage.holo .gpanel::before{display:none}
-.stage.holo .qbox{background:rgba(255,255,255,.78);border-color:#c9c4d6;color:#2c2836;box-shadow:0 1px 2px rgba(40,34,60,.06)}
-.stage.holo .qbox:focus{border-color:#8d7fb8;box-shadow:0 0 0 2px rgba(141,127,184,.18)}
-.stage.holo .qbox::placeholder{color:#9a94ab}
+.stage.holo .qbox{background:rgba(255,253,246,.80);border-color:#c2bcaa;color:#2a2419;box-shadow:0 1px 2px rgba(48,40,20,.07)}
+.stage.holo .qbox:focus{border-color:#a8823f;box-shadow:0 0 0 2px rgba(150,120,60,.20)}
+.stage.holo .qbox::placeholder{color:#98907e}
 .stage.holo .btn{box-shadow:none}
 .stage.holo .btn.gold{box-shadow:0 2px 10px rgba(168,120,40,.22)}
-.stage.holo .btn.ghost{background:rgba(255,255,255,.72);border-color:#c9c4d6;color:#4a4458;box-shadow:0 1px 2px rgba(40,34,60,.06)}
-.stage.holo .btn.ghost b{color:#2c2836}
-.stage.holo .in.box{background:rgba(255,255,255,.8);border-color:#c9c4d6;color:#2c2836;box-shadow:none}
-.stage.holo .resetlink{color:#6f6980}
+.stage.holo .btn.ghost{background:rgba(255,253,246,.74);border-color:#c2bcaa;color:#4d4535;box-shadow:0 1px 2px rgba(48,40,20,.07)}
+.stage.holo .btn.ghost b{color:#2a2419}
+.stage.holo .in.box{background:rgba(255,253,246,.82);border-color:#c2bcaa;color:#2a2419;box-shadow:none}
+.stage.holo .resetlink{color:#6b6252}
 /* 탭 스크림이 밝은 판에서도 아래 글자를 먹는다 — 여기선 더 얕게 깐다 */
 .stage.holo{--tabscrim:22px}
-.stage.holo .gpanel.asking .gintro.dim2{color:#3a3547}
-.stage.holo .fine,.stage.holo .dim2,.stage.holo .whosub{color:#6f6980}
-.stage.holo .moodline{color:#4a4458}
+.stage.holo .gpanel.asking .gintro.dim2{color:#3c3527}
+.stage.holo .fine,.stage.holo .dim2,.stage.holo .whosub{color:#6b6252}
+.stage.holo .moodline{color:#4d4535}
 .stage.holo .moodline b{color:#b0651f}
-.stage.holo .moodline span{color:#7d7690}
-.stage.holo .qbox{background:rgba(255,255,255,.72);border-color:#c6c2d4;color:#2f2b3a}
-.stage.holo .qbox::placeholder{color:#9a94ab}
-.stage.holo .btn.ghost{color:#4a4458;border-color:#bdb8cc}
-.stage.holo .tabbar::before{background:linear-gradient(to top,#dcdbe4 0%,#dcdbe4 55%,rgba(220,219,228,.72) 80%,rgba(220,219,228,0) 100%)}
-.stage.holo .tabbtn{background:rgba(255,255,255,.66);color:#6b6478;border-color:rgba(90,78,130,.22)}
+.stage.holo .moodline span{color:#7a7261}
+.stage.holo .qbox{background:rgba(255,253,246,.74);border-color:#c2bcaa;color:#262218}
+.stage.holo .qbox::placeholder{color:#98907e}
+.stage.holo .btn.ghost{color:#4d4535;border-color:#bab392}
+.stage.holo .tabbar::before{background:linear-gradient(to top,#cfcbc0 0%,#cfcbc0 55%,rgba(207,203,192,.72) 80%,rgba(207,203,192,0) 100%)}
+.stage.holo .tabbtn{background:rgba(255,253,246,.70);color:#6b6252;border-color:rgba(120,96,40,.26)}
 .stage.holo .tabbtn.on{background:#fff;color:#7a4a12;border-color:rgba(122,74,18,.42)}
-.stage.holo .verbadge{color:#9a94ab}
+.stage.holo .verbadge{color:#98907e}
 .stage.holo .halo{filter:none}
 /* .scene.lobby 가 **어두운 radial** 을 깔고 있다 — 이걸 안 뒤집으면 밝은 바탕 위에 검은 타원이 남는다(실제로 그랬다) */
-.stage.holo .scene.lobby{background:radial-gradient(80% 52% at 50% 42%,rgba(255,255,255,.55) 0%,rgba(255,255,255,.22) 50%,rgba(255,255,255,0) 100%)}
-.stage.holo .gyeotpanel .gname{color:#2f2b3a}
+.stage.holo .scene.lobby{background:radial-gradient(80% 52% at 50% 42%,rgba(255,253,246,.42) 0%,rgba(255,253,246,.16) 50%,rgba(255,253,246,0) 100%)}
+.stage.holo .gyeotpanel .gname{color:#262218}
 .stage.holo .btn.gold{background:linear-gradient(180deg,#f4dfa6,#d8ae57);color:#2a1e05}
 .stage.holo .impbadge{color:#7a4a12;border-color:rgba(122,74,18,.32)}
 /* 색장은 캔버스를 스스로 채운다 — 입자용 확대율(1.85/1.72)을 그대로 얹으면 화면을 뒤덮는다 */

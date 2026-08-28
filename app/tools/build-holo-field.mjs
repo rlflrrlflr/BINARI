@@ -30,7 +30,7 @@ const ELS = [
   { key: "금", form: 3 }, { key: "토", form: 4 },
 ];
 const COLS = [
-  { t: "윤곽만 · 판결", orb: 0, w: [0.15, 0.35, 0.0] },
+  { t: "기본 · 판결", orb: 0, w: [0.15, 0.35, 0.0] },
   { t: "쐐기 · 예민함", orb: 0, w: [0.85, 0.15, 0.0], warm: 0.10 },
   { t: "뭉게 · 기분좋음", orb: 0, w: [0.10, 0.90, 0.0], warm: 0.34 },
   { t: "지지직 · 힘든 날", orb: 0, w: [0.14, 0.18, 0.70], warm: -0.24, sink: 0.42, lum: 0.84 },
@@ -54,7 +54,7 @@ const HTML = `<!doctype html><meta charset="utf-8">
 <title>홀로그램 색장 — 입자 없음</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
-  body{margin:0;background:#e6e6ea;color:#2a2733;
+  body{margin:0;background:#d9d5ca;color:#2a2419;
     font:13px/1.7 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR",sans-serif}
   .wrap{max-width:1120px;margin:0 auto;padding:26px 18px 60px}
   h1{font-size:19px;margin:0 0 4px;letter-spacing:-.02em}
@@ -63,7 +63,7 @@ const HTML = `<!doctype html><meta charset="utf-8">
   .board{display:grid;grid-template-columns:auto auto;gap:8px;align-items:start;justify-content:start}
   .hd{font-size:11.5px;color:#6b6678;text-align:center;padding-bottom:4px}
   .rl{font-size:12px;color:#4a4557;text-align:center}
-  .cell{position:relative;border-radius:14px;overflow:hidden;background:#e0e0e6}
+  .cell{position:relative;border-radius:14px;overflow:hidden;background:#d3cfc4}
   .hd span{display:block;text-align:center}
   canvas{display:block}
   .note{color:#6b6678;font-size:12px;line-height:1.85;margin-top:22px;border-top:1px solid #cfcdd8;padding-top:14px}
@@ -88,7 +88,7 @@ const DATA=${JSON.stringify(DATA)};
 const FRAG=${JSON.stringify(FIELD_FRAG)};
 const VERT="attribute vec2 a;void main(){gl_Position=vec4(a,0.,1.);}";
 const hex2rgb=h=>[parseInt(h.slice(1,3),16)/255,parseInt(h.slice(3,5),16)/255,parseInt(h.slice(5,7),16)/255];
-const BG=hex2rgb("#e0e0e6");
+const BG=hex2rgb("#d9d5ca");
 const CELL=190, NC=DATA.cols.length, NR=DATA.els.length;
 b.insertAdjacentHTML("beforeend",'<div class="hd"></div><div style="display:flex">'
   +DATA.cols.map(c=>'<div class="hd" style="width:'+CELL+'px">'+c.t+'</div>').join("")+'</div>');
