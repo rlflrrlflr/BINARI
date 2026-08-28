@@ -2714,7 +2714,12 @@ function useViewport() {
   return vp;
 }
 /* 수호신 지름 — **판결·곁이 같은 식을 쓴다**(곁탭IA §4 크기 규칙). 차이는 CSS 확대율로만 준다. */
-const guardianSize = (vp) => Math.min(vp.w * 1.1, vp.h * 0.57, 640);
+/* ⚠ 입자 버전은 입자가 가운데 몰려 있어 캔버스가 화면보다 넓어도(vp.w*1.1) 티가 안 났다.
+   **색장은 캔버스 전체를 칠하므로 그대로 두면 좌우가 잘린다**(실기 제보 2026-08-28).
+   홀로에선 화면 안에 들어오게 잡는다. 불꽃이 위로 뻗으므로 세로도 여유를 둔다. */
+const guardianSize = (vp) => (SKIN === "holo"
+  ? Math.min(vp.w * 0.96, vp.h * 0.46, 460)
+  : Math.min(vp.w * 1.1, vp.h * 0.57, 640));
 
 /* ── v140 A/B 스킨 — `?skin=holo` (2026-08-27 창업자 지시) ────────────────────
    "수호신 디자인을 아예 다르게 한 걸 테스트 서버에 올려줘. 기존 껀 놔두고."
@@ -2788,6 +2793,8 @@ const FIELD_FRAG = `
 precision highp float;
 uniform vec2  u_res, u_off;
 uniform float u_t, u_form, u_orb, u_warm, u_speed, u_lum, u_sink, u_grain;
+uniform float u_born, u_touchAmt;
+uniform vec2  u_touch;
 uniform vec3  u_c1, u_c2, u_c3, u_bg;
 uniform vec3  u_wt, u_bite;
 uniform vec4  u_rayP, u_puffP, u_flkP, u_baseP;
@@ -2817,6 +2824,13 @@ void main(){
                     cos(t*0.19)*0.035 + sin(t*0.33+0.6)*0.014);
   float zc = 0.5 + 0.5*sin(t*0.147);
   vec2  p  = (uv - drift)*2.35;
+  /* ── 손끝 반응 (창업자 2026-08-28: "인터랙션 요소도 넣어줘 점 버전처럼") ──────────
+     입자 버전은 손끝으로 입자를 모았다 터뜨린다. 색장엔 입자가 없으므로 **장 자체가 당겨진다** —
+     누른 자리 쪽으로 쏠리고 그 부근이 밝아진다. 멀수록 급히 줄어야 덩어리째 안 움직인다. */
+  vec2  tp = u_touch*2.35;
+  float td = length(p - tp);
+  float tk = clamp(u_touchAmt, 0.0, 1.0) * exp(-td*td*1.6);
+  p -= (p - tp) * tk * 0.30;
 
   /* ── 형태 — 오행마다 세로/가로 비율. 레퍼런스는 정원이 아니라 **부드러운 타원·물방울**이다 */
   /* 불꽃은 **세로로 길다**. x 를 키우면 가로가 좁아져 세로로 선다(정규화 반경이라 반대다). */
@@ -2826,7 +2840,9 @@ void main(){
   else if(u_form<2.5) agp = vec2(1.18, 0.80);   // 목 — 위로 뻗는다
   else if(u_form<3.5) agp = vec2(1.08, 0.90);   // 금 — 고르다
   else                agp = vec2(0.98, 1.00);   // 토 — 넓고 낮다
-  agp = mix(agp, vec2(1.0), u_orb*0.7);          // 응축하면 다섯이 다 둥글어진다
+  /* ⚠ **곁은 완전한 원이다**(창업자 2026-08-28). 0.7 만 섞으면 불꽃 모양이 남아
+     "둥근 디자인"이 안 된다. 응축이 끝나면 비율도 일렁임도 전부 0 으로 간다. */
+  agp = mix(agp, vec2(1.0), u_orb);          // 응축하면 다섯이 다 둥글어진다
   vec2 e = p*agp;
   float ang = atan(e.y, e.x);
 
@@ -2850,7 +2866,7 @@ void main(){
      위로 흐르며 끝이 흔들린다. y 좌표에서 시간을 빼면 무늬가 **위로 올라간다**.
      그리고 흔들림을 위쪽일수록 크게 준다 — 불꽃 끝이 더 흔들리는 게 그 이유다. */
   float up  = smoothstep(-0.9, 1.1, w.y/max(R,1e-3));
-  float sway = mix(1.0, 0.42, u_orb);                       // 응축(곁)하면 잦아든다
+  float sway = mix(1.0, 0.0, u_orb) * mix(0.35, 1.0, u_born);   // 곁이면 완전히 멎고, 갓 태어났을 땐 아직 약하다
   float fx = fbm(vec2(w.x*1.9,       w.y*0.95 - t*0.85));
   float fy = fbm(vec2(w.x*1.4 + 3.7, w.y*0.80 - t*0.62));
   w.x += (fx-0.5) * R * (0.14 + 0.46*up) * sway;
@@ -2887,12 +2903,18 @@ void main(){
   /* ⚠ **비율을 레퍼런스에서 재서 맞춘다.** v146~ 은 오라가 칸을 덮을 만큼 크고 옅어서
      회색 안개가 됐다. 레퍼런스는 진한 몸통이 칸 폭의 약 40%, 헤일로까지 합쳐 약 75% —
      **작고 진하고, 바깥은 바탕이 그대로 남는다.** 그 여백이 오라를 오라로 보이게 한다. */
+  /* ── 탄생 (창업자: "점 버전에 비해서 탄생할 때의 모션이 너무 없다") ──────────────
+     u_born 0 = 조각이 멀리 흩어져 아주 옅다 → 1 = 제자리에 모여 또렷하다.
+     층마다 **모이는 속도를 달리** 해야 '조각이 모인다'로 읽힌다 — 한꺼번에 커지면 그냥 페이드인이다. */
+  float bScat = 1.0 - u_born;
   float rBase = length(w)/max(R,1e-3);
-  float r0 = length(w-c0)/(R*0.46);
-  float r1 = length(w-c1)/(R*0.86);
-  float r2 = length(w-c2)/(R*0.98);
-  float r3 = length(w-c3)/(R*1.22*puffK*zg);
-  float r4 = length(w-c4)/(R*1.56*puffK*zg);
+  /* ⚠ 흩어짐 배율을 크게 잡았더니 바깥 층이 캔버스를 넘어 **사각 자국**이 났다(실기).
+     조각이 흩어져 보이는 데는 이 정도면 충분하다 — 넘치면 형태가 아니라 얼룩이 된다. */
+  float r0 = length(w-c0*(1.0+bScat*0.4))/(R*0.46*(1.0 + bScat*0.22));
+  float r1 = length(w-c1*(1.0+bScat*1.8))/(R*0.86*(1.0 + bScat*0.55));
+  float r2 = length(w-c2*(1.0+bScat*2.6))/(R*0.98*(1.0 + bScat*0.80));
+  float r3 = length(w-c3*(1.0+bScat*3.2))/(R*1.22*puffK*zg*(1.0 + bScat*0.90));
+  float r4 = length(w-c4*(1.0+bScat*3.6))/(R*1.56*puffK*zg*(1.0 + bScat*0.95));
 
   /* ⚠ **심을 하얗게 뒤집었더니 눈알이 됐다**(한 판 날렸다). 레퍼런스를 다시 보면
      WARMTH 는 중심이 오히려 **진한 자홍**이다 — 진한 중심 자체는 죄가 없다.
@@ -2937,9 +2959,11 @@ void main(){
 
   /* ⚠ 마스크를 **사각형**(max(|x|,|y|))으로 잡으면 헤일로가 캔버스를 채울 때 그 사각 자국이
      그대로 드러난다(실기에서 각진 얼룩으로 보였다). 원형으로 감싼다. */
-  float vig  = smoothstep(1.16, 0.66, length(uv)*2.0);
-  float live = mix(1.0, fl, u_wt.z);
-  gl_FragColor = vec4(outc, clamp(sum*u_lum*live*vig, 0.0, 1.0));
+  float vig  = smoothstep(1.02, 0.56, length(uv)*2.0);
+  float live  = mix(1.0, fl, u_wt.z);
+  float bornK = 0.20 + 0.80*u_born;               // 흩어져 있을 땐 옅지만 **보이기는 해야 한다**
+  float touchK = 1.0 + tk*0.55;                   // 손끝 부근이 환해진다
+  gl_FragColor = vec4(outc, clamp(sum*u_lum*live*vig*bornK*touchK, 0.0, 1.0));
 }`;
 /* 밝은 바탕용 보정 — **원색(EL_COLOR)은 안 건드린다.** 금의 c2(#e8f2ff)는 거의 흰색이라
    밝은 바탕에서 통째로 사라진다(시제품 첫 판에서 금 줄이 안 보였다). 이 렌더러에서만 한 칸 낮춘다. */
@@ -2961,11 +2985,15 @@ const holoPal = (k) => {
   return [base[0], base[1], mixHex(sae[0], sae[1], 0.42)];
 };
 const HOLO_BG = [0.851, 0.835, 0.792];   // 미색 회색 #d9d5ca
+/* 온보딩 팔레트 — **아직 오행을 모른다.** 기본값 토(황토)를 쓰면 미색 바탕과 색이 겹쳐
+   조각이 아예 안 보인다(실기에서 그랬다). 서사가 "조각 하나는 달빛에 물들어" 이므로
+   달빛 은청으로 둔다 — 임의의 색이 아니라 이 앱이 이미 쓰는 말에서 온 색이다. */
+const HOLO_MOON = ["#46557f", "#93a6d0", "#b7a9d6"];
 
-function GuardianField({ saju, mood, orbRef, size = 340, onFail }) {
+function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFail }) {
   const ref = useRef(null);
   useEffect(() => {
-    const cv = ref.current; if (!cv || !saju) return;
+    const cv = ref.current; if (!cv) return;
     let gl = null, raf = 0, dead = false;
     const fail = () => { if (!dead) { dead = true; if (raf) cancelAnimationFrame(raf); onFail && onFail(); } };
     try {
@@ -2982,15 +3010,17 @@ function GuardianField({ saju, mood, orbRef, size = 340, onFail }) {
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
       const la = gl.getAttribLocation(pg, "a"); gl.enableVertexAttribArray(la);
       gl.vertexAttribPointer(la, 2, gl.FLOAT, false, 0, 0);
-      const U = {}; ["u_res","u_off","u_t","u_form","u_orb","u_warm","u_speed","u_lum","u_sink","u_grain","u_c1","u_c2","u_c3","u_bg","u_wt","u_bite","u_rayP","u_puffP","u_flkP","u_baseP"]
+      const U = {}; ["u_res","u_off","u_t","u_form","u_orb","u_warm","u_speed","u_lum","u_sink","u_grain","u_c1","u_c2","u_c3","u_bg","u_wt","u_bite","u_rayP","u_puffP","u_flkP","u_baseP","u_born","u_touch","u_touchAmt"]
         .forEach((k) => { U[k] = gl.getUniformLocation(pg, k); });
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const S = Math.round(size * dpr); cv.width = S; cv.height = S;
-      const pal = holoPal(saju.main).map(hex2rgb);
+      /* 온보딩(사주 아직 없음)에도 오라를 띄운다 — 그때는 중립 팔레트로 **흩어진 조각**만 보인다 */
+      const el = (saju && saju.main) || null;
+      const pal = (el ? holoPal(el) : HOLO_MOON).map(hex2rgb);
       gl.uniform2f(U.u_res, S, S); gl.uniform2f(U.u_off, 0, 0);
       gl.uniform3fv(U.u_c1, pal[0]); gl.uniform3fv(U.u_c2, pal[1]); gl.uniform3fv(U.u_c3, pal[2]);
       gl.uniform3fv(U.u_bg, HOLO_BG);
-      gl.uniform1f(U.u_form, ({ 화: 0, 수: 1, 목: 2, 금: 3, 토: 4 })[saju.main] ?? 4);
+      gl.uniform1f(U.u_form, ({ 화: 0, 수: 1, 목: 2, 금: 3, 토: 4 })[el] ?? 3);
       gl.uniform1f(U.u_grain, AURA.base.grain);
       gl.uniform1f(U.u_warm, mood ? mood.warm : 0);
       /* ⚠ 창업자 지적 "움직임이 없잖아" — 워핑이 느리면 정지화로 보인다. 기본 배속을 올린다. */
@@ -3009,6 +3039,22 @@ function GuardianField({ saju, mood, orbRef, size = 340, onFail }) {
       gl.viewport(0, 0, S, S);
       gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);   // 스트레이트 알파
       gl.clearColor(0, 0, 0, 0);
+      /* ── 손끝 (인터랙션) — 캔버스 좌표를 -0.5~0.5 로 정규화해 셰이더에 넘긴다.
+         `passive:false` 로 두면 스크롤을 막는다 — 오라는 배경이므로 스크롤을 뺏으면 안 된다. */
+      const touch = { x: 0, y: 0, amt: 0, target: 0 };
+      const at = (e) => {
+        const r = cv.getBoundingClientRect();
+        const src = e.touches && e.touches[0] ? e.touches[0] : e;
+        touch.x = (src.clientX - r.left) / r.width - 0.5;
+        touch.y = 0.5 - (src.clientY - r.top) / r.height;
+      };
+      const on = (e) => { at(e); touch.target = 1; };
+      const off = () => { touch.target = 0; };
+      cv.addEventListener("pointerdown", on, { passive: true });
+      cv.addEventListener("pointermove", (e) => { if (touch.target > 0.5) at(e); }, { passive: true });
+      cv.addEventListener("pointerup", off, { passive: true });
+      cv.addEventListener("pointerleave", off, { passive: true });
+
       /* 응축 보간 — v133 과 같은 규칙(끊기면 교체, 이어지면 자세). 1.25초 */
       let orb = 0, last = performance.now();
       const T0 = performance.now();
@@ -3018,9 +3064,33 @@ function GuardianField({ saju, mood, orbRef, size = 340, onFail }) {
         orb += ((orbRef && orbRef.current ? 1 : 0) - orb) * (1 - Math.exp(-dt / 1.25));
         gl.uniform1f(U.u_orb, orb < 0.0004 ? 0 : orb);
         gl.uniform1f(U.u_t, (now - T0) / 1000);
+        /* 탄생 — 흩어진 조각이 2.4초에 걸쳐 모인다. 온보딩(scatter)에서는 모이다 만 상태로 머문다.
+           ⚠ 선형이 아니라 **뒤로 갈수록 느리게**(ease-out) 해야 '모여서 자리를 잡는' 것으로 읽힌다. */
+        const age = (now - T0) / 1000;
+        /* scatter 는 **온보딩 진행도**다(0=막 흩어짐 … 0.6=거의 모임). 숫자가 아니면 기본 0.16.
+           숨쉬듯 미세하게 흔들어야 '모이는 중'으로 보인다 — 정지하면 그냥 옅은 얼룩이다. */
+        const bornV = scatter
+          ? Math.min(0.66, (typeof scatter === "number" ? scatter : 0.16)) + 0.05 * Math.sin(age * 0.7)
+          : 1 - Math.pow(1 - Math.min(1, age / 2.4), 3);
+        gl.uniform1f(U.u_born, bornV);
+        /* 손끝 — 누르면 0.35초에 차고 떼면 1.1초에 풀린다. 판결 반응(reactRef)도 같은 채널로 실린다 */
+        let rk = 0;
+        if (reactRef && reactRef.current) {
+          const rt = (now - reactRef.current.t0) / 1000;
+          rk = Math.max(0, 1 - rt / 1.7) * Math.min(1, rt / 0.18);
+        }
+        touch.amt += (touch.target - touch.amt) * (1 - Math.exp(-dt / (touch.target > touch.amt ? 0.35 : 1.1)));
+        gl.uniform2f(U.u_touch, touch.x, touch.y);
+        gl.uniform1f(U.u_touchAmt, Math.max(touch.amt, rk * 0.7));
         gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLES, 0, 3);
       };
       draw();
+      return () => {
+        cancelAnimationFrame(raf);
+        cv.removeEventListener("pointerdown", on);
+        cv.removeEventListener("pointerup", off);
+        cv.removeEventListener("pointerleave", off);
+      };
     } catch (e) {
       /* 조용히 폴백하면 **왜 떨어졌는지 영영 모른다** — 실제로 한 번 그렇게 헤맸다. 이유를 남긴다. */
       try { console.error("[GuardianField] 색장 렌더 실패 → 입자로 폴백:", e && e.message); } catch (_) {}
@@ -3028,7 +3098,7 @@ function GuardianField({ saju, mood, orbRef, size = 340, onFail }) {
     }
     return () => { if (raf) cancelAnimationFrame(raf); dead = true;
       try { const e = gl && gl.getExtension("WEBGL_lose_context"); e && e.loseContext(); } catch (_) {} };
-  }, [saju, mood, size]);
+  }, [saju, mood, size, scatter]);
   return <canvas ref={ref} className="gcv" style={{ width: size, height: size }} aria-hidden="true" />;
 }
 
@@ -3617,10 +3687,10 @@ function Guardian(props) {
     } catch (_) {}
     return glDetect() ? "gl" : "2d";
   });
-  if (SKIN === "holo" && !holoDead && props.saju) {
+  if (SKIN === "holo" && !holoDead) {
     if (typeof window !== "undefined") window.__BINARI_R = "field";
     return <GuardianField saju={props.saju} mood={props.mood} orbRef={props.orbRef}
-      size={props.size} onFail={() => setHoloDead(true)} />;
+      reactRef={props.reactRef} scatter={props.scatter} size={props.size} onFail={() => setHoloDead(true)} />;
   }
   if (typeof window !== "undefined") window.__BINARI_R = mode;   // 버전 배지용 — 실제 렌더러(sim/gl/2d) 노출
   if (mode === "sim") return <GuardianCanvasSim {...props} onFail={() => setMode("gl")} />;
@@ -3637,7 +3707,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v150 · 부르면 답이 온다";
+const APP_VER = "v151 · 손끝과 탄생";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -6416,7 +6486,12 @@ export default function App() {
 
       {step === 0 && (
         <section className="scene fade">
-          <div className="orb"><DustOrb size={170} stage={0} /></div>
+          {/* ⚠ 홀로 스킨의 온보딩 심볼 (창업자 2026-08-28: "홀로그램에 맞춰서 심볼이 있어야지 처음부터").
+              먼지 오브 대신 **아직 흩어진 오라**를 띄우고, 칸을 채워 갈수록 조금씩 모이게 한다 —
+              "흩어져 있던 조각들이 너를 향해 모이고 있어" 라는 서사를 화면이 같이 말한다. */}
+          <div className="orb">{SKIN === "holo"
+            ? <Guardian scatter={0.34 + bstep * 0.13} size={Math.min(vp.w * 0.62, 240)} />
+            : <DustOrb size={170} stage={0} />}</div>
           {adEntry && <p className="adhook">망설이는 일에 <b>판결</b>을 내려주는 곳이야 — 가라 · 멈춰라 · 기다려라, 셋 중 하나로.</p>}
           <p className="line">…불렀어?</p>
           <p className="line d1">어른이 된다는 건, 나를 이루던 것들이 조금씩 흩어지는 일이야.</p>
@@ -6440,7 +6515,9 @@ export default function App() {
 
       {step === 1 && (
         <section className="scene stepv fade">
-          <div className="orb"><DustOrb size={170} stage={0} /></div>
+          <div className="orb">{SKIN === "holo"
+            ? <Guardian scatter={0.34 + bstep * 0.13} size={Math.min(vp.w * 0.62, 240)} />
+            : <DustOrb size={170} stage={0} />}</div>
           {bstep === 0 && (
             <div className="bscene" key={0}>
               <p className="line">네 이름을 다시 들려줄래.</p>
@@ -6621,7 +6698,12 @@ export default function App() {
             : (phase >= 1 && gyeotSorted.length > 0 && !gyeotOpen ? tryGyeotOpen : undefined)}>
           <div className={`halo wide ${tab === "gyeot" ? "gyeotscale" : `${!awake && phase >= 1 && !res ? "lobbyscale" : ""} ${asking ? "asking" : ""} ${ritual ? "ritualfade" : ""} ${busy || (res && !cardOn) ? "busy" : ""} ${res && cardOn ? "dimmed" : ""}`}`}>
             {phase === 0
-              ? <BirthCanvas tint={saju ? EL_COLOR[saju.main] : undefined} size={guardianSize(vp)} />
+              /* ⚠ 홀로 스킨에서 온보딩만 입자(BirthCanvas)를 쓰면 **처음 두 화면에 심볼이 없다**
+                 (창업자 실기 제보 2026-08-28: "홀로그램에 맞춰서 심볼이 있어야지 처음부터").
+                 서사가 "흩어져 있던 조각들이 모이고 있어" 이므로 scatter 상태로 띄운다. */
+              ? (SKIN === "holo"
+                  ? <Guardian saju={saju} scatter size={guardianSize(vp)} />
+                  : <BirthCanvas tint={saju ? EL_COLOR[saju.main] : undefined} size={guardianSize(vp)} />)
               : <div className="fade"><Guardian saju={saju} zo={zo} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} restRef={restRef} orbRef={orbRef} gyeotRef={gyeotRef} popRef={gyeotPopRef} mood={mood} broodRef={broodRef} size={guardianSize(vp)} /></div>}
             <div className="gtext up">
               {phase === 0 && <div className="formwrap"><p className="forming">{birth.name ? `${birth.name}, 흩어져 있던 조각들이` : "흩어져 있던 조각들이"}<br />너를 향해 모이고 있어…<br />너의 수호신이 돌아오는 중이야.</p><ul className="formsteps">{FORM_STEPS.map((s, i) => <li key={i} className={i < formStep ? "done" : i === formStep ? "now" : ""}>{i < formStep ? "✓" : i === formStep ? "✦" : "·"} {s}{i === formStep ? "…" : ""}</li>)}</ul></div>}
@@ -7304,6 +7386,9 @@ const CSS = `
 .line,.sub2,.mention,.dimq,.gsay,.gintro,.forming,.vv,.vs,.vq,.qquote,.dmain,.gname,.vlogverdict{text-wrap:balance}
 .fade{animation:fd 1.15s cubic-bezier(.22,.7,.25,1) both}@keyframes fd{from{opacity:0;transform:translateY(14px) scale(.985);filter:blur(7px)}to{opacity:1;transform:none;filter:blur(0)}}
 .orb{position:relative;width:170px;height:170px;margin:20px 0 28px;filter:drop-shadow(0 0 24px rgba(245,217,139,.2))}
+/* ⚠ .orb 는 170px 고정이라 홀로의 색장(240px)이 넘쳐 **오른쪽 위로 밀려 글자와 겹쳤다.**
+   홀로에선 컨테이너가 캔버스를 따라가게 두고, 밝은 판이므로 금빛 드롭섀도도 끈다. */
+.stage.holo .orb{width:auto;height:auto;display:grid;place-items:center;filter:none;margin:8px 0 20px}
 .line{font-size:17px;line-height:1.8;margin:8px 0;opacity:0;animation:fd 1.6s cubic-bezier(.22,.7,.25,1) forwards}.d1{animation-delay:1.4s}.d2{animation-delay:3s}
 .brand-mark{margin-top:56px;font-size:11px;letter-spacing:.4em;color:#8a7f95;font-family:sans-serif}
 /* 버전 배지 — 탭이 차지하는 높이 위로 올린다. 전엔 본문(각인 버튼)과 겹쳐 읽혔다 */
@@ -7516,6 +7601,16 @@ const CSS = `
 .stage.holo .moodline span{color:#7a7261}
 .stage.holo .qbox{background:rgba(255,253,246,.74);border-color:#c2bcaa;color:#262218}
 .stage.holo .qbox::placeholder{color:#98907e}
+/* ⚠ 생년월일 칸의 「1993 · 7 · 15」는 **placeholder(예시)** 인데 어두운 판용 색(#4d445f)이
+   그대로 쓰여 진하게 보였고, 실기에서 창업자가 **이미 입력된 값으로 오인**했다(2026-08-28).
+   예시는 값보다 확실히 옅어야 한다 — 입력값 #262218 대비 두 단계 낮춘다. */
+.stage.holo .in::placeholder,.stage.holo .impname::placeholder,.stage.holo .impnum::placeholder,
+.stage.holo .galias::placeholder{color:#b0a894;font-weight:400}
+.stage.holo .line{color:#241f14}
+.stage.holo .sub2{color:#5d5544}
+.stage.holo .ainote{color:#7f7663}
+.stage.holo .unit{color:#8a8271}
+.stage.holo .in{color:#262218}
 .stage.holo .btn.ghost{color:#4d4535;border-color:#bab392}
 .stage.holo .tabbar::before{background:linear-gradient(to top,#cfcbc0 0%,#cfcbc0 55%,rgba(207,203,192,.72) 80%,rgba(207,203,192,0) 100%)}
 .stage.holo .tabbtn{background:rgba(255,253,246,.70);color:#6b6252;border-color:rgba(120,96,40,.26)}
