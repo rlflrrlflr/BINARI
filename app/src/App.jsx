@@ -2780,101 +2780,81 @@ void main(){
   uv.y += u_sink*0.06;
   float t = u_t*u_speed;
 
-  /* ── 1. xyz 로 떠다닌다 ────────────────────────────────────────────────
-     창업자 지적(2026-08-28): "움직임은 xyz 축으로 있어야 해."
-     x·y 는 자리를 옮기고, z 는 **앞뒤** — 가까워지면 커지고 밝아진다. 주기를 서로 나눠
-     떨어지지 않게 잡아야 왕복이 아니라 **떠다니는 것**으로 보인다. */
-  vec2 drift = vec2(sin(t*0.23)*0.085 + sin(t*0.41+1.3)*0.032,
-                    cos(t*0.19)*0.070 + sin(t*0.33+0.6)*0.028);
+  /* ── xyz — x·y 로 떠다니고 z 로 앞뒤 ─────────────────────────────────── */
+  vec2 drift = vec2(sin(t*0.23)*0.075 + sin(t*0.41+1.3)*0.028,
+                    cos(t*0.19)*0.062 + sin(t*0.33+0.6)*0.024);
   float zc = 0.5 + 0.5*sin(t*0.147);
   vec2  p  = (uv - drift)*2.35;
-  float d  = length(p);
 
-  /* ── 2. 몸은 **구**다. 실루엣을 노이즈로 흔들지 않는다 ─────────────────
-     창업자 지적: "너무 세포 같이 생겼어." 각도 노이즈로 반경을 흔들면 아메바가 된다 —
-     레퍼런스는 둥근 발광체다. 흔들리는 건 실루엣이 아니라 **안의 결과 밖의 빛**이다. */
-  float R = mix(0.70, 0.56, u_orb) * mix(0.93, 1.08, zc) * (1.0 + 0.022*sin(t*0.85));
+  /* ── 형태 — 오행마다 세로/가로 비율. 레퍼런스는 정원이 아니라 **부드러운 타원·물방울**이다 */
+  vec2 agp = vec2(1.0, 1.16);
+  if(u_form<0.5)      agp = vec2(1.10, 0.86);   // 화 — 세로로 솟는다
+  else if(u_form<1.5) agp = vec2(0.84, 1.22);   // 수 — 옆으로 눕는다
+  else if(u_form<2.5) agp = vec2(1.06, 0.90);   // 목 — 위로 뻗는다
+  else if(u_form<3.5) agp = vec2(1.00, 1.00);   // 금 — 고르다
+  else                agp = vec2(0.90, 1.14);   // 토 — 넓고 낮다
+  agp = mix(agp, vec2(1.0), u_orb*0.7);          // 응축하면 다섯이 다 둥글어진다
+  vec2 e = p*agp;
+  float ang = atan(e.y, e.x);
 
-  /* ── 3. 자전 — 표면 결이 구를 따라 돈다(3D 로 읽히는 지점) ────────────
-     화면 좌표 대신 **구 표면의 법선**을 만들고 그걸 회전시켜 노이즈를 찍는다.
-     가장자리로 갈수록 결이 압축돼 보이는 게 공짜로 따라온다 — 평면 워핑엔 그게 없다. */
-  vec2  s  = p/max(R,1e-3);
-  float rr = clamp(dot(s,s), 0.0, 1.0);
-  vec3  n  = vec3(s, sqrt(max(0.0, 1.0-rr)));
-  float ay = t*0.20, ax = 0.34;
-  vec3  q  = vec3(n.x*cos(ay)+n.z*sin(ay), n.y, -n.x*sin(ay)+n.z*cos(ay));
-  q = vec3(q.x, q.y*cos(ax)-q.z*sin(ax), q.y*sin(ax)+q.z*cos(ax));
-  float ay2 = -t*0.13;
-  vec3  q2 = vec3(n.x*cos(ay2)+n.z*sin(ay2), n.y, -n.x*sin(ay2)+n.z*cos(ay2));
+  /* ⚠ 굴곡은 **아주 낮은 주파수만**. 고주파를 얹는 순간 세포막이 된다(v143·v145 가 그랬다).
+     레퍼런스의 형태는 큰 덩어리 둘셋이 겹친 물방울이지 아메바가 아니다. */
+  float sh = 1.0 + 0.085*sin(ang*2.0 + t*0.21) + 0.050*sin(ang*3.0 - t*0.17);
+  float R  = mix(0.62, 0.50, u_orb) * mix(0.94, 1.07, zc) * (1.0 + 0.020*sin(t*0.85));
+  float rr = length(e) / max(R*sh, 1e-3);
+  /* 아주 느린 큰 얼룩 하나 — 좌우 대칭을 깨는 용도. 무늬로 보이면 안 된다 */
+  rr *= 1.0 + (fbm(p*0.46 + vec2(t*0.05, -t*0.04)) - 0.5)*0.16;
 
-  float f  = fbm(q.xy*1.45  + vec2(q.z*1.15, -q.z*0.85) + vec2(t*0.05, 0.0));
-  float f2 = fbm(q2.xy*2.30 - vec2(q2.z*0.90, q2.z*1.20) + vec2(0.0, -t*0.07));
-
-  /* ── 4. 구의 음영 — 방향광 하나. 이게 있어야 공으로 보인다 ───────────── */
-  float lit = 0.42 + 0.58*clamp(dot(normalize(vec3(-0.34, 0.52, 0.78)), n), 0.0, 1.0);
-
-  float soft = mix(u_baseP.x, u_baseP.y, u_orb);
-  float body = smoothstep(R+soft, R-soft*0.7, d);
-  float rimB = smoothstep(u_baseP.z, 0.0, abs(d-R)) * u_baseP.w;
-
-  /* ── 5. 색 — 안이 진하고 가장자리가 옅다 + 음영 ──────────────────────── */
-  vec3 core = u_c1;
-  vec3 mid  = mix(u_c1, u_c2, smoothstep(0.22,0.78,f));
-  vec3 rim  = mix(u_c2, vec3(1.0), 0.28);
-  float ramp = smoothstep(0.04, mix(0.68, 0.52, u_orb), 1.0-rr);
-  vec3 col  = mix(rim, core, ramp);
-  col = mix(col, mid, smoothstep(0.24,0.76,f)*0.70);
-  col *= 0.88 + 0.26*f2;                    // 자전하는 결이 몸 위를 지나간다
-  col = mix(col, u_c3, smoothstep(0.55,0.95,f2)*0.30*(1.0-ramp*0.5));
-  col = mix(col, rim, rimB*0.50);
-  col *= (0.74 + 0.34*lit);
-  col += vec3(u_warm*0.11, u_warm*0.035, -u_warm*0.10);
-
-  /* ── 6. 감정은 **빛에만** 실린다 ──────────────────────────────────────
-     창업자 지적: "예민함일 때 본체가 움직이는 게 아니라 빛만 조정되는 거야."
-     그래서 아래 셋은 전부 발광층만 건드린다. 몸의 반경 R 은 위에서 이미 확정됐다. */
-  float ang  = atan(p.y, p.x);
+  /* ── 감정은 **빛에만** ────────────────────────────────────────────────── */
   float jit  = (fbm(vec2(ang*2.1, t*0.7))-0.5)*u_rayP.w*3.0;
-  float sray = pow(abs(sin(ang*u_rayP.x*0.5 + t*0.16 + jit)), u_rayP.y);       // 쐐기 — 예민함
+  float sray = pow(abs(sin(ang*u_rayP.x*0.5 + t*0.16 + jit)), u_rayP.y);
   float lobe = sin(ang*u_puffP.x + t*u_puffP.w)*0.5
              + (fbm(vec2(cos(ang),sin(ang))*u_puffP.y + vec2(t*u_puffP.w,0.0))-0.5)*1.4;
-  float puffK = 1.0 + lobe*u_puffP.z*1.6*u_wt.y;                                // 뭉게 — 기분 좋음
+  float puffK = 1.0 + lobe*u_puffP.z*1.5*u_wt.y;
   float ph   = floor(t*u_flkP.x);
   float fl   = 1.0 - u_flkP.y*hash(vec2(ph, 7.3));
-  fl *= mix(0.34, 1.0, step(u_flkP.z, hash(vec2(ph, 19.1))));                   // 지지직 — 힘든 날
+  fl *= mix(0.34, 1.0, step(u_flkP.z, hash(vec2(ph, 19.1))));
 
-  /* ── 7. 발광 — 바탕이 미색 회색이라 **흰빛이 보인다**(창업자 제안) ───── */
-  float zg = mix(0.90, 1.12, zc);
-  float glow1 = smoothstep(R*mix(1.60,1.26,u_orb)*puffK*zg, R*0.72, d);
-  float glow2 = smoothstep(R*mix(2.55,1.85,u_orb)*puffK*zg, R*1.00, d);
-  vec3  gcol  = mix(u_c2, vec3(1.0), 0.62);
-  vec3  gcol2 = mix(u_c3, vec3(1.0), 0.72);
-  vec3  rcol  = mix(u_c1, vec3(1.0), 0.30);
-  /* ⚠ 안쪽 컷을 **테두리에 걸치면 공이 각져 보인다**(실기에서 그랬다). 살은 몸이 끝난 뒤부터 시작한다. */
-  float rayGlow = sray * smoothstep(R*u_rayP.z, R*1.02, d) * smoothstep(R*1.00, R*1.16, d) * u_wt.x;
+  /* ── 색은 **반경에 따라 층으로 번진다. 경계선은 없다** ────────────────
+     ⚠ 여기가 세포와 갈리는 지점이다. v145 는 ①몸의 알파 경계 ②밝아지는 림 띠
+        ③자전하는 표면 결 — 셋을 다 갖고 있었고 그게 정확히 **세포막과 세포질**이었다.
+        레퍼런스에는 셋 다 없다. 안쪽이 진하고 바깥으로 갈수록 **색이 바뀌며 옅어질** 뿐이다.
+     층마다 색과 알파를 따로 쌓고 색은 알파로 가중평균한다(더하면 흰색으로 탄다). */
+  /* ⚠ 헤일로를 흰색으로 섞으면 **색이 안개에 묻힌다**(한 판 그렇게 날렸다).
+     레퍼런스는 코어(진한 자홍)와 헤일로(시안·연두)가 **대비색으로 뚜렷하다.**
+     흰빛은 맨 바깥에만 아주 얇게 둔다. */
+  vec3 acc  = u_c3;                                 // 나를 생하는 오행 — 대비색
+  vec3 mist = mix(u_c3, vec3(1.0), 0.55);
+  float zg  = mix(0.94, 1.10, zc);
+
+  float aCore = pow(smoothstep(0.88, 0.00, rr), 1.22) * 1.00;
+  float aBody = pow(smoothstep(1.10, 0.34, rr), 1.20) * 0.42;
+  /* ⚠ 헤일로에 **안쪽 컷이 없으면 중심까지 차서** 코어와 섞여 탁해진다(금=파랑 코어에
+     토=노랑 헤일로가 겹쳐 회청색이 됐다 — 보색끼리 가중평균하면 회색이다).
+     레퍼런스의 헤일로는 코어를 덮는 안개가 아니라 **코어 바깥의 링**이다. */
+  float aHalo = pow(smoothstep(mix(1.78,1.48,u_orb)*puffK*zg, 0.60, rr), 1.20)
+              * smoothstep(0.34, 0.86, rr) * 0.62;
+  float aOut  = pow(smoothstep(mix(2.45,1.95,u_orb)*puffK*zg, 1.20, rr), 1.40)
+              * smoothstep(0.90, 1.45, rr) * 0.14;
+  float aRay  = sray * smoothstep(mix(2.40,1.90,u_orb), 1.00, rr) * smoothstep(0.85, 1.20, rr) * u_wt.x * 0.40;
 
   float spark = 0.0;
-  for(int i=0;i<5;i++){
+  for(int i=0;i<7;i++){
     float fi=float(i);
-    vec2 sp = vec2(sin(t*0.31+fi*2.1)*0.42, cos(t*0.27+fi*1.7)*0.42)
-            + vec2(hash(vec2(fi,1.0))-0.5, hash(vec2(fi,2.0))-0.5)*0.55;
-    spark += smoothstep(0.052,0.0,length(p-sp))*(0.55+0.45*sin(t*1.6+fi*2.4));
+    vec2 sp = vec2(sin(t*0.31+fi*2.1)*0.40, cos(t*0.27+fi*1.7)*0.44)
+            + vec2(hash(vec2(fi,1.0))-0.5, hash(vec2(fi,2.0))-0.5)*0.62;
+    spark += smoothstep(0.040,0.0,length(p-sp))*(0.50+0.50*sin(t*1.6+fi*2.4));
   }
+  float aSp = spark*0.60;
 
-  float aBody = body*u_lum*mix(0.92,1.06,zc);
-  float aRim  = rimB*(1.0-body*0.35);
-  float aG1   = glow1*0.24*(1.0-body);
-  float aG2   = glow2*0.12*(1.0-glow1);
-  float aRay  = rayGlow*0.60*(1.0-body*0.55);
-  float aSp   = spark*0.55*(1.0-body*0.6);
-  float sum   = aBody+aRim+aG1+aG2+aRay+aSp;
-  vec3 outc = (col*aBody + rim*aRim + gcol*aG1 + gcol2*aG2 + rcol*aRay + vec3(1.0)*aSp) / max(sum, 1e-3);
+  vec3 core = u_c1 + vec3(u_warm*0.11, u_warm*0.035, -u_warm*0.10);
+  float sum = aCore+aBody+aHalo+aOut+aRay+aSp;
+  vec3 outc = (core*aCore + u_c2*aBody + acc*aHalo + mist*aOut + acc*aRay + vec3(1.0)*aSp) / max(sum, 1e-3);
   outc += (hash(gl_FragCoord.xy+fract(u_t)*0.01)-0.5)*u_grain;
 
-  /* 발광은 캔버스보다 넓다 — 테두리에서 알파를 눕혀 잘린 자국을 없앤다 */
-  float vig = smoothstep(1.0, 0.62, max(abs(uv.x), abs(uv.y))*2.0);
+  float vig  = smoothstep(1.0, 0.60, max(abs(uv.x), abs(uv.y))*2.0);
   float live = mix(1.0, fl, u_wt.z);
-  gl_FragColor = vec4(outc, clamp(sum*live*vig, 0.0, 1.0));
+  gl_FragColor = vec4(outc, clamp(sum*u_lum*live*vig, 0.0, 1.0));
 }`;
 /* 밝은 바탕용 보정 — **원색(EL_COLOR)은 안 건드린다.** 금의 c2(#e8f2ff)는 거의 흰색이라
    밝은 바탕에서 통째로 사라진다(시제품 첫 판에서 금 줄이 안 보였다). 이 렌더러에서만 한 칸 낮춘다. */
@@ -2883,10 +2863,17 @@ const HOLO_FIX = { 금: ["#5b76b8", "#8fb0e6", "#1d2436"] };
    레퍼런스는 대비되는 색이 만난다. 셋째를 **나를 생하는 오행의 밝은 색**으로 바꾼다 —
    임의의 예쁜 색이 아니라 근거가 있는 색이다(목생화·화생토…). */
 const HOLO_SAENG = { 화: "목", 토: "화", 금: "토", 수: "금", 목: "수" };
+function mixHex(a, b, w) {
+  const h = (x) => [1, 3, 5].map((i) => parseInt(x.slice(i, i + 2), 16));
+  const A = h(a), B = h(b);
+  return "#" + A.map((v, i) => Math.round(v + (B[i] - v) * w).toString(16).padStart(2, "0")).join("");
+}
 const holoPal = (k) => {
   const base = HOLO_FIX[k] || EL_COLOR[k] || EL_COLOR.토;
-  const acc = (HOLO_FIX[HOLO_SAENG[k]] || EL_COLOR[HOLO_SAENG[k]] || EL_COLOR.토)[1];
-  return [base[0], base[1], acc];
+  /* ⚠ 셋째(헤일로)를 생 오행의 **밝은** 색으로 쓰면 흐려서 대비가 안 선다.
+     진한 색과 밝은 색을 섞어 채도를 살린다 — 레퍼런스의 시안·연두 자리다. */
+  const sae = HOLO_FIX[HOLO_SAENG[k]] || EL_COLOR[HOLO_SAENG[k]] || EL_COLOR.토;
+  return [base[0], base[1], mixHex(sae[0], sae[1], 0.42)];
 };
 const HOLO_BG = [0.851, 0.835, 0.792];   // 미색 회색 #d9d5ca
 
@@ -3539,7 +3526,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v145 · 구와 미색";
+const APP_VER = "v146 · 오라";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
