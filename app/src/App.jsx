@@ -1765,7 +1765,12 @@ function MatchDoc({ saju, birth, onClose, onMet, pre = null }) {
       <div className="imphead">
         <p className="impeyebrow">비 나 리 · 궁 합</p>
         <p className="imptitle">그 사람과 너</p>
-        <p className="impsub">{f.y}년 {f.m}월 {f.d}일생과 맞대 봤어. {f.h == null ? "태어난 시를 몰라 그만큼 얕게 읽었어." : ""}</p>
+        {/* ⚠ `pre` 로 열면 **폼이 비어 있다** — 그대로 두면 「년 월 일생과 맞대 봤어」가 나간다
+            (실제로 나갔다, 스샷으로 잡음). 좌표로 연 문서는 상대 생년월일을 **모르는 게 정상**이므로
+            날짜 대신 **누구와 맞댔는지**를 말한다. 모르는 걸 아는 척하지 않는다. */}
+        <p className="impsub">{pre
+          ? <>{(pre.name || "").trim() ? <><b>{pre.name.trim()}</b>{josa(pre.name.trim(), "과", "와")} 맞대 봤어.</> : "그 사람과 맞대 봤어."} 생년월일은 그 사람 기기에만 있어 — 우리는 <b>맞대는 값</b>만 받았어.</>
+          : <>{f.y}년 {f.m}월 {f.d}일생과 맞대 봤어. {f.h == null ? "태어난 시를 몰라 그만큼 얕게 읽었어." : ""}</>}</p>
       </div>
 
       {/* ── 「같은 날, 다른 하늘」 (v137 · 유인동기와루프설계 §3-B) ────────────────
@@ -3916,7 +3921,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v161 · 분까지 받는다";
+const APP_VER = "v162 · 같은 문서를 본다";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -5599,7 +5604,6 @@ function InviteLanding({ id, onOnboard, onDismiss }) {
   const [state, setState] = useState("checking");   // checking | ask | dead
   const [from, setFrom] = useState("");
   const [f, setF] = useState({ y: "", m: "", d: "", h: "", mi: "", nm: "" });
-  const [hourOpen, setHourOpen] = useState(false);   // 시·분은 노크형 — 아는 사람만 연다
   /* 값은 언제나 간다(창업자 결정 2026-08-28). 서버 계약은 그대로 두되(notify 를 계속 보낸다)
      화면에서 고르게 하지 않는다 — 서버의 `notify:false` 경로는 남겨 둔다. */
   const notify = true;
@@ -5607,7 +5611,14 @@ function InviteLanding({ id, onOnboard, onDismiss }) {
   const [err, setErr] = useState("");
   const [r, setR] = useState(null);
 
+  /* ⚠ **내가 보낸 초대를 내가 열면 태우지 않는다**(2026-08-28 창업자 제보로 발견).
+     링크가 잘 갔는지 눌러 보는 건 자연스러운 행동인데, 그러면 **응답 1회를 자기가 써 버려서**
+     정작 받을 사람이 못 연다. 서버는 누가 보냈는지 모르지만 **보낸 기기는 자기 초대 id 를 갖고 있다** —
+     그걸로 여기서 가른다. 서버는 안 건드린다(재공유 방어는 그대로). */
+  const mine = useMemo(() => { try { return gyeotInvites().includes(id); } catch (_) { return false; } }, [id]);
+
   useEffect(() => {
+    if (mine) { setState("mine"); return; }
     let alive = true;
     (async () => {
       try {
@@ -5623,7 +5634,7 @@ function InviteLanding({ id, onOnboard, onDismiss }) {
       } catch (_) { if (alive) { setState("dead"); setErr("지금은 초대를 열 수 없어."); } }
     })();
     return () => { alive = false; };
-  }, [id]);
+  }, [id, mine]);
 
   const who = from || "누군가";
   const ok = /^\d{4}$/.test(String(f.y || "")) && +f.y >= 1900 && +f.y <= new Date().getFullYear()
@@ -5658,18 +5669,34 @@ function InviteLanding({ id, onOnboard, onDismiss }) {
       });
       const d = await q.json().catch(() => null);
       if (!q.ok || !d?.aAxes) throw new Error(d?.error?.message || "둘 사이를 볼 수 없었어");
-      /* ⑤ **B가 a 자리** — 자기 쪽에서 본 사이다 */
-      const read = readMatch({ a: { saju: my, birth: { y: +f.y, m: +f.m, d: +f.d, h: hh === null ? 12 : hh, min: mm }, name: (f.nm || "").trim() },
+      /* ⑤ **B가 a 자리** — 자기 쪽에서 본 사이다. 여기서는 **읽히는지만 확인**하고,
+         실제 문서는 아래에서 MatchDoc 이 같은 엔진으로 다시 그린다(두 벌을 만들지 않으려고
+         결과를 넘기는 대신 **재료**를 넘긴다). */
+      const myBirth = { y: +f.y, m: +f.m, d: +f.d, h: hh === null ? 12 : hh, min: mm };
+      const read = readMatch({ a: { saju: my, birth: myBirth, name: (f.nm || "").trim() },
                               b: { ...d.aAxes, name: String(d.name || from || "").trim() } });
       if (!read?.chorus) throw new Error("둘 사이를 볼 수 없었어");
       track("invite_answered", { notify });
-      setR(read);
+      setR({ mySaju: my, myBirth, aAxes: d.aAxes });
     } catch (e) {
       setErr(String(e?.message || e));
     } finally { setBusy(false); }
   };
 
   if (state === "checking") return <section className="scene fade"><p className="sub2 center">초대를 여는 중…</p></section>;
+  if (state === "mine") return (
+    <section className="scene fade">
+      <p className="line">이건 네가 보낸 초대야.</p>
+      <p className="sub2">여기서 열면 <b>네가 답한 걸로 끝나 버려</b> — 링크는 한 번만 답할 수 있거든.
+        받을 사람에게 그대로 보내 줘.</p>
+      <button className="btn gold mt" onClick={async () => {
+        const url = `${SHARE_HOST}/?inv=${encodeURIComponent(id)}`;
+        try { if (navigator.share) { await navigator.share({ title: "비나리 — 둘 사이를 보자", url }); return; } } catch (_) { return; }
+        try { await navigator.clipboard.writeText(url); } catch (_) {}
+      }}>링크 다시 보내기</button>
+      <button className="btn ghost mt" onClick={onDismiss}>비나리로 돌아갈래</button>
+    </section>
+  );
   if (state === "dead") return (
     <section className="scene fade">
       <p className="line">이 초대는 열 수 없어.</p>
@@ -5678,19 +5705,18 @@ function InviteLanding({ id, onOnboard, onDismiss }) {
     </section>
   );
 
+  /* ── 결과 — **부른 사람과 똑같은 문서를 본다** (2026-08-28 창업자) ────────────
+     창업자: *"궁합 결과를 초대한 사람이랑 응한 사람이랑 같은 결과를 볼 수 있게 해줘.
+     저 9개만 보는 게 무슨 재미가 있겠어 호기심도 안 일으키지."*
+
+     맞다. 아홉 칸은 **머리글의 근거**지 문서가 아니다 — 「그 사이」가 셋쯤 뜨면 아무 말도 안 한
+     화면이 된다. 부른 사람은 곁 탭에서 궁합 전문을 보는데 받은 사람만 요약을 보면,
+     **같은 두 사람을 두고 두 사람이 다른 걸 보는 것**이고 그건 이 앱이 계속 피해 온 것이다.
+     ⚠ 그래서 **같은 컴포넌트**(MatchDoc)를 쓴다. 화면용으로 다시 쓰면 두 벌이 되고 갈린다.
+     ⚠ 문서 아래에 ⑥ 문을 그대로 붙인다 — 여전히 **세 번째 화면을 안 만든다.** */
   if (r) return (
     <section className="scene fade invres">
-      <p className="chorush" dangerouslySetInnerHTML={{ __html: r.chorus.head }} />
-      {r.chorus.inner && <p className="invnote center" dangerouslySetInnerHTML={{ __html: r.chorus.inner }} />}
-      <ul className="invcells">
-        {r.chorus.cells.map((c, i) => (
-          <li key={i} className={c.v >= 1 ? "up" : c.v <= -1 ? "dn" : "mid"}>
-            <span className="civ">{c.civ}</span><span className="what">{c.what}</span><span className="say">{c.say}</span>
-          </li>
-        ))}
-      </ul>
-      <p className="invnote">같은 두 사람인데 하늘마다 다르게 봐. 이건 흠이 아니라 <b>알맹이야</b> — 평균을 내면 이게 사라져.</p>
-      {/* ⑥ 이 지시서의 목표. 화면을 새로 열지 않고 **결과 안에서** 이어진다 */}
+      <MatchDoc saju={r.mySaju} birth={r.myBirth} pre={{ ax: r.aAxes, name: from }} onClose={onDismiss} />
       <div className="invdoor">
         <p className="invdoorq">네 수호신도 만들어볼래?</p>
         <button className="btn gold" onClick={() => { track("invite_to_onboard", {}); onOnboard({ y: f.y, m: f.m, d: f.d, h: f.h, min: f.mi, name: (f.nm || "").trim() }); }}>응, 내 것도 볼래</button>
@@ -5716,20 +5742,18 @@ function InviteLanding({ id, onOnboard, onDismiss }) {
           시안의 근거("이 계산은 일간뿐이라 시와 무관하다")가 사실과 달랐다.
           ⚠ 그렇다고 필수로 만들지 않는다 — 이 화면의 값은 **탭 4**다. 온보딩의 한자 이름과 같은
             **노크형**으로 둔다: 아는 사람만 열어 적고, 탭 수는 그대로다. */}
-      {hourOpen ? (
-        <>
-          <p className="invlbl">태어난 시 · 분</p>
-          <div className="row gap center">
-            <input className="in sm" placeholder="14" inputMode="numeric" maxLength={2} aria-label="태어난 시"
-              value={f.h} onChange={(e) => setF({ ...f, h: e.target.value })} /><span className="unit">시</span>
-            <input className="in sm" placeholder="30" inputMode="numeric" maxLength={2} aria-label="태어난 분"
-              value={f.mi} onChange={(e) => setF({ ...f, mi: e.target.value })} /><span className="unit">분</span>
-          </div>
-          <p className="invhint">달의 자리는 하루 안에서도 움직여 — 알수록 또렷해져.</p>
-        </>
-      ) : (
-        <button className="knocklink" onClick={() => setHourOpen(true)}>태어난 시도 알아 — 더 또렷하게 볼래</button>
-      )}
+      {/* ⚠ **접어두지 않는다**(2026-08-28 창업자: "시간, 분 쓰는 건 기본값으로. 접어두지 마").
+          노크형으로 뒀던 이유는 탭 수(4)를 지키려던 것인데, **안 열면 정오로 계산되고 그건 70%에서
+          답이 달라진다.** 안 보이는 정밀도를 아껴서 얻는 탭 하나보다 틀린 답이 더 비싸다.
+          비워 두면 여전히 볼 수 있다 — 필수가 아니라 **기본으로 보이는 선택**이다. */}
+      <p className="invlbl">태어난 시 · 분 <em className="invopt2">몰라도 돼</em></p>
+      <div className="row gap center">
+        <input className="in sm" placeholder="14" inputMode="numeric" maxLength={2} aria-label="태어난 시"
+          value={f.h} onChange={(e) => setF({ ...f, h: e.target.value })} /><span className="unit">시</span>
+        <input className="in sm" placeholder="30" inputMode="numeric" maxLength={2} aria-label="태어난 분"
+          value={f.mi} onChange={(e) => setF({ ...f, mi: e.target.value })} /><span className="unit">분</span>
+      </div>
+      <p className="invhint">달의 자리는 하루 안에서도 움직여 — 적을수록 또렷해져.</p>
       {/* ⚠ 이 칸의 쓰임이 v155 에서 바뀌었다 — 동의하면 이 이름이 **부른 사람의 곁에 뜬다.**
           그래서 힌트도 그걸 말한다. 안 적으면 그쪽엔 이름 없는 자리로 선다. */}
       <input className="in wide center box" lang="ko" maxLength={12} aria-label="너를 부를 이름 (선택)"
@@ -8155,11 +8179,18 @@ const CSS = `
 
 /* ── 초대 랜딩 — 링크를 받은 사람의 첫 화면 (v147 · 시안 public/invite-mock.html) ──
    ⚠ 값은 시안에서 그대로 옮긴다. 여기서 다시 고르면 시안과 화면이 갈린다. */
-.invask,.invres{max-width:360px;margin:0 auto;text-align:center}
+.invask{max-width:360px;margin:0 auto;text-align:center}
+/* 결과는 **부른 사람이 보는 문서 그대로**다 — 요약 폭(360)에 가두면 표가 접힌다 */
+.invres{max-width:560px;margin:0 auto;text-align:center;width:100%}
+.invres .imp{text-align:left}
+/* 문서 끝의 「닫을게」는 아래 ⑥ 문과 같은 일을 한다 — 둘이 나란히 있으면 어디로 갈지 흐려진다 */
+.invres .imp > .btn.ghost:last-child{display:none}
+.invopt2{font-style:normal;color:#8a7f95;font-size:10.5px;margin-left:6px}
 .invwho{font-size:16px;line-height:1.75;color:#efe6ff;margin:10px 0 4px;word-break:keep-all;text-wrap:balance}
 .invwho b{color:#ffe9ad}
 .invwhosub{font-family:sans-serif;font-size:12px;color:#8a7f95;margin:0 0 20px;line-height:1.7}
 .invlbl{font-family:sans-serif;font-size:11px;color:#8a7f95;letter-spacing:.06em;margin:0 0 8px}
+.invlbl + .row + .invlbl,.row + .invlbl{margin-top:16px}
 .invopt{font-family:sans-serif;font-size:11.5px;color:#9b90b8;border:1px dashed #3a3157;border-radius:9px;padding:9px;margin:12px 0 14px}
 .invopt b{color:#cfc4e2}
 .invnotice{border:1px solid rgba(245,217,139,.28);background:rgba(245,217,139,.055);border-radius:11px;padding:12px 13px;margin:14px 0 12px;text-align:left}

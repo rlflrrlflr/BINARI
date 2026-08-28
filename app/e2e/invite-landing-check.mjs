@@ -71,9 +71,13 @@ ck("① 부른 사람의 이름이 첫 줄에 뜬다", who.includes("연지"), w
 /* ⚠ 이름 뒤 조사 — "연지이 궁금해했어"가 시안 첫 판에서 실제로 나갔다. 받침 없는 이름이라 「가」다. */
 ck("① 이름 뒤 조사가 맞다(연지+가)", who.includes("연지가") && !who.includes("연지이"), who);
 
-ck("① 온보딩 전체가 아니라 생일 세 칸이다", (await ask.locator("input.in").count()) <= 4,
+/* ⚠ 칸이 여섯이다 — 년·월·일 + **시·분**(2026-08-28 창업자: "기본값으로. 접어두지 마") + 이름(선택).
+   그래도 **필수는 셋뿐**이고, 온보딩 전체(9화면)와 비교하는 게 이 검사의 뜻이다. */
+ck("① 온보딩 전체가 아니라 한 화면이다", (await ask.locator("input.in").count()) <= 6,
    `${await ask.locator("input.in").count()}칸`);
-ck("① 태어난 시를 안 묻는다", !/몇 시|태어난 시를/.test(await ask.innerText()));
+ck("① 시·분이 접혀 있지 않다(기본으로 보인다)", (await ask.locator("input.in.sm").count()) === 4,
+   `${await ask.locator("input.in.sm").count()}칸`);
+ck("① 「시를 안 쓴다」는 거짓말이 사라졌다", !/이 결과는 시를 안 써/.test(await ask.innerText()));
 const notice = await page.locator(".invnotice").innerText().catch(() => "");
 ck("① 무엇이 나가는지 눈에 띄게 적혀 있다", /이 기기에만/.test(notice) && /안 가/.test(notice), notice.replace(/\n/g, " ").slice(0, 60));
 /* ⚠ **동의 체크가 2026-08-28 에 사라졌다**(창업자: "이 칸 없애. 무조건 공유되도록").
@@ -97,11 +101,6 @@ await ask.locator("input.in").nth(0).fill("1987");
 await ask.locator("input.in").nth(1).fill("9");
 await ask.locator("input.in").nth(2).fill("3");
 await ask.locator("input.in.wide").fill("지은");
-/* 시·분은 노크형 — 열어서 적으면 실제로 계산에 실린다(「시를 안 쓴다」가 거짓이었다) */
-await page.getByRole("button", { name: /태어난 시도 알아/ }).click();
-await page.waitForTimeout(200);
-ck("① 시·분을 열면 두 칸이 선다", (await ask.locator("input.in.sm").count()) === 4,
-   `${await ask.locator("input.in.sm").count()}칸`);
 await ask.locator("input.in.sm").nth(2).fill("21");
 await ask.locator("input.in.sm").nth(3).fill("40");
 await page.getByRole("button", { name: "둘 사이를 볼게" }).click();
@@ -109,14 +108,19 @@ await page.waitForTimeout(1200);
 
 const res = page.locator("section.invres");
 ck("② 결과 화면으로 넘어간다", await res.isVisible().catch(() => false));
-ck("② 아홉 칸이 다 선다", (await res.locator(".invcells li").count()) === 9,
-   `${await res.locator(".invcells li").count()}칸`);
-const says = await res.locator(".invcells .say").allTextContents();
-ck("② 칸은 세 낱말뿐이다(총점·퍼센트·하트 없음)",
-   says.every((t) => ["맞는다", "갈린다", "그 사이"].includes(t.trim())), [...new Set(says)].join("·"));
+/* ⚠ **아홉 칸 요약이 아니라 문서 전문이다**(2026-08-28 창업자: "저 9개만 보는 게 무슨 재미가
+   있겠어"). 부른 사람이 곁 탭에서 보는 것과 **같은 컴포넌트**여야 한다 — 두 사람이 같은 두 사람을
+   두고 다른 걸 보면 안 된다. */
+ck("② 부른 사람과 같은 문서가 뜬다(요약이 아니다)", (await res.locator(".imp").count()) === 1);
+const rtxt0 = await res.innerText();
+ck("② 아홉 축이 다 펼쳐진다",
+   ["여덟 글자", "자리의 글자", "여덟 항목", "해의 자리", "달의 자리", "두 날의 무게", "두 날개", "소리", "두 개의 길"]
+     .filter((x) => rtxt0.includes(x)).length >= 8,
+   `${["여덟 글자","자리의 글자","여덟 항목","해의 자리","달의 자리","두 날의 무게","두 날개","소리","두 개의 길"].filter((x) => rtxt0.includes(x)).length}/9`);
+ck("② 「같이 일하면」 절도 온다 — 요약엔 없던 것", /같이 일하면|둘의 역할|누가 미나/.test(rtxt0));
 const rtxt = await res.innerText();
-ck("② 총점·게이지·퍼센트가 없다", !/\d+\s*점|\d+%|\d+\s*\/\s*\d+/.test(rtxt), (rtxt.match(/\d+[점%]/) || ["없음"])[0]);
-ck("② 머리글이 있다(갈림을 먼저 말한다)", (await res.locator(".chorush").innerText()).length > 6);
+ck("② 총점을 앞세우지 않는다", rtxt.indexOf("아홉 축의 판정") === -1 || rtxt.indexOf("아홉 축의 판정") > rtxt.length / 2);
+ck("② 하트·퍼센트가 없다", !/♥|❤|\d+%/.test(rtxt), (rtxt.match(/\d+%/) || ["없음"])[0]);
 
 /* ── ③ 다음 문 — 이 지시서의 목표(k 의 분자) ──────────────────────────── */
 ck("③ 세 번째 화면을 만들지 않았다 — 문이 결과 안에 있다", await res.locator(".invdoor").isVisible());
