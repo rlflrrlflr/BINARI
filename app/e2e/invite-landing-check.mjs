@@ -21,12 +21,29 @@ const ck = (n, p, note = "") => { R.push(p); console.log(`${p ? "PASS" : "FAIL"}
      브라우저는 같은 출처 **GET 에 Origin 을 안 붙인다.** 그래서 실기에서 403 이 될 요청이
      검사에서는 통과했다 — 서버를 흉내 내면 흉내가 통과할 뿐이라고 이 파일 머리에 써 놓고
      내가 그렇게 했다. 이제 브라우저가 실제로 보낸 헤더를 그대로 넘긴다. */
-async function api(method, { seg = [], query = {}, body = null, headers = {} } = {}) {
-  const req = { method, headers, query: { ...query, seg }, body };
+async function api(method, { seg = [], query = {}, body = null, headers = {}, url = null } = {}) {
+  /* ⚠ `query.seg` 를 안 넣는다 — Vercel 이 이 프로젝트에서 조각을 거기 안 실어 준다(라이브 실측).
+     핸들러가 `req.url` 에서 직접 읽는지까지 여기서 같이 검사된다. */
+  const qs = new URLSearchParams(Object.entries(query)).toString();
+  const path = url || ("/api/invite" + (seg.length ? "/" + seg.map(encodeURIComponent).join("/") : "") + (qs ? "?" + qs : ""));
+  const req = { method, headers, url: path, query: { ...query }, body };
   let code = 200, payload = null;
   const res = { setHeader() {}, status(c) { code = c; return res; }, json(v) { payload = v; return res; }, end() { return res; } };
   await handler(req, res);
   return { code, body: payload };
+}
+
+/* 브라우저가 실제로 부른 것을 **그대로** 핸들러에 넘기는 중계기 하나.
+   ⚠ 세 군데에 손으로 복사해 뒀다가 한 곳만 고쳐서 깨뜨렸다 — 중계는 한 벌만 둔다. */
+async function relay(route, tap) {
+  const u = new URL(route.request().url());
+  let body = null; try { body = JSON.parse(route.request().postData() || "null"); } catch (_) {}
+  if (tap) tap({ m: route.request().method(), path: u.pathname, body, headers: route.request().headers() });
+  const r = await api(route.request().method(), {
+    url: u.pathname + u.search, query: Object.fromEntries(u.searchParams),
+    body, headers: route.request().headers(),
+  });
+  await route.fulfill({ status: r.code, contentType: "application/json", body: JSON.stringify(r.body) });
 }
 
 _resetMem();
@@ -41,18 +58,7 @@ const b = await chromium.launch(process.env.CHROME_PATH ? { executablePath: proc
 const page = await b.newPage({ viewport: { width: 430, height: 932 } });
 page.setDefaultTimeout(9000);
 const seen = [], seenHeaders = [];
-await page.route("**/api/invite**", async (route) => {
-  const u = new URL(route.request().url());
-  const rest = u.pathname.replace(/^\/api\/invite\/?/, "");
-  const seg = rest ? rest.split("/").map(decodeURIComponent) : [];
-  const query = Object.fromEntries(u.searchParams);
-  let body = null;
-  try { body = JSON.parse(route.request().postData() || "null"); } catch (_) {}
-  seen.push({ m: route.request().method(), seg, body });
-  seenHeaders.push(route.request().headers());
-  const r = await api(route.request().method(), { seg, query, body, headers: route.request().headers() });
-  await route.fulfill({ status: r.code, contentType: "application/json", body: JSON.stringify(r.body) });
-});
+await page.route("**/api/invite**", (route) => relay(route, (x) => { seen.push({ m: x.m, seg: x.path.replace(/^\/api\/invite\/?/, "").split("/").filter(Boolean) }); seenHeaders.push(x.headers); }));
 
 await page.goto(`${BASE}/?inv=${ID}`, { waitUntil: "domcontentloaded" });
 await page.waitForTimeout(600);
@@ -105,14 +111,7 @@ ck("③ 문이 수호신으로 이어진다", await page.getByRole("button", { n
 
 /* ── ④ 응답은 한 번 — 재공유 방어가 화면에서도 닫힌다 ─────────────────── */
 const p2 = await b.newPage({ viewport: { width: 430, height: 932 } });
-await p2.route("**/api/invite**", async (route) => {
-  const u = new URL(route.request().url());
-  const rest = u.pathname.replace(/^\/api\/invite\/?/, "");
-  const r = await api(route.request().method(), { seg: rest ? rest.split("/").map(decodeURIComponent) : [],
-    query: Object.fromEntries(u.searchParams), body: JSON.parse(route.request().postData() || "null"),
-    headers: route.request().headers() });
-  await route.fulfill({ status: r.code, contentType: "application/json", body: JSON.stringify(r.body) });
-});
+await p2.route("**/api/invite**", (route) => relay(route));
 await p2.goto(`${BASE}/?inv=${ID}`, { waitUntil: "domcontentloaded" });
 await p2.waitForTimeout(500);
 const dead = await p2.locator("section").innerText().catch(() => "");
@@ -140,15 +139,7 @@ ck("⑤ 넣었던 생년월일이 실제로 실려 있다", ys === "1987", ys);
 {
   const pa = await b.newPage({ viewport: { width: 430, height: 932 } });
   const calls = [];
-  await pa.route("**/api/invite**", async (route) => {
-    const u = new URL(route.request().url());
-    const rest = u.pathname.replace(/^\/api\/invite\/?/, "");
-    let body = null; try { body = JSON.parse(route.request().postData() || "null"); } catch (_) {}
-    calls.push({ m: route.request().method(), body });
-    const r = await api(route.request().method(), { seg: rest ? rest.split("/").map(decodeURIComponent) : [],
-      query: Object.fromEntries(u.searchParams), body, headers: route.request().headers() });
-    await route.fulfill({ status: r.code, contentType: "application/json", body: JSON.stringify(r.body) });
-  });
+  await pa.route("**/api/invite**", (route) => relay(route, (x) => calls.push({ m: x.m, body: x.body })));
   const { onboard } = await import("./onboard.mjs");
   await onboard(pa, BASE);
   /* ⚠ **첫 곁은 초대로 안 만든다.** 창업자 게이트가 그렇다 — *"첫 입력은 공짜야. 근데 추가로

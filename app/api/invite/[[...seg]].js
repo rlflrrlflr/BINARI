@@ -99,6 +99,24 @@ async function delInvite(id) {
 
 const clean = (s, n) => String(s == null ? "" : s).slice(0, n);
 
+/* ── 경로 조각 읽기 ─────────────────────────────────────────────────────────
+   ⚠ **`req.query.seg` 를 믿지 마라 — 이 프로젝트에서는 비어 온다.** 라이브 실측(2026-08-28):
+     `GET /api/invite/check?ids=zzz` 가 함수까지는 오는데 seg 가 [] 이라 전부 405 로 떨어졌다.
+     대괄호 파일명은 **라우팅**에만 쓰이고, 조각을 `req.query` 에 실어 주는 건 Next 쪽 동작이다.
+     그래서 **URL 에서 직접 읽는다.** query.seg 는 실어 주는 환경을 위해 폴백으로만 둔다.
+   ⚠ 이게 이 파일에서 나온 **세 번째** 같은 종류의 사고다(맨 경로 404 · GET Origin 403 · 조각 부재).
+     셋 다 로컬 검사를 통과하고 배포에서만 죽었다. 공통 원인은 하나다 —
+     **검사가 Vercel 이 주는 모양이 아니라 내가 준 모양으로 req 를 만들었다.**
+     지금 `e2e/invite-check.mjs` 는 `url` 만 주고 `query.seg` 를 **일부러 안 준다.** 그렇게 둬라. */
+function segsOf(req) {
+  const path = String(req.url || "").split("?")[0];
+  const m = path.match(/\/invite\/?(.*)$/);
+  const fromUrl = m && m[1] ? m[1].split("/").filter(Boolean).map((x) => { try { return decodeURIComponent(x); } catch (_) { return x; } }) : [];
+  if (fromUrl.length) return fromUrl;
+  const raw = req.query?.seg;
+  return Array.isArray(raw) ? raw : raw ? [raw] : [];
+}
+
 export default async function handler(req, res) {
   const origin = req.headers.origin || "";
   /* ⚠ **브라우저는 같은 출처 GET 에 `Origin` 을 안 붙인다**(fetch 규격: GET·HEAD 는 제외).
@@ -121,9 +139,7 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(originOk ? 204 : 403).end();
   if (!originOk) return res.status(403).json({ error: { message: "허용되지 않은 출처" } });
 
-  /* 경로 조각 — Vercel 선택적 catch-all. `/api/invite` → [] · `/answer` → ["answer"] · `/:id` → [id] */
-  const raw = req.query?.seg;
-  const seg = Array.isArray(raw) ? raw : raw ? [raw] : [];
+  const seg = segsOf(req);
 
   let body = req.body;
   if (typeof body === "string") { try { body = JSON.parse(body); } catch (_) { body = null; } }

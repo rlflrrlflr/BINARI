@@ -1091,6 +1091,9 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
       bad.push("GET 에도 Origin 을 요구함 — 브라우저는 같은 출처 GET 에 Origin 을 안 붙인다");
     if (!/seg\[0\] === "new"/.test(api)) bad.push("만들기가 조각(new)을 안 받음");
     if (!/seg\[0\] === "check"/.test(api)) bad.push("조회가 조각(check)을 안 받음");
+    /* 세 번째 실사고 — Vercel 이 조각을 req.query 에 안 실어 준다. URL 에서 읽어야 한다 */
+    if (!/function segsOf/.test(api) || api.indexOf("req.url") > api.indexOf("req.query?.seg"))
+      bad.push("경로 조각을 req.query 에서만 읽음 — Vercel 이 거기 안 실어 준다");
   } else bad.push("초대 API 파일이 없음");
   if (existsSync("e2e/invite-check.mjs")) {
     try { execFileSync("node", ["e2e/invite-check.mjs"], { stdio: "pipe", timeout: 60000 }); }

@@ -16,7 +16,13 @@ const ORIGIN = "https://binari-sepia.vercel.app";
    ⚠ `origin: null` 을 넘기면 **헤더 자체를 안 붙인다** — 브라우저가 같은 출처 GET 에서
      하는 일이 그거다(아래 ⑧). 빈 문자열이 아니라 부재를 재현해야 그 경로가 검사된다. */
 async function call(method, { seg = [], query = {}, body = null, origin = ORIGIN } = {}) {
-  const req = { method, headers: origin == null ? {} : { origin }, query: { ...query, seg }, body };
+  /* ⚠ **`query.seg` 를 일부러 안 넣는다.** Vercel 이 이 프로젝트에서 그걸 안 실어 주기 때문이다
+     (라이브 실측 2026-08-28: 조각이 [] 로 와서 전 경로가 405). 검사가 그걸 넣어 주면
+     **검사만 통과하고 배포에서 죽는다** — 이 파일에서 세 번 연속 그 방식으로 놓쳤다.
+     그래서 여기서 재현하는 건 Vercel 이 실제로 주는 것: `url` 과 **일반 쿼리뿐**이다. */
+  const qs = new URLSearchParams(Object.entries(query).filter(([, v]) => v !== undefined)).toString();
+  const url = "/api/invite" + (seg.length ? "/" + seg.map(encodeURIComponent).join("/") : "") + (qs ? "?" + qs : "");
+  const req = { method, headers: origin == null ? {} : { origin }, url, query: { ...query }, body };
   let code = 200, payload = null;
   const res = {
     setHeader() {},
@@ -216,6 +222,17 @@ const f = R.filter((x) => !x).length;
   ck("⑧ Origin 없는 DELETE(취소)도 막힌다", del.code === 403, `${del.code}`);
   const evil = await call("GET", { seg: [id], origin: "https://evil.example" });
   ck("⑧ 남의 출처가 **적혀 온** GET 은 여전히 막힌다", evil.code === 403, `${evil.code}`);
+}
+
+/* ── ⑨-b 조각은 URL 에서 읽는다 (2026-08-28 세 번째 실사고) ──────────────── */
+{
+  _resetMem();
+  ck("⑨-b query.seg 가 없어도 경로를 읽는다 — Vercel 이 안 실어 준다",
+     (await call("POST", { seg: ["new"], body: { axes: AXES, name: "연지" } })).code === 200);
+  const api = readFileSync(new URL("../api/invite/[[...seg]].js", import.meta.url), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+  ck("⑨-b URL 을 먼저 보고 query.seg 는 폴백이다",
+     /function segsOf/.test(api) && api.indexOf("req.url") < api.indexOf("req.query?.seg"));
 }
 
 console.log(`\n=== 초대와 회신: ${R.length - f}/${R.length} PASS ===`);
