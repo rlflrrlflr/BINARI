@@ -3730,7 +3730,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v156 · 둘 사이가 돌아온다";
+const APP_VER = "v157 · 이름은 받은 사람이 쓴다";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -4898,6 +4898,12 @@ function gyeotInvites() {
   try { const a = JSON.parse(store.getItem(INVITE_KEY) || "[]"); return Array.isArray(a) ? a.filter((x) => typeof x === "string").slice(0, GYEOT_MAX) : []; }
   catch (_) { return []; }
 }
+/* 취소·응답이 끝난 초대 id 를 내 목록에서 뺀다 — 안 빼면 확인(GET)이 죽은 id 를 계속 물고 간다 */
+function gyeotDropInvite(id) {
+  const next = gyeotInvites().filter((x) => x !== id);
+  try { store.setItem(INVITE_KEY, JSON.stringify(next)); } catch (_) {}
+  return next;
+}
 function gyeotPushInvite(id) {
   const next = [String(id).slice(0, 64), ...gyeotInvites().filter((x) => x !== id)].slice(0, GYEOT_MAX);
   try { store.setItem(INVITE_KEY, JSON.stringify(next)); } catch (_) {}
@@ -5513,8 +5519,11 @@ function InviteLanding({ id, onOnboard, onDismiss }) {
       </div>
       {/* 시(時)를 안 묻는다 — 이 계산은 시를 안 쓴다(§C-2). 무거운 칸을 하나 지웠다 */}
       <p className="invopt">태어난 시는 몰라도 돼 — <b>이 결과는 시를 안 써</b></p>
+      {/* ⚠ 이 칸의 쓰임이 v155 에서 바뀌었다 — 동의하면 이 이름이 **부른 사람의 곁에 뜬다.**
+          그래서 힌트도 그걸 말한다. 안 적으면 그쪽엔 이름 없는 자리로 선다. */}
       <input className="in wide center box" lang="ko" maxLength={12} aria-label="너를 부를 이름 (선택)"
         placeholder="너를 부를 이름 (안 적어도 돼)" value={f.nm} onChange={(e) => setF({ ...f, nm: e.target.value })} />
+      <p className="invhint">{notify ? <>{who}의 곁에 이 이름으로 서게 돼.</> : <>이 이름은 이 기기에만 남아.</>}</p>
       {/* ③ 무엇이 나가는지 — 회색 각주가 아니라 **눈에 띄는 상자**로 입력 바로 아래.
           헌장 기준이 「유저가 무엇이 나가는지 보고 있는가」라, 안 보이는 채로 나가면 그건 유출이다.
           나가는 것과 **안 나가는 것**을 같이 적고, 안 나가는 쪽을 더 길게 적는다. */}
@@ -5524,7 +5533,7 @@ function InviteLanding({ id, onOnboard, onDismiss }) {
       <div className="invnotice">
         {notify ? (
           <p><b>네 생일은 이 기기에만 남아</b> — 우리 서버에도, {who}에게도 안 가.<br />
-            {who}에게 가는 건 <b>둘 사이를 계산하는 값</b>이야. 그래야 {who}도 같은 걸 볼 수 있어.<br />
+            {who}에게 가는 건 <b>네가 적은 이름과 둘 사이를 계산하는 값</b>이야. 그래야 {who}도 같은 걸 볼 수 있어.<br />
             <span className="no">그 값으로 네 생일을 되짚을 수는 있어 — {who}에게만 그래.</span></p>
         ) : (
           <p><b>지금은 아무것도 안 나가.</b> 생일도, 이름도, 결과도.<br />
@@ -5986,8 +5995,7 @@ export default function App() {
      답이 온 뒤에 자리를 만들 재료(오행·일간)가 **영영 오지 않는다** — 그래서 부를 때 만든다.
      자리에 실리는 건 **A가 적은 이름 하나**뿐이고, 하늘은 비어 있다. 그게 「부른 곁」의 뜻 그대로다:
      기척은 있는데 아직 사람이 아니다. 답이 오면 밝기·자리·꼬리로만 사람이 된다(숫자 금지). */
-  const [inviteName, setInviteName] = useState(null);   // null = 문 닫힘 · 문자열 = 이름 받는 중
-  const inviteNew = async (nm) => {
+  const inviteNew = async () => {
     if (inviteBusy) return;
     setInviteBusy("new"); setInviteErr("");
     try {
@@ -6002,10 +6010,13 @@ export default function App() {
       const d = await r.json().catch(() => null);
       if (!r.ok || !d?.id) throw new Error(d?.error?.message || "지금은 초대를 만들 수 없어");
       gyeotPushInvite(d.id);
-      const called = String(nm || "").trim().slice(0, GYEOT_NAME_MAX);
-      setGyeot((prev) => gyeotAdd(prev, { key: `inv:${d.id}`, el: null, dg: null, name: called, inv: d.id }));
-      setInviteName(null);
-      track("invite_created", { from: "gyeot", named: !!called });
+      /* ⚠ **이름을 안 묻는다**(2026-08-28 창업자: *"누구를 부를지 이름을 쓰는 게 왜 필요해?
+         받은 사람이 쓰면 되지."*). 맞다 — v155 부터 **답이 올 때 그 사람 이름이 함께 온다**
+         (동의한 경우). 그 앞에서 A에게 한 번 더 묻는 건 같은 값을 두 번 받는 것이고,
+         부르는 데 화면이 하나 더 낀다. 자리는 이름 없이 서고, 답이 오면 그때 이름이 붙는다.
+         비워 둔 칸은 A가 직접 적을 수도 있다(목록의 이름 칸은 그대로 편집 가능하다). */
+      setGyeot((prev) => gyeotAdd(prev, { key: `inv:${d.id}`, el: null, dg: null, name: "", inv: d.id }));
+      track("invite_created", { from: "gyeot" });
       const url = `${SHARE_HOST}/?inv=${encodeURIComponent(d.id)}`;
       /* ⚠ 방금 만든 검사(5-p)가 이 줄을 잡았다 — 이름은 받침이 갈린다("민수가" / "형원이").
          내가 세운 규칙에 내가 먼저 걸린 게 이 검사의 값이다. */
@@ -6900,7 +6911,17 @@ export default function App() {
                       <div className="gaskrow">
                         <button className="btn ghost sm" onClick={() => setGyeotAsk("")}>아니, 둘래</button>
                         <button className="btn ghost sm del" onClick={() => {
-                          setGyeot((p) => gyeotDrop(p, gyeotAsk)); track("gyeot_dropped", {}); setGyeotAsk("");
+                          /* ⚠ **초대를 지우면 서버에서도 지운다.** 처리방침 §5-2 가 「보낸 이는 초대를
+                             취소할 수 있고, 취소하면 즉시 삭제됩니다」라고 약속해 놓고 여태 **화면에서만**
+                             지우고 있었다 — 서버의 좌표는 30일을 그대로 남았다. 약속과 코드가 어긋난
+                             자리이고, 이 리포가 v127.7 에 겪은 것과 같은 종류다.
+                             ⚠ 실패해도 화면에서는 지운다 — 유저가 지웠는데 안 지워지는 게 더 나쁘다.
+                               서버 쪽은 30일 뒤 어차피 사라진다. */
+                          if (g?.inv) {
+                            fetch(`/api/invite/${encodeURIComponent(g.inv)}`, { method: "DELETE" }).catch(() => {});
+                            gyeotDropInvite(g.inv);
+                          }
+                          setGyeot((p) => gyeotDrop(p, gyeotAsk)); track("gyeot_dropped", { pending: !!g?.inv }); setGyeotAsk("");
                         }}>지울래</button>
                       </div>
                     </div>
@@ -6911,24 +6932,8 @@ export default function App() {
                 {/* 첫 곁이 생기면 부르는 문이 사라져 있었다 — 목록이 곧 막다른 길이 됐다는 뜻이다. */}
                 {/* 게이트: **첫 곁은 내가 직접 넣어 공짜, 그 다음부터는 그 사람이 직접 넣는다**(창업자).
                     그래서 이 문은 궁합 폼이 아니라 **초대**로 간다 — 부르는 일이 여기 하나로 모인다. */}
-                {inviteName === null ? (
-                  <button className="btn ghost mt" onClick={() => { setInviteErr(""); setInviteName(""); }}>한 사람 더 부를래</button>
-                ) : (
-                  /* 이름을 먼저 받는다 — 이 이름이 명부의 자리가 된다(위 inviteNew 주석).
-                     비워도 부를 수 있다. 이름을 필수로 걸면 이름을 모르는 사람은 못 부른다. */
-                  <div className="gcall">
-                    <p>누구를 부를까 <i>이름은 이 기기에만</i></p>
-                    <input className="in wide center box" lang="ko" maxLength={GYEOT_NAME_MAX} autoFocus
-                      aria-label="부를 사람의 이름" placeholder="민수 · 팀장님 · 엄마"
-                      value={inviteName} onChange={(e) => setInviteName(e.target.value)} />
-                    <p className="fine">링크를 보내면 그 사람이 <b>자기 생일을 직접</b> 넣어. 답이 오면 곁에 서.</p>
-                    <div className="gaskrow">
-                      <button className="btn ghost sm" onClick={() => { setInviteName(null); setInviteErr(""); }}>그만둘래</button>
-                      <button className="btn sm" disabled={inviteBusy === "new"}
-                        onClick={() => inviteNew(inviteName)}>{inviteBusy === "new" ? "만드는 중…" : "부를게"}</button>
-                    </div>
-                  </div>
-                )}
+                <button className="btn ghost mt" disabled={inviteBusy === "new"}
+                  onClick={() => inviteNew()}>{inviteBusy === "new" ? "만드는 중…" : "한 사람 더 부를래"}</button>
                 <button className="btn ghost mt" onClick={() => { setGyeotOpen(false); track("gyeot_roster_closed", {}); }}>접어둘게</button>
               </>)}
             </div>
@@ -7888,6 +7893,7 @@ const CSS = `
 .invcells .dn .say{color:#e59aa6}
 .invcells .mid .say{color:#9b90b8}
 .invnote{font-family:sans-serif;font-size:11.5px;color:#8a7f95;line-height:1.75;margin:0 0 16px}
+.invhint{font-family:sans-serif;font-size:11px;color:#8a7f95;margin:6px 0 0;text-align:center}
 .invnote b{color:#cfc4e2}
 .invnote.center{text-align:center}
 .invdoor{border-top:1px solid #2a2340;padding-top:16px;margin-top:6px}

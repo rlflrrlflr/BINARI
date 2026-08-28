@@ -57,11 +57,12 @@ const M = new Function("store", "hex2rgb", "roleOf", `
   ${grab("function writeGyeot(")}
   ${grab("function gyeotAdd(")}
   ${grab("function gyeotDrop(")}
+  ${grab("function gyeotFill(")}
   ${grab("function gyeotSetName(")}
   ${grab("function gyeotOrder(")}
   ${grab("function gyeotSummary(")}
   ${grab("function gyeotView(")}
-  return { GYEOT_KEY, GYEOT_MAX, GY_CALLED, GY_STANDING, gyeotSummary, GYEOT_REL_LINE, gyeotFingerprint, gyeotSeat, gyeotRel,
+  return { GYEOT_KEY, GYEOT_MAX, GY_CALLED, GY_STANDING, gyeotSummary, GYEOT_REL_LINE, gyeotFingerprint, gyeotSeat, gyeotRel, gyeotFill,
            readGyeot, writeGyeot, gyeotAdd, gyeotDrop, gyeotSetName, gyeotOrder, gyeotView };
 `)(store, hex2rgb, roleOf);
 
@@ -212,6 +213,30 @@ const fp = (y, m, d) => M.gyeotFingerprint(y, m, d);
      ⚠ 늘어도 되는 건 여기까지다 — **이름은 여전히 안 넘어간다**(아래 ⑤가 잡는다). */
   ck("④ 셰이더가 받는 모양은 {key,rel,ang,col,tier} 뿐",
      Object.keys(vw[0]).sort().join(",") === "ang,col,key,rel,tier", Object.keys(vw[0]).sort().join(","));
+  /* ── 답이 온 자리를 채운다 (v155~157) ──────────────────────────────────
+     초대는 이름 없이 나가고, 답이 오면 **받은 사람이 쓴 이름**이 붙는다
+     (2026-08-28 창업자: "누구를 부를지 이름을 쓰는 게 왜 필요해? 받은 사람이 쓰면 되지").
+     ⚠ 단 A가 이미 적어 둔 이름은 **안 덮는다** — 그게 A가 그 사람을 알아보는 이름이다. */
+  {
+    const AX = { dG: 7, dJ: 4, el: "금", nak: 11, rashi: 1, lp: 3 };
+    const seeded = M.gyeotAdd([], { key: "inv:x1", el: null, dg: null, name: "", inv: "x1" }, 10);
+    ck("④-c 부른 자리는 하늘 없이 선다", seeded[0].el === null && seeded[0].tier === M.GY_CALLED);
+    const filled = M.gyeotFill(seeded, "inv:x1", AX, "주영");
+    ck("④-c 답이 오면 하늘이 찬다", filled[0].el === "금" && filled[0].dg === 7 && filled[0].tier === M.GY_STANDING,
+       `${filled[0].el}/${filled[0].dg}/${filled[0].tier}`);
+    ck("④-c 관계 좌표가 실린다(둘 사이를 이 기기에서 계산한다)", filled[0].ax && filled[0].ax.nak === 11);
+    ck("④-c 받은 사람이 쓴 이름이 붙는다", filled[0].name === "주영", filled[0].name);
+    ck("④-c 시각(at)은 안 건드린다 — 승격이 목록 순서를 안 흔든다", filled[0].at === 10, String(filled[0].at));
+    /* A가 이미 적어 둔 이름이 있으면 그게 이긴다 */
+    const named = M.gyeotAdd([], { key: "inv:x2", el: null, dg: null, name: "팀장님", inv: "x2" }, 11);
+    ck("④-c A가 적어 둔 이름은 안 덮인다",
+       M.gyeotFill(named, "inv:x2", AX, "주영")[0].name === "팀장님",
+       M.gyeotFill(named, "inv:x2", AX, "주영")[0].name);
+    /* 동의를 껐으면 좌표가 안 온다 — 그래도 밝기는 올라가면 안 된다(A는 아무것도 못 받는다) */
+    ck("④-c 좌표 없이 채우려 해도 하늘을 지어내지 않는다",
+       M.gyeotFill(seeded, "inv:x1", null, "")[0].el === null);
+  }
+
   ck("④ 하늘을 모르는 곁은 흙색을 지어내지 않는다", (() => {
     const unk = M.gyeotView([{ key: "u", el: null, tier: M.GY_CALLED }], "화")[0];
     const soil = M.gyeotView([{ key: "s", el: "토", tier: M.GY_CALLED }], "화")[0];

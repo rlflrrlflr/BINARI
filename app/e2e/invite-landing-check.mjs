@@ -163,24 +163,24 @@ ck("⑤ 넣었던 생년월일이 실제로 실려 있다", ys === "1987", ys);
   await open();
   ck("⑥ 명부가 열린다", await pa.getByRole("button", { name: "한 사람 더 부를래" }).isVisible().catch(() => false));
 
+  /* ⚠ **부르기 전에 이름을 안 묻는다**(2026-08-28 창업자: *"받은 사람이 쓰면 되지"*).
+     v155 부터 답이 올 때 그 사람 이름이 함께 오므로, 앞에서 A에게 묻는 건 같은 값을 두 번 받는 것이다.
+     한 번 눌러 바로 초대가 만들어지고 자리는 **이름 없이** 선다. */
   await pa.getByRole("button", { name: "한 사람 더 부를래" }).click();
-  await pa.waitForTimeout(250);
-  ck("⑥ 부르기 전에 이름을 묻는다", await pa.locator(".gcall input").isVisible().catch(() => false));
-  await pa.locator(".gcall input").fill("주영");
-  await pa.getByRole("button", { name: "부를게" }).click();
-  await pa.waitForTimeout(900);
+  await pa.waitForTimeout(1100);
+  ck("⑥ 이름을 묻는 화면이 끼지 않는다", (await pa.locator(".gcall").count()) === 0);
 
   const madeIt = calls.find((c) => c.m === "POST" && c.body?.axes);
   ck("⑥ 서버로 간 건 좌표뿐 — 생년월일 원값이 없다",
      !!madeIt && !Object.keys(madeIt.body.axes).some((k) => /^(y|m|d|h|min|birth)$/i.test(k)),
      Object.keys(madeIt?.body?.axes || {}).join(","));
-  ck("⑥ 이름은 서버로 안 간다(부를 사람의 이름)",
-     !JSON.stringify(madeIt?.body || {}).includes("주영"), JSON.stringify(madeIt?.body?.name ?? null));
+  ck("⑥ 초대를 만들 때 서버로 가는 이름은 **부른 사람 자기 이름**뿐이다(B 화면 첫 줄용)",
+     typeof madeIt?.body?.name === "string", JSON.stringify(madeIt?.body?.name ?? null));
 
   const row = pa.locator(".gyeotlist li").filter({ has: pa.locator("input.galias") }).first();
   ck("⑥ 명부에 자리가 하나 는다", (await pa.locator(".gyeotlist li input.galias").count()) === 2,
      `${await pa.locator(".gyeotlist li input.galias").count()}자리`);
-  ck("⑥ 그 자리의 이름이 실려 있다", (await pa.locator(".gyeotlist li input.galias").first().inputValue()) === "주영");
+  ck("⑥ 답이 오기 전엔 이름이 비어 있다", (await pa.locator(".gyeotlist li input.galias").first().inputValue()) === "");
   ck("⑥ 아직은 '부른 곁'이다(흐린 층)", ((await row.getAttribute("class")) || "").includes("called"),
      (await row.getAttribute("class")) || "");
   const line = await row.locator(".grel").innerText();
@@ -237,8 +237,11 @@ ck("⑤ 넣었던 생년월일이 실제로 실려 있다", ys === "1987", ys);
   ck("⑧ 관계 좌표가 자리에 실린다 — 사이를 A 기기에서 계산한다", !!(seat && seat.ax && seat.ax.nak === 11));
   ck("⑧ 그래도 생년월일 원값은 안 실린다",
      !Object.keys((seat && seat.ax) || {}).some((k) => /^(y|m|d|h|min|birth)$/i.test(k)));
-  ck("⑧ A가 적어 둔 이름을 B의 이름이 덮지 않는다", seat && seat.name === "주영2" ? false : seat.name === "주영",
-     seat && seat.name);
+  /* 이름은 **받은 사람이 쓴 것**이 그대로 온다 — A는 아무것도 안 적었다 */
+  ck("⑧ 받은 사람이 적은 이름이 그 자리에 붙는다", seat && seat.name === "주영", seat && seat.name);
+  /* ⚠ 반대 방향(「A가 적어 둔 이름은 안 덮는다」)은 **여기서 재지 않는다.**
+     이 화면에선 A가 이름을 안 적으므로 그 경로가 안 밟힌다 — 처음엔 여기에 검사를 썼는데
+     실제로는 아무것도 안 재는 항목이었다. 그 규칙은 `gyeot-roster-check` 가 함수로 직접 잰다. */
   const row3 = pa.locator(".gyeotlist li").filter({ has: pa.locator("input.galias") }).first();
   ck("⑧ 하늘이 차면 역할 이름이 뜬다(「아직 답이 없어」가 아니다)",
      !/답이 없어/.test(await row3.locator(".grel").innerText()), await row3.locator(".grel").innerText());
