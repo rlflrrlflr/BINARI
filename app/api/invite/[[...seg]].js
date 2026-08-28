@@ -10,12 +10,21 @@
    저장하는 것 (§5-2 표 그대로):
      · A의 관계 계산용 **파생값**(axes) — 생년월일 원값이 아니다
      · 응답 여부와 시각
-     · B가 동의한 경우에 한해 표시용 이름(label)
+     · **B가 동의한 경우에 한해** B의 파생값(bAxes)과 표시용 이름(label)
    저장하지 않는 것: 생년월일·태어난 시각 원값 · 질문 · 판결문 · 서신 · 문서
-     ⚠ **B의 파생값(bAxes)도 저장하지 않는다.** 지시서 §3 의 요청 본문에는 있지만
-       §2-2 「저장하는 것」에도 §10 「B의 값을 A에게 보내기 — 안 한다」에도 없다.
-       받아서 버린다 — 인터페이스는 맞추되 **쓰지도 남기지도 않는다.**
-       (여기 저장을 추가하려면 §5-2 표와 privacy-check 를 먼저 고쳐야 한다.)
+
+   ⚠ **`bAxes` 는 2026-08-28 창업자 결정으로 저장·전달한다.** 그 전엔 받아서 버렸고
+     근거는 지시서 §10(「B의 값을 A에게 보내기 — 안 한다. 답이 왔어 한 비트만」)이었다.
+     **그 선을 지키면 이 기능이 성립하지 않는다** — A는 초대를 보내도 그 사람과의 사이를
+     영영 못 본다(오행도 일간도 안 오니 곁이 색도 역할도 없는 채로 밝아지기만 한다).
+     창업자 게이트가 「첫 입력은 공짜, 그다음은 그 사람이 직접 넣어야 한다」인데,
+     그 대가로 A가 받는 게 없으면 게이트가 아니라 막다른 길이다. 창업자 지적 그대로:
+     *"내가 초대했는데 내꺼에도 자동 반영이 되어야지."*
+   ⚠ **그래서 동의의 뜻이 바뀌었다.** 예전 체크는 「답했다는 사실을 알려도 되나」였는데
+     이제 「내 값으로 계산한 둘 사이를 그 사람도 보게 해도 되나」다. **화면 문구도 같이 바꿨다** —
+     문구를 안 바꾸고 값만 보내면 그건 동의가 아니라 기만이다. 처리방침 §5-2 도 함께 고쳤다.
+   ⚠ **역산은 이제 양방향이다.** A→B 는 이미 §5-2 「정직한 고지 1」이 말하고 있었고,
+     B→A 도 같은 성질이므로 B 화면에도 같은 무게로 적는다.
 
    경로 다섯 — **전부 조각이 하나 이상 붙는다:**
      생성 POST /api/invite/new · 엿보기 GET /api/invite/:id · 응답 POST /api/invite/answer ·
@@ -98,6 +107,8 @@ async function delInvite(id) {
 }
 
 const clean = (s, n) => String(s == null ? "" : s).slice(0, n);
+/* 생년월일 원값이 섞여 오는 것을 서버가 막는다 — **양쪽 좌표에 다 건다**(A의 axes · B의 bAxes) */
+const BANNED = ["y", "m", "d", "h", "min", "birth", "birthday", "ymd"];
 
 /* ── 경로 조각 읽기 ─────────────────────────────────────────────────────────
    ⚠ **`req.query.seg` 를 믿지 마라 — 이 프로젝트에서는 비어 온다.** 라이브 실측(2026-08-28):
@@ -165,8 +176,18 @@ export default async function handler(req, res) {
          그래서 **소비는 언제나 하고(answered 기록), A에게 보이는 것만 동의로 가른다.**
          지켜야 할 뜻("동의가 진짜 선택지여야 한다" = A가 아무것도 못 얻는다)은 그대로고,
          처리방침 §5-2 의 "보낸 이에게는 아무것도 전달되지 않습니다"도 아래 GET 이 지킨다. */
-      inv.answered = { at: Date.now(), notify, label: notify ? clean(body?.label, MAX_LABEL) : "" };
-      /* ⚠ body.bAxes 는 **읽지 않는다.** 위 파일 머리 주석 참조 — 받아서 버린다. */
+      /* ⚠ **동의가 없으면 B의 값은 받지도 남기지도 않는다.** 지우는 게 아니라 애초에 안 담는다 —
+         담아 두고 "안 보여 준다"로 가르면 언젠가 한 줄 고쳐서 새어 나간다. */
+      const bAxes = notify && body?.bAxes && typeof body.bAxes === "object" && !Array.isArray(body.bAxes)
+        ? body.bAxes : null;
+      if (bAxes) {
+        /* A쪽과 같은 방어 — 생년월일 원값이 섞여 오면 여기서도 막는다 */
+        const hit = Object.keys(bAxes).find((k) => BANNED.includes(k.toLowerCase()));
+        if (hit) return res.status(400).json({ error: { message: `생년월일 원값은 안 받아 — '${hit}'` } });
+      }
+      inv.answered = { at: Date.now(), notify,
+        label: notify ? clean(body?.label, MAX_LABEL) : "",
+        axes: bAxes };
       await putInvite(id, inv);
       // B가 계산할 재료만 돌려준다. 계산은 B 기기의 match.js 가 한다(서버에 로직 복제 금지)
       return res.status(200).json({ aAxes: inv.axes, name: clean(inv.name, MAX_LABEL) });
@@ -206,7 +227,10 @@ export default async function handler(req, res) {
            처리방침 §5-2: "동의하지 않으면 … 보낸 이에게는 아무것도 전달되지 않습니다."
            서버는 소비 사실을 알지만 A에게는 안 알린다 — 그 한 비트가 곧 제3자 제공이다. */
         const shown = !!(inv.answered && inv.answered.notify);
-        out.push({ id, answered: shown, label: shown ? inv.answered.label : "", at: inv.at });
+        /* 동의한 경우에만 B의 좌표가 함께 간다. **계산은 A 기기의 match.js 가 한다** —
+           서버는 여기서도 재료만 넘긴다(B 쪽과 같은 규칙). */
+        out.push({ id, answered: shown, label: shown ? inv.answered.label : "",
+          axes: shown ? inv.answered.axes || null : null, at: inv.at });
       }
       return res.status(200).json(out);
     }
@@ -219,7 +243,6 @@ export default async function handler(req, res) {
       }
       /* ⚠ **생년월일 원값이 섞여 오는 것을 서버가 막는다.** 클라이언트만 믿으면
          어느 판에서 누가 y/m/d 를 넣어 보내고, 그 순간 처리방침 §5-2 가 거짓이 된다. */
-      const BANNED = ["y", "m", "d", "h", "min", "birth", "birthday", "ymd"];
       const hit = Object.keys(axes).find((k) => BANNED.includes(k.toLowerCase()));
       if (hit) return res.status(400).json({ error: { message: `생년월일 원값은 안 받아 — '${hit}'` } });
 

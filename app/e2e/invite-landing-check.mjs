@@ -200,7 +200,11 @@ ck("⑤ 넣었던 생년월일이 실제로 실려 있다", ys === "1987", ys);
   /* ── ⑦ B가 답한다 → A가 앱을 열면 그 자리가 사람이 된다 ─────────────── */
     const invId = await pa.evaluate(() => JSON.parse(localStorage.getItem("binari.invites.v1") || "[]")[0]);
   ck("⑦ 초대 id 는 A 기기에만 남는다", typeof invId === "string" && invId.length >= 10, String(invId).slice(0, 4) + "…");
-  const ans = await api("POST", { seg: ["answer"], body: { id: invId, notify: true }, headers: HDR });
+  /* B가 동의하고 답한다 — **좌표를 함께 보낸다.** 이게 A에게 돌아오는 초대의 대가다
+     (2026-08-28 창업자: "내가 초대했는데 내꺼에도 자동 반영이 되어야지"). */
+  const B_AXES = { dG: 7, dJ: 4, el: "금", nayin: "검봉금", sun: "황소자리", moon: "사자자리",
+    nak: 11, rashi: 1, wday: "수요일", pasa: "폰", neptu: 11, tone: 9, tsign: "이믹스", lp: 3 };
+  const ans = await api("POST", { seg: ["answer"], body: { id: invId, notify: true, bAxes: B_AXES, label: "주영" }, headers: HDR });
   ck("⑦ 받은 사람이 답할 수 있다", ans.code === 200 && !!ans.body?.aAxes, `${ans.code}`);
 
   await pa.reload({ waitUntil: "domcontentloaded" });
@@ -222,6 +226,29 @@ ck("⑤ 넣었던 생년월일이 실제로 실려 있다", ys === "1987", ys);
   /* 한 번 승격되면 그냥 밝은 상태다 — 다시 열어도 '못 본 승격'이 쌓이지 않는다(§5) */
   ck("⑦ 저장분도 승격돼 있다(다음에 열어도 다시 안 밝아진다)",
      (await pa.evaluate(() => JSON.parse(localStorage.getItem("binari.gyeot.v1") || "[]")[0]?.tier)) === "standing");
+
+  /* ── ⑧ **초대의 대가** — 자리가 채워지고 A도 둘 사이를 본다 ────────────────
+     이게 없으면 게이트("그 다음부터는 그 사람이 직접 넣어야 한다")가 막다른 길이다.
+     A는 그 사람 생년월일을 모르므로, 좌표가 안 오면 영영 사이를 못 본다. */
+  const seat = await pa.evaluate(() => JSON.parse(localStorage.getItem("binari.gyeot.v1") || "[]")
+    .find((x) => String(x.key).startsWith("inv:")) || null);
+  ck("⑧ 답이 오면 자리에 하늘이 찬다(오행·일간)", seat && seat.el === "금" && seat.dg === 7,
+     JSON.stringify(seat && { el: seat.el, dg: seat.dg }));
+  ck("⑧ 관계 좌표가 자리에 실린다 — 사이를 A 기기에서 계산한다", !!(seat && seat.ax && seat.ax.nak === 11));
+  ck("⑧ 그래도 생년월일 원값은 안 실린다",
+     !Object.keys((seat && seat.ax) || {}).some((k) => /^(y|m|d|h|min|birth)$/i.test(k)));
+  ck("⑧ A가 적어 둔 이름을 B의 이름이 덮지 않는다", seat && seat.name === "주영2" ? false : seat.name === "주영",
+     seat && seat.name);
+  const row3 = pa.locator(".gyeotlist li").filter({ has: pa.locator("input.galias") }).first();
+  ck("⑧ 하늘이 차면 역할 이름이 뜬다(「아직 답이 없어」가 아니다)",
+     !/답이 없어/.test(await row3.locator(".grel").innerText()), await row3.locator(".grel").innerText());
+  ck("⑧ 그 행에 「둘 사이」 문이 생긴다", await row3.locator("button.gsee").isVisible().catch(() => false));
+  await row3.locator("button.gsee").click();
+  await pa.waitForTimeout(1200);
+  const doc = await pa.locator(".imp").innerText().catch(() => "");
+  ck("⑧ 생년월일을 다시 묻지 않고 바로 문서가 열린다", !/누구랑 맞대 볼까/.test(doc) && doc.length > 200,
+     doc.replace(/\n/g, " ").slice(0, 60));
+  ck("⑧ 아홉 축이 실제로 서 있다", /여덟 글자|아홉/.test(doc));
   await pa.close();
 }
 

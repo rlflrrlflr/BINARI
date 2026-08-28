@@ -1552,14 +1552,21 @@ function GuardianSealMini({ saju }) {
     </div>
   );
 }
-function MatchDoc({ saju, birth, onClose, onMet }) {
+/* `pre` 가 오면 **입력 화면을 건너뛴다** — 초대에 답이 온 곁은 이미 좌표를 갖고 있어서
+   A가 그 사람 생년월일을 다시 물을 이유가 없다(애초에 A는 그걸 모른다).
+   ⚠ 그때도 계산은 **여기서** 한다 — 서버는 재료만 준다. */
+function MatchDoc({ saju, birth, onClose, onMet, pre = null }) {
   const [notesOn, setNotesOn] = useState(false);
   const [f, setF] = useState(() => { try { return JSON.parse(localStorage.getItem(MATCH_LAST_KEY) || "{}"); } catch { return {}; } });
-  const [done, setDone] = useState(false);
+  const [done, setDone] = useState(!!pre);
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const ok = /^\d{4}$/.test(String(f.y || "")) && +f.y >= 1900 && +f.y <= 2030
     && +f.m >= 1 && +f.m <= 12 && +f.d >= 1 && +f.d <= 31;
   const r = useMemo(() => {
+    if (pre?.ax && saju?.idx) {
+      try { return readMatch({ a: { saju, birth }, b: { ...pre.ax, name: pre.name || "" } }); }
+      catch (_) { return null; }
+    }
     if (!done || !ok || !saju?.idx) return null;
     try {
       const noH = !f.h && f.h !== 0;
@@ -1568,7 +1575,7 @@ function MatchDoc({ saju, birth, onClose, onMet }) {
       return readMatch({ a: { saju, birth },
         b: { saju: bs, birth: { y: +f.y, m: +f.m, d: +f.d, h: noH ? 12 : +f.h, min: 0 } } });
     } catch (e) { return null; }
-  }, [done, f.y, f.m, f.d, f.h, saju, birth]);
+  }, [done, f.y, f.m, f.d, f.h, saju, birth, pre]);
   useEffect(() => { track("match_opened", { has_saju: !!saju?.idx }); }, []);
   /* 여기가 실제 사고 경로다: 입력 검증(ok)은 통과했는데 readMatch 가 null 을 돌려주면
      화면은 **아무 말 없이 입력 폼으로 되돌아간다.** 유저 눈에는 버튼이 안 먹는 걸로 보이고
@@ -3709,7 +3716,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v154 · 부르면 답이 온다";
+const APP_VER = "v155 · 둘 사이가 돌아온다";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -4886,6 +4893,22 @@ function gyeotDrop(list, key) { return writeGyeot(list.filter((x) => x.key !== k
 /* 승격 — 「부른 곁」이 「곁」이 된다. **`at` 을 건드리지 않는다**: 정렬 키가 최근순 하나뿐이라
    여기서 시각을 갱신하면 답이 온 사람이 목록 맨 앞으로 튀어 오르고, 그 순간 목록이 **순위표**가 된다
    (v134.2 방어 ①). 승격은 밝기와 자리로만 말한다 — 줄 순서로 말하지 않는다. */
+/* 답이 온 자리를 **채운다** — 하늘(오행·일간)과 관계 좌표가 이때 처음 온다.
+   ⚠ 좌표(`ax`)를 통째로 들고 있는 이유는 **둘 사이를 A 기기에서 계산하기 위해서**다.
+     서버는 재료만 주고 계산은 `match.js` 가 한다(B 쪽과 같은 규칙 — 두 벌이 되면 갈린다).
+   ⚠ `at` 은 여기서도 안 건드린다(아래 gyeotStand 주석과 같은 이유). */
+function gyeotFill(list, key, ax, label) {
+  const next = list.map((x) => {
+    if (x.key !== key) return x;
+    const el = ax && ax.el ? ax.el : (ax && Number.isInteger(ax.dG) ? GAN_EL[ax.dG] : x.el);
+    return { ...x, tier: GY_STANDING,
+      el: el || x.el,
+      dg: ax && Number.isInteger(ax.dG) ? ax.dG : x.dg,
+      ax: ax || x.ax,
+      name: (x.name || "").trim() || String(label || "").slice(0, GYEOT_NAME_MAX) };
+  });
+  return writeGyeot(next);
+}
 function gyeotStand(list, key) {
   if (!list.some((x) => x.key === key && x.tier !== GY_STANDING)) return list;
   return writeGyeot(list.map((x) => (x.key === key ? { ...x, tier: GY_STANDING } : x)));
@@ -5412,9 +5435,13 @@ function InviteLanding({ id, onOnboard, onDismiss }) {
       if (!my?.idx) throw new Error("네 하늘을 세우지 못했어");
       const q = await fetch("/api/invite/answer", {
         method: "POST", headers: { "content-type": "application/json" },
-        /* ⚠ label 을 안 싣는다(위 주석). notify 는 **A에게 보일지**만 가른다 —
-           응답 자체는 언제나 기록된다. 그게 재공유 방어이고, 그 갈림의 사유는 api/invite 주석에 있다. */
-        body: JSON.stringify({ id, notify }),
+        /* ⚠ **동의했을 때만** 내 좌표와 이름을 싣는다(2026-08-28 창업자 결정).
+           안 싣는 게 아니라 **안 만든다** — 끄면 아래 세 줄이 통째로 안 붙는다.
+           notify 는 여전히 A에게 보일지만 가르고, 응답 자체는 언제나 기록된다(재공유 방어). */
+        body: JSON.stringify(notify
+          ? { id, notify, bAxes: matchAxes({ saju: my, birth: { y: +f.y, m: +f.m, d: +f.d, h: 12, min: 0 } }),
+              label: (f.nm || "").trim().slice(0, 12) }
+          : { id, notify }),
       });
       const d = await q.json().catch(() => null);
       if (!q.ok || !d?.aAxes) throw new Error(d?.error?.message || "둘 사이를 볼 수 없었어");
@@ -5477,14 +5504,24 @@ function InviteLanding({ id, onOnboard, onDismiss }) {
       {/* ③ 무엇이 나가는지 — 회색 각주가 아니라 **눈에 띄는 상자**로 입력 바로 아래.
           헌장 기준이 「유저가 무엇이 나가는지 보고 있는가」라, 안 보이는 채로 나가면 그건 유출이다.
           나가는 것과 **안 나가는 것**을 같이 적고, 안 나가는 쪽을 더 길게 적는다. */}
+      {/* ⚠ **문구와 실제로 나가는 것이 어긋나면 그건 동의가 아니라 기만이다.**
+          2026-08-28 에 「답했다는 사실만」에서 「둘 사이를 함께 본다」로 바뀌었고,
+          그때 이 상자와 아래 체크 문구를 **같이** 고쳤다. 한쪽만 고치지 마라. */}
       <div className="invnotice">
-        <p><b>네 생일은 이 기기에만 남아.</b> 우리 서버에 안 올라가.<br />
-          {who}에게는 {notify ? <><b>‘답했다’는 사실만</b> 전해져</> : <><b>아무것도 안 가</b></>} —
-          <span className="no"> 생일도, 이름도, 결과도 안 가.</span></p>
+        {notify ? (
+          <p><b>네 생일은 이 기기에만 남아</b> — 우리 서버에도, {who}에게도 안 가.<br />
+            {who}에게 가는 건 <b>둘 사이를 계산하는 값</b>이야. 그래야 {who}도 같은 걸 볼 수 있어.<br />
+            <span className="no">그 값으로 네 생일을 되짚을 수는 있어 — {who}에게만 그래.</span></p>
+        ) : (
+          <p><b>지금은 아무것도 안 나가.</b> 생일도, 이름도, 결과도.<br />
+            {/* ⚠ 검진 5-p 가 여기서 `{who}는` 을 잡았다 — 이름은 받침이 갈린다("주영은" / "연지는").
+                내가 만든 검사에 내가 두 번째로 걸렸다. 조사는 전부 josa() 로 계산한다. */}
+            <span className="no">{who}{josa(who, "은", "는")} 네가 열어봤는지도 몰라 — 대신 {who}{josa(who, "은", "는")} 둘 사이를 못 봐.</span></p>
+        )}
       </div>
       <label className={"invchk" + (notify ? " on" : "")}>
         <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} />
-        <span>답했다는 걸 {who}에게 알려도 될까? <em>(꺼도 결과는 그대로 봐)</em></span>
+        <span>{who}도 둘 사이를 보게 할까? <em>(꺼도 네 결과는 그대로 봐)</em></span>
       </label>
       {err && <p className="err">{err}</p>}
       <button className="btn gold" disabled={!ok || busy} onClick={submit}>{busy ? "둘 사이를 보는 중…" : ok ? "둘 사이를 볼게" : "생년월일을 채워 줘"}</button>
@@ -5637,8 +5674,14 @@ export default function App() {
             setGyeot((prev) => {
               const seat = prev.find((y) => y.inv === x.id && y.tier !== GY_STANDING);
               if (!seat) return prev;
-              track("gyeot_promoted", { wait_h: x.at ? Math.round((Date.now() - x.at) / 3600000) : null });
-              return gyeotStand(prev, seat.key);
+              track("gyeot_promoted", { wait_h: x.at ? Math.round((Date.now() - x.at) / 3600000) : null,
+                filled: !!x.axes });
+              /* ⚠ **자리를 채운다**(2026-08-28 창업자: "내가 초대했는데 내꺼에도 자동 반영이 되어야지").
+                 그 전엔 밝기만 바뀌고 오행도 일간도 안 와서, A는 초대를 보내고도 그 사람과의
+                 사이를 영영 못 봤다 — 게이트를 세워 놓고 대가가 없었다.
+                 ⚠ 이름은 **덮어쓰지 않는다.** A가 적어 둔 이름이 그 사람을 알아보는 이름이고,
+                   B가 적은 이름은 A가 비워 뒀을 때만 채운다. */
+              return gyeotFill(prev, seat.key, x.axes, x.label);
             });
           }, k * 500));
         });
@@ -5918,6 +5961,7 @@ export default function App() {
      실제로는 삼키고 있었다(브라우저로 눌러 보고 잡았다). 곁 탭이 쓸 자리를 따로 둔다. */
   const [inviteErr, setInviteErr] = useState("");
   const [gyeotAsk, setGyeotAsk] = useState("");   // 지울지 묻는 중인 곁의 key
+  const [gyeotSee, setGyeotSee] = useState(null); // 둘 사이를 펼쳐 볼 곁 {ax, name}
   /* ── 위성이 붙는 순간 (v144 · 창업자: "게임에서 아이템 뽑았을 때처럼") ──────────
      ref 로 둔다 — state 면 매 프레임 리렌더가 걸리고, 캔버스는 rAF 로 스스로 돈다(v129.4 와 같은 이유).
      {i: 슬롯번호, t0: 시작시각}. 셰이더가 1.4초에 걸쳐 0→1 로 밀고 끝나면 스스로 지운다. */
@@ -6821,6 +6865,11 @@ export default function App() {
                             그렇다고 회색 잔글씨로 두면 눌리는 줄 모른다(앞 판의 지적).
                           ⚠ **누르면 바로 안 지운다.** 이름 옆의 작은 표라 잘못 누르기 쉽고,
                             지우면 되돌릴 수 없다 — 한 번 묻는다. */}
+                      {/* 답이 와서 좌표가 찬 곁만 — 그 사람과의 사이를 여기서 연다.
+                          ⚠ **A는 그 사람 생년월일을 모른다.** 그래서 이 문이 없으면 초대의 대가가
+                            영영 안 온다(창업자 2026-08-28). 좌표는 곁에 실려 있다. */}
+                      {g.ax && <button className="gsee" title="둘 사이를 본다"
+                        onClick={() => { setGyeotSee({ ax: g.ax, name: g.name || "" }); track("match_opened", { from: "gyeot" }); }}>둘 사이</button>}
                       <button className="gx" title="이 곁을 지운다"
                         onClick={() => setGyeotAsk(g.key)}>✕</button>
                     </li>);
@@ -7311,6 +7360,14 @@ export default function App() {
           </div>
         </div>
       )}
+      {gyeotSee && (
+        <div className="readwrap">
+          <button className="escx" onClick={() => setGyeotSee(null)} aria-label="닫기">✕</button>
+          <div className="readbody">
+            <MatchDoc saju={saju} birth={birth} pre={gyeotSee} onClose={() => setGyeotSee(null)} />
+          </div>
+        </div>
+      )}
       {matchOpen && (
         <div className="readwrap">
           <button className="escx" onClick={() => setMatchOpen(false)} aria-label="닫기">✕</button>
@@ -7778,6 +7835,9 @@ const CSS = `
 @keyframes gjoinIn{from{opacity:0;transform:translateY(6px) scale(.96);filter:blur(3px)}to{opacity:1;transform:none;filter:none}}
 @media (prefers-reduced-motion:reduce){.gjoin{animation:none}}
 .gyerr{max-width:340px;margin:8px auto 0;font-size:11.5px;line-height:1.6;text-align:center}
+/* 답이 온 곁에만 뜨는 문 — ✕ 옆에 조용히 선다(v155) */
+.gsee{flex:0 0 auto;background:transparent;border:1px solid rgba(159,143,196,.34);border-radius:8px;color:#cfc4e2;font-family:sans-serif;font-size:11px;padding:4px 8px;margin-right:4px;cursor:pointer}
+.gsee:hover{border-color:rgba(245,217,139,.5);color:#ffe9ad}
 /* ── 부를 사람 이름 받기 (v147) ── */
 .gcall{width:100%;max-width:340px;margin:10px auto 0;padding:13px 14px;border:1px solid rgba(159,143,196,.26);border-radius:11px;background:rgba(20,15,38,.55);text-align:center}
 .gcall p{margin:0 0 8px;font-size:13px;color:#efe6ff}

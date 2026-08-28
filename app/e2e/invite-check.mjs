@@ -66,6 +66,12 @@ let id;
   const after = await call("GET", { seg: ["check"], query: { ids: id } });
   ck("② A가 확인하면 answered=true — 곁 승격의 유일한 입력", after.body?.[0]?.answered === true);
   ck("② 동의한 이름이 A에게 보인다", after.body?.[0]?.label === "지은");
+  /* ⚠ **이게 초대의 대가다**(2026-08-28 창업자 결정). 이 좌표가 안 오면 A는 초대를 보내고도
+     그 사람과의 사이를 못 본다 — 게이트를 세워 놓고 돌아오는 게 없는 셈이었다. */
+  ck("② 동의한 좌표가 A에게 온다 — A도 둘 사이를 볼 수 있다",
+     !!after.body?.[0]?.axes && after.body[0].axes.dG === AXES.dG, JSON.stringify(after.body?.[0]?.axes || null).slice(0, 40));
+  ck("② 그래도 생년월일 원값은 안 온다",
+     !Object.keys(after.body?.[0]?.axes || {}).some((k) => /^(y|m|d|h|min|birth)$/i.test(k)));
 }
 
 /* ── ③ 응답 1회 — 재공유 방어 (지시서 §3) ────────────────────────────────── */
@@ -86,6 +92,7 @@ let id;
   const st = await call("GET", { seg: ["check"], query: { ids: nid } });
   ck("④ A에게는 answered 가 안 보인다", st.body?.[0]?.answered === false, JSON.stringify(st.body?.[0]));
   ck("④ 이름도 안 간다", st.body?.[0]?.label === "");
+  ck("④ 좌표도 안 간다 — 동의가 진짜 갈림길이다", !st.body?.[0]?.axes, JSON.stringify(st.body?.[0]?.axes ?? null));
   /* ⚠ 지시서 두 줄이 부딪힌 자리 — 동의를 껐어도 **링크는 소비된다.**
      안 그러면 동의를 끈 사람의 링크만 계속 열려 있어 재공유 방어가 거기서만 뚫린다. */
   const again = await call("POST", { seg: ["answer"], body: { id: nid, bAxes: AXES, notify: true, label: "재사용" } });
@@ -137,7 +144,15 @@ let id;
      원인은 언제나 같다 — **주석이 금칙 문자열을 인용한다.** 인용을 못 하게 하는 건 답이 아니다
      (주석이 왜 그런지 설명하려면 인용이 필요하다). 검사 쪽에서 주석을 걷는 게 답이다. */
   const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
-  ck("⑧ B의 파생값을 저장하지 않는다", !/bAxes/.test(code), "주석 밖에서 bAxes 를 안 읽는다");
+  /* ⚠ **이 줄이 2026-08-28 에 뒤집혔다.** 예전엔 "B의 파생값을 저장하지 않는다"였고, 근거는
+     지시서 §10 이었다. 그 선을 지키면 **A가 초대를 보내고도 그 사람과의 사이를 영영 못 본다** —
+     오행도 일간도 안 오니 곁이 색도 역할도 없이 밝아지기만 한다. 창업자 결정으로 뒤집혔다.
+     **금지가 사라진 게 아니라 조건이 붙었다.** 그 조건을 여기서 문다(아래 ④가 동작으로도 문다). */
+  ck("⑧ B의 파생값은 **동의했을 때만** 담는다", /const bAxes = notify &&/.test(code));
+  ck("⑧ 동의가 없으면 담아 두고 가리는 게 아니라 **아예 안 담는다**",
+     !/inv\.answered\.axes\s*=/.test(code) && /axes: bAxes/.test(code));
+  ck("⑧ B의 좌표에도 생년월일 원값 방어가 걸린다",
+     (code.match(/BANNED\.includes/g) || []).length >= 2, `${(code.match(/BANNED\.includes/g) || []).length}곳`);
   ck("⑧ 서버가 match.js 를 안 부른다(로직 복제 금지)", !/match\.js|readMatch/.test(code));
   ck("⑧ 출처 판정을 judge.js 에서 가져온다(두 벌 금지)", /from "\.\.\/judge\.js"/.test(code));
   ck("⑧ 의존성을 안 늘린다(node 내장만)", !/^import .* from "(?!node:|\.)/m.test(code));
