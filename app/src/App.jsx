@@ -2827,9 +2827,14 @@ void main(){
   float t = u_t*u_speed;
 
   /* ── xyz — x·y 로 떠다니고 z 로 앞뒤 ─────────────────────────────────── */
-  vec2 drift = vec2(sin(t*0.23)*0.042 + sin(t*0.41+1.3)*0.016,
-                    cos(t*0.19)*0.035 + sin(t*0.33+0.6)*0.014);
-  float zc = 0.5 + 0.5*sin(t*0.147);
+  /* ⚠ **폭과 주기를 실측해서 올렸다.** 이전 값은 12초에 x 20px·y 21px·면적 18% 로
+     "움직이는 게 맞나" 소리를 들었다(창업자 2026-08-28). 주기가 23초라 사실상 정지였다.
+     주기를 8~10초대로 당기고 폭을 두 배로 — 그래야 **보고 있는 동안** 떠다니는 게 보인다.
+     ⚠ 폭을 더 키우면 헤일로가 캔버스를 넘는다(r4 최외곽 0.81 + 드리프트 0.25 = 1.06,
+        캔버스 반폭 1.175). 이 값이 상한 근처다. */
+  vec2 drift = vec2(sin(t*0.55)*0.075 + sin(t*0.93+1.3)*0.030,
+                    cos(t*0.47)*0.088 + sin(t*0.81+0.6)*0.034);
+  float zc = 0.5 + 0.5*sin(t*0.38);
   vec2  p  = (uv - drift)*2.35;
   /* ── 손끝 반응 (창업자 2026-08-28: "인터랙션 요소도 넣어줘 점 버전처럼") ──────────
      입자 버전은 손끝으로 입자를 모았다 터뜨린다. 색장엔 입자가 없으므로 **장 자체가 당겨진다** —
@@ -2840,7 +2845,7 @@ void main(){
      오라 전체가 손끝으로 옮겨가며 작아지고 진해진다. 떼면 천천히 풀린다. */
   vec2  tp = u_touch*2.35;
   float tk = clamp(u_touchAmt, 0.0, 1.0);
-  p -= tp * tk * 0.82;                       // 중심이 손끝으로 간다
+  p -= tp * tk * 0.95;                       // 중심이 손끝으로 간다 — 거의 그 자리까지
 
   /* ── 형태 — 오행마다 세로/가로 비율. 레퍼런스는 정원이 아니라 **부드러운 타원·물방울**이다 */
   /* 불꽃은 **세로로 길다**. x 를 키우면 가로가 좁아져 세로로 선다(정규화 반경이라 반대다). */
@@ -2869,7 +2874,7 @@ void main(){
      2차는 타원, **3차는 삼각형**을 만든다. 비율·일렁임·혀·물방울은 다 u_orb 에 물렸는데
      이것만 빠져 있었다 — 곁이 안 둥근 진짜 이유. 응축이 끝나면 굴곡도 0 으로 간다. */
   float sh = 1.0 + (0.085*sin(ang*2.0 + t*0.21) + 0.050*sin(ang*3.0 - t*0.17)) * (1.0 - u_orb);
-  float R  = mix(0.52, 0.42, u_orb) * mix(1.0, 0.58, tk) * mix(0.94, 1.07, zc) * (1.0 + 0.020*sin(t*0.85)) * sh;
+  float R  = mix(0.52, 0.42, u_orb) * mix(1.0, 0.44, tk) * mix(0.90, 1.12, zc) * (1.0 + 0.020*sin(t*0.85)) * sh;
 
   /* 물방울 — 위로 갈수록 좁아진다. 상하대칭 타원은 눈알이나 세포로 읽힌다.
      ⚠ **이 변형만 u_orb 에 안 물려 있어** 곁에서도 위가 좁아졌다(실측 세로/가로 0.93).
@@ -2912,7 +2917,7 @@ void main(){
      ⚠ 어긋남이 크면 코어가 화면 밖으로 밀려 **한쪽으로 쏠린 얼룩**이 된다(실기에서 그랬다).
         비대칭은 '완벽한 동심원이 아니다'를 만들 만큼만 — 지금 폭은 반경의 5~12%. */
   /* */
-  float zg = mix(0.94, 1.10, zc);
+  float zg = mix(0.90, 1.16, zc);
   /* ⚠ **층의 어긋남도 곁에서는 접는다.** 어긋남은 판결(불꽃)이 동심원=세포로 보이지 않게
      하려고 넣은 것인데, 곁은 응축된 구슬이라 동심이어야 둥글다. 남겨 두면 층 경계가
      엇갈리며 **한쪽이 각져 보인다**(실기에서 둥근 삼각형으로 읽혔다). */
@@ -2985,7 +2990,7 @@ void main(){
   float vig  = smoothstep(1.02, 0.56, length(uv)*2.0);
   float live  = mix(1.0, fl, u_wt.z);
   float bornK = 0.20 + 0.80*u_born;               // 흩어져 있을 땐 옅지만 **보이기는 해야 한다**
-  float touchK = 1.0 + tk*0.42;                   // 모이면 진해진다
+  float touchK = 1.0 + tk*0.62;                   // 모이면 진해진다
   gl_FragColor = vec4(outc, clamp(sum*u_lum*live*vig*bornK*touchK, 0.0, 1.0));
 }`;
 /* 밝은 바탕용 보정 — **원색(EL_COLOR)은 안 건드린다.** 금의 c2(#e8f2ff)는 거의 흰색이라
@@ -3102,7 +3107,7 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
           const rt = (now - reactRef.current.t0) / 1000;
           rk = Math.max(0, 1 - rt / 1.7) * Math.min(1, rt / 0.18);
         }
-        touch.amt += (touch.target - touch.amt) * (1 - Math.exp(-dt / (touch.target > touch.amt ? 0.42 : 2.0)));
+        touch.amt += (touch.target - touch.amt) * (1 - Math.exp(-dt / (touch.target > touch.amt ? 0.14 : 1.1)   /* 모임은 즉각, 풀림은 여운 */));
         gl.uniform2f(U.u_touch, touch.x, touch.y);
         gl.uniform1f(U.u_touchAmt, Math.max(touch.amt, rk * 0.7));
         gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -3730,7 +3735,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v156 · 둘 사이가 돌아온다";
+const APP_VER = "v157 · 보이는 움직임";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
