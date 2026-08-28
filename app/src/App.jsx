@@ -2825,8 +2825,12 @@ function useViewport() {
 /* ⚠ 입자 버전은 입자가 가운데 몰려 있어 캔버스가 화면보다 넓어도(vp.w*1.1) 티가 안 났다.
    **색장은 캔버스 전체를 칠하므로 그대로 두면 좌우가 잘린다**(실기 제보 2026-08-28).
    홀로에선 화면 안에 들어오게 잡는다. 불꽃이 위로 뻗으므로 세로도 여유를 둔다. */
+/* ⚠ **캔버스와 오라 크기는 다른 문제다**(창업자 2026-08-28: "까만색 버전 대비 캔버스가 작은 거 아냐?").
+   실측: 수호신 자체는 홀로가 더 크다(261x285 vs 검은 판 163x259). 작은 건 **캔버스**였다 —
+   370 vs 800 이라 오라가 캔버스의 70% 를 차지해 **떠다니고 손끝을 따라갈 여백이 없었다.**
+   캔버스를 검은 판 수준으로 넓히고 `R` 을 그만큼 줄인다 — 오라는 그대로, 여백만 는다. */
 const guardianSize = (vp) => (SKIN === "holo"
-  ? Math.min(vp.w * 0.96, vp.h * 0.46, 460)
+  ? Math.min(vp.w * 1.50, vp.h * 0.70, 660)
   : Math.min(vp.w * 1.1, vp.h * 0.57, 640));
 
 /* ── v140 A/B 스킨 — `?skin=holo` (2026-08-27 창업자 지시) ────────────────────
@@ -2988,7 +2992,7 @@ void main(){
   float sh = 1.0 + (0.085*sin(ang*2.0 + t*0.21) + 0.050*sin(ang*3.0 - t*0.17)) * (1.0 - fold);
   /* ⚠ 곁 전이가 "느리다"는 건 시간만의 문제가 아니었다 — **줄어드는 양이 19% 뿐**이라
      0.5초 안에 다 끝나도 변화가 안 보였다. 응축 폭을 키운다(면적으로는 -57%). */
-  float R  = mix(0.52, 0.34, clamp(u_orb,0.0,1.0)) * mix(1.0, 0.20, tk) * mix(0.90, 1.12, zc) * (1.0 + 0.020*sin(t*0.85)) * sh;
+  float R  = mix(0.320, 0.208, clamp(u_orb,0.0,1.0)) * mix(1.0, 0.20, tk) * mix(0.90, 1.12, zc) * (1.0 + 0.020*sin(t*0.85)) * sh;
 
   /* 물방울 — 위로 갈수록 좁아진다. 상하대칭 타원은 눈알이나 세포로 읽힌다.
      ⚠ **이 변형만 u_orb 에 안 물려 있어** 곁에서도 위가 좁아졌다(실측 세로/가로 0.93).
@@ -3202,7 +3206,11 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
       gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);   // 스트레이트 알파
       gl.clearColor(0, 0, 0, 0);
       /* ── 손끝 (인터랙션) — 캔버스 좌표를 -0.5~0.5 로 정규화해 셰이더에 넘긴다.
-         `passive:false` 로 두면 스크롤을 막는다 — 오라는 배경이므로 스크롤을 뺏으면 안 된다. */
+         ⚠ 예전 주석에 "오라는 배경이므로 스크롤을 뺏으면 안 된다"고 적어 두고 `touch-action` 을
+            안 걸었는데, **그래서 폰에서 위습을 끌면 페이지가 스크롤됐다**(창업자 실기 제보).
+            판단이 틀렸다 — 오라는 배경이 아니라 **누르는 대상**이다. 캔버스 영역에서만
+            제스처를 가져가고(캔버스는 화면 상단 일부다), 나머지 화면의 스크롤은 그대로다.
+            입자 엔진은 처음부터 그렇게 하고 있었다. */
       const touch = { x: 0, y: 0, amt: 0, target: 0 };
       /* ── 위습(wisp) — **좌표를 통째로 옮기지 않는다** ────────────────────────
          창업자 지적(2026-08-28): "그냥 통채로 딸려오는 느낌이야."
@@ -3223,12 +3231,18 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
         touch.x = (src.clientX - r.left) / r.width - 0.5;
         touch.y = 0.5 - (src.clientY - r.top) / r.height;
       };
-      const on = (e) => { at(e); touch.target = 1; wisp.ex = Math.min(1.6, wisp.ex + 0.5); };
+      const on = (e) => {
+        at(e); touch.target = 1; wisp.ex = Math.min(1.6, wisp.ex + 0.5);
+        /* 캔버스 밖으로 끌어도 계속 따라오게 — 없으면 가장자리에서 뚝 끊긴다 */
+        try { cv.setPointerCapture(e.pointerId); } catch (_) {}
+      };
+      const move = (e) => { if (touch.target > 0.5) at(e); };
       const off = () => { touch.target = 0; };
-      cv.addEventListener("pointerdown", on, { passive: true });
-      cv.addEventListener("pointermove", (e) => { if (touch.target > 0.5) at(e); }, { passive: true });
-      cv.addEventListener("pointerup", off, { passive: true });
-      cv.addEventListener("pointerleave", off, { passive: true });
+      cv.addEventListener("pointerdown", on);
+      cv.addEventListener("pointermove", move);
+      cv.addEventListener("pointerup", off);
+      cv.addEventListener("pointercancel", off);
+      cv.addEventListener("pointerleave", off);
 
       /* ── 응축 = **푸딩** (창업자 2026-08-28: "가운데로 모였다가 다시 퍼지는 느낌,
          말랑하고 귀여운 푸딩같은 느낌") ─────────────────────────────────────────
@@ -3302,7 +3316,9 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
       return () => {
         cancelAnimationFrame(raf);
         cv.removeEventListener("pointerdown", on);
+        cv.removeEventListener("pointermove", move);
         cv.removeEventListener("pointerup", off);
+        cv.removeEventListener("pointercancel", off);
         cv.removeEventListener("pointerleave", off);
       };
     } catch (e) {
@@ -3313,7 +3329,10 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
     return () => { if (raf) cancelAnimationFrame(raf); dead = true;
       try { const e = gl && gl.getExtension("WEBGL_lose_context"); e && e.loseContext(); } catch (_) {} };
   }, [saju, mood, size, scatter]);
-  return <canvas ref={ref} className="gcv" style={{ width: size, height: size }} aria-hidden="true" />;
+  /* ⚠ `touchAction:"none"` 이 없으면 **폰에서 드래그가 스크롤로 새어 나간다**(실기 제보 2026-08-28).
+     입자 엔진(GuardianCanvasGL)은 처음부터 이걸 걸고 있었는데 색장에만 빠져 있었다. */
+  return <canvas ref={ref} className="gcv" aria-hidden="true"
+    style={{ width: size, height: size, touchAction: "none", cursor: "pointer" }} />;
 }
 
 function GuardianCanvasGL({ saju, zo, num, moon, birth, agitateRef, reactRef, restRef, broodRef, orbRef, gyeotRef, popRef, mood, size = 340, onFail }) {
@@ -3921,7 +3940,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v162 · 같은 문서를 본다";
+const APP_VER = "v164 · 같은 문서를 본다";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -6807,7 +6826,7 @@ export default function App() {
               먼지 오브 대신 **아직 흩어진 오라**를 띄우고, 칸을 채워 갈수록 조금씩 모이게 한다 —
               "흩어져 있던 조각들이 너를 향해 모이고 있어" 라는 서사를 화면이 같이 말한다. */}
           <div className="orb">{SKIN === "holo"
-            ? <Guardian scatter={0.34 + bstep * 0.13} size={Math.min(vp.w * 0.62, 240)} />
+            ? <Guardian scatter={0.34 + bstep * 0.13} size={Math.min(vp.w * 0.99, 383)} />
             : <DustOrb size={170} stage={0} />}</div>
           {adEntry && <p className="adhook">망설이는 일에 <b>판결</b>을 내려주는 곳이야 — 가라 · 멈춰라 · 기다려라, 셋 중 하나로.</p>}
           <p className="line">…불렀어?</p>
@@ -6939,7 +6958,7 @@ export default function App() {
                 (실기 재확인 2026-08-28). 여기는 사주가 이미 나온 뒤라 **제 오행 색**으로 뜨고,
                 기억이 돌아오는 중이므로 아직 다 안 모인 상태(0.62)로 둔다. */}
             {SKIN === "holo"
-              ? <Guardian saju={saju} scatter={recallSeen ? 0.78 : 0.62} size={Math.min(vp.w * 0.66, 260)} />
+              ? <Guardian saju={saju} scatter={recallSeen ? 0.78 : 0.62} size={Math.min(vp.w * 1.05, 415)} />
               : <DustOrb size={210} stage={recallSeen ? 3 : 1} tint={saju ? EL_COLOR[saju.main] : undefined} />}
             <div className="gtext">
               {reveal >= 5 && <p className="gname fade">기억이 다 돌아왔어</p>}

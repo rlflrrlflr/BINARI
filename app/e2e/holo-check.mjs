@@ -124,6 +124,44 @@ const dx = Math.round(span("x") * 393), dy = Math.round(span("y") * 393);
 const dz = Math.round(span("area") / Math.min(...rec.map((r) => r.area)) * 100);
 ck("⑪ x·y 로 떠다닌다(9초 안에)", dx + dy > 45, `x ${dx}px + y ${dy}px`);
 ck("⑪ z(앞뒤)로 커졌다 작아진다", dz > 25, `면적 변화 ${dz}%`);
+
+/* ── ⑫ 폰에서 **드래그를 브라우저에 뺏기지 않는가** ──────────────────────
+   창업자 실기 제보: "폰에서 왜 잡아서 드래그하려면 스크롤이 되지?"
+   원인은 캔버스에 `touch-action:none` 이 없어 브라우저가 그 제스처를 스크롤로 가져간 것.
+   ⚠ **스크롤 위치로는 검증이 안 된다** — 로비는 스크롤이 없어서 늘 0 이다.
+      대신 **위습이 손끝을 끝까지 따라왔는가**로 잰다. 제스처를 뺏기면 pointermove 가
+      중간에 끊겨 위습이 목표에 못 간다(실측 0.42 vs 0.25). */
+const tctx = await b.newContext({ viewport: { width: 393, height: 852 }, hasTouch: true, isMobile: true });
+const tp = await tctx.newPage();
+await tp.goto(BASE + "/?skin=holo"); await tp.waitForTimeout(1000);
+/* 온보딩을 통과한 상태를 그대로 쓰려면 저장소를 옮겨 심는다 */
+const store = await page.evaluate(() => JSON.stringify(localStorage));
+await tp.evaluate((j) => { const o = JSON.parse(j); for (const k in o) localStorage.setItem(k, o[k]); }, store);
+await tp.goto(BASE + "/?skin=holo"); await tp.waitForTimeout(2600);
+const tbox = await tp.evaluate(() => { const r = document.querySelector("canvas").getBoundingClientRect();
+  return { l: r.left, t: r.top, w: r.width, h: r.height }; });
+const wy = () => tp.evaluate(() => {
+  const c = document.querySelector("canvas"), g = c.getContext("webgl");
+  const W = c.width, H = c.height, a = new Uint8Array(4 * W * H);
+  g.readPixels(0, 0, W, H, g.RGBA, g.UNSIGNED_BYTE, a);
+  let sy = 0, sw = 0;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const v = a[4 * (y * W + x) + 3];
+    if (v > 170) { sy += y * v; sw += v; } }
+  return sw ? sy / sw / H : null;
+});
+const cdp = await tctx.newCDPSession(tp);
+const cx = tbox.l + tbox.w * 0.5, y0 = tbox.t + tbox.h * 0.30, y1 = tbox.t + tbox.h * 0.78;
+await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: cx, y: y0 }] });
+for (let i = 1; i <= 8; i++) {
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: cx, y: y0 + (y1 - y0) * i / 8 }] });
+  await tp.waitForTimeout(50);
+}
+const got = await wy();
+await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+await tctx.close();
+/* 목표는 캔버스 아래쪽(정규화 0.22). 0.32 보다 위에 있으면 중간에 끊긴 것이다. */
+ck("⑫ 폰 드래그를 스크롤에 안 뺏긴다", got !== null && got < 0.32,
+   got === null ? "위습 못 찾음" : `위습 y ${got.toFixed(3)} (목표 0.22, 0.32 미만이어야)`);
 await b.close();
 
 const pass = R.filter(Boolean).length;
