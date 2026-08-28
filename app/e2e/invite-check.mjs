@@ -40,6 +40,16 @@ let id;
   const before = await call("GET", { query: { ids: id } });
   ck("② 답이 오기 전엔 answered=false", before.body?.[0]?.answered === false);
 
+  /* ── 엿보기 (v147) — B의 첫 화면 「○○이 너와의 사이를 궁금해했어」가 이것 없이는 못 선다.
+     ⚠ **소비하지 않는다.** 여기서 소비하면 화면을 여는 것만으로 초대가 닫혀
+       B가 생일을 넣기도 전에 끝난다. 아래 ⑦이 그걸 못 박는다. */
+  const peek = await call("GET", { seg: [id] });
+  ck("② 링크를 열면 부른 사람의 이름을 준다", peek.code === 200 && peek.body?.name === "민수", `${peek.code}`);
+  ck("② 엿보기는 좌표를 안 준다 — 답한 사람만 받는다", !peek.body?.aAxes && !peek.body?.axes,
+     Object.keys(peek.body || {}).join(","));
+  const stillOpen = await call("GET", { query: { ids: id } });
+  ck("② 엿보기는 초대를 소비하지 않는다", stillOpen.body?.[0]?.answered === false);
+
   const a = await call("POST", { seg: ["answer"], body: { id, bAxes: AXES, notify: true, label: "지은" } });
   ck("② B가 답하면 A의 axes 를 받는다", a.code === 200 && a.body?.aAxes?.dG === 2, `${a.code}`);
   ck("② B가 A의 이름도 받는다(누가 불렀는지 한 줄)", a.body?.name === "민수");
@@ -145,5 +155,24 @@ let id;
 }
 
 const f = R.filter((x) => !x).length;
+/* ── ⑦ 엿보기의 경계 — 여기가 새어도 화면은 멀쩡하다 ─────────────────────── */
+{
+  _resetMem();
+  const gone = await call("GET", { seg: ["없는초대"] });
+  ck("⑦ 없는 초대를 엿보면 404 — 있는 척하지 않는다", gone.code === 404, `${gone.code}`);
+
+  const c = await call("POST", { body: { axes: AXES, name: "연지" } });
+  const iid = c.body.id;
+  await call("POST", { seg: ["answer"], body: { id: iid, notify: false } });
+  const closed = await call("GET", { seg: [iid] });
+  /* 답이 온 초대는 **열리는 척부터 안 한다.** 여기서 200 을 주면 두 번째 사람이 생일을 다 넣고
+     제출 단계에서야 410 을 만난다 — 값을 받아 놓고 거절하는 건 제일 나쁜 순서다. */
+  ck("⑦ 이미 답이 온 초대는 엿보기도 410", closed.code === 410, `${closed.code}`);
+
+  const c2 = await call("POST", { body: { axes: AXES, name: "주영" } });
+  const other = await call("GET", { seg: [c2.body.id], origin: "https://evil.example" });
+  ck("⑦ 다른 출처에서는 엿보지도 못한다", other.code === 403, `${other.code}`);
+}
+
 console.log(`\n=== 초대와 회신: ${R.length - f}/${R.length} PASS ===`);
 if (f) process.exit(1);

@@ -17,6 +17,8 @@
        받아서 버린다 — 인터페이스는 맞추되 **쓰지도 남기지도 않는다.**
        (여기 저장을 추가하려면 §5-2 표와 privacy-check 를 먼저 고쳐야 한다.)
 
+   경로 넷 + 엿보기 하나: 생성(POST /) · 엿보기(GET /:id) · 응답(POST /answer) · 조회(GET ?ids=) · 취소(DELETE /:id)
+
    계산은 **B 기기에서** `match.js` 로 한다. 서버는 A의 axes 를 돌려줄 뿐이다.
    서버에 로직을 복제하면 같은 두 사람을 두고 화면마다 다른 말을 하게 된다 —
    이 리포가 반복해서 겪은 사고가 정확히 그것이다.
@@ -136,6 +138,20 @@ export default async function handler(req, res) {
       if (!id) return res.status(400).json({ error: { message: "초대가 없어" } });
       await delInvite(id);
       return res.status(200).json({ ok: true });
+    }
+
+    /* ── 엿보기: B가 링크를 열었다 (v147) ─────────────────────────────────
+       **소비하지 않는다.** 돌려주는 건 A가 적어둔 표시용 이름 하나뿐 —
+       화면 첫 줄("○○이 너와의 사이를 궁금해했어")이 그것 없이는 못 선다.
+       ⚠ 좌표(axes)는 여기서 안 준다. 그건 응답한 사람만 받는다 —
+         안 그러면 링크를 쥔 누구나 A의 좌표를 조용히 긁어 갈 수 있다.
+       ⚠ 소비를 안 하므로 **재공유 방어는 그대로다**(응답은 여전히 1회).
+         이미 답이 온 초대는 여기서도 410 으로 닫는다 — 열리는 척부터 하지 않는다. */
+    if (req.method === "GET" && seg[0] && !req.query?.ids) {
+      const inv = await getInvite(clean(seg[0], 64));
+      if (!inv) return res.status(404).json({ error: { message: "만료됐거나 없는 초대야" } });
+      if (inv.answered) return res.status(410).json({ error: { message: "이미 답이 온 초대야" } });
+      return res.status(200).json({ ok: true, name: clean(inv.name, MAX_LABEL) });
     }
 
     // ── 조회: A가 앱을 열 때. 곁 승격의 유일한 입력 ────────────────────────

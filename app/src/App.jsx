@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { readImprint } from "./lib/imprint.js";
-import { readMatch, roleOf, ROLE } from "./lib/match.js";
+import { readMatch, matchAxes, roleOf, ROLE } from "./lib/match.js";
 /* 오라 스펙 — 레퍼런스를 값으로 적은 단일 진실 원천. 셰이더 상수를 코드에 안 박는다.
    시제품 보드(tools/build-holo-field.mjs)도 **같은 파일**을 읽는다 — 보드와 앱이 어긋날 수 없다. */
 import AURA from "./lib/aura-spec.json";
@@ -2349,7 +2349,7 @@ uniform float u_gyN,u_gyTake,u_gyLum,u_gyBack;   // v134 곁
    ⚠ 곁탭IA §4 「앞줄은 셋까지」를 **창업자가 뒤집은 것**이다(개수 표기 금지 때와 같은 성격).
      상한 8은 성능·유니폼 한도이지 설계상의 수가 아니다.
    ⚠ 배열 인덱싱은 **상수 루프 + 상수 첨자**로 한다. 동적 첨자는 기기마다 지원이 갈린다. */
-uniform vec3 u_gcs[8]; uniform float u_grs[8], u_gas[8];
+uniform vec3 u_gcs[8]; uniform float u_grs[8], u_gas[8], u_gts[8];
 uniform float u_gpop, u_gpopi;   // 새로 붙는 위성 — 진행도(0~1)와 그 자리 번호
 uniform vec4 u_trail[10];
 varying float v_a; varying float v_pick; varying float v_star;
@@ -2617,19 +2617,27 @@ void main(){
      덤으로 탭 전환이 의미를 얻는다 — 응축하면서 곁이 함께 떠오른다. */
   if(u_gyN>0.5 && u_orb>0.02 && halo>0.5 && (a_r1.y-0.84)/0.16 < u_gyTake){
     float gi = floor(fract(a_r1.x*137.0)*u_gyN);
-    vec3  gcol=u_gcs[0]; float grel=u_grs[0], gang=u_gas[0];
-    for(int k=1;k<8;k++){ if(float(k)==gi){ gcol=u_gcs[k]; grel=u_grs[k]; gang=u_gas[k]; } }
+    vec3  gcol=u_gcs[0]; float grel=u_grs[0], gang=u_gas[0], gt=u_gts[0];
+    for(int k=1;k<8;k++){ if(float(k)==gi){ gcol=u_gcs[k]; grel=u_grs[k]; gang=u_gas[k]; gt=u_gts[k]; } }
     float gdir  = grel<-0.5 ? -1.0 : 1.0;                       // 극이면 반대로 돈다
     float gbase = gang + gdir*u_t*0.23;
     float gtail = fract(a_r0.z*3.1+a_r1.w*2.7);
-    float ga    = gbase - gdir*gtail*0.5;
+    /* ── 승격 — 기척이 사람이 된다 (v147 · 작업지시_초대와회신 §5 D-2) ──────────
+       **밝기만으로는 안 보인다.** 가산 블렌딩에서 0.45→1.0 은 생각보다 안 띈다.
+       그래서 축 셋을 같이 움직인다 — 밝기·자리(궤도)·꼬리. 셋이 같이 가야
+       "밝아졌다"가 아니라 **"가까이 왔다"** 로 읽힌다.
+       gt 는 0(부른 곁) ~ 1(곁) 사이를 **프레임마다 따라가는** 값이다(⚠ 셰이더 문자열 안에서는
+       백틱을 쓰지 마라 — 템플릿 리터럴이 거기서 끊긴다. 이 줄을 쓰다 실제로 끊어 먹었다). tier 를 갈아끼우면
+       한 프레임에 튀어서 그건 전환이 아니라 교체가 된다(v133 교훈: 끊기면 교체, 이어지면 자세). */
+    float ga    = gbase - gdir*gtail*mix(0.95, 0.5, gt);          // 꼬리 — 길고 흐림 → 짧고 또렷
     /* ── 새로 붙는 위성 (v144) ────────────────────────────────────────────
        뽑기의 만족감은 **기다림 → 튀어나옴 → 자리잡음** 셋이 다 있어야 생긴다.
        중심에서 솟아 궤도로 밀려 나가고(반지름), 나오는 순간 밝게 탄다(밝기).
        ⚠ 다른 위성은 안 건드린다 — 하나가 오는 사건이지 전체가 다시 그려지는 게 아니다. */
     float isNew = (u_gpop < 0.999 && abs(gi - u_gpopi) < 0.5) ? 1.0 : 0.0;
     float pe    = 1.0 - pow(1.0 - u_gpop, 3.0);                  // 빠르게 나가 천천히 앉는다
-    float grad  = mix(0.46, mix(0.06, 0.46*1.14, pe), isNew);    // 살짝 지나쳤다 돌아온다
+    float gset  = mix(0.46*1.18, 0.46, gt);                      // 자리 — 바깥 → 앞줄
+    float grad  = mix(gset, mix(0.06, gset*1.14, pe), isNew);    // 살짝 지나쳤다 돌아온다
     vec2  gorb  = grel<-0.5 ? vec2(cos(ga)*0.60, sin(ga))*grad   // 극 — 가로지르는 궤도면
                             : vec2(cos(ga), sin(ga)*0.60)*grad;
     float gj = a_r0.x*6.2832, gjr = pow(a_r0.y,1.6)*(0.030+0.035*gtail);
@@ -2645,7 +2653,7 @@ void main(){
     /* 궤도 중심은 본체를 따라간다. 응축하면 행성이 부유를 안 하므로 중심도 0 으로 수렴한다. */
     vec2 gctr = vec2(sin(t*0.11+1.3)*0.11, sin(t*0.17)*0.07+0.012*u_breath)*(1.0-ta)*smoothstep(0.0,3.5,u_t);
     spos  = mix(gctr, vec2(0.0), u_orb) + gp;
-    v_gc  = gcol; v_gon = 1.0;
+    v_gc  = gcol*mix(0.45, 1.0, gt); v_gon = 1.0;             // 밝기 — 셋 중 하나일 뿐이다
     float popGlow = isNew * (1.0 - u_gpop) * (1.0 - u_gpop) * 5.0;   // 나오는 순간만 탄다
     orbK  = gA*(0.45+u_gyLum*4.0+popGlow)*smoothstep(0.05,0.55,u_orb);
     orbPS = 1.15;
@@ -3035,6 +3043,7 @@ function GuardianCanvasGL({ saju, zo, num, moon, birth, agitateRef, reactRef, re
       L.u_gcs = gl.getUniformLocation(prog, "u_gcs[0]");
       L.u_grs = gl.getUniformLocation(prog, "u_grs[0]");
       L.u_gas = gl.getUniformLocation(prog, "u_gas[0]");
+      L.u_gts = gl.getUniformLocation(prog, "u_gts[0]");
       gl.uniform1f(L.u_form, FORM_I[saju.main] ?? 4);
       const R0 = 0.8 * (E ? 1.0 : 0.9);
       gl.uniform1f(L.u_R, R0);
@@ -3074,6 +3083,7 @@ function GuardianCanvasGL({ saju, zo, num, moon, birth, agitateRef, reactRef, re
       gl.uniform1f(L.u_breath, 0); gl.uniform1f(L.u_trailLive, 0); gl.uniform1f(L.u_zodiac, saju.yJ ?? 0);
       gl.uniform3fv(L.u_wispCol, [0.50 + c1[0] * 0.28, 0.55 + c1[1] * 0.26, 0.66 + c1[2] * 0.20]); // 달빛 은백(#D8E0EA 톤, LED 백색 방지)
       const gcs = new Float32Array(GY_SLOTS * 3), grs = new Float32Array(GY_SLOTS), gas = new Float32Array(GY_SLOTS);
+      const gts = new Float32Array(GY_SLOTS), gtMap = new Map();   // 승격 보간 — key 별 현재값
       const trailArr = new Float32Array(40); let trailHead = 0, lastDrop = 0;  // v64 궤적 링버퍼 10점
       gl.uniform4fv(L.u_trail, trailArr);
       gl.disable(gl.DEPTH_TEST);
@@ -3117,12 +3127,24 @@ function GuardianCanvasGL({ saju, zo, num, moon, birth, agitateRef, reactRef, re
         gl.uniform1f(L.u_gyLum, sh.per);
         gl.uniform1f(L.u_gyBack, sh.back);
         /* 슬롯 배열을 한 번에 넘긴다 — 빈 자리는 0 이라 셰이더가 안 그린다(u_gyN 이 잘라 준다) */
+        /* 승격 보간 — **사람(key)마다** 값을 들고 간다. 슬롯 번호로 들면 곁이 하나 늘어
+           자리가 밀리는 순간 남의 전이를 이어받아 엉뚱한 위성이 밝아진다. */
+        const K = 1 - Math.exp(-dt / 0.75);                       // 2.2초쯤에 도착하는 ease-out
         for (let i = 0; i < GY_SLOTS; i++) {
           const g = gy[i];
           gcs[i * 3] = g ? g.col[0] : 0; gcs[i * 3 + 1] = g ? g.col[1] : 0; gcs[i * 3 + 2] = g ? g.col[2] : 0;
           grs[i] = g ? g.rel : 0; gas[i] = g ? g.ang : 0;
+          if (!g) { gts[i] = 0; continue; }
+          const want = g.tier;
+          /* 처음 보는 사람은 **제 상태에서 시작**한다 — 앱을 열 때마다 이미 곁인 사람이
+             다시 밝아지면 그건 사건이 아니라 인트로가 된다(§5 "놓친 것 만들기 금지"). */
+          let cur = gtMap.has(g.key) ? gtMap.get(g.key) : want;
+          cur += (want - cur) * K;
+          if (Math.abs(want - cur) < 0.001) cur = want;
+          gtMap.set(g.key, cur); gts[i] = cur;
         }
         gl.uniform3fv(L.u_gcs, gcs); gl.uniform1fv(L.u_grs, grs); gl.uniform1fv(L.u_gas, gas);
+        gl.uniform1fv(L.u_gts, gts);
         /* 새 위성 등장 — popRef 가 {i, t0} 을 주면 1.4초에 걸쳐 0→1 로 민다 */
         const pop = popRef && popRef.current;
         const pt = pop ? Math.min(1, (now - pop.t0) / 1400) : 1;
@@ -3554,7 +3576,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v147 · 위성이 붙는다";
+const APP_VER = "v148 · 부르면 답이 온다";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -4660,7 +4682,10 @@ function readGyeot() {
     /* v134.2 는 층을 한글("곁"/"대기")로 저장했다. 읽을 때 한 번만 옮긴다 —
        안 옮기면 그때 곁을 들인 사람은 전원이 `standing` 도 `called` 도 아닌 값이 되어
        **밝기 판정이 조용히 뒤집힌다**(화면은 멀쩡하고 흐림만 사라진다). */
-    return a.filter((x) => x && x.key && x.el)
+    /* ⚠ **`x.el` 을 필수로 두지 않는다(v147).** 부르기만 한 곁은 하늘이 없다 —
+       초대에 답이 와야 사람이 되고, 그 전까지 우리는 그 사람의 오행을 모른다(§10).
+       예전 조건이면 부른 곁이 **다음 새로고침에 통째로 사라졌다.** */
+    return a.filter((x) => x && x.key)
       /* alias → name 승계. v134.2~4 는 「유저가 붙이는 별칭」이라 alias 였는데,
          2026-08-17부터 **상대의 이름**을 받는다. 뜻이 달라졌으므로 이름도 바꿔 둔다 —
          같은 칸에 다른 뜻을 담아 두면 다음 사람이 개인정보 등급을 잘못 읽는다. */
@@ -4678,29 +4703,37 @@ function writeGyeot(list) {
 /* 들이기 — 같은 지문이면 새로 세우지 않고 **마지막으로 주고받은 때만** 갱신한다.
    같은 사람을 두 번 세면 명부가 곧 "몇 번 돌렸나" 카운터가 된다. */
 function gyeotAdd(list, e, now) {
-  if (!e || !e.key || !e.el) return list;
+  if (!e || !e.key) return list;
   const t = now || Date.now();
   const i = list.findIndex((x) => x.key === e.key);
   if (i >= 0) {
     const next = list.slice();
     /* 이름은 **덮어쓰지 않는다** — 두 번째 궁합에서 칸을 비워 두면 먼저 적은 이름이 지워진다.
        새로 적었을 때만 바뀐다. 지우고 싶으면 목록에서 직접 비우면 된다. */
-    next[i] = { ...next[i], el: e.el, at: t,
+    next[i] = { ...next[i], at: t,
+      el: e.el || next[i].el,                        // 하늘을 모르는 채로 덮어쓰지 않는다
       dg: Number.isInteger(e.dg) ? e.dg : next[i].dg,
+      inv: e.inv || next[i].inv,
       name: e.name ? String(e.name).slice(0, GYEOT_NAME_MAX) : next[i].name };
     return writeGyeot(next);
   }
-  return writeGyeot([{ key: e.key, el: e.el, dg: Number.isInteger(e.dg) ? e.dg : null,
-    name: String(e.name || "").slice(0, GYEOT_NAME_MAX), tier: e.tier === GY_STANDING ? GY_STANDING : GY_CALLED, at: t }, ...list]);
+  return writeGyeot([{ key: e.key, el: e.el || null, dg: Number.isInteger(e.dg) ? e.dg : null,
+    name: String(e.name || "").slice(0, GYEOT_NAME_MAX), tier: e.tier === GY_STANDING ? GY_STANDING : GY_CALLED,
+    at: t, ...(e.inv ? { inv: e.inv } : {}) }, ...list]);
 }
 /* 초대에 실어 보낼 **내 파생값**. 서버·상대에게 나가는 유일한 묶음이다.
    ⚠ 생년월일 원값(y·m·d·h)을 **절대 넣지 마라** — 서버도 막지만(400), 막히기 전에 안 담는 게 먼저다.
      여기 값이 늘면 처리방침 §5-2 「저장하는 것」도 같이 늘려야 한다(privacy-check 가 문장을 물고 있다).
    ⚠ 지금은 **관계 계산에 필요한 최소치**다. 상대 기기가 이걸로 사이를 계산한다(계산은 B 기기 몫). */
-function gyeotAxesOfMe(saju) {
-  const i = saju?.idx;
-  if (!i || !Number.isInteger(i.dG)) return null;
-  return { dG: i.dG, dJ: i.dJ, el: saju.main || null, nayin: saju.nayin || null };
+/* 초대에 실어 보낼 **내 관계 좌표**. 엔진이 쓰는 값을 `match.js` 한 곳에서 뽑는다 —
+   여기서 따로 추리면 두 벌이 되고, 두 벌이 되면 갈린다(이 리포가 반복해서 겪은 사고).
+   ⚠ v147 이전엔 넷(dG·dJ·el·nayin)뿐이었다. 그걸로는 받은 사람이 **아홉 축 중 넷밖에 못 세운다** —
+     나머지는 보낸 사람의 생년월일이 있어야 계산됐다. 좌표를 넓히는 대신
+     생년월일은 그대로 안 보낸다(`matchAxes` 주석 참조). */
+function gyeotAxesOfMe(saju, birth) {
+  const ax = matchAxes({ saju, birth });
+  if (!ax) return null;
+  return { ...ax, el: saju.main || null };      // el 은 궤도 색 — 엔진이 아니라 그림이 쓴다
 }
 /* 내가 보낸 초대의 id 목록 — **A 기기에만** 남는다. 답이 왔는지 확인할 때(GET ?ids=) 쓰는 유일한 열쇠다.
    ⚠ 곁 명부와 **따로 둔다.** 초대는 아직 곁이 아니다 — 답이 와야 사람이 선다.
@@ -4717,6 +4750,13 @@ function gyeotPushInvite(id) {
   return next;
 }
 function gyeotDrop(list, key) { return writeGyeot(list.filter((x) => x.key !== key)); }
+/* 승격 — 「부른 곁」이 「곁」이 된다. **`at` 을 건드리지 않는다**: 정렬 키가 최근순 하나뿐이라
+   여기서 시각을 갱신하면 답이 온 사람이 목록 맨 앞으로 튀어 오르고, 그 순간 목록이 **순위표**가 된다
+   (v134.2 방어 ①). 승격은 밝기와 자리로만 말한다 — 줄 순서로 말하지 않는다. */
+function gyeotStand(list, key) {
+  if (!list.some((x) => x.key === key && x.tier !== GY_STANDING)) return list;
+  return writeGyeot(list.map((x) => (x.key === key ? { ...x, tier: GY_STANDING } : x)));
+}
 /* 이름을 고쳐 적는다. 목록에서 직접 비우면 이름 없는 곁이 된다(그래도 자리는 남는다). */
 function gyeotSetName(list, key, name) {
   return writeGyeot(list.map((x) => (x.key === key ? { ...x, name: String(name || "").slice(0, GYEOT_NAME_MAX) } : x)));
@@ -4747,7 +4787,13 @@ function gyeotSummary(list, myDG) {
   let unread = 0;
   for (const x of list) {
     const r = Number.isInteger(x.dg) && Number.isInteger(myDG) ? roleOf(myDG, x.dg) : null;
-    if (!r) { unread++; continue; }          // v134 이전에 든 곁은 일간을 안 들고 있다 — 세지 않고 따로 알린다
+    /* ⚠ **부른 곁(하늘을 모르는 자리)은 「못 읽었다」가 아니다.** v147 전에는 자리를 못 읽는 경우가
+       하나뿐이라(v134 이전에 든 곁) 안내문이 "궁합을 다시 보면 읽혀"였는데, 초대로 든 자리에는
+       그 말이 **틀리다** — 그 사람은 궁합을 다시 볼 대상이 아니라 아직 답을 안 한 사람이고,
+       답이 와도 우리는 그 사람의 일간을 받지 않는다(§10 「B의 값을 A에게 보내기 — 안 한다」).
+       그래서 세지 않고 넘긴다. 그 자리의 상태는 목록 행이 제 말로 말한다("부르는 중 — 아직 답이 없어").
+       (검사가 잡았다: 안 거르면 저 안내문이 **항상** 떠서 틀린 길을 가리킨다) */
+    if (!r) { if (x.el) unread++; continue; }
     if (!g.has(r.ss)) g.set(r.ss, { ss: r.ss, label: r.name, use: r.use, people: [] });
     g.get(r.ss).people.push(x);
   }
@@ -4806,11 +4852,19 @@ function gyeotFillNames(text, list) {
    `대기` 층은 색을 죽여 흐리게 세운다. 셰이더는 손대지 않는다(u_gc 가 이미 밝기를 나르는 vec3다). */
 function gyeotView(list, myMain) {
   const seat = gyeotSeat(list);
-  return list.map((g) => {
-    const base = hex2rgb((EL_COLOR[g.el] || EL_COLOR.토)[1]);
-    const dim = g.tier === GY_STANDING ? 1 : 0.45;
-    return { rel: gyeotRel(myMain, g.el), ang: seat.get(g.key) || 0, col: base.map((c) => c * dim) };
-  });
+  /* ⚠ **여기서 흐리게 만들지 않는다.** v146 까지는 색에 0.45 를 곱해 넘겼는데, 그러면 승격이
+     **한 프레임 만에** 끝나 전이가 안 생긴다(§5 D-2). 층은 `tier` 로만 넘기고 밝기·자리·꼬리는
+     셰이더가 프레임마다 따라간다. 여기 dim 을 되살리면 곱이 두 번 걸려 곁이 어두워진다. */
+  return list.map((g) => ({
+    key: g.key,
+    rel: gyeotRel(myMain, g.el),
+    ang: seat.get(g.key) || 0,
+    /* ⚠ 하늘을 모르는 곁(부르기만 한 사람)에게 **오행 색을 지어 주지 않는다.**
+       예전 폴백은 `EL_COLOR.토` 였는데, 그건 "이 사람은 흙이다"라고 말하는 것과 같다.
+       모르는 건 모르는 색(무채)으로 둔다 — 답이 오면 그때 하늘이 생긴다. */
+    col: hex2rgb(g.el ? (EL_COLOR[g.el] || EL_COLOR.토)[1] : "#cfc4e2"),
+    tier: g.tier === GY_STANDING ? 1 : 0,
+  }));
 }
 
 function loadMemory() {
@@ -5151,6 +5205,162 @@ function anon(t, name) {
   return s.replace(/[ \t]{2,}/g, " ").trim();
 }
 
+/* ═══════════════ 초대 랜딩 — 링크를 받은 사람이 처음 보는 화면 ═══════════════
+   작업지시_초대와회신_2026-08-26 §4 · 시안 app/public/invite-mock.html (D-1)
+
+   **이 화면이 우리 제품의 첫인상이 된다.** 지금까지 링크로 들어온 사람은 판결 카드를 봤는데
+   앞으로는 여기가 처음이다. 그리고 이 화면이 곧 **공유 유입 온보딩 축약**이다 —
+   현행은 장면 10·탭 10 에 완주율 40%(합격선 50)이고, 여기는 **장면 2·탭 4** 다.
+
+   지키는 것 (시안이 정하고 지시서가 못 박은 것):
+   ① 화면은 **둘**이다(입력 → 결과). 결과 안에 「네 수호신도 만들어볼래?」가 들어간다 —
+      세 번째 화면을 만들지 않는다. 여세를 끊지 않는 게 이 문의 전부다.
+   ② `readMatch({a: B, b: A})` — **B가 a 자리**다. 자기 쪽에서 본 사이를 읽는다.
+      (일간 십성은 방향이 있어서 누구 쪽에서 읽느냐로 답이 갈린다)
+   ③ **동의를 결과의 대가로 안 건다.** 꺼도 결과는 전부 보인다 —
+      대가로 걸면 그건 동의가 아니라 **통행료**이고, 그렇게 받은 동의는 근거가 못 된다.
+   ④ **'궁합'이라는 말을 안 쓴다.** 곁탭IA §3 에서 둘 사이는 「사이」다. 궁합은 유료 문서 이름이라
+      무료 화면에 쓰면 값을 치른 것과 헷갈린다.
+   ⑤ **이름 뒤 조사를 계산한다.** A가 적어둔 임의 문자열이라 받침이 갈린다 —
+      안 하면 "연지이 궁금해했어"가 나간다(시안 첫 판에서 실제로 나왔다).
+   ⑥ 머리글·아홉 칸은 **엔진이 만든 것을 그대로** 쓴다. 화면에서 다시 쓰지 않는다(두 벌이 되면 갈린다).
+
+   ⚠ **시안과 하나 다르다 — B에게 이름을 (선택으로) 묻는다.**
+     시안은 "B에게 이름을 안 묻는다"였고 근거는 ①줄에 뜨는 이름이 A의 것이라는 점이었다.
+     그 근거는 그대로 지킨다(①줄은 여전히 A가 적어둔 이름이다). 이름을 받는 건 다른 이유다 —
+     창업자 지시(2026-08-26): "초대 받은 사람은 이미 이름과 생년월일을 적었으니 온보딩이 반은 끝난 거야."
+     받은 이름은 **⑥ 문으로 들어갈 때 그 사람의 온보딩에 실린다.** 선택 칸이라 탭 수는 그대로 4다.
+   ⚠ **그 이름은 A에게 안 간다.** 서버 `label` 칸은 비운 채로 보낸다 —
+     A는 이미 자기가 적어둔 이름을 갖고 있어서 얻는 게 없고, 얻는 게 없는 제3자 제공은 하지 않는다. */
+function InviteLanding({ id, onOnboard, onDismiss }) {
+  const [state, setState] = useState("checking");   // checking | ask | dead
+  const [from, setFrom] = useState("");
+  const [f, setF] = useState({ y: "", m: "", d: "", nm: "" });
+  const [notify, setNotify] = useState(true);        // 켠 채로 시작 — 끄는 사람만 1탭 더
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [r, setR] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const q = await fetch(`/api/invite/${encodeURIComponent(id)}`);
+        const d = await q.json().catch(() => null);
+        if (!alive) return;
+        if (!q.ok) { setState("dead"); setErr(d?.error?.message || "이 초대는 열 수 없어."); return; }
+        setFrom(String(d?.name || "").trim());
+        setState("ask");
+        /* 위조·만료는 안 센다 — 유효 검증을 통과한 것만 「열렸다」로 센다.
+           공유 수신 계측(shared_verdict_view)이 이미 같은 규칙이라 눈금을 맞춘다. */
+        track("invite_opened", { named: !!String(d?.name || "").trim() });
+      } catch (_) { if (alive) { setState("dead"); setErr("지금은 초대를 열 수 없어."); } }
+    })();
+    return () => { alive = false; };
+  }, [id]);
+
+  const who = from || "누군가";
+  const ok = /^\d{4}$/.test(String(f.y || "")) && +f.y >= 1900 && +f.y <= new Date().getFullYear()
+    && +f.m >= 1 && +f.m <= 12 && +f.d >= 1 && +f.d <= 31;
+
+  const submit = async () => {
+    if (busy || !ok) return;
+    setBusy(true); setErr("");
+    try {
+      /* 개보법 제22조의2 — 온보딩과 **같은 게이트**를 여기도 둔다.
+         여기가 첫 화면인 사람에게는 이 문이 유일한 문이다. */
+      const age = exactAge(+f.y, +f.m, +f.d);
+      if (age !== null && age < 14) {
+        track("age_gate_blocked", { age_band: "14세 미만" });
+        setErr("아직은 네 하늘을 열 수 없어. 열넷의 봄을 지나고 다시 와 줘.");
+        setBusy(false); return;
+      }
+      const my = calcSaju(+f.y, +f.m, +f.d, 12, 0, true, 126.978);   // 이 계산은 시를 안 쓴다
+      if (!my?.idx) throw new Error("네 하늘을 세우지 못했어");
+      const q = await fetch("/api/invite/answer", {
+        method: "POST", headers: { "content-type": "application/json" },
+        /* ⚠ label 을 안 싣는다(위 주석). notify 는 **A에게 보일지**만 가른다 —
+           응답 자체는 언제나 기록된다. 그게 재공유 방어이고, 그 갈림의 사유는 api/invite 주석에 있다. */
+        body: JSON.stringify({ id, notify }),
+      });
+      const d = await q.json().catch(() => null);
+      if (!q.ok || !d?.aAxes) throw new Error(d?.error?.message || "둘 사이를 볼 수 없었어");
+      /* ⑤ **B가 a 자리** — 자기 쪽에서 본 사이다 */
+      const read = readMatch({ a: { saju: my, birth: { y: +f.y, m: +f.m, d: +f.d, h: 12, min: 0 }, name: (f.nm || "").trim() },
+                              b: { ...d.aAxes, name: String(d.name || from || "").trim() } });
+      if (!read?.chorus) throw new Error("둘 사이를 볼 수 없었어");
+      track("invite_answered", { notify });
+      setR(read);
+    } catch (e) {
+      setErr(String(e?.message || e));
+    } finally { setBusy(false); }
+  };
+
+  if (state === "checking") return <section className="scene fade"><p className="sub2 center">초대를 여는 중…</p></section>;
+  if (state === "dead") return (
+    <section className="scene fade">
+      <p className="line">이 초대는 열 수 없어.</p>
+      <p className="sub2">{err} 링크는 <b>한 번만</b> 답할 수 있고 30일이 지나면 닫혀.</p>
+      <button className="btn gold mt" onClick={onDismiss}>그럼 내 수호신을 만들래</button>
+    </section>
+  );
+
+  if (r) return (
+    <section className="scene fade invres">
+      <p className="chorush" dangerouslySetInnerHTML={{ __html: r.chorus.head }} />
+      {r.chorus.inner && <p className="invnote center" dangerouslySetInnerHTML={{ __html: r.chorus.inner }} />}
+      <ul className="invcells">
+        {r.chorus.cells.map((c, i) => (
+          <li key={i} className={c.v >= 1 ? "up" : c.v <= -1 ? "dn" : "mid"}>
+            <span className="civ">{c.civ}</span><span className="what">{c.what}</span><span className="say">{c.say}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="invnote">같은 두 사람인데 하늘마다 다르게 봐. 이건 흠이 아니라 <b>알맹이야</b> — 평균을 내면 이게 사라져.</p>
+      {/* ⑥ 이 지시서의 목표. 화면을 새로 열지 않고 **결과 안에서** 이어진다 */}
+      <div className="invdoor">
+        <p className="invdoorq">네 수호신도 만들어볼래?</p>
+        <button className="btn gold" onClick={() => { track("invite_to_onboard", {}); onOnboard({ y: f.y, m: f.m, d: f.d, name: (f.nm || "").trim() }); }}>응, 내 것도 볼래</button>
+        <button className="btn ghost mt" onClick={onDismiss}>다음에</button>
+      </div>
+      <p className="ainote">비나리 — 아홉 하늘이 각각 다른 걸 봐</p>
+    </section>
+  );
+
+  return (
+    <section className="scene fade invask">
+      <p className="invwho"><b>{who}</b>{josa(who, "이", "가")} <b>너와의 사이</b>를 궁금해했어.</p>
+      <p className="invwhosub">생일만 넣으면 둘 사이를 아홉 하늘이 뭐라고 하는지 보여줄게.</p>
+      <p className="invlbl">태어난 날</p>
+      <div className="row gap center">
+        <input className="in" placeholder="1993" inputMode="numeric" maxLength={4} aria-label="태어난 해" value={f.y} onChange={(e) => setF({ ...f, y: e.target.value })} /><span className="unit">년</span>
+        <input className="in sm" placeholder="7" inputMode="numeric" maxLength={2} aria-label="태어난 달" value={f.m} onChange={(e) => setF({ ...f, m: e.target.value })} /><span className="unit">월</span>
+        <input className="in sm" placeholder="15" inputMode="numeric" maxLength={2} aria-label="태어난 날" value={f.d} onChange={(e) => setF({ ...f, d: e.target.value })} /><span className="unit">일</span>
+      </div>
+      {/* 시(時)를 안 묻는다 — 이 계산은 시를 안 쓴다(§C-2). 무거운 칸을 하나 지웠다 */}
+      <p className="invopt">태어난 시는 몰라도 돼 — <b>이 결과는 시를 안 써</b></p>
+      <input className="in wide center box" lang="ko" maxLength={12} aria-label="너를 부를 이름 (선택)"
+        placeholder="너를 부를 이름 (안 적어도 돼)" value={f.nm} onChange={(e) => setF({ ...f, nm: e.target.value })} />
+      {/* ③ 무엇이 나가는지 — 회색 각주가 아니라 **눈에 띄는 상자**로 입력 바로 아래.
+          헌장 기준이 「유저가 무엇이 나가는지 보고 있는가」라, 안 보이는 채로 나가면 그건 유출이다.
+          나가는 것과 **안 나가는 것**을 같이 적고, 안 나가는 쪽을 더 길게 적는다. */}
+      <div className="invnotice">
+        <p><b>네 생일은 이 기기에만 남아.</b> 우리 서버에 안 올라가.<br />
+          {who}에게는 {notify ? <><b>‘답했다’는 사실만</b> 전해져</> : <><b>아무것도 안 가</b></>} —
+          <span className="no"> 생일도, 이름도, 결과도 안 가.</span></p>
+      </div>
+      <label className={"invchk" + (notify ? " on" : "")}>
+        <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} />
+        <span>답했다는 걸 {who}에게 알려도 될까? <em>(꺼도 결과는 그대로 봐)</em></span>
+      </label>
+      {err && <p className="err">{err}</p>}
+      <button className="btn gold" disabled={!ok || busy} onClick={submit}>{busy ? "둘 사이를 보는 중…" : ok ? "둘 사이를 볼게" : "생년월일을 채워 줘"}</button>
+      <p className="ainote">해석은 전통 계산으로 만들어요 · 재미로 보는 참고예요{" · "}
+        <a className="plink" href="/privacy.html" target="_blank" rel="noreferrer">개인정보처리방침</a></p>
+    </section>
+  );
+}
+
 /* ═══════════════ 앱 ═══════════════ */
 export default function App() {
   const [mem] = useState(loadMemory);             // v16(B1): 부팅 시 기억 1회 로드
@@ -5196,6 +5406,13 @@ export default function App() {
   // 공유 판결 조회는 **검증을 통과한 뒤에만** 집계한다 — 위조 시도까지 조회수로 세면 지표가 오염된다
   useEffect(() => { if (sharedIn && typeof sharedIn === "object") track("shared_verdict_view", { dir: sharedIn.d }); }, [sharedIn]);
   const [sharedGone, setSharedGone] = useState(false);  // v75: '나도 물어볼래'로 공유 화면 닫음
+  /* ── 초대로 들어왔나 (§4) ────────────────────────────────────────────────
+     ⚠ 기억이 있는 사람(이미 수호신이 있는 사람)에게도 **연다.** 초대는 판결 공유와 달라서
+       받은 사람이 신규인지 기존인지로 갈리지 않는다 — 궁금한 건 둘 사이지 우리 앱이 아니다.
+       갈리는 건 마지막 문 하나뿐이다(수호신을 만들래 / 비나리로 돌아갈래). */
+  const [invId] = useState(() => { try { return new URLSearchParams(window.location.search).get("inv") || ""; } catch (_) { return ""; } });
+  const [invGone, setInvGone] = useState(false);
+  const dropInvUrl = () => { try { window.history.replaceState({}, "", window.location.pathname); } catch (_) {} };
   // 1단계 계측은 동의와 무관하게 항상 켠다(2단계 속성만 동의로 게이트)
   // 계측: 세션 시작. 유입은 first-touch(_superProps.ft_*)가 고정 부착하므로 여기선 이번 방문 경로(ref)만 참고용으로 남긴다.
   useEffect(() => { _optout = readOptout(); _consent = readConsent(); _initAnalytics(); let ref = "direct"; try { const sp = new URLSearchParams(window.location.search); ref = sp.get("ref") || sp.get("utm_source") || (sp.get("v") ? "share" : "direct"); } catch (_) {} trackVisit({ returning, ref }); }, []);
@@ -5262,6 +5479,41 @@ export default function App() {
     }));
     gyeotRef.current = gyeotView(gyeotSorted.concat(fake), saju.main);
   }, [gyeotSorted, saju]);
+  /* ── 답이 왔는지 확인한다 (작업지시_초대와회신 §5) ─────────────────────────
+     **앱을 열었을 때만** 본다. 푸시도 알림도 배지도 없다(§10) — A는 앱을 열어야 답을 본다.
+     그게 D7 게이트의 정직한 측정 환경이기도 하다.
+     ⚠ **둘 이상이면 0.5초씩 어긋나게** 올린다. 동시에 밝아지면 그게 곧 "2명"이라는 **숫자**가 된다.
+       어긋나면 사건이 둘이다 — 숫자를 안 쓰고 수를 느끼게 하는 유일한 길이다(§5 D-2).
+     ⚠ 승격되고 나면 그냥 밝은 상태다. **「못 본 승격」을 쌓아 두지 않는다** — 그게 쌓이면 그건 배지다. */
+  useEffect(() => {
+    if (!saju) return;
+    const ids = gyeotInvites();
+    if (!ids.length) return;
+    let alive = true;
+    const timers = [];
+    (async () => {
+      try {
+        const q = await fetch(`/api/invite?ids=${ids.map(encodeURIComponent).join(",")}`);
+        if (!q.ok) return;
+        const arr = await q.json().catch(() => null);
+        if (!alive || !Array.isArray(arr)) return;
+        const answered = arr.filter((x) => x && x.answered && x.id);
+        answered.forEach((x, k) => {
+          timers.push(setTimeout(() => {
+            if (!alive) return;
+            setGyeot((prev) => {
+              const seat = prev.find((y) => y.inv === x.id && y.tier !== GY_STANDING);
+              if (!seat) return prev;
+              track("gyeot_promoted", { wait_h: x.at ? Math.round((Date.now() - x.at) / 3600000) : null });
+              return gyeotStand(prev, seat.key);
+            });
+          }, k * 500));
+        });
+      } catch (_) { /* 답 확인 실패는 조용히 — 다음에 열 때 다시 본다 */ }
+    })();
+    return () => { alive = false; timers.forEach(clearTimeout); };
+  }, [!!saju]);
+
   const [bujeok, setBujeok] = useState(false);  // v7: 부적
   const [convo, setConvo] = useState(mem?.convo || []); // v14: 대화 기억 — 이전 질문·판결 누적(최근 6턴)
   const [dailySeen, setDailySeen] = useState(() => { try { return store.getItem(DAILY_KEY) === todayStr(); } catch (_) { return true; } }); // v16(B2)
@@ -5538,11 +5790,17 @@ export default function App() {
      {i: 슬롯번호, t0: 시작시각}. 셰이더가 1.4초에 걸쳐 0→1 로 밀고 끝나면 스스로 지운다. */
   const gyeotPopRef = useRef(null);
   const [gyeotJoined, setGyeotJoined] = useState(null);   // 화면에 "붙었다"를 말해 줄 자리
-  const inviteNew = async () => {
+  /* ⚠ **초대는 명부의 한 자리에 묶인다.** 지시서 §5 가 "답이 온 초대의 **상대**를 올린다"라고 쓴 이상
+     그 상대가 명부에 먼저 있어야 한다. 그리고 §10 이 「B의 값을 A에게 보내기」를 금지하므로
+     답이 온 뒤에 자리를 만들 재료(오행·일간)가 **영영 오지 않는다** — 그래서 부를 때 만든다.
+     자리에 실리는 건 **A가 적은 이름 하나**뿐이고, 하늘은 비어 있다. 그게 「부른 곁」의 뜻 그대로다:
+     기척은 있는데 아직 사람이 아니다. 답이 오면 밝기·자리·꼬리로만 사람이 된다(숫자 금지). */
+  const [inviteName, setInviteName] = useState(null);   // null = 문 닫힘 · 문자열 = 이름 받는 중
+  const inviteNew = async (nm) => {
     if (inviteBusy) return;
     setInviteBusy("new"); setInviteErr("");
     try {
-      const axes = gyeotAxesOfMe(saju);
+      const axes = gyeotAxesOfMe(saju, birth);
       if (!axes) { setInviteErr("아직 네 명식이 안 서서 초대를 못 만들어."); return; }
       const r = await fetch("/api/invite", {
         method: "POST", headers: { "content-type": "application/json" },
@@ -5551,7 +5809,10 @@ export default function App() {
       const d = await r.json().catch(() => null);
       if (!r.ok || !d?.id) throw new Error(d?.error?.message || "지금은 초대를 만들 수 없어");
       gyeotPushInvite(d.id);
-      track("invite_created", { from: "gyeot" });
+      const called = String(nm || "").trim().slice(0, GYEOT_NAME_MAX);
+      setGyeot((prev) => gyeotAdd(prev, { key: `inv:${d.id}`, el: null, dg: null, name: called, inv: d.id }));
+      setInviteName(null);
+      track("invite_created", { from: "gyeot", named: !!called });
       const url = `${SHARE_HOST}/?inv=${encodeURIComponent(d.id)}`;
       /* ⚠ 방금 만든 검사(5-p)가 이 줄을 잡았다 — 이름은 받침이 갈린다("민수가" / "형원이").
          내가 세운 규칙에 내가 먼저 걸린 게 이 검사의 값이다. */
@@ -6012,6 +6273,31 @@ export default function App() {
 
   const guardianIntro = saju && zo ? `나는 ${saju.nayin ? `'${saju.nayin.split("·")[1] || saju.nayin}'` : (saju.main === "수" ? "깊은 물결" : saju.main === "화" ? "꺼지지 않는 불꽃" : saju.main === "목" ? "자라나는 숲" : saju.main === "금" ? "벼려진 빛" : "단단한 대지")}의 기운을 두른, ${zo.el === "물" ? "안개처럼 흐르는" : zo.el === "불" ? "타오르는 형상의" : zo.el === "공기" ? "바람으로 된" : "산처럼 고요한"} 존재야.` : "";
 
+  /* ── 초대로 들어온 사람 — 여기가 첫 화면이다 ────────────────────────────────
+     **다른 무엇도 그리지 않는다.** 부분적으로 덮으면 이미 수호신이 있는 사람(step 3)의
+     화면이 아래에 그대로 살아 있게 된다 — 처음엔 그렇게 썼다가 잡았다.
+     ⚠ 훅은 위에서 전부 돌았다. 여기보다 위로 올리면 훅 순서가 깨진다. */
+  if (invId && !invGone) return (
+    <div className="stage">
+      <style>{CSS}</style>
+      <VerBadge />
+      <InviteLanding
+        id={invId}
+        onDismiss={() => { dropInvUrl(); setInvGone(true); }}
+        onOnboard={(b) => {
+          dropInvUrl(); setInvGone(true);
+          /* **생년월일 다음 단계로 떨어뜨린다**(창업자 2026-08-26). 이 사람은 이미 제일 무거운 칸을
+             통과했다 — 다시 물으면 그건 축약이 아니라 두 번 묻는 것이다.
+             ⚠ 기억이 있는 사람은 온보딩으로 되돌리지 않는다. 그건 수호신을 지우는 일이다. */
+          if (mem) return;
+          setBirth((p) => ({ ...p, y: String(b.y), m: String(b.m), d: String(b.d),
+            name: b.name || p.name, cal: "solar" }));
+          setStep(1); setBstep(2);
+        }}
+      />
+    </div>
+  );
+
   return (
     /* v127.4 오행 색 연동 — 사람마다 다른 건 수호신뿐이고 화면 크롬은 전 유저 같은 금색이었다.
        골드 기조는 그대로 두고(가독성) **글로우만** 그 사람의 오행 색으로 물들인다.
@@ -6364,14 +6650,16 @@ export default function App() {
                     const r = Number.isInteger(g.dg) && Number.isInteger(saju?.idx?.dG) ? roleOf(saju.idx.dG, g.dg) : null;
                     return (
                     <li key={g.key} className={g.tier === GY_STANDING ? "" : "called"}>
-                      <i className="gdot" style={{ background: (EL_COLOR[g.el] || EL_COLOR.토)[1] }} aria-hidden="true" />
+                      {/* 하늘을 모르는 곁은 흙색이 아니라 **무채색**이다 — 궤도의 색과 같은 규칙(gyeotView) */}
+                      <i className="gdot" style={{ background: g.el ? (EL_COLOR[g.el] || EL_COLOR.토)[1] : "#6a5f92" }} aria-hidden="true" />
                       <div className="gbody">
                         <input className="galias" value={g.name || ""} maxLength={12} placeholder="이름을 적어 둘래"
                           aria-label="이 곁을 부를 이름"
                           onChange={(e) => setGyeot((p) => gyeotSetName(p, g.key, e.target.value))} />
                         <span className="grel">
                           {gySum.index.has(g.key) && <em className="gsumix sm" aria-hidden="true">{gySum.index.get(g.key)}</em>}
-                          {r ? r.name : GYEOT_REL_LINE[String(gyeotRel(saju?.main, g.el))]}
+                          {r ? r.name : g.el ? GYEOT_REL_LINE[String(gyeotRel(saju?.main, g.el))]
+                            : g.tier === GY_STANDING ? "답이 왔어 — 하늘은 그 사람만 알아" : "부르는 중 — 아직 답이 없어"}
                         </span>
                       </div>
                       {/* ⚠ **초대하기를 행에서 뺐다**(창업자 2026-08-26): *"이름 옆에 초대가 붙을 필요는
@@ -6408,8 +6696,24 @@ export default function App() {
                 {/* 첫 곁이 생기면 부르는 문이 사라져 있었다 — 목록이 곧 막다른 길이 됐다는 뜻이다. */}
                 {/* 게이트: **첫 곁은 내가 직접 넣어 공짜, 그 다음부터는 그 사람이 직접 넣는다**(창업자).
                     그래서 이 문은 궁합 폼이 아니라 **초대**로 간다 — 부르는 일이 여기 하나로 모인다. */}
-                <button className="btn ghost mt" disabled={inviteBusy === "new"}
-                  onClick={() => inviteNew()}>{inviteBusy === "new" ? "만드는 중…" : "한 사람 더 부를래"}</button>
+                {inviteName === null ? (
+                  <button className="btn ghost mt" onClick={() => { setInviteErr(""); setInviteName(""); }}>한 사람 더 부를래</button>
+                ) : (
+                  /* 이름을 먼저 받는다 — 이 이름이 명부의 자리가 된다(위 inviteNew 주석).
+                     비워도 부를 수 있다. 이름을 필수로 걸면 이름을 모르는 사람은 못 부른다. */
+                  <div className="gcall">
+                    <p>누구를 부를까 <i>이름은 이 기기에만</i></p>
+                    <input className="in wide center box" lang="ko" maxLength={GYEOT_NAME_MAX} autoFocus
+                      aria-label="부를 사람의 이름" placeholder="민수 · 팀장님 · 엄마"
+                      value={inviteName} onChange={(e) => setInviteName(e.target.value)} />
+                    <p className="fine">링크를 보내면 그 사람이 <b>자기 생일을 직접</b> 넣어. 답이 오면 곁에 서.</p>
+                    <div className="gaskrow">
+                      <button className="btn ghost sm" onClick={() => { setInviteName(null); setInviteErr(""); }}>그만둘래</button>
+                      <button className="btn sm" disabled={inviteBusy === "new"}
+                        onClick={() => inviteNew(inviteName)}>{inviteBusy === "new" ? "만드는 중…" : "부를게"}</button>
+                    </div>
+                  </div>
+                )}
                 <button className="btn ghost mt" onClick={() => { setGyeotOpen(false); track("gyeot_roster_closed", {}); }}>접어둘게</button>
               </>)}
             </div>
@@ -7290,6 +7594,46 @@ const CSS = `
 @keyframes gjoinIn{from{opacity:0;transform:translateY(6px) scale(.96);filter:blur(3px)}to{opacity:1;transform:none;filter:none}}
 @media (prefers-reduced-motion:reduce){.gjoin{animation:none}}
 .gyerr{max-width:340px;margin:8px auto 0;font-size:11.5px;line-height:1.6;text-align:center}
+/* ── 부를 사람 이름 받기 (v147) ── */
+.gcall{width:100%;max-width:340px;margin:10px auto 0;padding:13px 14px;border:1px solid rgba(159,143,196,.26);border-radius:11px;background:rgba(20,15,38,.55);text-align:center}
+.gcall p{margin:0 0 8px;font-size:13px;color:#efe6ff}
+.gcall p i{font-style:normal;font-size:11px;color:#8a7f95;margin-left:6px}
+.gcall p.fine{margin:8px 0 0}
+.gcall .in{margin:0}
+.gcall .gaskrow{display:flex;gap:8px;justify-content:center;margin-top:10px}
+.gcall .btn.sm{margin:0}
+
+/* ── 초대 랜딩 — 링크를 받은 사람의 첫 화면 (v147 · 시안 public/invite-mock.html) ──
+   ⚠ 값은 시안에서 그대로 옮긴다. 여기서 다시 고르면 시안과 화면이 갈린다. */
+.invask,.invres{max-width:360px;margin:0 auto;text-align:center}
+.invwho{font-size:16px;line-height:1.75;color:#efe6ff;margin:10px 0 4px;word-break:keep-all;text-wrap:balance}
+.invwho b{color:#ffe9ad}
+.invwhosub{font-family:sans-serif;font-size:12px;color:#8a7f95;margin:0 0 20px;line-height:1.7}
+.invlbl{font-family:sans-serif;font-size:11px;color:#8a7f95;letter-spacing:.06em;margin:0 0 8px}
+.invopt{font-family:sans-serif;font-size:11.5px;color:#9b90b8;border:1px dashed #3a3157;border-radius:9px;padding:9px;margin:12px 0 14px}
+.invopt b{color:#cfc4e2}
+.invnotice{border:1px solid rgba(245,217,139,.28);background:rgba(245,217,139,.055);border-radius:11px;padding:12px 13px;margin:14px 0 12px;text-align:left}
+.invnotice p{font-family:sans-serif;font-size:12.5px;line-height:1.72;color:#e4dcc4;margin:0}
+.invnotice b{color:#f5d98b}
+.invnotice .no{color:#9b90b8}
+.invchk{display:flex;gap:9px;align-items:flex-start;font-family:sans-serif;font-size:12.5px;color:#cfc4e2;margin:0 0 18px;line-height:1.6;text-align:left;cursor:pointer}
+.invchk input{flex:0 0 auto;margin-top:2px;accent-color:#f5d98b;width:17px;height:17px}
+.invchk em{font-style:normal;color:#8a7f95}
+.chorush{font-size:16px;line-height:1.75;color:#efe6ff;margin:12px 0 10px;word-break:keep-all;text-wrap:balance}
+.chorush b{color:#ffe9ad}
+.invcells{list-style:none;margin:0 0 12px;padding:0;display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.invcells li{padding:8px 5px;border:1px solid rgba(159,143,196,.2);border-radius:9px;background:rgba(20,15,38,.5)}
+.invcells .civ{display:block;font-family:sans-serif;font-size:10px;color:#8a7f95;margin-bottom:3px}
+.invcells .what{display:block;font-family:sans-serif;font-size:11px;color:#cfc4e2;word-break:keep-all}
+.invcells .say{display:block;font-family:sans-serif;font-size:11px;margin-top:3px}
+.invcells .up .say{color:#8fe0b0}
+.invcells .dn .say{color:#e59aa6}
+.invcells .mid .say{color:#9b90b8}
+.invnote{font-family:sans-serif;font-size:11.5px;color:#8a7f95;line-height:1.75;margin:0 0 16px}
+.invnote b{color:#cfc4e2}
+.invnote.center{text-align:center}
+.invdoor{border-top:1px solid #2a2340;padding-top:16px;margin-top:6px}
+.invdoorq{font-size:15px;color:#efe6ff;margin:0 0 12px}
 .gact{background:none;border:1px solid rgba(159,143,196,.34);border-radius:7px;color:#b6aacc;font-family:inherit;font-size:10.5px;padding:4px 8px;cursor:pointer;white-space:nowrap}
 .gact:hover{border-color:rgba(245,217,139,.5);color:#efe6ff}
 .gact.del{color:#8f84a8;border-color:rgba(159,143,196,.2)}
