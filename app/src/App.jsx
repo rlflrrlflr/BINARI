@@ -2834,10 +2834,13 @@ void main(){
   /* ── 손끝 반응 (창업자 2026-08-28: "인터랙션 요소도 넣어줘 점 버전처럼") ──────────
      입자 버전은 손끝으로 입자를 모았다 터뜨린다. 색장엔 입자가 없으므로 **장 자체가 당겨진다** —
      누른 자리 쪽으로 쏠리고 그 부근이 밝아진다. 멀수록 급히 줄어야 덩어리째 안 움직인다. */
+  /* ⚠ 처음엔 **손끝 부근만 국소로 당겼다** — 그건 "모인다"가 아니라 "눌린다"로 보인다
+     (창업자 재확인: "이전 버전처럼 클릭한 곳에 모이는 게 아니잖아").
+     입자 버전의 모임은 **형태 반지름을 줄이는 것**이다. 색장도 같게 한다 —
+     오라 전체가 손끝으로 옮겨가며 작아지고 진해진다. 떼면 천천히 풀린다. */
   vec2  tp = u_touch*2.35;
-  float td = length(p - tp);
-  float tk = clamp(u_touchAmt, 0.0, 1.0) * exp(-td*td*1.6);
-  p -= (p - tp) * tk * 0.30;
+  float tk = clamp(u_touchAmt, 0.0, 1.0);
+  p -= tp * tk * 0.82;                       // 중심이 손끝으로 간다
 
   /* ── 형태 — 오행마다 세로/가로 비율. 레퍼런스는 정원이 아니라 **부드러운 타원·물방울**이다 */
   /* 불꽃은 **세로로 길다**. x 를 키우면 가로가 좁아져 세로로 선다(정규화 반경이라 반대다). */
@@ -2862,8 +2865,11 @@ void main(){
        ③ **색 여정이 짧다** → 레퍼런스는 진홍→핑크→노랑→연두→시안으로 색상이 서너 번 돈다.
           두 색만 오가면 "안이 진한 동그라미"가 되고 그건 세포다.
      그래서 층을 **다섯**으로 늘리고, 중심을 층마다 어긋내고, 심을 밝게 뒤집는다. */
-  float sh = 1.0 + 0.085*sin(ang*2.0 + t*0.21) + 0.050*sin(ang*3.0 - t*0.17);
-  float R  = mix(0.52, 0.42, u_orb) * mix(0.94, 1.07, zc) * (1.0 + 0.020*sin(t*0.85)) * sh;
+  /* ⚠ **이 굴곡이 곁에서도 살아 있어 둥근 삼각형이 됐다**(실기 재확인 2026-08-28).
+     2차는 타원, **3차는 삼각형**을 만든다. 비율·일렁임·혀·물방울은 다 u_orb 에 물렸는데
+     이것만 빠져 있었다 — 곁이 안 둥근 진짜 이유. 응축이 끝나면 굴곡도 0 으로 간다. */
+  float sh = 1.0 + (0.085*sin(ang*2.0 + t*0.21) + 0.050*sin(ang*3.0 - t*0.17)) * (1.0 - u_orb);
+  float R  = mix(0.52, 0.42, u_orb) * mix(1.0, 0.58, tk) * mix(0.94, 1.07, zc) * (1.0 + 0.020*sin(t*0.85)) * sh;
 
   /* 물방울 — 위로 갈수록 좁아진다. 상하대칭 타원은 눈알이나 세포로 읽힌다.
      ⚠ **이 변형만 u_orb 에 안 물려 있어** 곁에서도 위가 좁아졌다(실측 세로/가로 0.93).
@@ -2893,7 +2899,11 @@ void main(){
   float sray = pow(abs(sin(ang*u_rayP.x*0.5 + t*0.16 + jit)), u_rayP.y);
   float lobe = sin(ang*u_puffP.x + t*u_puffP.w)*0.5
              + (fbm(vec2(cos(ang),sin(ang))*u_puffP.y + vec2(t*u_puffP.w,0.0))-0.5)*1.4;
-  float puffK = 1.0 + lobe*u_puffP.z*1.35*u_wt.y;   // ⚠ 2.2 는 헤일로를 세잎클로버로 갈랐다
+  /* ⚠ **곁이 둥근 삼각형이던 진짜 이유가 여기다.** 뭉게 변조는 lobes=3 이라 sin(ang*3),
+     즉 **삼각형**이고 그게 헤일로 반경(r3·r4)에 곱해진다. 곁에서도 감정 가중치가 살아 있어
+     헤일로가 삼각으로 부풀었다. 굴곡·비율·물방울·층 어긋남을 다 껐는데도 각져 보인 게 이것 때문.
+     곁에서는 **형태 변조만** 접는다 — 감정은 밝기·색으로 계속 실린다. */
+  float puffK = 1.0 + lobe*u_puffP.z*1.35*u_wt.y*(1.0 - u_orb*0.92);   // ⚠ 2.2 는 헤일로를 세잎클로버로 갈랐다
   float ph   = floor(t*u_flkP.x);
   float fl   = 1.0 - u_flkP.y*hash(vec2(ph, 7.3));
   fl *= mix(0.34, 1.0, step(u_flkP.z, hash(vec2(ph, 19.1))));
@@ -2903,11 +2913,15 @@ void main(){
         비대칭은 '완벽한 동심원이 아니다'를 만들 만큼만 — 지금 폭은 반경의 5~12%. */
   /* */
   float zg = mix(0.94, 1.10, zc);
-  vec2 c0 = vec2( 0.07*sin(t*0.23),        -0.12 + 0.04*cos(t*0.19)) * R;   // 반사광은 한쪽으로 치우친다
-  vec2 c1 = vec2( 0.05*sin(t*0.19+0.7),    -0.01 + 0.035*cos(t*0.15)) * R;
-  vec2 c2 = vec2(-0.09*sin(t*0.15+1.1),     0.065*cos(t*0.13+0.4))    * R;
-  vec2 c3 = vec2( 0.12*sin(t*0.11+2.0),     0.11*cos(t*0.09+0.5))    * R;
-  vec2 c4 = vec2(-0.10*cos(t*0.08+1.4),     0.09*sin(t*0.07+2.2))    * R;
+  /* ⚠ **층의 어긋남도 곁에서는 접는다.** 어긋남은 판결(불꽃)이 동심원=세포로 보이지 않게
+     하려고 넣은 것인데, 곁은 응축된 구슬이라 동심이어야 둥글다. 남겨 두면 층 경계가
+     엇갈리며 **한쪽이 각져 보인다**(실기에서 둥근 삼각형으로 읽혔다). */
+  float orbC = mix(1.0, 0.18, u_orb);
+  vec2 c0 = vec2( 0.07*sin(t*0.23),        -0.12 + 0.04*cos(t*0.19)) * R * orbC;   // 반사광은 한쪽으로 치우친다
+  vec2 c1 = vec2( 0.05*sin(t*0.19+0.7),    -0.01 + 0.035*cos(t*0.15)) * R * orbC;
+  vec2 c2 = vec2(-0.09*sin(t*0.15+1.1),     0.065*cos(t*0.13+0.4))    * R * orbC;
+  vec2 c3 = vec2( 0.12*sin(t*0.11+2.0),     0.11*cos(t*0.09+0.5))    * R * orbC;
+  vec2 c4 = vec2(-0.10*cos(t*0.08+1.4),     0.09*sin(t*0.07+2.2))    * R * orbC;
 
   /* ⚠ **비율을 레퍼런스에서 재서 맞춘다.** v146~ 은 오라가 칸을 덮을 만큼 크고 옅어서
      회색 안개가 됐다. 레퍼런스는 진한 몸통이 칸 폭의 약 40%, 헤일로까지 합쳐 약 75% —
@@ -2935,7 +2949,7 @@ void main(){
   float a3 = ring(r3, 0.78, 0.50) * 0.52;   // ⚠ 좁고 세면 **과녁**이 된다 — 넓게 번지게                  // 대비색 헤일로 — 레퍼런스의 시안·연두 자리
   float a4 = ring(r4, 0.84, 0.52) * 0.26;                  // 옅은 바깥
   float aRay = sray * smoothstep(mix(1.95,1.60,u_orb), 1.02, rBase)
-                    * smoothstep(1.00, 1.20, rBase) * u_wt.x * 0.46;
+                    * smoothstep(1.00, 1.20, rBase) * u_wt.x * 0.46 * (1.0 - u_orb*0.75);   // 빛살도 곁에선 접는다(각져 보인다)
 
   /* ── 색 여정 — 다섯 자리에서 색상이 네 번 돈다 ───────────────────────── */
   vec3 heart = mix(u_c2, vec3(1.0), 0.66);                 // 반사광 — 작고 치우친 밝은 점
@@ -2971,7 +2985,7 @@ void main(){
   float vig  = smoothstep(1.02, 0.56, length(uv)*2.0);
   float live  = mix(1.0, fl, u_wt.z);
   float bornK = 0.20 + 0.80*u_born;               // 흩어져 있을 땐 옅지만 **보이기는 해야 한다**
-  float touchK = 1.0 + tk*0.55;                   // 손끝 부근이 환해진다
+  float touchK = 1.0 + tk*0.42;                   // 모이면 진해진다
   gl_FragColor = vec4(outc, clamp(sum*u_lum*live*vig*bornK*touchK, 0.0, 1.0));
 }`;
 /* 밝은 바탕용 보정 — **원색(EL_COLOR)은 안 건드린다.** 금의 c2(#e8f2ff)는 거의 흰색이라
@@ -3088,7 +3102,7 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
           const rt = (now - reactRef.current.t0) / 1000;
           rk = Math.max(0, 1 - rt / 1.7) * Math.min(1, rt / 0.18);
         }
-        touch.amt += (touch.target - touch.amt) * (1 - Math.exp(-dt / (touch.target > touch.amt ? 0.35 : 1.1)));
+        touch.amt += (touch.target - touch.amt) * (1 - Math.exp(-dt / (touch.target > touch.amt ? 0.42 : 2.0)));
         gl.uniform2f(U.u_touch, touch.x, touch.y);
         gl.uniform1f(U.u_touchAmt, Math.max(touch.amt, rk * 0.7));
         gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -3716,7 +3730,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v155 · 둘 사이가 돌아온다";
+const APP_VER = "v156 · 둘 사이가 돌아온다";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
