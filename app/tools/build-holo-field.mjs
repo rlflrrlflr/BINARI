@@ -126,7 +126,7 @@ gl.uniform4f(U("u_baseP"),AB.edgeSoft["펼침"],AB.edgeSoft["응축"],AB.rimWidt
    조각이 흩어진 채 거의 안 보인다 — 보드는 **다 태어난 상태**를 보여야 한다. */
 gl.uniform1f(U("u_born"),1); gl.uniform1f(U("u_touchAmt"),0); gl.uniform2f(U("u_touch"),0,0);
 /* v158 위습 — 보드는 정지 상태를 보여주므로 제자리·들뜸 0·꼬리도 제자리 */
-gl.uniform2f(U("u_wisp"),0,0); gl.uniform1f(U("u_ex"),0);
+gl.uniform2f(U("u_wisp"),0,0); gl.uniform1f(U("u_ex"),0); gl.uniform1f(U("u_squash"),0);
 gl.uniform2fv(U("u_trail"),new Float32Array(12));
 gl.uniform2f(U("u_res"),CELL*dpr,CELL*dpr);
 gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA); gl.clearColor(0,0,0,0);

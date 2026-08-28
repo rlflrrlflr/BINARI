@@ -2800,7 +2800,7 @@ const FIELD_FRAG = `
 precision highp float;
 uniform vec2  u_res, u_off;
 uniform float u_t, u_form, u_orb, u_warm, u_speed, u_lum, u_sink, u_grain;
-uniform float u_born, u_touchAmt, u_ex;
+uniform float u_born, u_touchAmt, u_ex, u_squash;
 uniform vec2  u_touch, u_wisp;
 uniform vec2  u_trail[6];
 uniform vec3  u_c1, u_c2, u_c3, u_bg;
@@ -2857,7 +2857,10 @@ void main(){
   else                agp = vec2(0.98, 1.00);   // 토 — 넓고 낮다
   /* ⚠ **곁은 완전한 원이다**(창업자 2026-08-28). 0.7 만 섞으면 불꽃 모양이 남아
      "둥근 디자인"이 안 된다. 응축이 끝나면 비율도 일렁임도 전부 0 으로 간다. */
-  agp = mix(agp, vec2(1.0), u_orb);          // 응축하면 다섯이 다 둥글어진다
+  agp = mix(agp, vec2(1.0), clamp(u_orb, 0.0, 1.0));   // 응축하면 다섯이 다 둥글어진다
+  /* 푸딩의 **눌림** — 모일 땐 납작, 퍼질 땐 옆으로. 부호가 반대인 한 쌍이라
+     넓이는 거의 보존된다(젤리가 찌그러져도 양은 그대로인 것과 같다). */
+  agp *= vec2(1.0 + u_squash*0.55, 1.0 - u_squash*0.55);
   vec2 e = p*agp;
   float ang = atan(e.y, e.x);
 
@@ -3054,7 +3057,7 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
       const la = gl.getAttribLocation(pg, "a"); gl.enableVertexAttribArray(la);
       gl.vertexAttribPointer(la, 2, gl.FLOAT, false, 0, 0);
-      const U = {}; ["u_res","u_off","u_t","u_form","u_orb","u_warm","u_speed","u_lum","u_sink","u_grain","u_c1","u_c2","u_c3","u_bg","u_wt","u_bite","u_rayP","u_puffP","u_flkP","u_baseP","u_born","u_touch","u_touchAmt","u_wisp","u_ex","u_trail"]
+      const U = {}; ["u_res","u_off","u_t","u_form","u_orb","u_warm","u_speed","u_lum","u_sink","u_grain","u_c1","u_c2","u_c3","u_bg","u_wt","u_bite","u_rayP","u_puffP","u_flkP","u_baseP","u_born","u_touch","u_touchAmt","u_wisp","u_ex","u_trail","u_squash"]
         .forEach((k) => { U[k] = gl.getUniformLocation(pg, k); });
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const S = Math.round(size * dpr); cv.width = S; cv.height = S;
@@ -3112,16 +3115,24 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
       cv.addEventListener("pointerup", off, { passive: true });
       cv.addEventListener("pointerleave", off, { passive: true });
 
-      /* 응축 보간 — v133 과 같은 규칙(끊기면 교체, 이어지면 자세).
-         ⚠ 1.25초는 **느리다**(창업자 재확인). 탭을 눌렀는데 1초 넘게 안 변하면 "안 눌렸나"가 된다.
-            0.45초로 당긴다 — 그래도 튀지 않는 건 다섯 층이 같이 흐르기 때문이다. */
-      let orb = 0, last = performance.now();
+      /* ── 응축 = **푸딩** (창업자 2026-08-28: "가운데로 모였다가 다시 퍼지는 느낌,
+         말랑하고 귀여운 푸딩같은 느낌") ─────────────────────────────────────────
+         지수 감쇠는 목표에 **도착만** 한다 — 아무리 빨라도 "말랑"이 안 나온다.
+         스프링으로 바꾸면 지나쳤다 되돌아오며 두어 번 출렁인다. 그게 푸딩이다.
+         ⚠ orb 를 0~1 로 자르면 오버슈트가 죽는다. 살짝 넘치게 두되(-0.18~1.28)
+            그 이상은 막는다 — 넘치면 반경 식이 음수 쪽으로 간다. */
+      let orb = 0, orbV = 0, last = performance.now();
       const T0 = performance.now();
       const draw = () => {
         raf = requestAnimationFrame(draw);
         const now = performance.now(), dt = Math.min(0.05, (now - last) / 1000); last = now;
-        orb += ((orbRef && orbRef.current ? 1 : 0) - orb) * (1 - Math.exp(-dt / 0.26));
-        gl.uniform1f(U.u_orb, orb < 0.0004 ? 0 : orb);
+        const orbT = orbRef && orbRef.current ? 1 : 0;
+        orbV += ((orbT - orb) * 190 - orbV * 10.0) * dt;     // K 크고 D 낮게 = 빠르고 말랑
+        orb = Math.max(-0.18, Math.min(1.28, orb + orbV * dt));
+        gl.uniform1f(U.u_orb, Math.abs(orb) < 0.0004 ? 0 : orb);
+        /* 눌림(squash) — 빠르게 모일 때 살짝 납작해지고 퍼질 때 옆으로 늘어난다.
+           푸딩이 "말랑"해 보이는 건 이 한 축 때문이다. */
+        gl.uniform1f(U.u_squash, Math.max(-0.9, Math.min(0.72, orbV * 0.105)));
         gl.uniform1f(U.u_t, (now - T0) / 1000);
         /* 탄생 — 흩어진 조각이 2.4초에 걸쳐 모인다. 온보딩(scatter)에서는 모이다 만 상태로 머문다.
            ⚠ 선형이 아니라 **뒤로 갈수록 느리게**(ease-out) 해야 '모여서 자리를 잡는' 것으로 읽힌다. */
@@ -3138,19 +3149,23 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
           const rt = (now - reactRef.current.t0) / 1000;
           rk = Math.max(0, 1 - rt / 1.7) * Math.min(1, rt / 0.18);
         }
-        touch.amt += (touch.target - touch.amt) * (1 - Math.exp(-dt / (touch.target > touch.amt ? 0.14 : 1.1)   /* 모임은 즉각, 풀림은 여운 */));
+        touch.amt += (touch.target - touch.amt) * (1 - Math.exp(-dt / (touch.target > touch.amt ? 0.06 : 0.85)  /* 모임은 즉각, 풀림은 여운 */));
         const gather = Math.max(touch.amt, rk * 0.7);
 
         /* 위습 물리 — 목표(손끝 또는 제자리)로 끌리되 **감쇠가 낮아 지나쳤다 돌아온다.**
            그 오버슈트가 "살아 있는 것이 다가온다"로 읽힌다. 임계감쇠로 두면 다시 기계가 된다. */
         const held = touch.target > 0.5;
         const tx = held ? touch.x * 2.35 : 0, ty = held ? touch.y * 2.35 : 0;
-        const K = held ? 34 : 8, D = held ? 4.6 : 3.0;      // 부를 땐 세게, 놓으면 느슨하게
+        /* ⚠ K=34·D=4.6 은 **굼떴다**(창업자 재확인). 손끝은 즉각 반응해야 하고,
+           말랑함은 감쇠를 낮춰서 얻는다 — 세기를 낮춰서가 아니다. */
+        const K = held ? 170 : 30, D = held ? 11.5 : 5.8;
         wisp.vx += ((tx - wisp.x) * K - wisp.vx * D) * dt;
         wisp.vy += ((ty - wisp.y) * K - wisp.vy * D) * dt;
         /* 도착하면 손끝 둘레를 **맴돈다** — 접선 방향으로 살짝 민다(키우기 게임의 '따라다님') */
         const ddx = tx - wisp.x, ddy = ty - wisp.y, dd = Math.hypot(ddx, ddy);
-        if (held && dd < 0.45) { const s2 = (1 - dd / 0.45) * 3.2 * (1 + wisp.ex * 0.5);
+          /* ⚠ 맴도는 힘이 세면 **손끝에 안 붙고 주위를 돈다** — 실측에서 목표의 70%까지만 왔다.
+     맴돌기는 "붙은 뒤의 애교"지 접근을 막는 힘이 아니다. 0.28 안쪽에서만, 약하게. */
+        if (held && dd < 0.28) { const s2 = (1 - dd / 0.28) * 3.0 * (1 + wisp.ex * 0.5);
           wisp.vx += -ddy * s2 * dt; wisp.vy += ddx * s2 * dt; }
         wisp.x += wisp.vx * dt; wisp.y += wisp.vy * dt;
         wisp.ex *= Math.exp(-dt / 2.6);                      // 들뜸은 천천히 식는다
@@ -3788,7 +3803,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v158 · 위습";
+const APP_VER = "v159 · 푸딩";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
