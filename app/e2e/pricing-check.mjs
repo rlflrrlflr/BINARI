@@ -31,7 +31,7 @@ ok((SRC.match(/function markFreeIssue/g) || []).length === 1,
 ok(/if \(_superProps\.free_issued\) return;/.test(SRC), "사람당 한 번만 발사한다");
 
 /* ── 실주행: 정말로 붙어서 나가는가 ── */
-const br = await chromium.launch();
+const br = await chromium.launch(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {});
 const page = await br.newPage({ viewport: { width: 390, height: 844 } });
 try {
   await onboard(page, BASE, "?trackdebug&i=0");

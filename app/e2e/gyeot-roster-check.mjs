@@ -33,6 +33,10 @@ const disk = new Map();
 const store = { getItem: (k) => (disk.has(k) ? disk.get(k) : null), setItem: (k, v) => disk.set(k, String(v)), removeItem: (k) => disk.delete(k) };
 const { roleOf } = await import("../src/lib/match.js");
 const hex2rgb = (h) => [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255];
+/* 층(부른 곁/곁)이 실제로 **밝기·자리·꼬리**로 갈리는 자리는 이제 셰이더다(v147).
+   그래서 소스 그대로를 검사 대상으로 든다 — 주석은 걷어내고 본다(주석이 검사에 걸리는 사고를
+   이 리포가 네 번 겪었다: `same ? 1 : 1`, \bidx\b, 5-g 의 (O) 예문, invite-check 의 match.js). */
+const SRC = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 
 const M = new Function("store", "hex2rgb", "roleOf", `
   ${grab("const EL_COLOR = {", "const")}
@@ -91,8 +95,12 @@ const fp = (y, m, d) => M.gyeotFingerprint(y, m, d);
   ck("① 상한이 있다 — 명부가 수집 카운터가 되지 않는다", big.length === M.GYEOT_MAX, `${big.length}/${M.GYEOT_MAX}`);
 
   reset();
+  /* ⚠ v147 에서 조건이 하나 풀렸다: **오행 없는 자리를 받는다.** 부르기만 한 곁은 하늘이 없다
+     — 답이 와야 사람이 되고, 그 전엔 상대의 오행을 우리가 모른다(지시서 §10 「B의 값을 A에게 보내기 — 안 한다」).
+     그래서 `{key}` 만으로도 자리가 선다. 열쇠 없는 것은 여전히 안 받는다 — 그건 자리가 아니다. */
   ck("① 이상값에도 안 터진다",
-     M.gyeotAdd([], null, 1).length === 0 && M.gyeotAdd([], { key: "x" }, 1).length === 0 && M.gyeotAdd([], { el: "수" }, 1).length === 0);
+     M.gyeotAdd([], null, 1).length === 0 && M.gyeotAdd([], { el: "수" }, 1).length === 0 && M.gyeotAdd([], {}, 1).length === 0);
+  ck("① 하늘을 모르는 자리도 선다 (부르기만 한 곁)", M.gyeotAdd([], { key: "x", name: "민수" }, 1).length === 1);
   disk.set(M.GYEOT_KEY, "{망가진 JSON");
   ck("① 저장이 깨져 있어도 빈 명부로 시작한다", M.readGyeot().length === 0);
 }
@@ -179,7 +187,16 @@ const fp = (y, m, d) => M.gyeotFingerprint(y, m, d);
   ck("④ 코드 값이 한글이 아니다(화면 말이 바뀌어도 저장분이 안 깨진다)",
      !/[가-힣]/.test(M.GY_CALLED + M.GY_STANDING), `${M.GY_CALLED}/${M.GY_STANDING}`);
   const vw = M.gyeotView([{ key: "z", el: "토", tier: M.GY_STANDING }, { key: "z2", el: "토", tier: M.GY_CALLED }], "화");
-  ck("④ '부른 곁'은 흐리게 선다", vw[1].col[0] < vw[0].col[0], `${vw[0].col[0].toFixed(3)} → ${vw[1].col[0].toFixed(3)}`);
+  /* ⚠ **v147 에서 흐리게 만드는 자리가 옮겨졌다.** 예전엔 여기서 색에 0.45 를 곱해 넘겼는데,
+     그러면 승격이 한 프레임 만에 끝나 전이가 안 생긴다(§5 D-2: 끊기면 교체, 이어지면 자세).
+     이제 층은 `tier`(0/1)로만 넘기고 밝기·자리·꼬리는 셰이더가 프레임마다 따라간다.
+     그래서 검사도 **같은 뜻을 새 자리에서** 잡는다 — 뜻은 하나도 안 무르게 한다:
+       ① 뷰가 층을 구분해서 넘기는가  ② 셰이더가 그 층으로 실제 밝기를 가르는가. */
+  ck("④ '부른 곁'과 '곁'이 층으로 갈린다", vw[0].tier === 1 && vw[1].tier === 0, `${vw[0].tier} → ${vw[1].tier}`);
+  ck("④ '부른 곁'은 흐리게 선다 (셰이더가 0.45 를 층으로 건다)",
+     /v_gc\s*=\s*gcol\*mix\(0\.45,\s*1\.0,\s*gt\)/.test(SRC), "v_gc = gcol*mix(0.45, 1.0, gt)");
+  ck("④ 승격은 밝기 하나로만 말하지 않는다 (자리·꼬리도 같이 움직인다)",
+     /mix\(0\.46\*1\.18,\s*0\.46,\s*gt\)/.test(SRC) && /gtail\*mix\(0\.95,\s*0\.5,\s*gt\)/.test(SRC));
   /* ④-b 구값 승계 — v134.2 가 한글로 저장한 것을 안 옮기면 **밝기 판정이 조용히 뒤집힌다**
      (둘 다 GY_STANDING 이 아니게 되어 전원이 흐려지거나, 반대로 전원이 밝아진다). */
   reset();
@@ -190,8 +207,16 @@ const fp = (y, m, d) => M.gyeotFingerprint(y, m, d);
      migrated[0].tier === M.GY_STANDING && migrated[1].tier === M.GY_CALLED,
      migrated.map((x) => x.tier).join(","));
   ck("④ 흐린 것도 꺼지지는 않는다", vw[1].col[0] > 0);
-  ck("④ 셰이더가 받는 모양은 {rel,ang,col} 뿐",
-     Object.keys(vw[0]).sort().join(",") === "ang,col,rel", Object.keys(vw[0]).sort().join(","));
+  /* `key` 가 늘었다 — 승격 보간을 **사람마다** 들고 가야 해서다. 슬롯 번호로 들면
+     곁이 하나 늘어 자리가 밀리는 순간 남의 전이를 이어받아 엉뚱한 위성이 밝아진다.
+     ⚠ 늘어도 되는 건 여기까지다 — **이름은 여전히 안 넘어간다**(아래 ⑤가 잡는다). */
+  ck("④ 셰이더가 받는 모양은 {key,rel,ang,col,tier} 뿐",
+     Object.keys(vw[0]).sort().join(",") === "ang,col,key,rel,tier", Object.keys(vw[0]).sort().join(","));
+  ck("④ 하늘을 모르는 곁은 흙색을 지어내지 않는다", (() => {
+    const unk = M.gyeotView([{ key: "u", el: null, tier: M.GY_CALLED }], "화")[0];
+    const soil = M.gyeotView([{ key: "s", el: "토", tier: M.GY_CALLED }], "화")[0];
+    return unk.col.join() !== soil.col.join() && unk.rel === 0;
+  })());
 }
 
 /* ── ⑥ 써머리 색인 — 표와 목록을 잇는 장치 (2026-08-17) ─────────────────────

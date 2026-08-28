@@ -30,7 +30,7 @@ for (const forbidden of ["texture(", "canvas", "GuardianSeal", "shader", "u_form
   ck(!panel.includes(forbidden), `의식 블록이 수호신 렌더에 안 묶여 있다 — ${forbidden} 없음`);
 
 /* ── 실주행 ── */
-const b = await chromium.launch();
+const b = await chromium.launch(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {});
 const p = await b.newPage({ viewport: { width: 430, height: 932 } });
 try {
   await p.addInitScript(() => {

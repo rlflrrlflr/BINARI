@@ -8,7 +8,7 @@ const appDir = join(dirname(fileURLToPath(import.meta.url)), "..");
 // import.meta.env는 Node ESM엔 없으므로 스텁 주입(휴면 계측: AKEY=undefined → 완전 무동작)
 /* v124.1: 임시 번들을 src/ 안에 떨군다 — App.jsx 가 v113부터 `./lib/imprint.js` 를 임포트하는데
    app 루트에 떨구면 그 상대경로가 깨져 이 검증 자체가 통째로 못 돌았다(ERR_MODULE_NOT_FOUND). */
-execSync("npx esbuild src/App.jsx --format=esm --jsx=automatic --define:import.meta.env={} --outfile=src/.mansae-test.tmp.mjs", { cwd: appDir });
+execSync("npx esbuild src/App.jsx --format=esm --jsx=automatic --bundle --packages=external --define:import.meta.env={} --outfile=src/.mansae-test.tmp.mjs", { cwd: appDir });
 const { calcSaju, sunLongitude, equationOfTime, cityLon, moonLongitude, tzolkin, lunar2solar, solar2lunar, daeun } = await import(join(appDir, "src/.mansae-test.tmp.mjs"));
 
 const results = [];

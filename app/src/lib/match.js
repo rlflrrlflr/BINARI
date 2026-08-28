@@ -11,8 +11,8 @@
    ③ **총점을 맨 앞에 두지 않는다** — 숫자를 먼저 보면 나머지를 안 읽는다.
    ④ **헤어지라고 말하지 않는다.** 판정은 "무엇을 조심하라"까지다. 관계를 끊는 결정은 우리 몫이 아니다. */
 import {
-  jdFromKST, jdn, sunSign, moonSign, nakshatra, tzolkin, nayin, weton, lifePath,
-  ashtakuta, sipseong as ssOf, GAN as GANK, JI as JIK, GAN_EL, JI_EL,
+  jdFromKST, jdn, sunSign, moonSign, tzolkin, nayin, weton, lifePath,
+  ashtakutaIdx, sidIdx, sipseong as ssOf, GAN as GANK, JI as JIK, GAN_EL, JI_EL,
 } from "./sky.js";
 
 const jong = (s) => { const c = (s || "").trim().slice(-1).charCodeAt(0); return c >= 0xac00 && c <= 0xd7a3 && (c - 0xac00) % 28 > 0; };
@@ -103,16 +103,53 @@ export function roleOf(myDG, theirDG) {
   return { ss, name: (ROLE[ss] || ROLE_FALLBACK)[0], use: (ROLE[ss] || ROLE_FALLBACK)[1] };
 }
 
-/** 두 사람의 궁합. a·b 는 { saju:{idx}, birth:{y,m,d,h,min} }
+/* ── 한 사람의 관계 좌표 (v147 · 작업지시_초대와회신 §4) ────────────────────
+   **왜 만들었나.** 초대를 받은 사람(B)은 보낸 사람(A)의 **생년월일을 모른 채** 둘 사이를 계산해야 한다 —
+   서버가 A의 생년월일 원값을 안 갖고 있기 때문이다(처리방침 §5-2). 그런데 예전 `readMatch` 는
+   두 사람 **모두**의 `birth.y/m/d` 를 요구해서 그 화면을 만들 수가 없었다.
+
+   그래서 아홉 축이 **한 사람에게서 실제로 뽑아 쓰는 값**만 추린 게 이 함수다. 아래 목록이 전부다 —
+   생년월일은 여기서 끝나고 더 흐르지 않는다.
+
+   ⚠ **되짚을 수는 있다.** 이 좌표들을 다 모으면 생일을 좁힐 수 있다. 그래서 숨기지 않고
+     처리방침 §5-2 「정직한 고지 1」이 그렇게 **적혀 있다.** 헌장 기준이 「유저가 무엇이 나가는지
+     보고 있는가」라서, 되짚기가 가능하다는 사실 자체를 화면에 내놓는 쪽을 골랐다.
+   ⚠ **키 이름에 y·m·d·h 를 쓰지 마라.** `api/invite` 가 그 이름들을 400 으로 막는다 —
+     생년월일 원값이 섞여 들어오는 걸 서버가 막는 장치라, 파생값이 그 이름을 쓰면 같이 막힌다. */
+export function matchAxes(p) {
+  if (!p?.saju?.idx || !p?.birth?.y) return null;
+  const i = p.saju.idx;
+  const jd = jdFromKST(+p.birth.y, +p.birth.m, +p.birth.d,
+    i.hG == null ? 12 : +p.birth.h, i.hG == null ? 0 : (+p.birth.min || 0));
+  const sid = sidIdx(jd, +p.birth.y);                                    // 인도 — 나크샤트라·라시
+  const w = weton(+p.birth.y, +p.birth.m, +p.birth.d);                   // 자바 — 날의 무게
+  const t = tzolkin(jdn(+p.birth.y, +p.birth.m, +p.birth.d));            // 마야 — 날개
+  return {
+    ax: 1,
+    dG: i.dG, dJ: i.dJ,                                                  // 동아시아 — 일간·일지
+    nayin: p.saju.nayin || nayin(+p.birth.y),                            // 동아시아 — 소리
+    sun: sunSign(jd), moon: moonSign(jd),                                // 서양 — 해·달의 자리
+    nak: sid.nak, rashi: sid.rashi,
+    wday: w.day, pasa: w.pasaran, neptu: w.neptu,
+    tone: t.tone, tsign: t.sign,
+    lp: lifePath(+p.birth.y, +p.birth.m, +p.birth.d),                    // 수비학 — 라이프패스
+  };
+}
+/** 사람이든 좌표든 받아 좌표로 세운다. 이름은 좌표에 안 실려 오므로 따로 얹는다. */
+const asAxes = (p) => {
+  if (!p) return null;
+  const ax = p.saju ? matchAxes(p) : Number.isInteger(p.dG) ? p : null;
+  return ax ? { ...ax, name: p.name || ax.name || "" } : null;
+};
+
+/** 두 사람의 궁합. a·b 는 { saju:{idx}, birth:{y,m,d,h,min} } 또는 `matchAxes()` 좌표.
     ⚠ sex 는 받지 않는다 — 이 엔진은 성별을 쓰지 않는다(2026-08-15에 화면 칩과 함께 걷어냄). */
 export function readMatch({ a, b, lat = 37.5665, lon = 126.978 } = {}) {
-  if (!a?.saju?.idx || !b?.saju?.idx || !a?.birth?.y || !b?.birth?.y) return null;
+  const A = asAxes(a), B = asAxes(b);
+  if (!A || !B) return null;
   const notes = [];
   const fn = (t) => { notes.push(t); return notes.length; };
-  const jdOf = (p) => jdFromKST(+p.birth.y, +p.birth.m, +p.birth.d,
-    p.saju.idx.hG == null ? 12 : +p.birth.h, p.saju.idx.hG == null ? 0 : (+p.birth.min || 0));
-  const jdA = jdOf(a), jdB = jdOf(b);
-  const elA = GAN_EL[a.saju.idx.dG], elB = GAN_EL[b.saju.idx.dG];
+  const elA = GAN_EL[A.dG], elB = GAN_EL[B.dG];
   const rows = [];
   const put = (from, ask, val, w, v, why) => rows.push({ from, ask, val, w, v, n: fn(`${from} — ${why}`) });
 
@@ -120,20 +157,20 @@ export function readMatch({ a, b, lat = 37.5665, lon = 126.978 } = {}) {
   {
     const w = elA === elB
       ? { v: 1, t: `<b>둘 다 ${EL_KO[elA]}야.</b> 같은 방식으로 세상을 봐서 말이 빠르게 통해. 대신 <b>같은 것에 약해서</b> 둘 다 무너질 땐 같이 무너져` }
-      : SANG[elB] === elA ? { v: 2, t: `<b>${b.name || "상대"}가 너를 받쳐 주는 결이야.</b> 옆에 있으면 네가 편해져. 조심할 건 하나 — <b>받는 게 당연해지는 것</b>이야` }
+      : SANG[elB] === elA ? { v: 2, t: `<b>${B.name || "상대"}가 너를 받쳐 주는 결이야.</b> 옆에 있으면 네가 편해져. 조심할 건 하나 — <b>받는 게 당연해지는 것</b>이야` }
         : SANG[elA] === elB ? { v: 1, t: `<b>네가 주는 쪽이야.</b> 챙기고 끌어 주게 돼. 오래 가려면 <b>네가 받는 통로</b>를 따로 만들어 둬야 해` }
           : GEUK[elA] === elB ? { v: -1, t: `<b>네가 밀어붙이는 결이야.</b> 결정을 네가 내리게 돼. 상대가 말수가 줄면 그건 동의가 아니라 <b>포기</b>야` }
             : { v: -1, t: `<b>상대가 너를 잡아 두는 결이야.</b> 긴장이 있는데 그 긴장이 너를 헤매지 않게 해. 대신 <b>답답하다는 말이 나오는 사이</b>야` };
     put("동아시아 · 여덟 글자", "누가 주고 누가 받나", `${EL_KO[elA]} ↔ ${EL_KO[elB]}`, w.t, w.v,
-      `일간 ${GANK[a.saju.idx.dG]}(${elA}) vs ${GANK[b.saju.idx.dG]}(${elB}). 오행 생극 그대로다 — <b>변환이 없다</b>.`);
+      `일간 ${GANK[A.dG]}(${elA}) vs ${GANK[B.dG]}(${elB}). 오행 생극 그대로다 — <b>변환이 없다</b>.`);
   }
   /* ② 동아시아 · 일지 — 생활이 맞나 */
-  const rel = jiRel(a.saju.idx.dJ, b.saju.idx.dJ);
-  put("동아시아 · 자리의 글자", "같이 사는 게 맞나", `${JIK[a.saju.idx.dJ]}·${JIK[b.saju.idx.dJ]} ${rel}`,
+  const rel = jiRel(A.dJ, B.dJ);
+  put("동아시아 · 자리의 글자", "같이 사는 게 맞나", `${JIK[A.dJ]}·${JIK[B.dJ]} ${rel}`,
     JI_REL_W[rel].w, JI_REL_W[rel].v,
-    `두 사람의 짝 자리 ${JIK[a.saju.idx.dJ]}·${JIK[b.saju.idx.dJ]} → <b>${rel}</b>. 십이지 합·충·형 배당 그대로다 — <b>변환이 없다</b>.`);
+    `두 사람의 짝 자리 ${JIK[A.dJ]}·${JIK[B.dJ]} → <b>${rel}</b>. 십이지 합·충·형 배당 그대로다 — <b>변환이 없다</b>.`);
   /* ③ 인도 · 아쉬타쿠타 — 여덟 항목을 합치지 않고 그대로 편다 */
-  const ak = ashtakuta(jdA, +a.birth.y, jdB, +b.birth.y);
+  const ak = ashtakutaIdx(A.nak, A.rashi, B.nak, B.rashi);
   const akRows = Object.entries(ak.detail).map(([k, sc]) => {
     const max = { 바르나: 1, 바샤: 2, 타라: 3, 요니: 4, 그라하: 5, 가나: 6, 바쿠트: 7, 나디: 8 }[k];
     return { k, sc, max, label: AK_MEAN[k][0], w: AK_MEAN[k][1], ratio: sc / max };
@@ -147,7 +184,7 @@ export function readMatch({ a, b, lat = 37.5665, lon = 126.978 } = {}) {
     `아쉬타쿠타 ${ak.total}/36. 여덟 항목의 채점은 인도 전통 규칙 그대로라 <b>변환이 없다</b>. 다만 각 항목을 우리말 이름으로 옮기는 데는 <b>해석이 섞인다</b>. 그리고 <b>합산 점수를 앞세우지 않는다</b> — 숫자를 먼저 보면 나머지를 안 읽는다.`);
   /* ④ 서양 · 해자리 — 성향 / ⑤ 달자리 — 감정 */
   {
-    const sA = sunSign(jdA), sB = sunSign(jdB), eA = ZO_EL[sA], eB = ZO_EL[sB];
+    const sA = A.sun, sB = B.sun, eA = ZO_EL[sA], eB = ZO_EL[sB];
     const same = eA === eB, warm = ["불", "공기"], cool = ["흙", "물"];
     const pair = same ? 2 : (warm.includes(eA) && warm.includes(eB)) || (cool.includes(eA) && cool.includes(eB)) ? 1 : -1;
     put("서양 · 해의 자리", "성향이 맞나", `${sA} ↔ ${sB}`,
@@ -155,7 +192,7 @@ export function readMatch({ a, b, lat = 37.5665, lon = 126.978 } = {}) {
         : pair === 1 ? "<b>다른데 통하는 결이야.</b> 같은 속도로 움직이진 않아도 방향은 비슷해"
           : "<b>속도가 다른 결이야.</b> 한쪽이 나가자고 할 때 한쪽은 쉬자고 해. 못 맞춘다는 뜻이 아니라 <b>번갈아 맞춰 줘야 한다</b>는 뜻이야",
       pair, `${sA}(${eA}) vs ${sB}(${eB}). 사원소 궁합 — <b>해석이 섞인다</b>.`);
-    const mA = moonSign(jdA), mB = moonSign(jdB), meA = ZO_EL[mA], meB = ZO_EL[mB];
+    const mA = A.moon, mB = B.moon, meA = ZO_EL[mA], meB = ZO_EL[mB];
     put("서양 · 달의 자리", "감정이 맞나", `${mA} ↔ ${mB}`,
       meA === meB ? "<b>감정 처리 방식이 같아.</b> 화가 나면 둘 다 같은 식으로 굴어 — 그래서 회복도 빨라"
         : "<b>감정 처리 방식이 달라.</b> 한쪽은 바로 말하고 한쪽은 삭여. <b>싸움의 8할이 여기서 나와</b> — 내용이 아니라 방식에서",
@@ -163,7 +200,7 @@ export function readMatch({ a, b, lat = 37.5665, lon = 126.978 } = {}) {
   }
   /* ⑥ 자바 · 날의 무게 — 자바 전통이 실제로 궁합·택일에 쓰는 수치다 */
   {
-    const wA = weton(+a.birth.y, +a.birth.m, +a.birth.d), wB = weton(+b.birth.y, +b.birth.m, +b.birth.d);
+    const wA = { day: A.wday, pasaran: A.pasa, neptu: A.neptu }, wB = { day: B.wday, pasaran: B.pasa, neptu: B.neptu };
     const sum = wA.neptu + wB.neptu;
     /* ⚠️ 가운데 칸 문구가 "한쪽이 무겁고 한쪽이 가벼워"였다 — **판정은 합만 보는데 문구는 갈림을 단언했다**
        (역할과초대 §B-0-b ③). 13+13=26 처럼 **둘 다 중간이어도** 그 문장이 나갔다.
@@ -180,7 +217,7 @@ export function readMatch({ a, b, lat = 37.5665, lon = 126.978 } = {}) {
   }
   /* ⑦ 마야 · 두 날개 — 맡은 일이 같은가 다른가 */
   {
-    const tA = tzolkin(jdn(+a.birth.y, +a.birth.m, +a.birth.d)), tB = tzolkin(jdn(+b.birth.y, +b.birth.m, +b.birth.d));
+    const tA = { tone: A.tone, sign: A.tsign }, tB = { tone: B.tone, sign: B.tsign };
     const same = tA.sign === tB.sign;
     put("마야 · 두 날개", "맡은 일이 같은가", `${tA.sign} ↔ ${tB.sign}`,
       same ? "<b>같은 날개야.</b> 세상에 온 이유가 같아 — 같은 것에 흥분하고 같은 것에 실망해"
@@ -194,8 +231,9 @@ export function readMatch({ a, b, lat = 37.5665, lon = 126.978 } = {}) {
        그래서 1~2월 초 출생자는 **같은 사람인데 궁합과 각인에서 납음이 달라 보였다**
        (실측: 1990-01-15 → 궁합 노방토 / 각인 대림목). 같은 앱이 같은 사람에 대해 다른 말을 한 것이다.
        `calcSaju` 가 이미 입춘 보정을 마친 `saju.nayin` 을 들고 있으므로 그걸 쓴다 —
-       두 번 계산하는 대신 **한 곳에서 나온 값을 나눠 쓴다**. 그래야 다음에 또 갈리지 않는다. */
-    const nA = a.saju.nayin || nayin(+a.birth.y), nB = b.saju.nayin || nayin(+b.birth.y);
+       두 번 계산하는 대신 **한 곳에서 나온 값을 나눠 쓴다**. 그래야 다음에 또 갈리지 않는다.
+       (v147: 그 고름이 `matchAxes()` 로 올라갔다 — 좌표를 만드는 자리가 한 곳이라 갈릴 데가 없다) */
+    const nA = A.nayin, nB = B.nayin;
     const eA = ["목", "화", "토", "금", "수"].find((e) => nA.includes(e));
     const eB = ["목", "화", "토", "금", "수"].find((e) => nB.includes(e));
     const good = SANG[eB] === eA || SANG[eA] === eB || eA === eB;
@@ -206,7 +244,7 @@ export function readMatch({ a, b, lat = 37.5665, lon = 126.978 } = {}) {
   }
   /* ⑨ 수비학 — 평생 배우는 게 같은가 */
   {
-    const lA = lifePath(+a.birth.y, +a.birth.m, +a.birth.d), lB = lifePath(+b.birth.y, +b.birth.m, +b.birth.d);
+    const lA = A.lp, lB = B.lp;
     const same = lA === lB;
     put("수비학 · 두 개의 길", "평생 배우는 게 같은가", `${lA} ↔ ${lB}`,
       same ? `<b>둘 다 ${LP_TASK[lA]}을 배우는 삶이야.</b> 서로를 깊이 이해해. 대신 <b>같은 데서 같이 걸려</b> — 밖에서 조언해 줄 사람이 필요해`
@@ -230,7 +268,7 @@ export function readMatch({ a, b, lat = 37.5665, lon = 126.978 } = {}) {
        궁합 점수에 일 축을 얹으면 연애 궁합과 일 궁합이 한 숫자로 뭉개진다.
      ⚠ **"동업하지 마"라고 말하지 않는다.** 관계 판정과 같은 선이다 — 조심할 것까지가 우리 몫이다. */
   const work = (() => {
-    const ss = ssOf(a.saju.idx.dG, b.saju.idx.dG);   // 내가 상대를 보는 십성
+    const ss = ssOf(A.dG, B.dG);   // 내가 상대를 보는 십성
     /* ── 역할 10종 — 창업자 화법 규칙 3 「좋은 말이 아니라 쓸모」 (2026-08-15 개정) ──────
        규칙 1(등급 아니라 역할)·2(총점 아니라 축)는 이미 코드가 만족한다 — 이 값은 ssOf 단일 축에서
        나오고 총점을 안 탄다. 남은 건 규칙 3이었다: 예전 문구는 이름이 **구조 서술**("상대가 몰아붙이는 쪽")
@@ -248,7 +286,7 @@ export function readMatch({ a, b, lat = 37.5665, lon = 126.978 } = {}) {
 
        어휘 규칙: 이름은 전부 **「…자리」**로 끝난다. 사람을 규정하지 않고 **자리를 가리키기** 위해서다.
        ("이 사람은 ~한 사람이야" 는 등급이 되고, "~한 자리야" 는 관계의 위치가 된다) */
-    const _role = roleOf(a.saju.idx.dG, b.saju.idx.dG) || { ss, name: ROLE_FALLBACK[0], use: ROLE_FALLBACK[1] };
+    const _role = roleOf(A.dG, B.dG) || { ss, name: ROLE_FALLBACK[0], use: ROLE_FALLBACK[1] };
     const ROLE = [_role.name, _role.use];
     /* 미는 쪽·쏟는 쪽 — 각인 「같이 일하면 좋은 사람」과 **같은 규칙**이다(오행 상생 그대로) */
     const push = SANG[elB] === elA ? "상대가 너를 민다" : SANG[elA] === elB ? "네가 상대를 민다"
@@ -261,7 +299,7 @@ export function readMatch({ a, b, lat = 37.5665, lon = 126.978 } = {}) {
           : "붙어 있는 시간은 크게 문제 안 돼";
     const rows2 = [
       ["둘의 역할", `<b>${ROLE[0]}</b>${jong(ROLE[0]) ? "이야" : "야"}. ${dot(ROLE[1])}`,
-        fn(`같이 일하면 — 네 일간 ${IGA(GANK[a.saju.idx.dG])} 상대 일간 ${GANK[b.saju.idx.dG]}${jong(GANK[b.saju.idx.dG]) ? "을" : "를"} 보는 관계가 <b>${ss}</b>. 십성 배당 그대로다(<b>변환이 없다</b>). 그 관계를 직장·동업의 말로 옮기는 데는 <b>해석이 섞인다</b>.`)],
+        fn(`같이 일하면 — 네 일간 ${IGA(GANK[A.dG])} 상대 일간 ${GANK[B.dG]}${jong(GANK[B.dG]) ? "을" : "를"} 보는 관계가 <b>${ss}</b>. 십성 배당 그대로다(<b>변환이 없다</b>). 그 관계를 직장·동업의 말로 옮기는 데는 <b>해석이 섞인다</b>.`)],
       ["누가 미나", `<b>${push}.</b> ${push === "상대가 너를 민다" ? "이 사람 곁에서 네 일이 가벼워져 — <b>같이 일하기 좋은 쪽</b>이야."
         : push === "네가 상대를 민다" ? "네가 끌어 주게 돼. 성과는 나는데 <b>네가 먼저 지쳐</b> — 받는 통로를 따로 만들어."
           : push === "서로 안 밀고 안 쏟는다" ? "같은 기운이라 손발은 맞는데 <b>둘 다 같은 데서 막혀</b> — 막힐 때 물어볼 바깥 사람이 필요해."
@@ -274,7 +312,7 @@ export function readMatch({ a, b, lat = 37.5665, lon = 126.978 } = {}) {
         : "<b>같은 말을 다르게 알아듣는 사이야.</b> 정한 건 <b>한 줄이라도 적어서</b> 확인해 — 이 조합에서 사고는 거의 여기서 나"}.`,
         fn(`아쉬타쿠타 그라하 ${graha.sc}/${graha.max}(생각이 통하나). <b>변환이 없다</b>.`)],
       ["얼마나 붙어 있어도 되나", `<b>${tenure}.</b>`,
-        fn(`두 사람의 자리 글자 ${JIK[a.saju.idx.dJ]}·${JIK[b.saju.idx.dJ]} → ${rel}. 십이지 배당 그대로이고(<b>변환이 없다</b>), 근무 형태로 옮기는 데 <b>해석이 섞인다</b>.`)],
+        fn(`두 사람의 자리 글자 ${JIK[A.dJ]}·${JIK[B.dJ]} → ${rel}. 십이지 배당 그대로이고(<b>변환이 없다</b>), 근무 형태로 옮기는 데 <b>해석이 섞인다</b>.`)],
     ];
     const careW = [];
     if (["겁재", "편재"].includes(ss)) careW.push("<b>돈과 이름은 시작 전에 갈라 둬.</b> 이 조합은 성과가 날 때 갈리지, 안 날 때 갈리지 않아.");
@@ -285,7 +323,7 @@ export function readMatch({ a, b, lat = 37.5665, lon = 126.978 } = {}) {
     /* 시각화가 쓰는 값 — 이미 계산해 둔 것을 **밖으로 내보내기만** 한다(새 계산 0).
        관계표현인계서 §2: "엔진이 이미 방향값을 준다 — 있는 값을 그리기만 하면 된다" */
     return { rows: rows2, care: careW, push, elA, elB,
-      dgA: a.saju.idx.dG, dgB: b.saju.idx.dG,
+      dgA: A.dG, dgB: B.dG,
       n: fn("이 절은 <b>새로 계산한 게 아니다</b> — 위 아홉 축에서 이미 뽑은 값(일간·자리 글자·바르나·그라하)을 <b>일의 눈으로 다시 읽은 것</b>이다. 그래서 총점에도 안 들어간다. 연애 궁합과 일 궁합을 한 숫자로 뭉개지 않으려는 것이다.") };
   })();
 

@@ -23,7 +23,7 @@ const APPSRC = readFileSync(join(APPDIR, "src/App.jsx"), "utf8");
    ⚠ 임시 번들은 반드시 src/ 안에 떨군다. App.jsx 가 `./lib/imprint.js` 를 상대경로로 임포트해서
      app 루트에 떨구면 그 경로가 깨진다(v124.1 에 실제로 겪은 사고). */
 const TMP = join(APPDIR, "src/.invite-mock.tmp.mjs");
-execSync(`npx esbuild src/App.jsx --format=esm --jsx=automatic --define:import.meta.env={} --outfile=${TMP}`, { cwd: APPDIR });
+execSync(`npx esbuild src/App.jsx --format=esm --jsx=automatic --bundle --packages=external --define:import.meta.env={} --outfile=${TMP}`, { cwd: APPDIR });
 const { calcSaju } = await import(TMP);
 const { readMatch } = await import(join(APPDIR, "src/lib/match.js"));
 

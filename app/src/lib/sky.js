@@ -282,10 +282,17 @@ function nakIdxOf(jd, year) {
   const ayan = 23.86 + (year - 1990) * 0.01397;
   return Math.floor(norm360(moonLongitude(jd) - ayan) / (360 / 27)) % 27;
 }
-export function ashtakuta(aJd, aYear, bJd, bYear) {
-  const A = nakIdxOf(aJd, aYear), B = nakIdxOf(bJd, bYear);
-  const ayanA = 23.86 + (aYear - 1990) * 0.01397, ayanB = 23.86 + (bYear - 1990) * 0.01397;
-  const rA = Math.floor(norm360(moonLongitude(aJd) - ayanA) / 30), rB = Math.floor(norm360(moonLongitude(bJd) - ayanB) / 30);
+/* 한 사람의 인도 좌표 둘 — 나크샤트라(27) · 라시(12).
+   ⚠ **이걸 왜 밖으로 꺼냈나**: 아쉬타쿠타는 두 사람 각각에서 **정수 두 개**만 쓴다.
+     초대 회신에서는 받은 사람이 보낸 사람의 생년월일을 모른 채 계산해야 하는데,
+     그때 필요한 게 율리우스일이 아니라 **이 두 정수**다. 있는 값을 이름 붙여 내보낼 뿐 —
+     계산은 하나도 안 바뀐다(`ashtakuta` 가 아래에서 이걸 그대로 부른다). */
+export function sidIdx(jd, year) {
+  const ayan = 23.86 + (year - 1990) * 0.01397;
+  return { nak: nakIdxOf(jd, year), rashi: Math.floor(norm360(moonLongitude(jd) - ayan) / 30) };
+}
+/** 아쉬타쿠타 본체 — 좌표(나크샤트라·라시)만 받는다. 생년월일이 필요 없다. */
+export function ashtakutaIdx(A, rA, B, rB) {
   const s = {};
   /* 바르나(1) — 계급. 남자 쪽이 같거나 위면 1점 */
   s.바르나 = VARNA_BY_SIGN[rA] >= VARNA_BY_SIGN[rB] ? 1 : 0;
@@ -311,6 +318,11 @@ export function ashtakuta(aJd, aYear, bJd, bYear) {
   return { total: +total.toFixed(1), max: 36, detail: s,
     a: { nak: NAKSHATRA[A], yoni: YONI_NAME[YONI[A]], gana: GANA_NAME[GANA[A]], nadi: NADI_NAME[NADI[A]], rashi: ZODIAC12[rA] },
     b: { nak: NAKSHATRA[B], yoni: YONI_NAME[YONI[B]], gana: GANA_NAME[GANA[B]], nadi: NADI_NAME[NADI[B]], rashi: ZODIAC12[rB] } };
+}
+/** 생년월일에서 바로 — 기존 호출부가 쓰던 얼굴 그대로다. */
+export function ashtakuta(aJd, aYear, bJd, bYear) {
+  const a = sidIdx(aJd, aYear), b = sidIdx(bJd, bYear);
+  return ashtakutaIdx(a.nak, a.rashi, b.nak, b.rashi);
 }
 /* ── flow ── */
 export const GAN = ["갑","을","병","정","무","기","경","신","임","계"];

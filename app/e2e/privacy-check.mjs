@@ -111,6 +111,33 @@ ck("거부 UI 가 화면에 있다", /사용 통계 수집을 끌래/.test(src))
   ck("§5-1(판결 공유)은 그대로다 — 그건 지금도 참이다",
      /이 링크는 <strong>판결 내용을 주소 안에 직접 담아<\/strong> 전달하며, <strong>저희 서버에 저장하지 않습니다\.<\/strong>/.test(pv2));
   ck("§5-2 가 저장하는 것을 밝힌다(파생값)", /관계 계산용 파생값/.test(pv2));
+  /* ⚠ **목록이 코드보다 짧으면 그건 축소 고지다.** v147 에서 좌표가 넷에서 열하나로 넓어졌다
+     (넷으로는 받은 사람이 아홉 축 중 넷밖에 못 세운다). 방침의 괄호 안 목록과 `matchAxes()` 가
+     실제로 싣는 값이 **같은 수**인지 여기서 맞댄다 — 한쪽만 늘면 잡힌다. */
+  {
+    /* 값 **개수**로 맞대면 안 된다 — 「웨톤」 하나가 코드에선 셋(요일·파사란·넵투)이라 항상 어긋난다.
+       그래서 **이름 대 칸**으로 맞댄다. 이 표가 방침과 코드를 잇는 유일한 다리다:
+         ① 방침에 적힌 이름이 이 표에 없으면 → 방침이 코드에 없는 걸 적었다
+         ② 코드가 싣는 칸이 이 표에 없으면 → **고지 없이 값이 하나 늘었다**(이게 잡으려는 사고다) */
+    const MAP = { 일간: ["dG"], 일지: ["dJ"], 오행: ["el"], 해자리: ["sun"], 달자리: ["moon"],
+      나크샤트라: ["nak"], 라시: ["rashi"], 웨톤: ["wday", "pasa", "neptu"], 촐킨: ["tone", "tsign"],
+      납음: ["nayin"], 수: ["lp"] };
+    const listed = ((pv2.match(/관계 계산용 파생값<\/strong>\(([^)]+)\)/) || [])[1] || "").split("·").map((x) => x.trim());
+    const mx = readFileSync(new URL("../src/lib/match.js", import.meta.url), "utf8");
+    const nocmt = (t) => t.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+    const ret = nocmt((mx.match(/export function matchAxes[\s\S]*?\n\}/) || [""])[0]);
+    const extra = nocmt((src.match(/function gyeotAxesOfMe[\s\S]*?\n\}/) || [""])[0]);
+    const fields = [...(ret.slice(ret.indexOf("return {")) + extra).matchAll(/([a-zA-Z]+):/g)]
+      .map((m) => m[1]).filter((k) => k !== "ax");
+    const known = new Set(Object.values(MAP).flat());
+    const unlisted = [...new Set(fields)].filter((f) => !known.has(f));
+    const unmapped = listed.filter((x) => !MAP[x]);
+    ck("§5-2 의 파생값 목록에 없는 값을 코드가 싣지 않는다", unlisted.length === 0, unlisted.join(",") || "0건");
+    ck("§5-2 가 코드에 없는 값을 적지 않는다", unmapped.length === 0, unmapped.join(",") || "0건");
+    ck("§5-2 목록이 코드가 싣는 축을 빠짐없이 덮는다",
+       Object.entries(MAP).every(([ko, fs]) => !fs.some((f) => fields.includes(f)) || listed.includes(ko)),
+       `방침 ${listed.length}개 · 코드 칸 ${new Set(fields).size}개`);
+  }
   ck("§5-2 가 저장하지 않는 것을 밝힌다(생년월일 원값)",
      /<strong>생년월일·태어난 시각의 원래 값<\/strong>, 질문, 판결문/.test(pv2));
   ck("§5-2 가 보관 기간과 그 강제 수단을 밝힌다",
