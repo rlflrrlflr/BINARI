@@ -17,7 +17,22 @@
        받아서 버린다 — 인터페이스는 맞추되 **쓰지도 남기지도 않는다.**
        (여기 저장을 추가하려면 §5-2 표와 privacy-check 를 먼저 고쳐야 한다.)
 
-   경로 넷 + 엿보기 하나: 생성(POST /) · 엿보기(GET /:id) · 응답(POST /answer) · 조회(GET ?ids=) · 취소(DELETE /:id)
+   경로 다섯 — **전부 조각이 하나 이상 붙는다:**
+     생성 POST /api/invite/new · 엿보기 GET /api/invite/:id · 응답 POST /api/invite/answer ·
+     조회 GET /api/invite/check?ids= · 취소 DELETE /api/invite/:id
+
+   ⚠ **맨 경로(`/api/invite`)를 쓰지 마라 — Vercel 이 404 를 준다.** 파일 이름이 「선택적」
+     캐치올(`[[...seg]]`)이라 조각 0개도 잡힐 줄 알았는데, 이 프로젝트(Next 아닌 zero-config)에서는
+     **조각이 최소 하나 있어야 함수까지 도달한다.** 라이브 실측(2026-08-28):
+       GET /api/invite/zzzzzzzz → 403 JSON (함수가 답했다)
+       GET /api/invite          → 404 NOT_FOUND (함수까지 안 갔다)
+     그래서 첫 판에 초대 만들기가 통째로 죽었다 — 404 는 HTML 이라 앱이 JSON 을 못 읽고
+     "지금은 초대를 만들 수 없어"라는 폴백 문구만 띄웠다(서버 사유가 안 실린다).
+     **검사로는 못 잡는다.** 로컬 검사는 핸들러를 직접 부르고, preview 는 정적 서버라 라우팅이 없다.
+     잡은 건 배포된 URL 을 직접 찔러 본 것뿐이다.
+
+   ⚠ **예약어와 id 는 안 겹친다** — id 는 base64url 12자이고 예약어는 new·answer·check 셋뿐이다.
+     ID_BYTES 를 줄이려거든 이 셋과 길이가 겹치지 않는지부터 봐라(검사가 잡는다).
 
    계산은 **B 기기에서** `match.js` 로 한다. 서버는 A의 axes 를 돌려줄 뿐이다.
    서버에 로직을 복제하면 같은 두 사람을 두고 화면마다 다른 말을 하게 된다 —
@@ -86,8 +101,17 @@ const clean = (s, n) => String(s == null ? "" : s).slice(0, n);
 
 export default async function handler(req, res) {
   const origin = req.headers.origin || "";
-  const originOk = isAllowedOrigin(origin);
-  if (originOk) {
+  /* ⚠ **브라우저는 같은 출처 GET 에 `Origin` 을 안 붙인다**(fetch 규격: GET·HEAD 는 제외).
+     그래서 `isAllowedOrigin` 만으로 막으면 **엿보기와 조회가 실기에서 전부 403** 이 된다.
+     `judge`·`share` 는 전부 POST 라 이 리포가 여태 이걸 만난 적이 없었다.
+     ⚠ 이걸 검사가 못 잡은 이유도 적어 둔다 — 브라우저 검사에서 내가 **핸들러에 Origin 을 직접
+       넣어 줬다.** 서버를 흉내 내면 흉내가 통과할 뿐이라고 주석에 써 놓고 내가 그렇게 했다.
+       지금은 검사가 브라우저의 실제 헤더를 그대로 넘긴다.
+     **값을 바꾸는 요청(POST·DELETE)은 그대로 엄격하다** — CSRF 가 걸리는 건 그쪽이고,
+     GET 둘은 상태를 안 바꾼다(엿보기는 소비도 안 한다). */
+  const mutating = req.method === "POST" || req.method === "DELETE";
+  const originOk = origin ? isAllowedOrigin(origin) : !mutating;
+  if (origin && originOk) {
     res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Vary", "Origin");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
@@ -147,7 +171,7 @@ export default async function handler(req, res) {
          안 그러면 링크를 쥔 누구나 A의 좌표를 조용히 긁어 갈 수 있다.
        ⚠ 소비를 안 하므로 **재공유 방어는 그대로다**(응답은 여전히 1회).
          이미 답이 온 초대는 여기서도 410 으로 닫는다 — 열리는 척부터 하지 않는다. */
-    if (req.method === "GET" && seg[0] && !req.query?.ids) {
+    if (req.method === "GET" && seg[0] && seg[0] !== "check") {
       const inv = await getInvite(clean(seg[0], 64));
       if (!inv) return res.status(404).json({ error: { message: "만료됐거나 없는 초대야" } });
       if (inv.answered) return res.status(410).json({ error: { message: "이미 답이 온 초대야" } });
@@ -155,7 +179,7 @@ export default async function handler(req, res) {
     }
 
     // ── 조회: A가 앱을 열 때. 곁 승격의 유일한 입력 ────────────────────────
-    if (req.method === "GET") {
+    if (req.method === "GET" && seg[0] === "check") {
       const ids = String(req.query?.ids || "").split(",").map((x) => clean(x, 64)).filter(Boolean).slice(0, MAX_IDS);
       if (!ids.length) return res.status(200).json([]);
       const out = [];
@@ -172,7 +196,7 @@ export default async function handler(req, res) {
     }
 
     // ── 생성: A가 초대를 만든다 ────────────────────────────────────────────
-    if (req.method === "POST") {
+    if (req.method === "POST" && seg[0] === "new") {
       const axes = body?.axes;
       if (!axes || typeof axes !== "object" || Array.isArray(axes)) {
         return res.status(400).json({ error: { message: "사이를 볼 값이 없어" } });

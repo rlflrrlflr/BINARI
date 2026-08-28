@@ -1068,6 +1068,40 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
     "곁 목록에 두 번째 정렬 키를 넣거나 궤도 자리를 인덱스로 주면 목록이 **순위**가 됩니다. 그러면 앱이 사람을 줄 세우게 됩니다 — 적합도가 낮아지면 등급이 내려가는 게 아니라 역할이 바뀐다는 규칙이 거기서 무너집니다.");
 }
 
+/* ── 검사 5-q. 초대가 실기에서 닿는가 (2026-08-28 실사고) ─────────────────
+   **이 둘은 로컬 검사를 전부 통과하고 라이브에서만 죽었다.** 그래서 여기 남긴다 —
+   검진은 배포 직전에 도는 유일한 관문이다.
+     ① 앱이 맨 경로 `/api/invite` 로 불렀는데 Vercel 이 404 를 줬다. 파일이 「선택적」
+        캐치올(`[[...seg]]`)인데 이 프로젝트에서는 **조각이 최소 하나 있어야** 함수까지 간다.
+        404 는 HTML 이라 앱은 사유도 못 읽고 폴백 문구만 띄웠다 — 유저 눈엔 "그냥 안 됨"이다.
+     ② 브라우저는 같은 출처 **GET 에 Origin 을 안 붙인다.** 그런데 서버가 Origin 을 요구해서
+        엿보기·승격 확인이 통째로 403 이었다. 이 리포의 다른 API 는 전부 POST 라 처음 만난 사고다.
+   ⚠ **두 사고 다 "코드를 읽어서"가 아니라 배포된 URL 을 찔러서 잡았다.** 여기 검사는 재발만 막는다. */
+{
+  const app = readFileSync(APP, "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+  const bad = [];
+  const paths = [...app.matchAll(/fetch\(\s*[`"']\/api\/invite([^`"'\s)]*)/g)].map((m) => m[1]);
+  if (!paths.length) bad.push("앱이 초대 API 를 안 부름");
+  const bare = paths.filter((x) => !/^\/[^?]/.test(x));
+  if (bare.length) bad.push(`맨 경로로 부르는 곳 ${bare.length}군데 — Vercel 이 404 를 준다`);
+  const API = "api/invite/[[...seg]].js";
+  if (existsSync(API)) {
+    const api = readFileSync(API, "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+    if (!/const mutating = /.test(api) || !/origin \? isAllowedOrigin\(origin\) : !mutating/.test(api))
+      bad.push("GET 에도 Origin 을 요구함 — 브라우저는 같은 출처 GET 에 Origin 을 안 붙인다");
+    if (!/seg\[0\] === "new"/.test(api)) bad.push("만들기가 조각(new)을 안 받음");
+    if (!/seg\[0\] === "check"/.test(api)) bad.push("조회가 조각(check)을 안 받음");
+  } else bad.push("초대 API 파일이 없음");
+  if (existsSync("e2e/invite-check.mjs")) {
+    try { execFileSync("node", ["e2e/invite-check.mjs"], { stdio: "pipe", timeout: 60000 }); }
+    catch (_) { bad.push("초대 서버 검사 실패 — node e2e/invite-check.mjs"); }
+  } else bad.push("초대 서버 검사 파일이 없음");
+  add(bad.length ? "심각" : "정상",
+    bad.length ? "초대가 실기에서 안 닿을 수 있음" : "초대 API — 조각 있는 경로 · GET 은 Origin 없이도 통과",
+    bad.length ? bad.join(" · ") : `앱이 부르는 경로 ${paths.length}개 전부 조각 있음 · 값 바꾸는 요청만 Origin 요구`,
+    "맨 경로(/api/invite)로 부르면 Vercel 이 404 를 주고, GET 에 Origin 을 요구하면 브라우저가 그 헤더를 안 붙여서 403 이 됩니다. 둘 다 화면에는 '그냥 안 됨'으로만 보이고 로컬 검사는 통과합니다.");
+}
+
 /* ── 검사 5-n. 값을 치른 문서가 기기에 남는가 (작업지시_루프배관 §1-5) ─────
    각인(9,900원)·궁합(4,900원)에는 **문서가 화면 밖으로 나갈 방법이 0이었다.** 이미지 카드는
    남에게 보일 조각이지 문서가 아니다. localStorage 는 iOS 에서 7일이면 지워질 수 있는 그릇이라,

@@ -16,9 +16,13 @@ const BASE = process.env.BASE || "http://localhost:4173";
 const R = [];
 const ck = (n, p, note = "") => { R.push(p); console.log(`${p ? "PASS" : "FAIL"} — ${n}${note ? " · " + note : ""}`); };
 
-/* 핸들러를 직접 부른다(invite-check 와 같은 대역) */
-async function api(method, { seg = [], query = {}, body = null } = {}) {
-  const req = { method, headers: { origin: "https://binari-sepia.vercel.app" }, query: { ...query, seg }, body };
+/* 핸들러를 직접 부른다(invite-check 와 같은 대역).
+   ⚠ **`headers` 를 지어내지 마라.** 첫 판에 여기서 Origin 을 항상 넣어 줬는데,
+     브라우저는 같은 출처 **GET 에 Origin 을 안 붙인다.** 그래서 실기에서 403 이 될 요청이
+     검사에서는 통과했다 — 서버를 흉내 내면 흉내가 통과할 뿐이라고 이 파일 머리에 써 놓고
+     내가 그렇게 했다. 이제 브라우저가 실제로 보낸 헤더를 그대로 넘긴다. */
+async function api(method, { seg = [], query = {}, body = null, headers = {} } = {}) {
+  const req = { method, headers, query: { ...query, seg }, body };
   let code = 200, payload = null;
   const res = { setHeader() {}, status(c) { code = c; return res; }, json(v) { payload = v; return res; }, end() { return res; } };
   await handler(req, res);
@@ -29,13 +33,14 @@ _resetMem();
 /* A의 좌표 — **가상 명식**이다(CLAUDE.md §운영 규칙). 실제 사람의 값을 검사에 넣지 않는다. */
 const A_AXES = { dG: 2, dJ: 0, el: "화", nayin: "노방토", sun: "전갈자리", moon: "게자리",
   nak: 5, rashi: 3, wday: "월요일", pasa: "레기", neptu: 12, tone: 4, tsign: "치칸", lp: 7 };
-const made = await api("POST", { body: { axes: A_AXES, name: "연지" } });
+const HDR = { origin: "https://binari-sepia.vercel.app" };   // 검사가 직접 부를 때만 쓴다
+const made = await api("POST", { seg: ["new"], body: { axes: A_AXES, name: "연지" }, headers: HDR });
 const ID = made.body.id;
 
 const b = await chromium.launch(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {});
 const page = await b.newPage({ viewport: { width: 430, height: 932 } });
 page.setDefaultTimeout(9000);
-const seen = [];
+const seen = [], seenHeaders = [];
 await page.route("**/api/invite**", async (route) => {
   const u = new URL(route.request().url());
   const rest = u.pathname.replace(/^\/api\/invite\/?/, "");
@@ -44,7 +49,8 @@ await page.route("**/api/invite**", async (route) => {
   let body = null;
   try { body = JSON.parse(route.request().postData() || "null"); } catch (_) {}
   seen.push({ m: route.request().method(), seg, body });
-  const r = await api(route.request().method(), { seg, query, body });
+  seenHeaders.push(route.request().headers());
+  const r = await api(route.request().method(), { seg, query, body, headers: route.request().headers() });
   await route.fulfill({ status: r.code, contentType: "application/json", body: JSON.stringify(r.body) });
 });
 
@@ -69,6 +75,10 @@ ck("① 동의 체크는 켠 채로 시작한다", await page.locator(".invchk i
 ck("① '궁합'이라는 말을 안 쓴다", !/궁합/.test(await ask.innerText()));
 /* 헌장 — 결과를 보기 전엔 아무 값도 안 나간다(엿보기 한 번뿐) */
 ck("① 열었을 때 나간 요청은 엿보기 하나뿐", seen.length === 1 && seen[0].m === "GET", JSON.stringify(seen.map((x) => x.m + x.seg.join())));
+/* ⚠ 이게 첫 판에 놓친 것 — 브라우저는 같은 출처 GET 에 Origin 을 **안 붙인다.**
+   붙는다고 착각한 채 검사가 헤더를 지어내 주고 있어서, 실기에서 403 날 요청이 통과했다. */
+ck("① 그 GET 에 브라우저는 Origin 을 안 붙인다(서버가 그걸 견뎌야 한다)",
+   !seenHeaders.length || !seenHeaders[0].origin, JSON.stringify(seenHeaders[0] && seenHeaders[0].origin || "(없음)"));
 
 /* ── ② 결과 — 엔진이 만든 것을 그대로 편다 ────────────────────────────── */
 await ask.locator("input.in").nth(0).fill("1987");
@@ -99,7 +109,8 @@ await p2.route("**/api/invite**", async (route) => {
   const u = new URL(route.request().url());
   const rest = u.pathname.replace(/^\/api\/invite\/?/, "");
   const r = await api(route.request().method(), { seg: rest ? rest.split("/").map(decodeURIComponent) : [],
-    query: Object.fromEntries(u.searchParams), body: JSON.parse(route.request().postData() || "null") });
+    query: Object.fromEntries(u.searchParams), body: JSON.parse(route.request().postData() || "null"),
+    headers: route.request().headers() });
   await route.fulfill({ status: r.code, contentType: "application/json", body: JSON.stringify(r.body) });
 });
 await p2.goto(`${BASE}/?inv=${ID}`, { waitUntil: "domcontentloaded" });
@@ -135,7 +146,7 @@ ck("⑤ 넣었던 생년월일이 실제로 실려 있다", ys === "1987", ys);
     let body = null; try { body = JSON.parse(route.request().postData() || "null"); } catch (_) {}
     calls.push({ m: route.request().method(), body });
     const r = await api(route.request().method(), { seg: rest ? rest.split("/").map(decodeURIComponent) : [],
-      query: Object.fromEntries(u.searchParams), body });
+      query: Object.fromEntries(u.searchParams), body, headers: route.request().headers() });
     await route.fulfill({ status: r.code, contentType: "application/json", body: JSON.stringify(r.body) });
   });
   const { onboard } = await import("./onboard.mjs");
@@ -196,10 +207,9 @@ ck("⑤ 넣었던 생년월일이 실제로 실려 있다", ys === "1987", ys);
   ck("⑥ 답한 수를 세는 말이 없다", !/답한 사람|답이 온 곁|\d+\s*명이 답/.test(await pa.locator("section.gyeot").innerText()));
 
   /* ── ⑦ B가 답한다 → A가 앱을 열면 그 자리가 사람이 된다 ─────────────── */
-  const newId = (await api("GET", { query: { ids: "" } }), calls.find((c) => c.m === "POST" && c.body?.axes) ? null : null);
-  const invId = await pa.evaluate(() => JSON.parse(localStorage.getItem("binari.invites.v1") || "[]")[0]);
+    const invId = await pa.evaluate(() => JSON.parse(localStorage.getItem("binari.invites.v1") || "[]")[0]);
   ck("⑦ 초대 id 는 A 기기에만 남는다", typeof invId === "string" && invId.length >= 10, String(invId).slice(0, 4) + "…");
-  const ans = await api("POST", { seg: ["answer"], body: { id: invId, notify: true } });
+  const ans = await api("POST", { seg: ["answer"], body: { id: invId, notify: true }, headers: HDR });
   ck("⑦ 받은 사람이 답할 수 있다", ans.code === 200 && !!ans.body?.aAxes, `${ans.code}`);
 
   await pa.reload({ waitUntil: "domcontentloaded" });
