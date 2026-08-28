@@ -102,6 +102,28 @@ const rad = () => page.evaluate(() => {
 await page.getByRole("button", { name: "곁" }).click(); await page.waitForTimeout(2400);
 const gyeot3 = await rad();
 ck("⑩ 곁이 둥글다 — 삼각(3주기) 성분", gyeot3 < 0.06, `${gyeot3} (0.06 미만이어야)`);
+
+/* ── ⑪ xyz 로 **눈에 보이게** 떠다니는가 ─────────────────────────────────
+   ⚠ 창업자가 "xyz 축으로 움직이고 있는 건 맞아?" 라고 물었다. 실제로 움직이고는
+      있었는데 12초에 x 20px·y 21px·면적 18% 라 **정지로 보였다**(주기 23초).
+      "구현했다"와 "보인다"는 다른 말이고, 지표가 없으면 그 차이를 놓친다. */
+await page.getByRole("button", { name: "판결" }).click(); await page.waitForTimeout(1500);
+const snap = () => page.evaluate(() => {
+  const c = document.querySelector("canvas"), g = c.getContext("webgl");
+  const W = c.width, H = c.height, a = new Uint8Array(4 * W * H);
+  g.readPixels(0, 0, W, H, g.RGBA, g.UNSIGNED_BYTE, a);
+  let sx = 0, sy = 0, sw = 0, n = 0;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const v = a[4 * (y * W + x) + 3];
+    if (v > 60) { sx += x * v; sy += y * v; sw += v; n++; } }
+  return { x: sx / sw / W, y: sy / sw / H, area: n / (W * H) };
+});
+const rec = [];
+for (let i = 0; i < 18; i++) { rec.push(await snap()); await page.waitForTimeout(500); }
+const span = (k) => { const v = rec.map((r) => r[k]); return Math.max(...v) - Math.min(...v); };
+const dx = Math.round(span("x") * 393), dy = Math.round(span("y") * 393);
+const dz = Math.round(span("area") / Math.min(...rec.map((r) => r.area)) * 100);
+ck("⑪ x·y 로 떠다닌다(9초 안에)", dx + dy > 45, `x ${dx}px + y ${dy}px`);
+ck("⑪ z(앞뒤)로 커졌다 작아진다", dz > 25, `면적 변화 ${dz}%`);
 await b.close();
 
 const pass = R.filter(Boolean).length;
