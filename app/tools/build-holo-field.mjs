@@ -29,50 +29,76 @@ float vnoise(vec2 p){
   vec2 i=floor(p), f=fract(p); vec2 u=f*f*(3.0-2.0*f);
   return mix(mix(hash(i),hash(i+vec2(1,0)),u.x), mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),u.x), u.y);
 }
-/* ⚠ **옥타브를 3으로 줄였다.** 5옥타브 fbm 은 고주파가 살아 연기·대리석처럼 보인다 —
-   레퍼런스는 **매끄러운 저주파 그라데이션**이다. 결이 아니라 '면'이 흘러야 한다. */
-float fbm(vec2 p){ float s=0.0,a=0.55; for(int i=0;i<3;i++){ s+=a*vnoise(p); p*=2.03; a*=0.5; } return s; }
+float fbm(vec2 p){ float s=0.0,a=0.55; for(int i=0;i<4;i++){ s+=a*vnoise(p); p*=2.03; a*=0.5; } return s; }
 
 void main(){
   vec2 uv=(gl_FragCoord.xy-u_off-0.5*u_res)/min(u_res.x,u_res.y);
   uv.y += u_sink*0.06;
   vec2 p = uv*2.35;
+  float t = u_t*u_speed;
 
-  float t = u_t*u_speed*0.45;
-  /* 저주파 워핑 — 색 경계를 천천히 밀어 준다(유기적 유영). 진폭만 크고 주파수는 낮다. */
-  vec2 w = vec2(fbm(p*0.52+vec2(0.0,t*0.30)), fbm(p*0.52+vec2(6.3,2.1)-t*0.24));
+  /* ── 1. 살아 있는 실루엣 ────────────────────────────────────────────────
+     매끈한 정원은 **죽어 보인다**(첫 판이 그랬다). 각도 기반 노이즈로 반경을 흔들면
+     이음새 없이 일렁이는 오라가 된다. 응축(곁)하면 흔들림이 줄어 단단해진다. */
+  float ang = atan(p.y, p.x);
+  vec2  ac  = vec2(cos(ang), sin(ang));
+  /* ⚠ 각도 노이즈의 **주파수를 낮게** 잡는다. 처음에 1.7·3.4 를 썼더니 방사형 가시가 돋아
+     성게처럼 됐다 — 레퍼런스는 굴곡이 크고 부드럽다. 큰 굴곡 하나 + 잔결 하나면 충분하다. */
+  float organic = mix(1.0, 0.30, u_orb);
+  float wob = fbm(ac*0.72 + vec2(t*0.30, -t*0.22)) - 0.5;
+  float wob2= fbm(ac*1.45 + vec2(-t*0.19, t*0.25)) - 0.5;
+  float breathe = 0.050*sin(t*0.85) + 0.032*sin(t*1.31+1.9);
+  float R = mix(0.80, 0.60, u_orb) * (1.0 + (wob*0.40 + wob2*0.13)*organic + breathe);
 
-  /* 색 띠 두 장 — 이게 레퍼런스의 '3색 메시 그라데이션'이다.
-     방향은 오행마다 다르다(형태를 못 쓰는 대신 결의 방향으로 가른다). */
-  vec2 d1 = u_form<0.5 ? vec2( 0.55, 0.84) : u_form<1.5 ? vec2( 0.95,-0.30)
-          : u_form<2.5 ? vec2(-0.30, 0.95) : u_form<3.5 ? vec2( 0.72, 0.69) : vec2(-0.80,-0.60);
-  vec2 d2 = vec2(-d1.y, d1.x);
-  float g1 = smoothstep(-1.05, 1.05, dot(p,d1) + (w.x-0.5)*2.4);
-  float g2 = smoothstep(-0.85, 1.15, dot(p,d2) + (w.y-0.5)*2.2);
-  vec3 col = mix(u_c1, u_c2, g1);
-  col = mix(col, u_c3, g2*0.72);
-  col += vec3(u_warm*0.10, u_warm*0.03, -u_warm*0.09);
-
-  /* 구(球) — 위에서 빛이 든다.
-     ⚠ normalize(p) 로 각도를 쓰면 **중심에 특이점**이 생기고(뾰족한 얼룩) 원뿔형 그라데이션이 된다.
-        첫 판이 그랬다. 정규화 없이 **선형 방향광**으로 쓴다. */
-  float R = mix(0.86, 0.72, u_orb);
   float d = length(p);
-  float nz = 1.0 - clamp(d/R, 0.0, 1.0);
-  float lit = 0.5 + 0.5*dot(p/max(R,0.001), vec2(-0.40, 0.64));
-  col *= 0.74 + 0.44*smoothstep(-0.15, 1.10, lit + nz*0.30);
+  float nz = clamp(1.0 - d/max(R,1e-3), 0.0, 1.0);
 
-  /* **선명한 원형 경계** — 레퍼런스 1의 핵심. 가장자리만 아주 살짝 부드럽게. */
-  float ball  = smoothstep(R+0.028, R-0.028, d);
-  float bloom = smoothstep(R+0.60, R+0.02, d)*(1.0-ball);
+  /* ── 2. 다층 색 — 안에서 밖으로 네 겹 ──────────────────────────────────
+     두 색만 섞으면 단조롭다. 코어(진함) → 몸통 → 림(밝음) → 바깥 악센트로 겹친다. */
+  vec2 w1 = vec2(fbm(p*0.62+vec2(0.0,t*0.34)), fbm(p*0.62+vec2(5.1,2.3)-t*0.29));
+  float f  = fbm(p*0.9 + (w1-0.5)*2.2 + vec2(t*0.15,-t*0.12));
+  float f2 = fbm(p*1.5 - (w1-0.5)*1.8 + vec2(-t*0.19, t*0.23));
 
-  /* ⚠ 바깥 번짐에 **음영 먹은 색을 쓰면 안 된다** — 공 밖이 새까매진다(첫 판이 그랬다).
-     번짐은 밝은 쪽 색으로 따로 만든다. */
-  vec3 glow = mix(u_c2, vec3(1.0), 0.28);
-  vec3 outc = mix(glow, col, ball);
+  /* ⚠ 램프 방향이 생명이다. 처음엔 코어를 nz>0.92 에만 줬더니 **몸통 전체가 밝은 색**이 되어
+     밝은 바탕에서 통째로 하얗게 날아갔다. 레퍼런스는 반대다 — **안이 진하고 밖이 옅다.** */
+  vec3 core = u_c1;
+  vec3 mid  = mix(u_c1, u_c2, smoothstep(0.20,0.80,f));
+  vec3 rim  = mix(u_c2, vec3(1.0), 0.30);
+  float ramp = smoothstep(0.02, mix(0.62, 0.46, u_orb), nz);   // 응축하면 진한 코어가 더 넓게 찬다
+  vec3 col  = mix(rim, core, ramp);
+  col = mix(col, mid, smoothstep(0.28,0.72,f)*0.45);
+  col = mix(col, u_c3, smoothstep(0.55,0.95,f2)*0.30*(1.0-ramp*0.5));
+  col += vec3(u_warm*0.11, u_warm*0.035, -u_warm*0.10);
+
+  /* ── 3. 발광 — 반경이 다른 세 겹이 겹쳐야 '빛이 퍼진다'로 읽힌다 ────── */
+  float body  = smoothstep(R+0.26, R-0.46, d);        // 넓은 감쇠 — 오라는 경계가 없다
+  float glow1 = smoothstep(R*mix(2.05,1.45,u_orb), R*0.70, d);
+  float glow2 = smoothstep(R*mix(3.40,2.10,u_orb), R*1.00, d);
+  vec3  gcol  = mix(u_c2, vec3(1.0), 0.30);
+  vec3  gcol2 = mix(u_c3, vec3(1.0), 0.52);
+
+  /* ── 4. 반짝임 — 레퍼런스의 흰 점광. 몇 개만, 천천히 */
+  float spark = 0.0;
+  for(int i=0;i<5;i++){
+    float fi=float(i);
+    vec2 sp = vec2(sin(t*0.31+fi*2.1)*0.42, cos(t*0.27+fi*1.7)*0.42)
+            + vec2(hash(vec2(fi,1.0))-0.5, hash(vec2(fi,2.0))-0.5)*0.55;
+    float sd = length(p-sp);
+    float tw = 0.55+0.45*sin(t*1.6+fi*2.4);
+    spark += smoothstep(0.052,0.0,sd)*tw;
+  }
+
+  /* ⚠ 층의 색을 **더하면 안 된다** — 1을 넘어 흰색으로 타고 오행 색이 사라진다(실제로 그랬다).
+     층마다 알파를 따로 쌓고, 색은 그 알파로 **가중평균**한다. */
+  float aBody = body*u_lum;
+  float aG1   = glow1*0.26*(1.0-body);
+  float aG2   = glow2*0.13*(1.0-glow1);
+  float aSp   = spark*0.55*(1.0-body*0.6);
+  float sum   = aBody+aG1+aG2+aSp;
+  float alp   = clamp(sum, 0.0, 1.0);
+  vec3 outc = (col*aBody + gcol*aG1 + gcol2*aG2 + vec3(1.0)*aSp) / max(sum, 1e-3);
   outc += (hash(gl_FragCoord.xy+fract(u_t)*0.01)-0.5)*u_grain;
-  float alp = clamp(ball*u_lum + bloom*0.34, 0.0, 1.0);
-  gl_FragColor = vec4(outc*alp, alp);   // 프리멀티플라이드
+  gl_FragColor = vec4(outc, alp);   // 스트레이트 알파
 }`;
 
 const ELS = [
@@ -162,8 +188,8 @@ const la=gl.getAttribLocation(pg,"a"); gl.enableVertexAttribArray(la); gl.vertex
 const U=n=>gl.getUniformLocation(pg,n);
 gl.uniform3fv(U("u_bg"),BG); gl.uniform1f(U("u_grain"),0.014); gl.uniform1f(U("u_speed"),1);
 gl.uniform2f(U("u_res"),CELL*dpr,CELL*dpr);
-gl.enable(gl.BLEND); gl.blendFunc(gl.ONE,gl.ONE_MINUS_SRC_ALPHA); gl.clearColor(0,0,0,0);
-const T0=performance.now(); let stop=false; setTimeout(()=>{stop=true;window.__frozen=true;},2500);
+gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA); gl.clearColor(0,0,0,0);
+const T0=performance.now(); let stop=false; setTimeout(()=>{window.__frozen=true;},2500); window.__stop=()=>{stop=true};
 (function loop(){
   if(!stop) requestAnimationFrame(loop);
   const t=(performance.now()-T0)/1000;
