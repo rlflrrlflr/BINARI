@@ -2992,7 +2992,10 @@ void main(){
   float sh = 1.0 + (0.085*sin(ang*2.0 + t*0.21) + 0.050*sin(ang*3.0 - t*0.17)) * (1.0 - fold);
   /* ⚠ 곁 전이가 "느리다"는 건 시간만의 문제가 아니었다 — **줄어드는 양이 19% 뿐**이라
      0.5초 안에 다 끝나도 변화가 안 보였다. 응축 폭을 키운다(면적으로는 -57%). */
-  float R  = mix(0.320, 0.208, clamp(u_orb,0.0,1.0)) * mix(1.0, 0.20, tk) * mix(0.90, 1.12, zc) * (1.0 + 0.020*sin(t*0.85)) * sh;
+  /* ⚠ 여기 clamp 가 있어서 **커지는 쪽 오버슈트가 죽었다.** v159 에 "0~1 로 자르면
+     오버슈트가 죽는다"고 적어 놓고 정작 반경 식에 넣었다 — 예비동작이 안 보이던 이유.
+     자르지 않아도 안전하다: orb 는 -0.18~1.28 로 이미 묶여 있고 그 범위에서 R>0 이다. */
+  float R  = mix(0.320, 0.208, u_orb) * mix(1.0, 0.20, tk) * mix(0.90, 1.12, zc) * (1.0 + 0.020*sin(t*0.85)) * sh;
 
   /* 물방울 — 위로 갈수록 좁아진다. 상하대칭 타원은 눈알이나 세포로 읽힌다.
      ⚠ **이 변형만 u_orb 에 안 물려 있어** 곁에서도 위가 좁아졌다(실측 세로/가로 0.93).
@@ -3250,18 +3253,35 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
          스프링으로 바꾸면 지나쳤다 되돌아오며 두어 번 출렁인다. 그게 푸딩이다.
          ⚠ orb 를 0~1 로 자르면 오버슈트가 죽는다. 살짝 넘치게 두되(-0.18~1.28)
             그 이상은 막는다 — 넘치면 반경 식이 음수 쪽으로 간다. */
-      let orb = 0, orbV = 0, last = performance.now();
+      let orb = 0, orbV = 0, orbLast = 0, antUntil = 0, last = performance.now();
       const T0 = performance.now();
       const draw = () => {
         raf = requestAnimationFrame(draw);
         const now = performance.now(), dt = Math.min(0.05, (now - last) / 1000); last = now;
         const orbT = orbRef && orbRef.current ? 1 : 0;
-        orbV += ((orbT - orb) * 190 - orbV * 10.0) * dt;     // K 크고 D 낮게 = 빠르고 말랑
-        orb = Math.max(-0.18, Math.min(1.28, orb + orbV * dt));
+        /* ── 예비동작 (창업자 2026-08-28: "작아지면서 뽀잉이 아니고 **커졌다가** 작아지면서
+           뽀잉으로 해야 아 변했구나!라는 게 확실히 느껴질 거 같아") ──────────────────
+           애니메이션의 anticipation 이다. 목표로 곧장 가면 "도착"만 보이고,
+           **반대로 한 번 밀었다 가야** 변화가 읽힌다.
+           탭이 바뀌는 순간 속도에 **반대 방향 임펄스**를 준다 —
+           곁으로 갈 땐 잠깐 더 퍼졌다가 모이고, 판결로 돌아올 땐 잠깐 더 오므렸다 퍼진다. */
+        /* ── 예비동작을 **시간으로 확보한다** ────────────────────────────────────
+           ⚠ 두 번 실패했다. ①속도 임펄스는 같은 프레임에 스프링이 상쇄했고
+           ②위치를 반대편으로 던지는 것도 K=190 이라 **120ms 만에 지나가** 안 보였다.
+           스프링 하나로는 시작점만 바뀔 뿐 머무는 시간이 없다.
+           그래서 0.17초 동안 **목표 자체를 반대편에 둔다** — 그동안 확실히 커지고,
+           만료되면 실제 목표로 당겨지며 지나쳤다 돌아온다. 그게 "커졌다 → 작아지며 뽀잉". */
+        if (orbT !== orbLast) { antUntil = now + 170; orbLast = orbT; }
+        const goal = now < antUntil ? (orbT > 0.5 ? -0.35 : 1.25) : orbT;
+        orbV += ((goal - orb) * 190 - orbV * 10.0) * dt;     // K 크고 D 낮게 = 빠르고 말랑
+        orb = Math.max(-0.45, Math.min(1.30, orb + orbV * dt));   // 아래로 넓힌 만큼 '먼저 커지는' 폭이 산다
         gl.uniform1f(U.u_orb, Math.abs(orb) < 0.0004 ? 0 : orb);
+        /* 응축값을 밖에 노출한다 — 화면을 읽어(readPixels) 재면 프레임당 100ms 넘게 걸려
+           **300ms 짜리 전환을 못 본다**(실측). 검사는 이 값을 본다. */
+        try { window.__BINARI_ORB = orb; } catch (_) {}
         /* 눌림(squash) — 빠르게 모일 때 살짝 납작해지고 퍼질 때 옆으로 늘어난다.
            푸딩이 "말랑"해 보이는 건 이 한 축 때문이다. */
-        gl.uniform1f(U.u_squash, Math.max(-0.9, Math.min(0.72, orbV * 0.105)));
+        gl.uniform1f(U.u_squash, Math.max(-0.34, Math.min(0.34, orbV * 0.042)   /* ⚠ 0.105 는 과했다 — 초반에 세로로 길쭉해지며(가로 99 세로 231) 오히려 면적이 줄어 '커졌다'가 눌림에 먹혔다 */));
         gl.uniform1f(U.u_t, (now - T0) / 1000);
         /* 탄생 — 흩어진 조각이 2.4초에 걸쳐 모인다. 온보딩(scatter)에서는 모이다 만 상태로 머문다.
            ⚠ 선형이 아니라 **뒤로 갈수록 느리게**(ease-out) 해야 '모여서 자리를 잡는' 것으로 읽힌다. */
@@ -3940,7 +3960,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v164 · 같은 문서를 본다";
+const APP_VER = "v165 · 커졌다 작아진다";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
