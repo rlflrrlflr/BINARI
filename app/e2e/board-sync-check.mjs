@@ -41,7 +41,8 @@ if (m) {
 /* ② 셰이더가 읽는 uniform 을 보드가 전부 세팅하는가 (새 축이 생기면 여기서 걸린다) */
 const declared = new Set();
 for (const d of frag.matchAll(/uniform\s+\w+\s+([^;]+);/g))
-  d[1].split(",").forEach((v) => declared.add(v.trim()));
+  /* ⚠ 배열 uniform(`u_trail[3]`)은 첨자를 떼야 이름이 된다 — 안 떼면 늘 "빠짐"으로 잡힌다 */
+  d[1].split(",").forEach((v) => declared.add(v.trim().replace(/\[.*$/, "")));
 const missing = [...declared].filter((u) => !new RegExp(`U\\("${u}"\\)`).test(HTML));
 ck("② 셰이더의 uniform 을 보드가 전부 세팅한다", missing.length === 0,
    missing.length ? `빠짐: ${missing.join(", ")}` : `${declared.size}개 전부`);

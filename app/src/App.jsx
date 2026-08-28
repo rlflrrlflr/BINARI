@@ -2800,8 +2800,9 @@ const FIELD_FRAG = `
 precision highp float;
 uniform vec2  u_res, u_off;
 uniform float u_t, u_form, u_orb, u_warm, u_speed, u_lum, u_sink, u_grain;
-uniform float u_born, u_touchAmt;
-uniform vec2  u_touch;
+uniform float u_born, u_touchAmt, u_ex;
+uniform vec2  u_touch, u_wisp;
+uniform vec2  u_trail[6];
 uniform vec3  u_c1, u_c2, u_c3, u_bg;
 uniform vec3  u_wt, u_bite;
 uniform vec4  u_rayP, u_puffP, u_flkP, u_baseP;
@@ -2839,13 +2840,12 @@ void main(){
   /* ── 손끝 반응 (창업자 2026-08-28: "인터랙션 요소도 넣어줘 점 버전처럼") ──────────
      입자 버전은 손끝으로 입자를 모았다 터뜨린다. 색장엔 입자가 없으므로 **장 자체가 당겨진다** —
      누른 자리 쪽으로 쏠리고 그 부근이 밝아진다. 멀수록 급히 줄어야 덩어리째 안 움직인다. */
-  /* ⚠ 처음엔 **손끝 부근만 국소로 당겼다** — 그건 "모인다"가 아니라 "눌린다"로 보인다
-     (창업자 재확인: "이전 버전처럼 클릭한 곳에 모이는 게 아니잖아").
-     입자 버전의 모임은 **형태 반지름을 줄이는 것**이다. 색장도 같게 한다 —
-     오라 전체가 손끝으로 옮겨가며 작아지고 진해진다. 떼면 천천히 풀린다. */
-  vec2  tp = u_touch*2.35;
+  /* ⚠ 좌표를 **통째로 옮기지 않는다**(창업자: "그냥 통채로 딸려오는 느낌이야").
+     위습의 위치는 JS 물리가 풀어서 u_wisp 로 온다 — 스프링이라 지나쳤다 돌아오고,
+     그 궤적이 아래 꼬리로 남는다. 여기서는 그 자리에 있다고만 하면 된다. */
+  vec2  p0 = p;                              // 캔버스 좌표(꼬리를 그릴 자리)
   float tk = clamp(u_touchAmt, 0.0, 1.0);
-  p -= tp * tk * 0.95;                       // 중심이 손끝으로 간다 — 거의 그 자리까지
+  p -= u_wisp;
 
   /* ── 형태 — 오행마다 세로/가로 비율. 레퍼런스는 정원이 아니라 **부드러운 타원·물방울**이다 */
   /* 불꽃은 **세로로 길다**. x 를 키우면 가로가 좁아져 세로로 선다(정규화 반경이라 반대다). */
@@ -2874,7 +2874,9 @@ void main(){
      2차는 타원, **3차는 삼각형**을 만든다. 비율·일렁임·혀·물방울은 다 u_orb 에 물렸는데
      이것만 빠져 있었다 — 곁이 안 둥근 진짜 이유. 응축이 끝나면 굴곡도 0 으로 간다. */
   float sh = 1.0 + (0.085*sin(ang*2.0 + t*0.21) + 0.050*sin(ang*3.0 - t*0.17)) * (1.0 - u_orb);
-  float R  = mix(0.52, 0.42, u_orb) * mix(1.0, 0.44, tk) * mix(0.90, 1.12, zc) * (1.0 + 0.020*sin(t*0.85)) * sh;
+  /* ⚠ 곁 전이가 "느리다"는 건 시간만의 문제가 아니었다 — **줄어드는 양이 19% 뿐**이라
+     0.5초 안에 다 끝나도 변화가 안 보였다. 응축 폭을 키운다(면적으로는 -57%). */
+  float R  = mix(0.52, 0.34, u_orb) * mix(1.0, 0.44, tk) * mix(0.90, 1.12, zc) * (1.0 + 0.020*sin(t*0.85)) * sh;
 
   /* 물방울 — 위로 갈수록 좁아진다. 상하대칭 타원은 눈알이나 세포로 읽힌다.
      ⚠ **이 변형만 u_orb 에 안 물려 있어** 곁에서도 위가 좁아졌다(실측 세로/가로 0.93).
@@ -2970,9 +2972,23 @@ void main(){
             + vec2(hash(vec2(fi,1.0))-0.5, hash(vec2(fi,2.0))-0.5)*0.62;
     spark += smoothstep(0.040,0.0,length(p-sp))*(0.50+0.50*sin(t*1.6+fi*2.4));
   }
-  float aSp = spark*0.60;
+  float aSp = spark*0.60*(1.0 + u_ex*0.9);   // 들뜨면 반짝임이 는다
+
+  /* ── 꼬리 — 위습이 지나간 자리에 남는 잔상 ────────────────────────────
+     위습이 **스스로 움직이는 것**으로 보이려면 자국이 있어야 한다. 뒤로 갈수록
+     작고 옅다. 들뜨면(ex) 길고 밝아진다 — 그게 "반응한다"로 읽히는 부분이다. */
+  float tail = 0.0;
+  for(int i=0;i<6;i++){
+    float fi = float(i);
+    vec2  dq = p0 - u_trail[i];
+    /* ⚠ 감쇠를 세게 잡았더니(5.5) 꼬리가 **점보다 작아져 안 보였다.**
+       위습은 꼬리가 본체만큼 중요하다 — 넉넉히 퍼지게 두고 뒤로 갈수록만 줄인다. */
+    tail += exp(-dot(dq,dq) * (3.8 + fi*1.5)) * (0.34 - 0.048*fi);
+  }
+  tail *= (0.30 + 0.70*tk) * (1.0 + u_ex*0.6);
 
   vec4 L = vec4(mist, a4);
+  L = ov(vec4(mix(u_c2, vec3(1.0), 0.70), tail), L);   // 꼬리는 **빛의 잔상** — 색보다 밝기다
   L = ov(vec4(mix(u_c3, vec3(1.0), 0.30), aRay), L);
   L = ov(vec4(acc,   a3), L);
   L = ov(vec4(warmc, a2), L);
@@ -2990,7 +3006,7 @@ void main(){
   float vig  = smoothstep(1.02, 0.56, length(uv)*2.0);
   float live  = mix(1.0, fl, u_wt.z);
   float bornK = 0.20 + 0.80*u_born;               // 흩어져 있을 땐 옅지만 **보이기는 해야 한다**
-  float touchK = 1.0 + tk*0.62;                   // 모이면 진해진다
+  float touchK = (1.0 + tk*0.62) * (1.0 + u_ex*0.28);   // 모이면 진해지고, 들뜨면 더 환해진다
   gl_FragColor = vec4(outc, clamp(sum*u_lum*live*vig*bornK*touchK, 0.0, 1.0));
 }`;
 /* 밝은 바탕용 보정 — **원색(EL_COLOR)은 안 건드린다.** 금의 c2(#e8f2ff)는 거의 흰색이라
@@ -3038,7 +3054,7 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
       const la = gl.getAttribLocation(pg, "a"); gl.enableVertexAttribArray(la);
       gl.vertexAttribPointer(la, 2, gl.FLOAT, false, 0, 0);
-      const U = {}; ["u_res","u_off","u_t","u_form","u_orb","u_warm","u_speed","u_lum","u_sink","u_grain","u_c1","u_c2","u_c3","u_bg","u_wt","u_bite","u_rayP","u_puffP","u_flkP","u_baseP","u_born","u_touch","u_touchAmt"]
+      const U = {}; ["u_res","u_off","u_t","u_form","u_orb","u_warm","u_speed","u_lum","u_sink","u_grain","u_c1","u_c2","u_c3","u_bg","u_wt","u_bite","u_rayP","u_puffP","u_flkP","u_baseP","u_born","u_touch","u_touchAmt","u_wisp","u_ex","u_trail"]
         .forEach((k) => { U[k] = gl.getUniformLocation(pg, k); });
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const S = Math.round(size * dpr); cv.width = S; cv.height = S;
@@ -3070,26 +3086,41 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
       /* ── 손끝 (인터랙션) — 캔버스 좌표를 -0.5~0.5 로 정규화해 셰이더에 넘긴다.
          `passive:false` 로 두면 스크롤을 막는다 — 오라는 배경이므로 스크롤을 뺏으면 안 된다. */
       const touch = { x: 0, y: 0, amt: 0, target: 0 };
+      /* ── 위습(wisp) — **좌표를 통째로 옮기지 않는다** ────────────────────────
+         창업자 지적(2026-08-28): "그냥 통채로 딸려오는 느낌이야."
+         맞다. `p -= tp*tk` 는 장 전체를 평행이동시키는 것이라 **끌려온다**로 보인다.
+         위습은 **스스로 온다** — 스프링으로 손끝에 끌리되 감쇠가 낮아 살짝 지나쳤다 돌아오고,
+         그 궤적이 꼬리로 남는다. 물리는 여기서 풀고 셰이더엔 **위치만** 넘긴다.
+
+         "키우기 게임 같은 상호작용"(창업자)은 **들뜸(ex)** 으로 만든다 —
+         톡 칠 때마다 오르고 천천히 식는다. 들뜨면 밝아지고 빨라지고 꼬리가 길어진다.
+         ⚠ 얼굴·팔다리를 그리지 않는다. 반응하는 건 **빛의 세기와 움직임**뿐이다. */
+      const wisp = { x: 0, y: 0, vx: 0, vy: 0, ex: 0 };
+      const TRAIL = 6;
+      const trail = Array.from({ length: TRAIL }, () => [0, 0]);
+      let tLast = 0;
       const at = (e) => {
         const r = cv.getBoundingClientRect();
         const src = e.touches && e.touches[0] ? e.touches[0] : e;
         touch.x = (src.clientX - r.left) / r.width - 0.5;
         touch.y = 0.5 - (src.clientY - r.top) / r.height;
       };
-      const on = (e) => { at(e); touch.target = 1; };
+      const on = (e) => { at(e); touch.target = 1; wisp.ex = Math.min(1.6, wisp.ex + 0.5); };
       const off = () => { touch.target = 0; };
       cv.addEventListener("pointerdown", on, { passive: true });
       cv.addEventListener("pointermove", (e) => { if (touch.target > 0.5) at(e); }, { passive: true });
       cv.addEventListener("pointerup", off, { passive: true });
       cv.addEventListener("pointerleave", off, { passive: true });
 
-      /* 응축 보간 — v133 과 같은 규칙(끊기면 교체, 이어지면 자세). 1.25초 */
+      /* 응축 보간 — v133 과 같은 규칙(끊기면 교체, 이어지면 자세).
+         ⚠ 1.25초는 **느리다**(창업자 재확인). 탭을 눌렀는데 1초 넘게 안 변하면 "안 눌렸나"가 된다.
+            0.45초로 당긴다 — 그래도 튀지 않는 건 다섯 층이 같이 흐르기 때문이다. */
       let orb = 0, last = performance.now();
       const T0 = performance.now();
       const draw = () => {
         raf = requestAnimationFrame(draw);
         const now = performance.now(), dt = Math.min(0.05, (now - last) / 1000); last = now;
-        orb += ((orbRef && orbRef.current ? 1 : 0) - orb) * (1 - Math.exp(-dt / 1.25));
+        orb += ((orbRef && orbRef.current ? 1 : 0) - orb) * (1 - Math.exp(-dt / 0.26));
         gl.uniform1f(U.u_orb, orb < 0.0004 ? 0 : orb);
         gl.uniform1f(U.u_t, (now - T0) / 1000);
         /* 탄생 — 흩어진 조각이 2.4초에 걸쳐 모인다. 온보딩(scatter)에서는 모이다 만 상태로 머문다.
@@ -3108,8 +3139,30 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
           rk = Math.max(0, 1 - rt / 1.7) * Math.min(1, rt / 0.18);
         }
         touch.amt += (touch.target - touch.amt) * (1 - Math.exp(-dt / (touch.target > touch.amt ? 0.14 : 1.1)   /* 모임은 즉각, 풀림은 여운 */));
+        const gather = Math.max(touch.amt, rk * 0.7);
+
+        /* 위습 물리 — 목표(손끝 또는 제자리)로 끌리되 **감쇠가 낮아 지나쳤다 돌아온다.**
+           그 오버슈트가 "살아 있는 것이 다가온다"로 읽힌다. 임계감쇠로 두면 다시 기계가 된다. */
+        const held = touch.target > 0.5;
+        const tx = held ? touch.x * 2.35 : 0, ty = held ? touch.y * 2.35 : 0;
+        const K = held ? 34 : 8, D = held ? 4.6 : 3.0;      // 부를 땐 세게, 놓으면 느슨하게
+        wisp.vx += ((tx - wisp.x) * K - wisp.vx * D) * dt;
+        wisp.vy += ((ty - wisp.y) * K - wisp.vy * D) * dt;
+        /* 도착하면 손끝 둘레를 **맴돈다** — 접선 방향으로 살짝 민다(키우기 게임의 '따라다님') */
+        const ddx = tx - wisp.x, ddy = ty - wisp.y, dd = Math.hypot(ddx, ddy);
+        if (held && dd < 0.45) { const s2 = (1 - dd / 0.45) * 3.2 * (1 + wisp.ex * 0.5);
+          wisp.vx += -ddy * s2 * dt; wisp.vy += ddx * s2 * dt; }
+        wisp.x += wisp.vx * dt; wisp.y += wisp.vy * dt;
+        wisp.ex *= Math.exp(-dt / 2.6);                      // 들뜸은 천천히 식는다
+
+        /* 꼬리 — 70ms 마다 지금 자리를 기록한다. 위습이 지나간 길이 남는다. */
+        if (now - tLast > 55) { tLast = now; trail.pop(); trail.unshift([wisp.x, wisp.y]); }
+
         gl.uniform2f(U.u_touch, touch.x, touch.y);
-        gl.uniform1f(U.u_touchAmt, Math.max(touch.amt, rk * 0.7));
+        gl.uniform1f(U.u_touchAmt, gather);
+        gl.uniform2f(U.u_wisp, wisp.x, wisp.y);
+        gl.uniform1f(U.u_ex, wisp.ex);
+        gl.uniform2fv(U.u_trail, new Float32Array(trail.flat()));
         gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLES, 0, 3);
       };
       draw();
@@ -3735,7 +3788,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v157 · 보이는 움직임";
+const APP_VER = "v158 · 위습";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
