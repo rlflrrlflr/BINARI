@@ -2811,12 +2811,13 @@ void main(){
   vec2  p  = (uv - drift)*2.35;
 
   /* ── 형태 — 오행마다 세로/가로 비율. 레퍼런스는 정원이 아니라 **부드러운 타원·물방울**이다 */
-  vec2 agp = vec2(1.0, 1.16);
-  if(u_form<0.5)      agp = vec2(1.10, 0.86);   // 화 — 세로로 솟는다
-  else if(u_form<1.5) agp = vec2(0.84, 1.22);   // 수 — 옆으로 눕는다
-  else if(u_form<2.5) agp = vec2(1.06, 0.90);   // 목 — 위로 뻗는다
-  else if(u_form<3.5) agp = vec2(1.00, 1.00);   // 금 — 고르다
-  else                agp = vec2(0.90, 1.14);   // 토 — 넓고 낮다
+  /* 불꽃은 **세로로 길다**. x 를 키우면 가로가 좁아져 세로로 선다(정규화 반경이라 반대다). */
+  vec2 agp = vec2(1.14, 0.82);
+  if(u_form<0.5)      agp = vec2(1.26, 0.76);   // 화 — 가장 높이 솟는다
+  else if(u_form<1.5) agp = vec2(0.94, 1.04);   // 수 — 낮게 눕는다
+  else if(u_form<2.5) agp = vec2(1.18, 0.80);   // 목 — 위로 뻗는다
+  else if(u_form<3.5) agp = vec2(1.08, 0.90);   // 금 — 고르다
+  else                agp = vec2(0.98, 1.00);   // 토 — 넓고 낮다
   agp = mix(agp, vec2(1.0), u_orb*0.7);          // 응축하면 다섯이 다 둥글어진다
   vec2 e = p*agp;
   float ang = atan(e.y, e.x);
@@ -2836,14 +2837,30 @@ void main(){
   /* 물방울 — 위로 갈수록 좁아진다. 상하대칭 타원은 눈알이나 세포로 읽힌다 */
   vec2 w = e;
   w.y *= 1.0 + 0.20*smoothstep(-0.3, 1.3, e.y/max(R,1e-3));
-  w *= 1.0 + (fbm(p*0.46 + vec2(t*0.05, -t*0.04)) - 0.5)*0.10;
+  /* ── 불꽃의 일렁임 (창업자 2026-08-28: "세포보다는 불꽃의 일렁임 느낌이여") ──────
+     세포와 불꽃을 가르는 건 **방향**이다. 세포는 사방이 같고, 불꽃은 아래가 뭉치고
+     위로 흐르며 끝이 흔들린다. y 좌표에서 시간을 빼면 무늬가 **위로 올라간다**.
+     그리고 흔들림을 위쪽일수록 크게 준다 — 불꽃 끝이 더 흔들리는 게 그 이유다. */
+  float up  = smoothstep(-0.9, 1.1, w.y/max(R,1e-3));
+  float sway = mix(1.0, 0.42, u_orb);                       // 응축(곁)하면 잦아든다
+  float fx = fbm(vec2(w.x*1.9,       w.y*0.95 - t*0.85));
+  float fy = fbm(vec2(w.x*1.4 + 3.7, w.y*0.80 - t*0.62));
+  w.x += (fx-0.5) * R * (0.14 + 0.46*up) * sway;
+  w.y -= (fy-0.5) * R * (0.08 + 0.24*up) * sway;
+  /* **혀** — 위쪽에서 반경을 늘려 솟게 한다. 왜곡만으론 둥근 얼룩이 흔들릴 뿐이고,
+     불꽃으로 읽히려면 위로 **뻗어야** 한다. 노이즈로 폭이 갈라져 혀가 여럿 된다.
+     아래는 반대로 뭉친다 — 밑동이 두꺼워야 위가 혀로 보인다. */
+  float tongue = fbm(vec2(w.x*2.6, w.y*0.85 - t*1.15));
+  float lift   = up * (0.30 + 0.62*tongue) * sway;
+  w.y /= (1.0 + lift*0.95);
+  w.y *= 1.0 + 0.22*(1.0-up)*sway;
 
   /* ── 감정은 **빛에만** ────────────────────────────────────────────────── */
   float jit  = (fbm(vec2(ang*2.1, t*0.7))-0.5)*u_rayP.w*3.0;
   float sray = pow(abs(sin(ang*u_rayP.x*0.5 + t*0.16 + jit)), u_rayP.y);
   float lobe = sin(ang*u_puffP.x + t*u_puffP.w)*0.5
              + (fbm(vec2(cos(ang),sin(ang))*u_puffP.y + vec2(t*u_puffP.w,0.0))-0.5)*1.4;
-  float puffK = 1.0 + lobe*u_puffP.z*1.5*u_wt.y;
+  float puffK = 1.0 + lobe*u_puffP.z*1.35*u_wt.y;   // ⚠ 2.2 는 헤일로를 세잎클로버로 갈랐다
   float ph   = floor(t*u_flkP.x);
   float fl   = 1.0 - u_flkP.y*hash(vec2(ph, 7.3));
   fl *= mix(0.34, 1.0, step(u_flkP.z, hash(vec2(ph, 19.1))));
@@ -2864,8 +2881,8 @@ void main(){
      **작고 진하고, 바깥은 바탕이 그대로 남는다.** 그 여백이 오라를 오라로 보이게 한다. */
   float rBase = length(w)/max(R,1e-3);
   float r0 = length(w-c0)/(R*0.46);
-  float r1 = length(w-c1)/(R*0.74);
-  float r2 = length(w-c2)/(R*0.86);
+  float r1 = length(w-c1)/(R*0.86);
+  float r2 = length(w-c2)/(R*0.98);
   float r3 = length(w-c3)/(R*1.22*puffK*zg);
   float r4 = length(w-c4)/(R*1.56*puffK*zg);
 
@@ -2874,12 +2891,12 @@ void main(){
      세포와 갈리는 건 ①색이 계속 바뀌고 ②층 중심이 어긋나 비대칭이고 ③형태가 물방울이며
      ④바깥이 아주 넓고 부드럽게 사라진다는 것. 밝은 심은 **작은 반사광**으로만 남긴다. */
   float a0 = ring(r0, 0.00, 0.62) * 0.16;                 // 작고 치우친 반사광
-  float a1 = pow(smoothstep(1.0, 0.00, r1), 1.20) * 0.95;  // 진한 코어 — 중심에서 최대
+  float a1 = pow(smoothstep(1.0, 0.00, r1), 1.20) * 0.95 * (1.0 - 0.42*up);  // 위로 갈수록 옅다 — 불꽃 끝
   float a2 = ring(r2, 0.80, 0.46) * 0.38;                  // 중간 색 띠
   float a3 = ring(r3, 0.78, 0.50) * 0.52;   // ⚠ 좁고 세면 **과녁**이 된다 — 넓게 번지게                  // 대비색 헤일로 — 레퍼런스의 시안·연두 자리
   float a4 = ring(r4, 0.84, 0.52) * 0.26;                  // 옅은 바깥
   float aRay = sray * smoothstep(mix(1.95,1.60,u_orb), 1.02, rBase)
-                    * smoothstep(1.00, 1.20, rBase) * u_wt.x * 0.42;
+                    * smoothstep(1.00, 1.20, rBase) * u_wt.x * 0.46;
 
   /* ── 색 여정 — 다섯 자리에서 색상이 네 번 돈다 ───────────────────────── */
   vec3 heart = mix(u_c2, vec3(1.0), 0.66);                 // 반사광 — 작고 치우친 밝은 점
@@ -3598,7 +3615,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v148 · 다섯 층 (위성이 붙는다)";
+const APP_VER = "v149 · 불꽃";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
