@@ -1,0 +1,185 @@
+/* ─────────────────────────────────────────────────────────────────────
+ * 홀로그램 색장(color field) 시제품 — **입자를 안 쓴다**
+ *
+ * 창업자 지적(2026-08-27): "뿌리부터 바꿔야지. 홀로그램은 아예 레퍼런스 그대로."
+ * v140 은 입자 엔진에 필터를 씌운 것이라 레퍼런스가 아니었다. 레퍼런스의 조건 셋:
+ *   ① 밝은 배경  ② 가산 발광이 아니라 **바탕 위에 얹히는 색**  ③ 낱알이 아예 없는 **연속 장**
+ * 그래서 파티클을 버리고 **전면 사각형 + 프래그먼트 셰이더**로 다시 짠다.
+ *   - 도메인 워핑 fbm = 유기적으로 흘러다니는 결
+ *   - 마스크의 가장자리를 노이즈로 흔들어 **원이 아닌 오라 형태**
+ *   - 오행은 색이 아니라 **비등방(형태)** 으로도 갈린다 — 화는 솟고, 수는 눕고, 토는 넓다
+ *
+ * 실행: cd app && node tools/build-holo-field.mjs → app/public/holo-field.html
+ * ───────────────────────────────────────────────────────────────────── */
+import { readFileSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+const APPDIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const SRC = readFileSync(resolve(APPDIR, "src/App.jsx"), "utf8");
+const EL_COLOR = new Function("return " + SRC.match(/const EL_COLOR = (\{[\s\S]*?\});/)[1])();
+
+const FIELD_FRAG = `
+precision highp float;
+uniform vec2  u_res, u_off;
+uniform float u_t, u_form, u_orb, u_warm, u_speed, u_lum, u_sink, u_grain;
+uniform vec3  u_c1, u_c2, u_c3, u_bg;
+
+float hash(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453123); }
+float vnoise(vec2 p){
+  vec2 i=floor(p), f=fract(p); vec2 u=f*f*(3.0-2.0*f);
+  return mix(mix(hash(i),hash(i+vec2(1,0)),u.x), mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),u.x), u.y);
+}
+/* ⚠ **옥타브를 3으로 줄였다.** 5옥타브 fbm 은 고주파가 살아 연기·대리석처럼 보인다 —
+   레퍼런스는 **매끄러운 저주파 그라데이션**이다. 결이 아니라 '면'이 흘러야 한다. */
+float fbm(vec2 p){ float s=0.0,a=0.55; for(int i=0;i<3;i++){ s+=a*vnoise(p); p*=2.03; a*=0.5; } return s; }
+
+void main(){
+  vec2 uv=(gl_FragCoord.xy-u_off-0.5*u_res)/min(u_res.x,u_res.y);
+  uv.y += u_sink*0.06;
+  vec2 p = uv*2.35;
+
+  float t = u_t*u_speed*0.45;
+  /* 저주파 워핑 — 색 경계를 천천히 밀어 준다(유기적 유영). 진폭만 크고 주파수는 낮다. */
+  vec2 w = vec2(fbm(p*0.52+vec2(0.0,t*0.30)), fbm(p*0.52+vec2(6.3,2.1)-t*0.24));
+
+  /* 색 띠 두 장 — 이게 레퍼런스의 '3색 메시 그라데이션'이다.
+     방향은 오행마다 다르다(형태를 못 쓰는 대신 결의 방향으로 가른다). */
+  vec2 d1 = u_form<0.5 ? vec2( 0.55, 0.84) : u_form<1.5 ? vec2( 0.95,-0.30)
+          : u_form<2.5 ? vec2(-0.30, 0.95) : u_form<3.5 ? vec2( 0.72, 0.69) : vec2(-0.80,-0.60);
+  vec2 d2 = vec2(-d1.y, d1.x);
+  float g1 = smoothstep(-1.05, 1.05, dot(p,d1) + (w.x-0.5)*2.4);
+  float g2 = smoothstep(-0.85, 1.15, dot(p,d2) + (w.y-0.5)*2.2);
+  vec3 col = mix(u_c1, u_c2, g1);
+  col = mix(col, u_c3, g2*0.72);
+  col += vec3(u_warm*0.10, u_warm*0.03, -u_warm*0.09);
+
+  /* 구(球) — 위에서 빛이 든다.
+     ⚠ normalize(p) 로 각도를 쓰면 **중심에 특이점**이 생기고(뾰족한 얼룩) 원뿔형 그라데이션이 된다.
+        첫 판이 그랬다. 정규화 없이 **선형 방향광**으로 쓴다. */
+  float R = mix(0.86, 0.72, u_orb);
+  float d = length(p);
+  float nz = 1.0 - clamp(d/R, 0.0, 1.0);
+  float lit = 0.5 + 0.5*dot(p/max(R,0.001), vec2(-0.40, 0.64));
+  col *= 0.74 + 0.44*smoothstep(-0.15, 1.10, lit + nz*0.30);
+
+  /* **선명한 원형 경계** — 레퍼런스 1의 핵심. 가장자리만 아주 살짝 부드럽게. */
+  float ball  = smoothstep(R+0.028, R-0.028, d);
+  float bloom = smoothstep(R+0.60, R+0.02, d)*(1.0-ball);
+
+  /* ⚠ 바깥 번짐에 **음영 먹은 색을 쓰면 안 된다** — 공 밖이 새까매진다(첫 판이 그랬다).
+     번짐은 밝은 쪽 색으로 따로 만든다. */
+  vec3 glow = mix(u_c2, vec3(1.0), 0.28);
+  vec3 outc = mix(glow, col, ball);
+  outc += (hash(gl_FragCoord.xy+fract(u_t)*0.01)-0.5)*u_grain;
+  float alp = clamp(ball*u_lum + bloom*0.34, 0.0, 1.0);
+  gl_FragColor = vec4(outc*alp, alp);   // 프리멀티플라이드
+}`;
+
+const ELS = [
+  { key: "화", form: 0 }, { key: "수", form: 1 }, { key: "목", form: 2 },
+  { key: "금", form: 3 }, { key: "토", form: 4 },
+];
+const COLS = [
+  { t: "펼침 · 판결", orb: 0, warm: 0 },
+  { t: "응축 · 곁", orb: 1, warm: 0 },
+  { t: "오늘 활기참", orb: 0, warm: 0.55 },
+  { t: "오늘 버거움", orb: 0, warm: -0.5, sink: 0.5, lum: 0.82 },
+];
+/* ⚠ 밝은 바탕용 보정 — **원색(EL_COLOR)은 안 건드린다.** 금의 c2(#e8f2ff)는 거의 흰색이라
+   밝은 회색 바탕에서 통째로 사라진다(첫 판에서 금 줄이 안 보였다). 이 화면에서만 한 칸 낮춘다. */
+const LIGHT_FIX = { 금: ["#5b76b8", "#8fb0e6", "#1d2436"] };
+/* ⚠ 오행 세 색은 **같은 계열**이라 셋을 섞어도 단색으로 보인다(첫 판이 그랬다).
+   레퍼런스는 대비되는 색 두세 개가 만난다. 그래서 셋째 색을 **나를 생하는 오행의 밝은 색**으로 바꾼다 —
+   임의의 예쁜 색이 아니라 근거가 있는 색이다(목생화·화생토…). */
+const SAENG = { 화: "목", 토: "화", 금: "토", 수: "금", 목: "수" };
+const pal = (k) => {
+  const base = LIGHT_FIX[k] || EL_COLOR[k];
+  const acc = (LIGHT_FIX[SAENG[k]] || EL_COLOR[SAENG[k]])[1];
+  return [base[0], base[1], acc];
+};
+const DATA = { els: ELS.map(e => ({ ...e, c: pal(e.key) })), cols: COLS };
+
+const HTML = `<!doctype html><meta charset="utf-8">
+<title>홀로그램 색장 — 입자 없음</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  body{margin:0;background:#e6e6ea;color:#2a2733;
+    font:13px/1.7 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR",sans-serif}
+  .wrap{max-width:1120px;margin:0 auto;padding:26px 18px 60px}
+  h1{font-size:19px;margin:0 0 4px;letter-spacing:-.02em}
+  .lead{color:#6b6678;font-size:12px;margin:0 0 18px}
+  .lead b{color:#2a2733}
+  .board{display:grid;grid-template-columns:auto auto;gap:8px;align-items:start;justify-content:start}
+  .hd{font-size:11.5px;color:#6b6678;text-align:center;padding-bottom:4px}
+  .rl{font-size:12px;color:#4a4557;text-align:center}
+  .cell{position:relative;border-radius:14px;overflow:hidden;background:#e0e0e6}
+  .hd span{display:block;text-align:center}
+  canvas{display:block}
+  .note{color:#6b6678;font-size:12px;line-height:1.85;margin-top:22px;border-top:1px solid #cfcdd8;padding-top:14px}
+  .note b{color:#2a2733} .note code{font-size:11px;color:#3d3a4d}
+</style>
+<div class="wrap">
+  <h1>홀로그램 색장 — 입자를 안 쓴다</h1>
+  <p class="lead">전면 사각형 하나 + 프래그먼트 셰이더. <b>도메인 워핑 fbm</b>으로 결을 만들고,
+  마스크 가장자리를 노이즈로 흔들어 <b>원이 아닌 오라</b>로 만든다. 바탕 위에 <b>얹는</b> 합성(가산 아님).</p>
+  <div class="board" id="b"></div>
+  <div class="note">
+    <p><b>오행은 색만이 아니라 형태로 갈린다</b> — 화는 세로로 솟고(1.30×0.74), 수는 옆으로 눕고(0.72×1.34),
+    목은 위로 뻗고, 금은 매끈한 구, 토는 넓고 낮다. <b>응축하면 다섯이 다 둥글어진다</b> —
+    그게 판결→곁 전이의 시각적 의미다(형상이 하나로 모인다).</p>
+    <p><b>오늘 상태</b>는 색을 갈아치우지 않는다 — 온도(<code>u_warm</code>)·속도·밝기·가라앉음(<code>u_sink</code>)만 민다.
+    3·4열이 같은 오행에 상태만 다르게 준 것이다.</p>
+    <p style="margin-top:12px">생성: <code>cd app &amp;&amp; node tools/build-holo-field.mjs</code></p>
+  </div>
+</div>
+<script>
+const DATA=${JSON.stringify(DATA)};
+const FRAG=${JSON.stringify(FIELD_FRAG)};
+const VERT="attribute vec2 a;void main(){gl_Position=vec4(a,0.,1.);}";
+const hex2rgb=h=>[parseInt(h.slice(1,3),16)/255,parseInt(h.slice(3,5),16)/255,parseInt(h.slice(5,7),16)/255];
+const BG=hex2rgb("#e0e0e6");
+const CELL=190, NC=DATA.cols.length, NR=DATA.els.length;
+b.insertAdjacentHTML("beforeend",'<div class="hd"></div><div style="display:flex">'
+  +DATA.cols.map(c=>'<div class="hd" style="width:'+CELL+'px">'+c.t+'</div>').join("")+'</div>');
+b.insertAdjacentHTML("beforeend",'<div style="display:flex;flex-direction:column">'
+  +DATA.els.map(e=>'<div class="rl" style="height:'+CELL+'px;display:grid;place-items:center">'+e.key+'</div>').join("")+'</div>'
+  +'<div class="cell" style="width:'+(NC*CELL)+'px;height:'+(NR*CELL)+'px"><canvas id="one" style="width:'+(NC*CELL)+'px;height:'+(NR*CELL)+'px"></canvas></div>');
+
+/* ⚠ 칸마다 컨텍스트를 열면 **브라우저 상한(≈16)** 에 걸린다 — 20칸을 열었더니 첫 줄이 통째로
+   렌더 실패했다. 캔버스 하나에 scissor 로 칸을 나눈다(보드 생성기가 쓰는 것과 같은 수법). */
+const cv=document.getElementById("one"), dpr=Math.min(devicePixelRatio||1,2);
+const W=NC*CELL*dpr, H=NR*CELL*dpr; cv.width=W; cv.height=H;
+const gl=cv.getContext("webgl",{alpha:true,premultipliedAlpha:true,antialias:false});
+const mk=(t,s)=>{const sh=gl.createShader(t);gl.shaderSource(sh,s);gl.compileShader(sh);
+  if(!gl.getShaderParameter(sh,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(sh));return sh};
+const pg=gl.createProgram();
+gl.attachShader(pg,mk(gl.VERTEX_SHADER,VERT)); gl.attachShader(pg,mk(gl.FRAGMENT_SHADER,FRAG));
+gl.linkProgram(pg); if(!gl.getProgramParameter(pg,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(pg));
+gl.useProgram(pg);
+const vb=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,vb);
+gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,3,-1,-1,3]),gl.STATIC_DRAW);
+const la=gl.getAttribLocation(pg,"a"); gl.enableVertexAttribArray(la); gl.vertexAttribPointer(la,2,gl.FLOAT,false,0,0);
+const U=n=>gl.getUniformLocation(pg,n);
+gl.uniform3fv(U("u_bg"),BG); gl.uniform1f(U("u_grain"),0.014); gl.uniform1f(U("u_speed"),1);
+gl.uniform2f(U("u_res"),CELL*dpr,CELL*dpr);
+gl.enable(gl.BLEND); gl.blendFunc(gl.ONE,gl.ONE_MINUS_SRC_ALPHA); gl.clearColor(0,0,0,0);
+const T0=performance.now(); let stop=false; setTimeout(()=>{stop=true;window.__frozen=true;},2500);
+(function loop(){
+  if(!stop) requestAnimationFrame(loop);
+  const t=(performance.now()-T0)/1000;
+  gl.uniform1f(U("u_t"),t);
+  gl.enable(gl.SCISSOR_TEST); gl.disable(gl.SCISSOR_TEST); gl.clear(gl.COLOR_BUFFER_BIT); gl.enable(gl.SCISSOR_TEST);
+  for(let r=0;r<NR;r++) for(let c=0;c<NC;c++){
+    const el=DATA.els[r], col=DATA.cols[c];
+    const x=c*CELL*dpr, y=(NR-1-r)*CELL*dpr, sz=CELL*dpr;
+    gl.viewport(x,y,sz,sz); gl.scissor(x,y,sz,sz); gl.uniform2f(U("u_off"),x,y);
+    gl.uniform3fv(U("u_c1"),hex2rgb(el.c[0])); gl.uniform3fv(U("u_c2"),hex2rgb(el.c[1])); gl.uniform3fv(U("u_c3"),hex2rgb(el.c[2]));
+    gl.uniform1f(U("u_form"),el.form); gl.uniform1f(U("u_orb"),col.orb||0);
+    gl.uniform1f(U("u_warm"),col.warm||0); gl.uniform1f(U("u_sink"),col.sink||0);
+    gl.uniform1f(U("u_lum"),col.lum==null?1:col.lum);
+    gl.drawArrays(gl.TRIANGLES,0,3);
+  }
+})();
+</script>`;
+writeFileSync(resolve(APPDIR,"public/holo-field.html"), HTML);
+console.log("생성: app/public/holo-field.html");

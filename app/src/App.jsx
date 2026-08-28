@@ -2695,6 +2695,50 @@ function useViewport() {
 /* 수호신 지름 — **판결·곁이 같은 식을 쓴다**(곁탭IA §4 크기 규칙). 차이는 CSS 확대율로만 준다. */
 const guardianSize = (vp) => Math.min(vp.w * 1.1, vp.h * 0.57, 640);
 
+/* ── v140 A/B 스킨 — `?skin=holo` (2026-08-27 창업자 지시) ────────────────────
+   "수호신 디자인을 아예 다르게 한 걸 테스트 서버에 올려줘. 기존 껀 놔두고."
+   **기존 경로는 한 줄도 안 바꾼다.** 플래그가 없으면 예전 코드가 그대로 돈다 —
+   A/B 는 같은 기기에서 주소 하나로 갈려야 비교가 된다.
+
+   홀로그램 = 낱알을 없애는 게 아니라 **겹쳐서 안 보이게** 하는 것이다.
+   점을 키우고 알파를 낮추면 같은 셰이더가 연속 그라데이션이 된다(실측: guardian-holo.html).
+   그래서 형태 축(u_form)·색 체계·오행 규칙은 전부 그대로 살아 있다. */
+const SKIN = (() => { try { return /[?&]skin=holo(&|$)/.test(window.location.search) ? "holo" : ""; } catch (_) { return ""; } })();
+
+/* ── 오늘의 상태 — **운세 방법론에서 나온다. 지어내지 않는다** ─────────────
+   축 둘만 쓴다(새 축을 늘리지 않는다 — 설계 헌장 §판결문 형식 보존):
+     ① 오늘 일진의 일간을 **내 일간이 보는 십성** — 날마다 바뀌고 사람마다 다르다
+     ② 달 위상 — 밝기에만 아주 약하게
+   ⚠ 이 값은 **판결에 안 들어간다.** 화면 상태(색·속도·밝기)만 만든다.
+      판결 축에 얹으면 그건 축을 늘리는 것이고 헌장 위반이다. */
+const MOOD = {
+  비견: { l: "단단함", warm: 0.00, sp: 0.92, lum: 1.00, ch: 0.85, sink: 0.00 },
+  겁재: { l: "들썩임", warm: 0.18, sp: 1.22, lum: 1.06, ch: 1.30, sink: -0.05 },
+  식신: { l: "활기참", warm: 0.30, sp: 1.16, lum: 1.12, ch: 1.00, sink: -0.10 },
+  상관: { l: "번뜩임", warm: 0.22, sp: 1.34, lum: 1.10, ch: 1.45, sink: -0.08 },
+  정재: { l: "또렷함", warm: 0.05, sp: 0.90, lum: 1.04, ch: 0.70, sink: 0.00 },
+  편재: { l: "펼쳐짐", warm: 0.24, sp: 1.10, lum: 1.06, ch: 1.20, sink: -0.06 },
+  정관: { l: "반듯함", warm: -0.05, sp: 0.86, lum: 0.98, ch: 0.62, sink: 0.04 },
+  편관: { l: "버거움", warm: -0.22, sp: 0.74, lum: 0.84, ch: 1.15, sink: 0.16 },
+  정인: { l: "포근함", warm: 0.12, sp: 0.82, lum: 1.02, ch: 0.72, sink: 0.02 },
+  편인: { l: "잠김",   warm: -0.18, sp: 0.70, lum: 0.88, ch: 0.80, sink: 0.14 },
+};
+function todayMood(saju) {
+  try {
+    if (!saju?.idx) return null;
+    const n = new Date();
+    const td = calcSaju(n.getFullYear(), n.getMonth() + 1, n.getDate(), 12, 0, true, 126.978);
+    if (!td?.idx) return null;
+    const ss = sipseong(saju.idx.dG, td.idx.dG);            // 내 일간이 오늘 일간을 보는 관계
+    const m = MOOD[ss]; if (!m) return null;
+    /* 달 나이 — moonPhase() 는 이름·해설만 돌려주므로(frac 없음) 같은 식으로 직접 잰다 */
+    const age = ((jdn(n.getFullYear(), n.getMonth() + 1, n.getDate()) - 2451550) % 29.53059 + 29.53059) % 29.53059;
+    const full = 1 - Math.abs(age / 29.53059 - 0.5) * 2;      // 보름=1 · 그믐=0
+    const moon = moonPhase(n.getFullYear(), n.getMonth() + 1, n.getDate());
+    return { ss, day: GAN[td.idx.dG], moon: moon && moon.name, ...m, lum: m.lum * (0.94 + 0.12 * full) };
+  } catch (_) { return null; }
+}
+
 function glDetect() {
   try {
     if (typeof window === "undefined") return false;
@@ -2703,7 +2747,146 @@ function glDetect() {
     return !!(c.getContext("webgl") || c.getContext("experimental-webgl"));
   } catch (_) { return false; }
 }
-function GuardianCanvasGL({ saju, zo, num, moon, birth, agitateRef, reactRef, restRef, broodRef, orbRef, gyeotRef, size = 340, onFail }) {
+/* ── v141 홀로그램 색장 렌더러 — **입자를 안 쓴다** ─────────────────────────
+   창업자 지적(2026-08-27): "뿌리부터 바꿔야지. 홀로그램은 아예 레퍼런스 그대로."
+   v140 은 입자 엔진에 필터를 씌운 것이라 레퍼런스가 아니었다. 레퍼런스의 조건 셋 —
+     ① 밝은 배경 ② 가산 발광이 아니라 **바탕 위에 얹히는 색** ③ 낱알이 아예 없는 **연속 장**
+   그래서 파티클을 버리고 전면 사각형 + 프래그먼트 셰이더로 다시 짰다.
+   시제품·튜닝 근거: `app/public/holo-field.html`(생성기 tools/build-holo-field.mjs)
+
+   ⚠ **기존 GuardianCanvasGL 은 그대로 산다.** `?skin=holo` 일 때만 이 렌더러가 대신 선다. */
+const FIELD_VERT = `attribute vec2 a; void main(){ gl_Position=vec4(a,0.0,1.0); }`;
+const FIELD_FRAG = `
+precision highp float;
+uniform vec2  u_res, u_off;
+uniform float u_t, u_form, u_orb, u_warm, u_speed, u_lum, u_sink, u_grain;
+uniform vec3  u_c1, u_c2, u_c3, u_bg;
+
+float hash(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453123); }
+float vnoise(vec2 p){
+  vec2 i=floor(p), f=fract(p); vec2 u=f*f*(3.0-2.0*f);
+  return mix(mix(hash(i),hash(i+vec2(1,0)),u.x), mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),u.x), u.y);
+}
+/* ⚠ **옥타브를 3으로 줄였다.** 5옥타브 fbm 은 고주파가 살아 연기·대리석처럼 보인다 —
+   레퍼런스는 **매끄러운 저주파 그라데이션**이다. 결이 아니라 '면'이 흘러야 한다. */
+float fbm(vec2 p){ float s=0.0,a=0.55; for(int i=0;i<3;i++){ s+=a*vnoise(p); p*=2.03; a*=0.5; } return s; }
+
+void main(){
+  vec2 uv=(gl_FragCoord.xy-u_off-0.5*u_res)/min(u_res.x,u_res.y);
+  uv.y += u_sink*0.06;
+  vec2 p = uv*2.35;
+
+  float t = u_t*u_speed*0.45;
+  /* 저주파 워핑 — 색 경계를 천천히 밀어 준다(유기적 유영). 진폭만 크고 주파수는 낮다. */
+  vec2 w = vec2(fbm(p*0.52+vec2(0.0,t*0.30)), fbm(p*0.52+vec2(6.3,2.1)-t*0.24));
+
+  /* 색 띠 두 장 — 이게 레퍼런스의 '3색 메시 그라데이션'이다.
+     방향은 오행마다 다르다(형태를 못 쓰는 대신 결의 방향으로 가른다). */
+  vec2 d1 = u_form<0.5 ? vec2( 0.55, 0.84) : u_form<1.5 ? vec2( 0.95,-0.30)
+          : u_form<2.5 ? vec2(-0.30, 0.95) : u_form<3.5 ? vec2( 0.72, 0.69) : vec2(-0.80,-0.60);
+  vec2 d2 = vec2(-d1.y, d1.x);
+  float g1 = smoothstep(-1.05, 1.05, dot(p,d1) + (w.x-0.5)*2.4);
+  float g2 = smoothstep(-0.85, 1.15, dot(p,d2) + (w.y-0.5)*2.2);
+  vec3 col = mix(u_c1, u_c2, g1);
+  col = mix(col, u_c3, g2*0.72);
+  col += vec3(u_warm*0.10, u_warm*0.03, -u_warm*0.09);
+
+  /* 구(球) — 위에서 빛이 든다.
+     ⚠ normalize(p) 로 각도를 쓰면 **중심에 특이점**이 생기고(뾰족한 얼룩) 원뿔형 그라데이션이 된다.
+        첫 판이 그랬다. 정규화 없이 **선형 방향광**으로 쓴다. */
+  float R = mix(0.86, 0.72, u_orb);
+  float d = length(p);
+  float nz = 1.0 - clamp(d/R, 0.0, 1.0);
+  float lit = 0.5 + 0.5*dot(p/max(R,0.001), vec2(-0.40, 0.64));
+  col *= 0.74 + 0.44*smoothstep(-0.15, 1.10, lit + nz*0.30);
+
+  /* **선명한 원형 경계** — 레퍼런스 1의 핵심. 가장자리만 아주 살짝 부드럽게. */
+  float ball  = smoothstep(R+0.028, R-0.028, d);
+  float bloom = smoothstep(R+0.60, R+0.02, d)*(1.0-ball);
+
+  /* ⚠ 바깥 번짐에 **음영 먹은 색을 쓰면 안 된다** — 공 밖이 새까매진다(첫 판이 그랬다).
+     번짐은 밝은 쪽 색으로 따로 만든다. */
+  vec3 glow = mix(u_c2, vec3(1.0), 0.28);
+  vec3 outc = mix(glow, col, ball);
+  outc += (hash(gl_FragCoord.xy+fract(u_t)*0.01)-0.5)*u_grain;
+  float alp = clamp(ball*u_lum + bloom*0.34, 0.0, 1.0);
+  gl_FragColor = vec4(outc*alp, alp);   // 프리멀티플라이드
+}`;
+/* 밝은 바탕용 보정 — **원색(EL_COLOR)은 안 건드린다.** 금의 c2(#e8f2ff)는 거의 흰색이라
+   밝은 바탕에서 통째로 사라진다(시제품 첫 판에서 금 줄이 안 보였다). 이 렌더러에서만 한 칸 낮춘다. */
+const HOLO_FIX = { 금: ["#5b76b8", "#8fb0e6", "#1d2436"] };
+/* ⚠ 오행 세 색은 **같은 계열**이라 셋을 섞어도 단색으로 보인다(첫 판이 그랬다).
+   레퍼런스는 대비되는 색이 만난다. 셋째를 **나를 생하는 오행의 밝은 색**으로 바꾼다 —
+   임의의 예쁜 색이 아니라 근거가 있는 색이다(목생화·화생토…). */
+const HOLO_SAENG = { 화: "목", 토: "화", 금: "토", 수: "금", 목: "수" };
+const holoPal = (k) => {
+  const base = HOLO_FIX[k] || EL_COLOR[k] || EL_COLOR.토;
+  const acc = (HOLO_FIX[HOLO_SAENG[k]] || EL_COLOR[HOLO_SAENG[k]] || EL_COLOR.토)[1];
+  return [base[0], base[1], acc];
+};
+const HOLO_BG = [0.878, 0.878, 0.894];
+
+function GuardianField({ saju, mood, orbRef, size = 340, onFail }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const cv = ref.current; if (!cv || !saju) return;
+    let gl = null, raf = 0, dead = false;
+    const fail = () => { if (!dead) { dead = true; if (raf) cancelAnimationFrame(raf); onFail && onFail(); } };
+    try {
+      gl = cv.getContext("webgl", { alpha: true, premultipliedAlpha: true, antialias: false, preserveDrawingBuffer: true });
+      if (!gl) { fail(); return; }
+      const mk = (t, src) => { const sh = gl.createShader(t); gl.shaderSource(sh, src); gl.compileShader(sh);
+        if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh) || "shader"); return sh; };
+      const pg = gl.createProgram();
+      gl.attachShader(pg, mk(gl.VERTEX_SHADER, FIELD_VERT)); gl.attachShader(pg, mk(gl.FRAGMENT_SHADER, FIELD_FRAG));
+      gl.linkProgram(pg);
+      if (!gl.getProgramParameter(pg, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pg) || "link");
+      gl.useProgram(pg);
+      const vb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vb);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+      const la = gl.getAttribLocation(pg, "a"); gl.enableVertexAttribArray(la);
+      gl.vertexAttribPointer(la, 2, gl.FLOAT, false, 0, 0);
+      const U = {}; ["u_res","u_off","u_t","u_form","u_orb","u_warm","u_speed","u_lum","u_sink","u_grain","u_c1","u_c2","u_c3","u_bg"]
+        .forEach((k) => { U[k] = gl.getUniformLocation(pg, k); });
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const S = Math.round(size * dpr); cv.width = S; cv.height = S;
+      const pal = holoPal(saju.main).map(hex2rgb);
+      gl.uniform2f(U.u_res, S, S); gl.uniform2f(U.u_off, 0, 0);
+      gl.uniform3fv(U.u_c1, pal[0]); gl.uniform3fv(U.u_c2, pal[1]); gl.uniform3fv(U.u_c3, pal[2]);
+      gl.uniform3fv(U.u_bg, HOLO_BG);
+      gl.uniform1f(U.u_form, ({ 화: 0, 수: 1, 목: 2, 금: 3, 토: 4 })[saju.main] ?? 4);
+      gl.uniform1f(U.u_grain, 0.014);
+      gl.uniform1f(U.u_warm, mood ? mood.warm : 0);
+      gl.uniform1f(U.u_speed, mood ? mood.sp : 1);
+      gl.uniform1f(U.u_lum, mood ? Math.min(1.12, mood.lum) : 1);
+      gl.uniform1f(U.u_sink, mood ? mood.sink * 2.2 : 0);
+      gl.viewport(0, 0, S, S);
+      gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);   // 프리멀티플라이드 알파
+      gl.clearColor(0, 0, 0, 0);
+      /* 응축 보간 — v133 과 같은 규칙(끊기면 교체, 이어지면 자세). 1.25초 */
+      let orb = 0, last = performance.now();
+      const T0 = performance.now();
+      const draw = () => {
+        raf = requestAnimationFrame(draw);
+        const now = performance.now(), dt = Math.min(0.05, (now - last) / 1000); last = now;
+        orb += ((orbRef && orbRef.current ? 1 : 0) - orb) * (1 - Math.exp(-dt / 1.25));
+        gl.uniform1f(U.u_orb, orb < 0.0004 ? 0 : orb);
+        gl.uniform1f(U.u_t, (now - T0) / 1000);
+        gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLES, 0, 3);
+      };
+      draw();
+    } catch (e) {
+      /* 조용히 폴백하면 **왜 떨어졌는지 영영 모른다** — 실제로 한 번 그렇게 헤맸다. 이유를 남긴다. */
+      try { console.error("[GuardianField] 색장 렌더 실패 → 입자로 폴백:", e && e.message); } catch (_) {}
+      fail(); return;
+    }
+    return () => { if (raf) cancelAnimationFrame(raf); dead = true;
+      try { const e = gl && gl.getExtension("WEBGL_lose_context"); e && e.loseContext(); } catch (_) {} };
+  }, [saju, mood, size]);
+  return <canvas ref={ref} className="gcv" style={{ width: size, height: size }} aria-hidden="true" />;
+}
+
+function GuardianCanvasGL({ saju, zo, num, moon, birth, agitateRef, reactRef, restRef, broodRef, orbRef, gyeotRef, mood, size = 340, onFail }) {
   const ref = useRef(null);
   useEffect(() => {
     const cv = ref.current; if (!cv) return;
@@ -2776,17 +2959,37 @@ function GuardianCanvasGL({ saju, zo, num, moon, birth, agitateRef, reactRef, re
       const R0 = 0.8 * (E ? 1.0 : 0.9);
       gl.uniform1f(L.u_R, R0);
       gl.uniform1f(L.u_arms, arms); gl.uniform1f(L.u_strands, strands); gl.uniform1f(L.u_twist, twist);
-      gl.uniform1f(L.u_speed, P ? 0.42 : 0.30); gl.uniform1f(L.u_chaos, T ? 0.6 : 1.35); gl.uniform1f(L.u_focal, E ? 0.12 : 0.88); // v65 명상 템포(2차 감속) // I=구심점·E=무구심점
+      /* ── v140 홀로그램 스킨 ────────────────────────────────────────────────
+         "유기체처럼 이리저리 흘러다니게"(창업자). 흘러다님은 두 값에서 온다 —
+         u_focal 을 낮추면 구심점이 풀려 **오프센터로 유동**하고, u_chaos 를 올리면
+         컬노이즈 결이 굵어진다. 형태 축은 그대로 두고 **운동만** 바꾼다. */
+      const HOLO = SKIN === "holo";
+      const MD = (HOLO && mood) ? mood : null;
+      const spd = (P ? 0.42 : 0.30) * (HOLO ? 1.15 : 1) * (MD ? MD.sp : 1);
+      const cha = (T ? 0.6 : 1.35) * (HOLO ? 1.35 : 1) * (MD ? MD.ch : 1);
+      const foc = HOLO ? 0.10 : (E ? 0.12 : 0.88);
+      gl.uniform1f(L.u_speed, spd); gl.uniform1f(L.u_chaos, cha); gl.uniform1f(L.u_focal, foc); // v65 명상 템포(2차 감속) // I=구심점·E=무구심점
       gl.uniform1f(L.u_nayF, nayF); gl.uniform1f(L.u_nayA, nayA);
       const F_AL = { 화: 0.36, 수: 0.31, 목: 0.32, 금: 0.29, 토: 0.26 }[saju.main] || 0.31;  // v64 노출 예산(백화 해소, 낱알 위계)
       const F_PS = { 금: 0.82, 토: 0.9 }[saju.main] || 1;
-      gl.uniform1f(L.u_ps, (T ? 1.6 : 2.0) * dpr * F_PS); gl.uniform1f(L.u_psMul, 1); gl.uniform1f(L.u_lum, lum); gl.uniform1f(L.u_twk, N ? 1 : 0);
+      /* ⚠ **노출 예산**을 다시 잡아야 한다. 점을 k 배 키우면 한 픽셀에 쌓이는 알파가 대략 k² 배다 —
+         첫 시도(5.6배·0.185)는 코어가 흰색으로 타서 **오행 색이 통째로 사라졌다**(리포가 F_AL 로
+         이미 한 번 싸운 그 백화다). 4.2² ≈ 17.6 이므로 알파를 1/17 쯤으로 내리고 조금만 위로 준다. */
+      const PSK = HOLO ? 4.4 : 1, ALK = HOLO ? 0.145 : 1;
+      gl.uniform1f(L.u_ps, (T ? 1.6 : 2.0) * dpr * F_PS * PSK); gl.uniform1f(L.u_psMul, 1);
+      gl.uniform1f(L.u_lum, lum * (MD ? MD.lum : 1)); gl.uniform1f(L.u_twk, HOLO ? 0 : (N ? 1 : 0));   // 홀로그램은 반짝임을 끈다(낱알을 드러내므로)
       // v94 심장박동 세기 — ?beat=0(끔) / 1(기본) / 2(강하게)
       let _beat = 3; try { const mb = /[?&]beat=([\d.]+)/.exec(window.location.search); if (mb) _beat = Math.max(0, Math.min(3, parseFloat(mb[1]))); } catch (_) {}
       gl.uniform1f(L.u_beat, _beat);
       // v93 실험: A 겉결 — 최신(sim)의 '소프트 헤일로' 패스 세기. ?soft=0(끔·기존 GL) / 1(sim과 동일) / 2(강하게)
       let _soft = 1; try { const m = /[?&]soft=([\d.]+)/.exec(window.location.search); if (m) _soft = Math.max(0, Math.min(3, parseFloat(m[1]))); } catch (_) {}
-      gl.uniform3fv(L.u_c1, c1); gl.uniform3fv(L.u_c2, c2); gl.uniform3fv(L.u_acc, acc);
+      /* 오늘 상태는 **색을 갈아치우지 않는다** — 오행 색을 유지한 채 온도만 민다.
+         갈아치우면 "내 수호신 색"이라는 소유 감각이 날마다 흔들린다. */
+      const warmK = MD ? MD.warm : 0;
+      const wtint = (c) => warmK === 0 ? c : [
+        Math.min(1, Math.max(0, c[0] + warmK * 0.16)), Math.min(1, Math.max(0, c[1] + warmK * 0.05)),
+        Math.min(1, Math.max(0, c[2] - warmK * 0.13))];
+      gl.uniform3fv(L.u_c1, wtint(c1)); gl.uniform3fv(L.u_c2, wtint(c2)); gl.uniform3fv(L.u_acc, wtint(acc));
       gl.uniform2f(L.u_touch, 0, 0); gl.uniform2f(L.u_touchVel, 0, 0); gl.uniform1f(L.u_touchAmt, 0);
       gl.uniform1f(L.u_breath, 0); gl.uniform1f(L.u_trailLive, 0); gl.uniform1f(L.u_zodiac, saju.yJ ?? 0);
       gl.uniform3fv(L.u_wispCol, [0.50 + c1[0] * 0.28, 0.55 + c1[1] * 0.26, 0.66 + c1[2] * 0.20]); // 달빛 은백(#D8E0EA 톤, LED 백색 방지)
@@ -2875,16 +3078,25 @@ function GuardianCanvasGL({ saju, zo, num, moon, birth, agitateRef, reactRef, re
            응집이 벌어들이는 밝기를 이겨야 '가라앉는다'로 읽힌다. */
         gl.uniform1f(L.u_lum, lum * (1 - 0.45 * brood + 0.75 * bur));
         gl.uniform1f(L.u_R, R0 * (1 - 0.26 * brood + 0.18 * bur));   // 오그라들었다가 도착에 펼쳐진다
-        gl.uniform1f(L.u_sink, brood * 1.0 - bur * 1.35);
+        gl.uniform1f(L.u_sink, brood * 1.0 - bur * 1.35 + (MD ? MD.sink : 0));   // v140 오늘 상태의 무게(버거움·잠김이면 가라앉는다)
         // v96 파면 확장: 누른 뒤 경과 시간(초) — 파동이 밀려나가며 끝이 형성되게. 떼면 touch.amt를 따라 사그라듦
         const _hold = touch.pressed ? Math.min(2.4, (now - (touch.t0 || now)) / 1000) : 0;
         gl.uniform1f(L.u_hold, _hold);
         gl.clear(gl.COLOR_BUFFER_BIT);
+        if (HOLO) {
+          /* ⚠ 큰 소프트 점은 **fill-bound** 다 — 패스를 늘리면 저가 기기에서 프레임이 죽는다.
+             그래서 기존 5패스가 아니라 **3패스**로 줄이고, 대신 점을 키워 겹치게 한다. */
+          gl.uniform1f(L.u_t, t); gl.uniform1f(L.u_psMul, 2.6); gl.uniform1f(L.u_alpha, 0.055 * F_AL * ALK); gl.drawArrays(gl.POINTS, 0, n);
+          gl.uniform1f(L.u_psMul, 1.35); gl.uniform1f(L.u_alpha, 0.24 * F_AL * ALK); gl.drawArrays(gl.POINTS, 0, n);
+          gl.uniform1f(L.u_psMul, 1); gl.uniform1f(L.u_alpha, 0.72 * F_AL * ALK); gl.drawArrays(gl.POINTS, 0, n);
+          gl.uniform1f(L.u_t, t - 0.38); gl.uniform1f(L.u_alpha, 0.26 * F_AL * ALK * 0.8); gl.drawArrays(gl.POINTS, 0, n);   // 흐르는 잔상
+        } else {
         gl.uniform1f(L.u_t, t); gl.uniform1f(L.u_psMul, 3.6); gl.uniform1f(L.u_alpha, 0.05 * F_AL); gl.drawArrays(gl.POINTS, 0, n); // 광휘(더 넓고 어둡게)
         if (_soft > 0) { gl.uniform1f(L.u_psMul, 1.8); gl.uniform1f(L.u_alpha, 0.22 * _soft * F_AL); gl.drawArrays(gl.POINTS, 0, n); } // v93 소프트 헤일로(최신 sim 겉결)
         gl.uniform1f(L.u_psMul, 1); gl.uniform1f(L.u_alpha, 0.72 * F_AL); gl.drawArrays(gl.POINTS, 0, n);        // 본체
         gl.uniform1f(L.u_t, t - 0.22); gl.uniform1f(L.u_alpha, 0.30 * F_AL); gl.drawArrays(gl.POINTS, 0, n);   // 비단결 꼬리 1
         gl.uniform1f(L.u_t, t - 0.50); gl.uniform1f(L.u_alpha, 0.13 * F_AL); gl.drawArrays(gl.POINTS, 0, n);    // 비단결 꼬리 2
+        }
         raf = requestAnimationFrame(draw);
       };
       draw();
@@ -3220,6 +3432,10 @@ function GuardianCanvasSim({ saju, zo, num, moon, birth, agitateRef, reactRef, r
 }
 /* WebGL 우선: 상태보존 시뮬(v68) → stateless(v67) → Canvas2D. 각 단계 실패 시 자동 강등 */
 function Guardian(props) {
+  /* v141 `?skin=holo` → **입자가 아니라 색장**. 실패하면 기존 입자 경로로 떨어진다. */
+  /* ⚠ **훅을 조기 반환보다 먼저 전부 부른다.** 처음엔 여기서 바로 return 했더니 아래
+     useState(mode) 가 건너뛰어져 React #310(훅 개수 불일치)로 화면이 죽었다. */
+  const [holoDead, setHoloDead] = useState(false);
   // v91: 기본 렌더러 = GL(v67 계열) — 무상태 직접계산이라 지연·링이 없고 중앙 발산 레이가 살아 있다.
   //      ?r=sim → 상태보존 FBO 엔진 / ?r=2d → Canvas2D (비교·폴백용)
   const [mode, setMode] = useState(() => {
@@ -3229,6 +3445,11 @@ function Guardian(props) {
     } catch (_) {}
     return glDetect() ? "gl" : "2d";
   });
+  if (SKIN === "holo" && !holoDead && props.saju) {
+    if (typeof window !== "undefined") window.__BINARI_R = "field";
+    return <GuardianField saju={props.saju} mood={props.mood} orbRef={props.orbRef}
+      size={props.size} onFail={() => setHoloDead(true)} />;
+  }
   if (typeof window !== "undefined") window.__BINARI_R = mode;   // 버전 배지용 — 실제 렌더러(sim/gl/2d) 노출
   if (mode === "sim") return <GuardianCanvasSim {...props} onFail={() => setMode("gl")} />;
   if (mode === "gl") return <GuardianCanvasGL {...props} onFail={() => setMode("2d")} />;
@@ -3244,18 +3465,40 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v140.1 · 조사 교정";
+const APP_VER = "v143 · 곁에 문 둘";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
    분업: 무료 카드는 '어느 쪽'(방향)에 답하고, 서신은 '언제·누구와·무엇을 걸고'에 답한다. */
-/* ── 동전 의식 스위치 (v129.2, 창업자 지시 "일단 없애보자 허들같아보여서") ──────
+/* ── 동전 의식 (v140, 창업자 지시 "C 다시 넣자 · 확실한 엔터테인먼트 요소가 되도록") ──────
+   ⚠ **켠 이유가 둘이다. 둘 다 적어 둔다 — 하나만 알면 다음 세션이 잘못 끈다.**
+     ① **재미** — 운세가 줄 수 있는 재미 넷(나에 대한 서술 / 단언 / 우연의 연출 / 관계) 중
+        '우연의 연출'을 담당한다. **재미가 결과 전에 일어나는 유일한 축**이다(슬롯을 당기는 손맛).
+        그리고 이것만이 데일리 리텐션 조건 ①을 정직하게 채운다 — **명식은 평생 안 바뀌지만
+        오늘 던진 동전은 매일 다르다.** 게다가 유저가 던지므로 조건 ②(유저가 넣은 것)도 일부 붙는다.
+     ② **마찰** — 창업자 판단(2026-08-27): *"무료로 바꾼 이상 일정 허들은 남겨야겠어."*
+        지금 세 상품이 전부 값을 표시하고 무료로 나간다. **여기서 마찰은 버그가 아니라 기능이다.**
+        돈이 아니라 주의(注意)로 값을 받는 자리다. 그래서 **「한 번에 던지기」를 없앴다** —
+        그 버튼이 있으면 재미도 마찰도 둘 다 무너진다.
+
+   ⚠ **끄기 전 기준선(v129.2 시점, 60일·외부)**: 사람 14명 · 판결 요청 103 · 성사 101(98%).
+     당시 껐던 사유는 *"허들같아보여서"* 였는데, **중도 이탈이 계측에 안 잡혀 검증이 불가능한 추측이었다.**
+     지금은 잰다 — `ritual_started` · `ritual_tossed`(회차·변효 여부·쥔 시간) · `ritual_abandoned`.
+     **다시 끄려면 이 셋을 먼저 읽어라.** 감으로 껐다 켰다 하지 않는다.
+
+   ⚠ **수호신 렌더와 결합하지 않았다 (2026-08-27).** 디자인 세션이 수호신을 도트→홀로그램으로
+     바꾸는 것을 검토 중이다. 그래서 의식의 시각 요소는 전부 `.hexpanel` 안에서 자족한다 —
+     캔버스·셰이더·`texture()` 를 참조하지 않는다. 유일한 접점은 기존 `agitateRef`(낙착마다 존재가
+     일렁인다) 하나뿐이고, 그건 없어도 의식이 성립한다. **수호신이 바뀌어도 이 화면은 안 고쳐도 된다.**
+
+   ── 아래는 v129.2 당시 기록(보존) ──────────────────────────────────────
    질문을 적고 '판결을 청한다'를 누르면 동전 셋을 여섯 번 던지는 화면이 끼어 있었다.
    지금은 건너뛰고 곧장 판결로 간다. 주역 괘는 그 던지기에서 나오므로 **주역 축이 함께 빠진다**
    (SYS 가 "주역 괘[유저가 동전으로 청한 경우만]"이라 hexInfo 가 null 이면 자연히 제외된다).
 
    ⚠ 되돌리려면 이 한 줄만 true 로. 의식 화면·던지기 함수·괘 계산은 지우지 않고 그대로 뒀다 —
      "일단"이라는 지시라 언제든 되돌릴 수 있어야 하고, 지웠다가 되살리면 같은 물건이 안 나온다.
+     → **그 판단이 옳았다.** 2026-08-27 에 한 줄로 되살렸고 같은 물건이 그대로 나왔다.
 
    측정 주의: 예전엔 question_asked 가 **던지기가 끝난 뒤에** 발사돼서, 동전 화면에서 이탈한
    사람은 아무 흔적도 안 남겼다 — 허들인지 잴 방법 자체가 없었다. 그래서 버튼을 누른 순간
@@ -3263,7 +3506,7 @@ const APP_VER = "v140.1 · 조사 교정";
    끄기 직전 기준선(60일·외부): 사람 14명 · 판결 요청 103건 · 판결 성사 101건.
    person 단위로는 막힌 사람이 0명이었다(깨운 14명 전원이 결국 질문함) — 다만 중도 이탈은
    위 이유로 안 보였으므로, '허들이 아니었다'는 증거는 아니다. */
-const COIN_RITUAL = false;
+const COIN_RITUAL = true;
 
 const LETTER_PRICE = 4900;
 const LETTER_SECTIONS = ["네가 망설인 자리", "여덟 글자가 이 일을 보는 눈", "언제 — 흐름과 움직일 날", "누구와 — 도울 사람, 몫을 갈라 둘 자리", "무엇을 걸고 — 이 판결이 틀릴 조건까지"];
@@ -4352,6 +4595,19 @@ function gyeotAdd(list, e, now) {
   return writeGyeot([{ key: e.key, el: e.el, dg: Number.isInteger(e.dg) ? e.dg : null,
     name: String(e.name || "").slice(0, GYEOT_NAME_MAX), tier: e.tier === GY_STANDING ? GY_STANDING : GY_CALLED, at: t }, ...list]);
 }
+/* 초대에 실어 보낼 **내 파생값**. 서버·상대에게 나가는 유일한 묶음이다.
+   ⚠ 생년월일 원값(y·m·d·h)을 **절대 넣지 마라** — 서버도 막지만(400), 막히기 전에 안 담는 게 먼저다.
+     여기 값이 늘면 처리방침 §5-2 「저장하는 것」도 같이 늘려야 한다(privacy-check 가 문장을 물고 있다).
+   ⚠ 지금은 **관계 계산에 필요한 최소치**다. 상대 기기가 이걸로 사이를 계산한다(계산은 B 기기 몫). */
+function gyeotAxesOfMe(saju) {
+  const i = saju?.idx;
+  if (!i || !Number.isInteger(i.dG)) return null;
+  return { dG: i.dG, dJ: i.dJ, el: saju.main || null, nayin: saju.nayin || null };
+}
+/* 이 곁에게 보낸 초대의 id — A 기기에만 남는다. 답이 왔는지 확인할 때(GET ?ids=) 쓰는 유일한 열쇠다. */
+function gyeotSetInvite(list, key, inv) {
+  return writeGyeot(list.map((x) => (x.key === key ? { ...x, inv: String(inv || "").slice(0, 64) } : x)));
+}
 function gyeotDrop(list, key) { return writeGyeot(list.filter((x) => x.key !== key)); }
 /* 이름을 고쳐 적는다. 목록에서 직접 비우면 이름 없는 곁이 된다(그래도 자리는 남는다). */
 function gyeotSetName(list, key, name) {
@@ -4856,6 +5112,9 @@ export default function App() {
   const [tosses, setTosses] = useState([]);
   const [hexInfo, setHexInfo] = useState(null);
   const [tossing, setTossing] = useState(false);   // v22: 동전이 공중에 떠 있는 0.75초
+  const [charging, setCharging] = useState(false); // v140: 쥐고 있는 동안 — 손 안에서 구른다
+  const [flyMs, setFlyMs] = useState(750);         // v140: 이번 던지기의 체공 시간(쥔 시간에 비례)
+  const chargeRef = useRef(0);
   /* v132 곁 탭 (곁탭IA v01 §6 단계 1) — 하단 탭 둘. 판결 탭은 **문구 하나도 안 바꾼다**, 껍데기만 씌운다.
      탭 도입은 이 리포에서 충돌면이 제일 넓은 변경이라(App.jsx 렌더 루트) 단계를 쪼개 올린다.
      지금 단계는 껍데기 + 곁 탭 1층(내 수호신)까지다. 곁 목록·부르기·궁합 이동은 다음 단계. */
@@ -4871,6 +5130,10 @@ export default function App() {
   /* v133 응축 — 곁 탭이면 행성, 판결 탭이면 펼친 형상. ref 로 넘겨 **리렌더 없이** 셰이더만 따라가게 한다
      (state 로 넘기면 size 처럼 deps 를 건드려 WebGL 컨텍스트가 재생성된다). */
   const orbRef = useRef(false);
+  /* v140 오늘의 상태 — `?skin=holo` 에서만 쓴다. **날짜+명식이 같으면 같은 값**이라
+     useMemo 로 굳힌다(매 렌더 새 객체면 size 처럼 deps 를 건드려 WebGL 이 재생성된다). */
+  const _today = new Date().toDateString();
+  const mood = useMemo(() => (SKIN === "holo" ? todayMood(saju) : null), [saju, _today]);
   /* v134.2 곁 명부 — 이제 **실제 데이터가 붙는다**(작업지시_역할과초대 §D).
      명부의 유일한 입구는 궁합을 돌리는 순간이다(MatchDoc onMet). 저장·정렬·파생은 전부 위 모듈 함수에 있다. */
   const [gyeot, setGyeot] = useState(() => readGyeot());
@@ -5000,8 +5263,38 @@ export default function App() {
       setTimeout(() => judge(hi), 800);
     }
   };
-  const toss = () => { if (tosses.length >= 6 || busy || tossing) return; setTossing(true); setTimeout(() => { setTossing(false); agitateRef.current = true; setTimeout(() => { agitateRef.current = false; }, tosses.length >= 5 ? 1400 : 600); finalize([...tosses, oneCoin()]); }, 750); }; // v23: 낙착마다 존재가 일렁인다
-  const tossAll = () => { if (tosses.length >= 6 || busy || tossing) return; setTossing(true); setTimeout(() => { setTossing(false); agitateRef.current = true; setTimeout(() => { agitateRef.current = false; }, 1400); const nt = [...tosses]; while (nt.length < 6) nt.push(oneCoin()); finalize(nt); }, 900); }; // 한 번에
+  /* v140 던지기 — 쥐었다 놓는다.
+     ⚠ **쥔 시간은 결과에 영향을 주지 않는다.** 체공 시간만 늘어난다.
+       손맛을 위해 결과를 손에 맡기는 척하면, 그건 우리가 프롬프트에서 금지하는 '지어낸 숫자'와 같다.
+       그래서 `oneCoin()` 은 held 를 아예 안 받는다 — 실수로도 섞이지 않게 인자에서 끊어 둔다.
+     ⚠ 마지막 여섯 번째만 뜸을 더 들인다(+260ms). 절정은 길어야 절정이다. */
+  const toss = (held = 0) => {
+    if (tosses.length >= 6 || busy || tossing) return;
+    const last = tosses.length === 5;
+    const fly = 620 + Math.round(Math.min(held, 1200) * 0.28) + (last ? 260 : 0);
+    setFlyMs(fly); setTossing(true);
+    setTimeout(() => {
+      setTossing(false);
+      agitateRef.current = true;                                   // v23: 낙착마다 존재가 일렁인다(수호신이 바뀌어도 무해)
+      setTimeout(() => { agitateRef.current = false; }, last ? 1400 : 600);
+      const c = oneCoin();
+      track("ritual_tossed", { n: tosses.length + 1, v: c.v, moving: c.v === 6 || c.v === 9, held_ms: Math.min(held, 1200) });
+      finalize([...tosses, c]);
+    }, fly);
+  };
+  const startCharge = () => { if (tosses.length >= 6 || busy || tossing) return; chargeRef.current = Date.now(); setCharging(true); };
+  const cancelCharge = () => { chargeRef.current = 0; setCharging(false); };
+  /* onClick 이 실제 던지기다 — pointerup 이든 키보드(Enter/Space)든 항상 온다.
+     pointerdown 은 '쥐는 연출'만 켠다. 둘을 나눠야 접근성이 안 깨진다. */
+  const doThrow = () => {
+    const held = chargeRef.current ? Date.now() - chargeRef.current : 0;
+    chargeRef.current = 0; setCharging(false);
+    toss(held);
+  };
+  const abandonRitual = () => {
+    track("ritual_abandoned", { thrown: tosses.length, qlen: q.trim().length });
+    setRitual(false); setTosses([]); setHexInfo(null); cancelCharge();
+  };
 
   // v15: 콜2 — 확정된 판결의 '근거'만 풀어쓴다(백그라운드, 클릭 전에 미리 로드)
   const fetchDetail = async (system, priorConvo, userText, r1, isRetry = false) => {
@@ -5117,6 +5410,47 @@ export default function App() {
     else { wakeTapRef.current = now; }
   };
   /* 곁 명부 열기 — tryWake 와 **같은 350ms 규칙**을 쓴다. 문법이 같아야 배우는 게 하나뿐이다. */
+  /* ── 곁에게 초대를 보낸다 (작업지시_초대와회신 §3 · 창업자 게이트 2026-08-26) ─────
+     게이트: **첫 곁은 내가 직접 넣어 공짜로 보고, 그 다음부터는 그 사람이 직접 넣어야 한다.**
+     그래서 이 버튼은 `부른 곁`(내가 넣기만 한 쪽)에만 뜬다 — 이미 답이 온 곁에는 보낼 이유가 없다.
+
+     ⚠ **서버에는 파생값만 간다.** 생년월일 원값은 안 보내고, 서버가 섞여 오면 400 으로 막는다.
+       무엇이 저장되고 얼마나 남는지는 처리방침 §5-2 에 적혀 있고 privacy-check 가 물고 있다.
+     ⚠ **실패를 삼키지 않는다.** 지금 KV 가 안 붙어 있으면(창업자 몫 §8) 서버는 메모리로 도는데,
+       그건 인스턴스가 갈리면 못 찾는다 — 개발·검사용이지 운영용이 아니다. 그래서 못 만들면
+       **못 만들었다고 말한다.** 링크만 쥐여 주고 실제로는 안 도는 게 제일 나쁘다. */
+  const [inviteBusy, setInviteBusy] = useState("");
+  /* ⚠ `err` 는 **온보딩 화면에서만** 렌더된다(생년월일 입력 단계). 곁 탭엔 그릴 자리가 없어서
+     여기서 setErr 를 부르면 **아무 데도 안 뜬다** — 주석엔 "실패를 삼키지 않는다"고 써 놓고
+     실제로는 삼키고 있었다(브라우저로 눌러 보고 잡았다). 곁 탭이 쓸 자리를 따로 둔다. */
+  const [inviteErr, setInviteErr] = useState("");
+  const inviteGyeot = async (g) => {
+    if (inviteBusy) return;
+    setInviteBusy(g.key); setInviteErr("");
+    try {
+      const axes = gyeotAxesOfMe(saju);
+      if (!axes) { setInviteErr("아직 네 명식이 안 서서 초대를 못 만들어."); return; }
+      const r = await fetch("/api/invite", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ axes, name: (birth.name || "").trim().slice(0, 12) }),
+      });
+      const d = await r.json().catch(() => null);
+      if (!r.ok || !d?.id) throw new Error(d?.error?.message || "지금은 초대를 만들 수 없어");
+      setGyeot((p) => gyeotSetInvite(p, g.key, d.id));
+      track("invite_created", { from: "gyeot" });
+      const url = `${SHARE_HOST}/?inv=${encodeURIComponent(d.id)}`;
+      /* ⚠ 방금 만든 검사(5-p)가 이 줄을 잡았다 — 이름은 받침이 갈린다("민수가" / "형원이").
+         내가 세운 규칙에 내가 먼저 걸린 게 이 검사의 값이다. */
+      const _me = (birth.name || "").trim() || "누군가";
+      const text = `${_me}${josa(_me, "이", "가")} 너와의 사이를 궁금해했어.\n생일만 넣으면 둘 사이가 보여.`;
+      try {
+        if (navigator.share) { await navigator.share({ title: "비나리 — 둘 사이를 보자", text, url }); return; }
+      } catch (_) { /* 유저가 공유시트를 닫은 것 — 실패가 아니다 */ return; }
+      try { await navigator.clipboard.writeText(`${text}\n${url}`); setShared(true); setTimeout(() => setShared(false), 2200); } catch (_) {}
+    } catch (e) {
+      setInviteErr(`초대를 못 만들었어 — ${String(e?.message || e)}`);
+    } finally { setInviteBusy(""); }
+  };
   const tryGyeotOpen = () => {
     const now = performance.now();
     if (now - gyeotTapRef.current < 350) { gyeotTapRef.current = 0; if (!gyeotOpen) { setGyeotOpen(true); track("gyeot_roster_opened", { n: gyeot.length }); } }
@@ -5509,6 +5843,14 @@ export default function App() {
   };
 
   const asking = phase >= 1 && awake && !res && !busy && !ritual;   // v55: 수호신이 물러난 순수 질문입력 구간
+  /* v140 — 방금 떨어진 한 번. 변효(6=노음·9=노양)면 그 자리를 짚어 준다.
+     ⚠ 뜻을 먼저, 이름은 안 붙인다(§용어 은닉 v112). "노양이야"는 아무 말도 안 한 것과 같다. */
+  const lastToss = tosses.length ? tosses[tosses.length - 1] : null;
+  const moveCue = !lastToss ? "" : lastToss.v === 9
+    ? "셋 다 앞이야 — 가득 찼다는 뜻이고, 가득 찬 건 다음에 기울어. 이 자리는 이미 돌기 시작했어."
+    : lastToss.v === 6
+      ? "셋 다 뒤야 — 바닥까지 닿았다는 뜻이고, 바닥에 닿은 건 되올라와. 여기가 접히는 자리야."
+      : "";
   /* v104: 몸·병·임신출산(S3)에는 서신을 팔지 않는다.
      S3에서 우리가 하는 일은 '판단을 넘기는 것'인데, 넘긴 판단에 4,900원을 받으면 그건 파는 게 아니라 등치는 거다.
      모델 판정(res.scope)과 규칙 판정(scopeHint) 중 하나라도 S3면 버튼을 숨긴다 — 안전 쪽으로 틀린다. */
@@ -5560,7 +5902,7 @@ export default function App() {
     /* v127.4 오행 색 연동 — 사람마다 다른 건 수호신뿐이고 화면 크롬은 전 유저 같은 금색이었다.
        골드 기조는 그대로 두고(가독성) **글로우만** 그 사람의 오행 색으로 물들인다.
        경쟁 8개사는 브랜드 컬러가 고정이라 구조적으로 못 하는 개인화다. */
-    <div className="stage" style={saju ? { "--elc": (EL_COLOR[saju.main] || [])[0] || "#f5d98b", "--elc2": (EL_COLOR[saju.main] || [])[1] || "#ffe9ad" } : undefined}>
+    <div className={`stage${SKIN === "holo" ? " holo" : ""}`} style={saju ? { "--elc": (EL_COLOR[saju.main] || [])[0] || "#f5d98b", "--elc2": (EL_COLOR[saju.main] || [])[1] || "#ffe9ad" } : undefined}>
       <style>{CSS}</style>
       <VerBadge />
 
@@ -5819,7 +6161,7 @@ export default function App() {
           <div className={`halo wide ${tab === "gyeot" ? "gyeotscale" : `${!awake && phase >= 1 && !res ? "lobbyscale" : ""} ${asking ? "asking" : ""} ${ritual ? "ritualfade" : ""} ${busy || (res && !cardOn) ? "busy" : ""} ${res && cardOn ? "dimmed" : ""}`}`}>
             {phase === 0
               ? <BirthCanvas tint={saju ? EL_COLOR[saju.main] : undefined} size={guardianSize(vp)} />
-              : <div className="fade"><Guardian saju={saju} zo={zo} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} restRef={restRef} orbRef={orbRef} gyeotRef={gyeotRef} broodRef={broodRef} size={guardianSize(vp)} /></div>}
+              : <div className="fade"><Guardian saju={saju} zo={zo} num={num} moon={moon} birth={birth} agitateRef={agitateRef} reactRef={reactRef} restRef={restRef} orbRef={orbRef} gyeotRef={gyeotRef} mood={mood} broodRef={broodRef} size={guardianSize(vp)} /></div>}
             <div className="gtext up">
               {phase === 0 && <div className="formwrap"><p className="forming">{birth.name ? `${birth.name}, 흩어져 있던 조각들이` : "흩어져 있던 조각들이"}<br />너를 향해 모이고 있어…<br />너의 수호신이 돌아오는 중이야.</p><ul className="formsteps">{FORM_STEPS.map((s, i) => <li key={i} className={i < formStep ? "done" : i === formStep ? "now" : ""}>{i < formStep ? "✓" : i === formStep ? "✦" : "·"} {s}{i === formStep ? "…" : ""}</li>)}</ul></div>}
             </div>
@@ -5911,12 +6253,34 @@ export default function App() {
                           {r ? r.name : GYEOT_REL_LINE[String(gyeotRel(saju?.main, g.el))]}
                         </span>
                       </div>
-                      <button className="gdrop" aria-label="이 곁을 지운다"
-                        onClick={() => { setGyeot((p) => gyeotDrop(p, g.key)); track("gyeot_dropped", {}); }}>지울래</button>
+                      {/* ⚠ 두 버튼이 **행마다** 있어야 하는 이유(창업자 지시 2026-08-26):
+                          ①「지울래」가 회색 잔글씨라 **버튼으로 안 읽혔다** — 스크린샷에서 라벨처럼 보인다
+                          ②곁이 하나라도 생기면 **더 부를 문이 화면에서 사라졌다**(빈 상태에만 CTA 를 뒀다).
+                            "추가로 계속 볼 수 있도록 유도해야지"가 그 지적이다.
+                          ⚠ 숫자·배지는 여전히 안 붙인다(곁탭IA §5). 버튼은 **할 수 있는 일**이지 세는 게 아니다. */}
+                      <div className="gacts">
+                        {/* ⚠ 두 버튼에 aria-label 을 안 붙인다. 붙이면 **접근성 이름이 보이는 글자를 덮어써서**
+                            스크린리더는 "초대하기"가 아니라 그 라벨을 읽는다(WCAG 2.5.3 Label in Name).
+                            검사에서도 getByRole(name:"초대하기") 가 0을 돌려줘 실제로 걸렸다 —
+                            글자가 이미 무엇을 하는지 말하고 있으면 라벨은 군더더기다.
+                            ⚠ 그리고 주석을 `&& (` 바로 뒤에 두면 **표현식 자리라 빌드가 깨진다**(실제로 깨뜨렸다). */}
+                        {g.tier !== GY_STANDING && (
+                          <button className="gact" disabled={inviteBusy === g.key}
+                            onClick={() => inviteGyeot(g)}>{inviteBusy === g.key ? "만드는 중…" : "초대하기"}</button>
+                        )}
+                        <button className="gact del"
+                          onClick={() => { setGyeot((p) => gyeotDrop(p, g.key)); track("gyeot_dropped", {}); }}>삭제하기</button>
+                      </div>
                     </li>);
                   })}
                 </ul>
+                {inviteErr && <p className="err gyerr">{inviteErr}</p>}
                 <p className="fine">이름도 생년월일도 <b>이 기기에만</b> 있어 — 서버로도, 통계로도 안 나가.</p>
+                {/* 첫 곁이 생기면 부르는 문이 사라져 있었다 — 목록이 곧 막다른 길이 됐다는 뜻이다. */}
+                <button className="btn ghost mt" onClick={() => {
+                  track("gyeot_more_cta", { from: "roster" });
+                  setGyeotOpen(false); setTab("judge"); setMatchOpen(true);
+                }}>한 사람 더 볼래</button>
                 <button className="btn ghost mt" onClick={() => { setGyeotOpen(false); track("gyeot_roster_closed", {}); }}>접어둘게</button>
               </>)}
             </div>
@@ -5952,6 +6316,12 @@ export default function App() {
               ) : justBorn ? (
                 <div><p className="gsay born fade">— 다시 만났네. 내가 너의 수호신이야.</p><p className="gsay fade" style={{ animationDelay: ".95s" }}>{guardianIntro}</p><p className="gsay sprite fade" style={{ animationDelay: "1.9s" }}>아, 조각 하나는 달빛에 물들어 곁에 남았어. 까불 거야 — '정령'이야.</p></div>
               ) : null}
+              {/* v140 오늘의 상태 — **`?skin=holo` 에서만** 뜬다. 기존 화면엔 안 붙는다.
+                  ⚠ 근거를 같이 적는다. 안 적으면 지어낸 말로 읽히고, 실제로 지어낸 게 아니다 —
+                     오늘 일진의 일간을 내 일간이 보는 십성이다. 판결에는 안 들어간다. */}
+              {SKIN === "holo" && mood && (
+                <p className="moodline fade">오늘은 <b>{mood.l}</b><span>오늘 일진 {mood.day} · 네 일간이 보면 {mood.ss}{mood.moon ? " · " + mood.moon : ""}</span></p>
+              )}
               <p className="wakehint">{letterSent ? "두드려봐 — 하나 더 물어도 돼" : "두드려봐 — 답은 거기 있어"}</p>
             </div>
           )}
@@ -6040,10 +6410,11 @@ export default function App() {
                       if (!q.trim()) { setErr("먼저 질문을 적어줘."); return; }
                       setErr("");
                       track("judge_requested", { ritual: COIN_RITUAL, qlen: q.trim().length });
-                      if (COIN_RITUAL) setRitual(true); else { setTosses([]); setHexInfo(null); judge(null); }
+                      if (COIN_RITUAL) { track("ritual_started", { qlen: q.trim().length, nth_verdict: records.length }); setRitual(true); }
+                      else { setTosses([]); setHexInfo(null); judge(null); }
                     }} disabled={busy}>판결을 청한다</button>
                   </div>
-                  <p className="fine">{COIN_RITUAL ? "동전 셋을 던져 하늘의 뜻을 묻는다 — 무엇을 묻든 같은 무게로 본다." : "무엇을 묻든 같은 무게로 본다."}</p>
+                  <p className="fine">{COIN_RITUAL ? "동전 셋을 여섯 번 던져서 묻는다 — 무엇을 묻든 같은 무게로 본다. 값은 안 받지만 손은 빌려줘야 해." : "무엇을 묻든 같은 무게로 본다."}</p>
                 </div>
               )}
               {/* v105.2 서신함 — 유료로 산 것이니 홈에서 언제든 다시 열린다.
@@ -6148,26 +6519,42 @@ export default function App() {
                   <label className="resetlink" style={{ cursor: "pointer" }}>기억 불러오기<input type="file" accept="application/json" style={{ display: "none" }} onChange={(e) => e.target.files && e.target.files[0] && importMemory(e.target.files[0])} /></label>
                 </div>
               )}
+              {/* v140 의식 — 재미와 마찰을 같은 동작 하나로 받는다(위 COIN_RITUAL 주석 참조).
+                  ⚠ 이 블록은 **수호신 렌더에 의존하지 않는다.** 디자인 세션이 도트→홀로그램으로 바꿔도
+                    여기는 안 고쳐도 된다. 색은 오행 하나(--elc)만 빌리고 형상은 안 빌린다. */}
               {ritual && !res && (
                 <div className="hexpanel fade">
                   <p className="qquote">“{q}”</p>
                   <p className="sub2">물음을 마음에 붙들고 — 동전 셋, 여섯 번.</p>
                   <div className="coinstage">
-                    {tossing && <><span className="coin fly" /><span className="coin fly c2" /><span className="coin fly c3" /></>}
-                    {!tossing && tosses.length > 0 && <p className="coins">{tosses[tosses.length - 1].coins.map((c, i) => <span key={i}>{c === 3 ? "● 앞" : "○ 뒤"}</span>)}</p>}
+                    {tossing
+                      ? <>{[0, 1, 2].map((i) => <span key={i} className={"coin fly" + (i ? " c" + (i + 1) : "")} style={{ animationDuration: flyMs + "ms" }} />)}</>
+                      : charging
+                        ? <>{[0, 1, 2].map((i) => <span key={i} className={"coin charge" + (i ? " c" + (i + 1) : "")} />)}</>
+                        : lastToss && <p className="coins">{lastToss.coins.map((c, i) => <span key={i} className={c === 3 ? "cface" : "cback"}>{c === 3 ? "● 앞" : "○ 뒤"}</span>)}</p>}
                   </div>
                   <div className="hexlines">
                     {tosses.map((l, idx) => (
-                      <div key={idx} className="hline on drop">
+                      <div key={idx} className={"hline on drop" + (l.v === 6 || l.v === 9 ? " mvline" : "")}>
                         {l.v % 2 ? <span className="yang" /> : <span className="yin" />}
                         {(l.v === 6 || l.v === 9) && <i className="mv">●</i>}
                       </div>
                     ))}
                   </div>
+                  {/* 변효(6·9)는 네 번에 한 번꼴로 나온다 — 절정이 될 만큼 드물고, 기다릴 만큼 잦다.
+                      뜻을 먼저 말하고 이름은 안 붙인다(§용어 은닉). */}
+                  {!tossing && moveCue && <p className="movecue fade">{moveCue}</p>}
                   {tosses.length < 6
-                    ? <div className="row gap center"><button className="btn gold" onClick={toss} disabled={busy || tossing}>{tossing ? "동전이 공중에…" : `동전을 던진다 (${tosses.length}/6)`}</button><button className="btn ghost" onClick={tossAll} disabled={busy || tossing}>한 번에 던지기</button></div>
-                    : <p className="sub2 mt">{busy ? "조각들이 합의하는 중…" : hexInfo && (<>괘가 맺혔어 — <b>{hexInfo.name}</b>{hexInfo.moving.length > 0 && <> · 기운은 <b>{hexInfo.toName}</b> 쪽으로 움직이고 있어</>}</>)}</p>}
-                  {!busy && !tossing && tosses.length < 6 && <button className="resetlink" onClick={() => { setRitual(false); setTosses([]); setHexInfo(null); }}>물음을 고칠래</button>}
+                    ? <div className="w100">
+                        <button className="btn gold throwbtn" onPointerDown={startCharge} onPointerLeave={cancelCharge} onPointerCancel={cancelCharge} onClick={doThrow} disabled={busy || tossing}>
+                          {tossing ? "동전이 공중에…" : charging ? "손 안에서 구르는 중… 놓으면 던져져" : `쥐었다 놓아 던진다 (${tosses.length}/6)`}
+                        </button>
+                        <p className="fine">{tosses.length === 5 ? "마지막 한 번이야." : "오래 쥐고 있어도 돼 — 손에 머무는 시간만 길어지고, 나오는 건 하늘이 정해."}</p>
+                      </div>
+                    /* ⚠ 대기 문구를 여기서 반복하지 않는다 — 위 `.brooding` 이 의식과 무관하게 이미 띄운다.
+                         v140 에서 둘이 같은 문장을 동시에 그려 검사가 strict mode 로 깨졌다(brood-check ②·④). */
+                    : hexInfo && <p className="sub2 mt">괘가 맺혔어 — <b>{hexInfo.name}</b>{hexInfo.moving.length > 0 && <> · 기운은 <b>{hexInfo.toName}</b> 쪽으로 움직이고 있어</>}</p>}
+                  {!busy && !tossing && tosses.length < 6 && <button className="resetlink" onClick={abandonRitual}>물음을 고칠래</button>}
                 </div>
               )}
               {err && (
@@ -6562,6 +6949,76 @@ const CSS = `
    전에는 판결만 absolute(bottom:14vh)이고 곁은 문서 흐름이라 문구 높이가 서로 달랐고(실기 지적),
    14vh 는 탭 스크림 안쪽이라 "두드려봐" 가 페이드에 먹혔다. 이제 탭이 차지하는 높이 위에 세운다. */
 .lobbypanel,.gyeot .gyeotpanel{position:absolute;left:0;right:0;bottom:calc(var(--tabh) + var(--tabscrim) + 10px);z-index:2;display:flex;flex-direction:column;align-items:center;width:100%;padding:0 16px;text-align:center;margin:0}
+/* ── v141 홀로그램 스킨의 밝은 바탕 ────────────────────────────────────────
+   레퍼런스가 밝은 회색 위의 파스텔 오라다. 검은 바탕 + 가산 발광으로는 그 룩이 안 나온다
+   (v140 이 그래서 네온이 됐다). 여기서는 **바탕을 뒤집는다** — 이 스킨에서만.
+   ⚠ 기존(플래그 없음) 화면은 한 줄도 안 바뀐다. 아래 규칙은 전부 .stage.holo 아래에만 있다.
+   ⚠⚠ 이 CSS 는 **템플릿 리터럴 안**이다 — 주석에 백틱을 쓰면 문자열이 거기서 끊기고
+      뒤가 JS 로 해석된다. 실제로 그렇게 터졌다(.stage.holo 를 멤버 접근으로 읽었다). 백틱 금지. */
+.stage.holo{background:radial-gradient(120% 90% at 50% 15%,#f2f1f6,#e4e3ea 55%,#dcdbe4);color:#2f2b3a}
+.stage.holo .gsay,.stage.holo .gintro,.stage.holo .forming{color:#3a3547}
+.stage.holo .gname,.stage.holo .imptitle{color:#2f2b3a}
+/* ── 밝은 판 전용 타이포 ────────────────────────────────────────────────
+   ⚠ **검은 판 글자를 그대로 쓰면 안 된다.** 어두운 배경용 글자는 뒤에 빛번짐(text-shadow)과
+      어두운 알약 배경을 깔아 뜨게 만든 것인데, 밝은 바탕에선 그게 **얼룩**으로 보인다.
+      그리고 넓은 자간 + 가는 획은 검은 배경에서 또렷하지만 밝은 배경에선 흐려진다 —
+      밝은 판은 **획을 조금 굵게, 자간을 좁게, 그림자는 0** 이 맞다. 대신 위계는
+      크기와 서체(수호신 말=명조 / 메타=고딕)로 만든다. */
+.stage.holo,.stage.holo *{text-shadow:none}
+.stage.holo .gname,.stage.holo .forming{background:none;padding:0}
+.stage.holo .gsay{font-size:16px;letter-spacing:-.004em;color:#2c2836;font-weight:500;line-height:1.85}
+.stage.holo .gsay.born{color:#201c2b;font-weight:600}
+.stage.holo .gintro.dim2{color:#4a4458;font-size:15px}
+.stage.holo .forming{color:#4a4458;letter-spacing:.06em}
+.stage.holo .gname{color:#2c2836}
+.stage.holo .gname.under{color:#2c2836;letter-spacing:.02em;font-weight:600}
+.stage.holo .wakehint{font-size:11px;letter-spacing:.22em;color:#8b8499;animation:none}
+.stage.holo .fine{font-size:11.5px;letter-spacing:0;color:#6f6980;line-height:1.75}
+.stage.holo .moodline{font-family:'Noto Serif KR',serif;font-size:14px;color:#3a3547;letter-spacing:0}
+.stage.holo .moodline b{font-size:17px;color:#a8571a;font-weight:600}
+.stage.holo .moodline span{font-family:sans-serif;font-size:10px;letter-spacing:.04em;color:#8b8499}
+.stage.holo .verbadge{color:#a8a2b5}
+/* ── 검은 판용 그림자·어두운 패널을 걷어낸다 ────────────────────────────────
+   text-shadow 만 끄면 절반이다. 검은 배경 UI 는 **박스 그림자와 어두운 판**으로 요소를 띄우는데,
+   밝은 바탕에선 그게 그대로 **검은 얼룩**이 된다. 실제로 질문 화면에 큰 검은 타원이 남았다
+   (.gpanel::before 가 radial 로 깔던 것). 밝은 판에서는 **얇은 테두리와 흰 면**으로 띄운다. */
+.stage.holo .gpanel::before{display:none}
+.stage.holo .qbox{background:rgba(255,255,255,.78);border-color:#c9c4d6;color:#2c2836;box-shadow:0 1px 2px rgba(40,34,60,.06)}
+.stage.holo .qbox:focus{border-color:#8d7fb8;box-shadow:0 0 0 2px rgba(141,127,184,.18)}
+.stage.holo .qbox::placeholder{color:#9a94ab}
+.stage.holo .btn{box-shadow:none}
+.stage.holo .btn.gold{box-shadow:0 2px 10px rgba(168,120,40,.22)}
+.stage.holo .btn.ghost{background:rgba(255,255,255,.72);border-color:#c9c4d6;color:#4a4458;box-shadow:0 1px 2px rgba(40,34,60,.06)}
+.stage.holo .btn.ghost b{color:#2c2836}
+.stage.holo .in.box{background:rgba(255,255,255,.8);border-color:#c9c4d6;color:#2c2836;box-shadow:none}
+.stage.holo .resetlink{color:#6f6980}
+/* 탭 스크림이 밝은 판에서도 아래 글자를 먹는다 — 여기선 더 얕게 깐다 */
+.stage.holo{--tabscrim:22px}
+.stage.holo .gpanel.asking .gintro.dim2{color:#3a3547}
+.stage.holo .fine,.stage.holo .dim2,.stage.holo .whosub{color:#6f6980}
+.stage.holo .moodline{color:#4a4458}
+.stage.holo .moodline b{color:#b0651f}
+.stage.holo .moodline span{color:#7d7690}
+.stage.holo .qbox{background:rgba(255,255,255,.72);border-color:#c6c2d4;color:#2f2b3a}
+.stage.holo .qbox::placeholder{color:#9a94ab}
+.stage.holo .btn.ghost{color:#4a4458;border-color:#bdb8cc}
+.stage.holo .tabbar::before{background:linear-gradient(to top,#dcdbe4 0%,#dcdbe4 55%,rgba(220,219,228,.72) 80%,rgba(220,219,228,0) 100%)}
+.stage.holo .tabbtn{background:rgba(255,255,255,.66);color:#6b6478;border-color:rgba(90,78,130,.22)}
+.stage.holo .tabbtn.on{background:#fff;color:#7a4a12;border-color:rgba(122,74,18,.42)}
+.stage.holo .verbadge{color:#9a94ab}
+.stage.holo .halo{filter:none}
+/* .scene.lobby 가 **어두운 radial** 을 깔고 있다 — 이걸 안 뒤집으면 밝은 바탕 위에 검은 타원이 남는다(실제로 그랬다) */
+.stage.holo .scene.lobby{background:radial-gradient(80% 52% at 50% 42%,rgba(255,255,255,.55) 0%,rgba(255,255,255,.22) 50%,rgba(255,255,255,0) 100%)}
+.stage.holo .gyeotpanel .gname{color:#2f2b3a}
+.stage.holo .btn.gold{background:linear-gradient(180deg,#f4dfa6,#d8ae57);color:#2a1e05}
+.stage.holo .impbadge{color:#7a4a12;border-color:rgba(122,74,18,.32)}
+/* 색장은 캔버스를 스스로 채운다 — 입자용 확대율(1.85/1.72)을 그대로 얹으면 화면을 뒤덮는다 */
+.stage.holo .halo.wide.lobbyscale{transform:translateY(2vh) scale(1)}
+.stage.holo .halo.wide.gyeotscale{transform:translateY(1vh) scale(1)}
+.stage.holo .gcv{mix-blend-mode:normal}
+.moodline{font-family:sans-serif;font-size:13px;letter-spacing:.06em;color:#cfc4e2;margin:0 0 2px;text-align:center;line-height:1.7}
+.moodline b{color:#f5d98b;font-weight:600;font-size:15px}
+.moodline span{display:block;font-size:10.5px;color:#8a7f95;letter-spacing:.02em;margin-top:2px}
 .wakehint{font-family:sans-serif;font-size:12px;letter-spacing:.16em;color:#d8c79a;margin-top:22px;animation:wakePulse 2.4s ease-in-out infinite;text-shadow:0 1px 10px rgba(4,3,10,.85)}
 /* v75: 공유 판결 랜딩 — 링크로 들어온 사람이 '실제 판결 카드'를 그대로 본다 */
 .sharedwrap{position:fixed;inset:0;z-index:60;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:34px 20px;background:radial-gradient(120% 78% at 50% 14%,#161029,#0b0817 58%,#060409);text-align:center;overflow-y:auto}
@@ -6665,6 +7122,14 @@ const CSS = `
 .galias::placeholder{color:#6f658a}
 .grel{font-size:12px;line-height:1.6;color:#b6aacc}
 .gdrop{flex:0 0 auto;background:none;border:none;color:#7d7296;font-family:inherit;font-size:11px;padding:4px;cursor:pointer}
+/* 행의 두 문 — 「지울래」가 회색 잔글씨라 버튼으로 안 읽혔다(창업자 지적). 테두리를 줘서 누를 것으로 보이게 한다.
+   ⚠ 강조(gold)를 안 쓴다 — 곁 목록은 상품 진열이 아니라 명부다(곁탭IA §5). */
+.gacts{flex:0 0 auto;display:flex;flex-direction:column;gap:4px}
+.gyerr{max-width:340px;margin:8px auto 0;font-size:11.5px;line-height:1.6;text-align:center}
+.gact{background:none;border:1px solid rgba(159,143,196,.34);border-radius:7px;color:#b6aacc;font-family:inherit;font-size:10.5px;padding:4px 8px;cursor:pointer;white-space:nowrap}
+.gact:hover{border-color:rgba(245,217,139,.5);color:#efe6ff}
+.gact.del{color:#8f84a8;border-color:rgba(159,143,196,.2)}
+.gact.del:hover{border-color:rgba(168,50,41,.5);color:#e08a80}
 .gdrop:hover{color:#c9bde3}
 .brooding{font-size:13px;letter-spacing:.14em;color:#cfc4e2;margin:14px 0 0;text-align:center;animation:formPulse 2.4s ease-in-out infinite}
 @keyframes haloPulse{0%,100%{filter:drop-shadow(0 0 26px rgba(245,217,139,.14))}50%{filter:drop-shadow(0 0 46px rgba(245,217,139,.34))}}
@@ -6706,6 +7171,23 @@ const CSS = `
 .coinstage{min-height:34px;display:flex;align-items:center;justify-content:center;gap:14px}
 .coin.fly{animation:coinFly .75s ease-out both}
 .coin.fly.c2{animation-delay:.09s}.coin.fly.c3{animation-delay:.17s}
+/* v140 쥐는 연출 — 손 안에서 굴러 모인다. 결과와 무관한 순수 연출이다(App 주석 참조) */
+.coin.charge{animation:coinCharge .42s ease-in-out infinite}
+.coin.charge.c2{animation-delay:.07s}.coin.charge.c3{animation-delay:.14s}
+@keyframes coinCharge{0%,100%{transform:translateY(0) rotate(0);filter:brightness(1)}25%{transform:translateY(-3px) rotate(-15deg);filter:brightness(1.35)}75%{transform:translateY(2px) rotate(13deg);filter:brightness(1.1)}}
+/* 눌러서 던지는 버튼 — 스크롤·길게눌러 선택이 끼어들면 손맛이 죽는다 */
+.throwbtn{touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.throwbtn:active{transform:scale(.97)}
+/* ⚠ 클래스명 .cf 는 쓰지 마라 — 이미 확신도 꼬리표 컴포넌트가 그 이름을 쓴다(테두리 있는 작은 칩).
+   v140 에서 실제로 충돌해 동전 「앞」에 남의 테두리가 붙어 나왔다(실물 스샷에서 잡았다).
+   ⚠⚠ 그리고 이 주석 자체가 두 번째 사고를 냈다 — 처음엔 백틱으로 감쌌는데,
+      이 CSS 는 **템플릿 리터럴 안**이라 백틱이 리터럴을 끊어 버려 빌드가 죽었다.
+      **CSS 블록 안 주석에는 백틱을 쓰지 마라.** */
+.coins .cface{color:#ffe9ad;text-shadow:0 0 10px rgba(255,233,173,.5)}
+.coins .cback{color:#8a7f95}
+/* 변효 — 이 효만 밝게. 절정이 절정으로 보여야 한다 */
+.hline.mvline .yang,.hline.mvline .yin{box-shadow:0 0 18px rgba(255,233,173,.95);filter:brightness(1.4)}
+.movecue{font-size:13.5px;line-height:1.65;color:#ffe9ad;margin:2px 0 0;text-align:center;max-width:280px}
 @keyframes coinFly{0%{transform:translateY(26px) rotateX(0);opacity:0}18%{opacity:1}55%{transform:translateY(-24px) rotateX(540deg)}100%{transform:translateY(0) rotateX(1080deg);opacity:1}}
 .hline.drop{animation:hexDrop .5s cubic-bezier(.2,.8,.3,1.25) both}
 @keyframes hexDrop{from{opacity:0;transform:translateY(-16px) scaleX(.6);filter:brightness(2.6)}to{opacity:1;transform:none;filter:none}}
@@ -7003,7 +7485,7 @@ sup.impfx{font-size:9px;color:#c98f3d;vertical-align:super;margin-left:2px}
 .vlogmeta b{font-weight:600}.lgo{color:#3dc98f}.lstop{color:#e05a5a}.lhold{color:#7f8fd4}
 .vlogrow{cursor:pointer;transition:border-color .2s}.vlogrow:hover{border-color:rgba(201,143,61,.4)}.vlogrow.open .vlogq{white-space:normal;overflow:visible}.vlogverdict{margin:5px 0 0;font-size:13px;color:#e7dcf5;line-height:1.55;border-top:1px solid rgba(255,255,255,.09);padding-top:5px}
 @media(max-width:520px){.stage{padding:20px 10px 72px}.scene{max-width:100%}.gpanel{width:95vw;padding:0}.grid16{gap:6px}}
-@media(prefers-reduced-motion:reduce){.fade,.line,.spark,.mcard,.chip.on,.halo.busy,.brooding,.forming,.persp.cardIn,.hline .mv,.rv,.gateflash{animation:none;transition:none;opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.fade,.line,.spark,.mcard,.chip.on,.halo.busy,.brooding,.forming,.persp.cardIn,.hline .mv,.rv,.gateflash,.coin.charge,.coin.fly,.hline.drop{animation:none;transition:none;opacity:1;transform:none}}
 `;
 
 export { calcSaju, sunLongitude, equationOfTime, cityLon, cityLat, moonLongitude, tzolkin, moonPlacements,
