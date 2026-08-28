@@ -154,7 +154,10 @@ ck("③ 판결 화면 문구 보존 — 판결을 청한다",
   const ins = p4.locator(".impask input.impnum");
   await ins.nth(0).fill("1997"); await ins.nth(1).fill("4"); await ins.nth(2).fill("22");
   await p4.getByRole("button", { name: "둘을 맞대 볼게" }).click(); await p4.waitForTimeout(900);
-  await p4.getByRole("button", { name: /닫을게/ }).last().click(); await p4.waitForTimeout(600);
+  await p4.getByRole("button", { name: /닫을게/ }).last().click(); await p4.waitForTimeout(1200);
+  /* ⚠ v144 — 궁합을 닫으면 **곁 탭으로 간다**(위성이 붙는 걸 보여주는 단계). 판결로 돌아와야 한다.
+     이 줄이 없으면 여기서 textarea 를 기다리다 타임아웃 난다 — 실제로 그렇게 걸렸다. */
+  await p4.getByRole("button", { name: "판결", exact: true }).click(); await p4.waitForTimeout(500);
   await p4.locator("canvas").first().dblclick();
   await p4.waitForSelector("textarea.qbox", { timeout: 12000 });
   await p4.locator("textarea.qbox").fill("내 사업에 도움이 될 사람이 있을까?");

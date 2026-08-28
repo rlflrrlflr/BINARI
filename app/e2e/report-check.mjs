@@ -286,8 +286,12 @@ await onboard(page);
     }
   }
   await page.getByRole("button", { name: /^닫을게$/ }).last().click().catch(() => {});
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(1200);
 }
+/* ⚠ v144 — 궁합을 닫으면 **곁 탭으로 간다**(위성이 붙는 단계). 판결로 돌아와야 질문칸이 있다. */
+await page.getByRole("button", { name: "판결", exact: true }).click().catch(() => {});
+await page.waitForTimeout(500);
+if (!(await page.locator("textarea.qbox").count())) { await page.locator("canvas").first().dblclick().catch(() => {}); await page.waitForTimeout(600); }
 await page.locator("textarea.qbox").fill("전남친에게 연락할까?"); await page.waitForTimeout(300);
 await page.getByRole("button", { name: "판결을 청한다" }).click();
 await throwCoins(page);

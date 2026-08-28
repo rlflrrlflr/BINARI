@@ -28,10 +28,12 @@ const grab = (head, kind = "fn") => {
   }
   throw new Error(`${head} 본문이 닫히지 않았습니다`);
 };
-const gyeotShares = new Function(`${grab("const GYEOT = {", "const")}${grab("function gyeotShares(")}
+const gyeotShares = new Function(`${grab("const GY_SLOTS =", "const")}${grab("const GYEOT = {", "const")}${grab("function gyeotShares(")}
   return gyeotShares;`)();
 
-const N = [1, 2, 3, 4, 5, 6, 8, 10, 20, 50];
+const SLOTS = new Function(`${grab("const GY_SLOTS =", "const")}return GY_SLOTS;`)();
+const GY = new Function(`${grab("const GY_SLOTS =", "const")}${grab("const GYEOT = {", "const")}return GYEOT;`)();
+const N = [1, 2, 3, 4, 5, 6, 8, 9, 10, 20, 50];
 const S = Object.fromEntries(N.map((n) => [n, gyeotShares(n)]));
 
 /* ── ① 앞줄 각자는 옅어지지 않는다 (시안이 틀렸던 바로 그 자리) ────────── */
@@ -66,13 +68,24 @@ const S = Object.fromEntries(N.map((n) => [n, gyeotShares(n)]));
 
 /* ── ③ 상한 — 열 명이 열 배가 되면 그게 시안 ⑤판의 벌레떼다 ──────────── */
 {
-  ck("③ 총량에 상한이 있다", S[50].total <= 0.5, `50명 ${S[50].total.toFixed(3)}`);
-  ck("③ 50명이 1명의 10배를 넘지 않는다", S[50].total < S[1].total * 10,
-     `1명 ${S[1].total.toFixed(3)} · 50명 ${S[50].total.toFixed(3)} (${(S[50].total / S[1].total).toFixed(1)}배)`);
+  /* ⚠ 상한을 **숫자로 박지 않는다.** 예전엔 `<= 0.5`·`< 10배` 였는데 그건 앞줄이 3일 때의 값이고,
+     슬롯이 8로 늘자(창업자 지시) 그대로 두면 검사가 **설계가 아니라 옛 숫자를 우긴다.**
+     그렇다고 통과할 만큼 올려 주는 건 게이트를 사정에 맞춰 내리는 것이다.
+     그래서 **슬롯 수에서 유도한다** — 앞줄이 다 차고 뒤 성운이 최대일 때가 곧 상한이고,
+     그 이상은 어떤 인원수에서도 안 나와야 한다. 슬롯을 늘리면 상한도 같이 따라온다.
+     ⚠ 진짜 성능 한도는 여기가 아니라 `u_gyTake`(재배정 입자 몫, 0.72 상한)다 — 그건 그대로다. */
+  const ceil = GY.per * SLOTS + GY.backCap;
+  ck("③ 총량이 슬롯에서 유도한 상한을 안 넘는다", S[50].total <= ceil + 1e-9,
+     `50명 ${S[50].total.toFixed(3)} ≤ ${ceil.toFixed(3)}(per×${SLOTS}+뒤성운)`);
+  ck("③ 뒤 성운이 앞줄 한 명분의 두 배를 안 넘는다 — 안 그러면 '안 보이는 사람'이 더 밝아진다",
+     GY.backCap <= GY.per * 2 + 1e-9, `뒤성운 ${GY.backCap} vs 1인분 ${GY.per}`);
   // 앞줄은 셋까지 — 넷째부터는 개체로 안 선다(숫자를 그림으로 세지 않기 위해)
-  ck("③ 앞줄은 셋까지", S[10].front === 3 && S[2].front === 2, `10명일 때 앞줄 ${S[10].front}`);
-  ck("③ 넷째부터는 뒤 성운으로", S[4].hidden === 1 && S[10].hidden === 7 && S[3].back === 0,
-     `4명 숨김 ${S[4].hidden} · 3명 뒤성운 ${S[3].back}`);
+  /* ⚠ v144 — 앞줄 상한이 3에서 **셰이더 슬롯 수(8)** 로 늘었다(창업자 지시).
+     숫자를 여기 박지 않고 **App.jsx 의 GY_SLOTS 를 그대로 읽어** 맞댄다 —
+     박아 두면 슬롯을 늘리는 날 이 검사만 조용히 옛 수를 우긴다. */
+  ck("③ 앞줄은 셰이더 슬롯 수까지", S[20].front === SLOTS && S[2].front === 2, `20명일 때 앞줄 ${S[20].front} / 슬롯 ${SLOTS}`);
+  ck("③ 슬롯을 넘으면 뒤 성운으로", S[SLOTS + 1].hidden === 1 && S[SLOTS].back === 0,
+     `${SLOTS + 1}명 숨김 ${S[SLOTS + 1].hidden} · ${SLOTS}명 뒤성운 ${S[SLOTS].back}`);
 }
 
 /* ── ④ 경계 ──────────────────────────────────────────────────────────── */
