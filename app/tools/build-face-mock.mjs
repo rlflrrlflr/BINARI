@@ -144,7 +144,18 @@ const HTML = `<!doctype html><meta charset="utf-8">
   비견 평온 · 겁재 놀람 · 식신 기쁨 · 상관 들뜸 · 정재 굳음 · 편재 곁눈 · 정관 감음 · 편관 시무룩 · 정인 기쁨 · 편인 졸림.
   <b>눈은 오늘, 입도 오늘</b>이 된다(전엔 입만 오늘이었다).</p>
 
-  <h2>앱에 얹은 넷 — <code>?skin=holo&amp;face=a|b|c|d</code></h2>
+  <h2>카툰 원근 — 각도에 따라 도는 얼굴</h2>
+  <p class="lead">창업자 지적(2026-08-29): "카툰 렌더링 보면 2d인데 각도에 따라 원근감도 생기고 그렇잖아 /
+  지금은 그냥 이미지가 냅다 붙은 거 같아서 단조로워." 맞다 — 눈·입을 <b>평면에 고정 좌표로</b> 찍고 있었다.
+  고치는 법은 카툰이 늘 쓰던 것: <b>얼굴 요소를 구 표면에 놓고 각도로 돌린 뒤 정사영</b>한다.
+  그러면 셋이 <b>동시에</b> 일어난다 — ①먼 쪽 눈이 작아지고 ②두 눈 간격이 좁아지고 ③가로로 눌린다.
+  하나만 하면 미끄러진 것으로 보이고, 셋이 같이 가야 <b>돌았다</b>로 읽힌다.</p>
+  <div class="row" id="gYaw"></div>
+  <p class="lead" style="margin-top:6px">앱에서는 이 각도가 <b>스스로 왔다갔다</b> 한다 —
+  주기를 나눠떨어지지 않게 잡아 왕복이 아니라 <b>두리번거림</b>이 되게 했다.
+  그리고 <b>손끝을 누르면 그쪽으로 돌아본다.</b> 흰자 눈(E)은 동공까지 시선을 따라간다.</p>
+
+  <h2>앱에 얹은 다섯 — <code>?skin=holo&amp;face=a|b|c|d|e</code></h2>
   <p class="lead">인기 상위 넷의 값을 옮긴 프리셋이다. <b>이건 앱에 실제로 들어갔다</b> —
   주소에 <code>&amp;face=a</code> 를 붙이면 보인다. 안 붙이면 얼굴 없는 지금 화면 그대로다.</p>
   <div class="row" id="gPreset"></div>
@@ -379,8 +390,12 @@ function faceCell(parent, opt, label, note){
 }
 EYE_KINDS.forEach(([k,nm,ds])=>faceCell(gEyeMood,{eye:k,mouth:"smile",eyeSz:0.030,gap:0.100},nm,ds));
 Object.entries(FACE_PRESETS).forEach(([k,P])=>
-  faceCell(gPreset,{eye:"dot",mouth:P.mouth,blush:P.blush,eyeSz:P.eyeSz*2.6,gap:P.gap*2.6,
+  faceCell(gPreset,{eye:P.eye||"dot",mouth:P.mouth,blush:P.blush,eyeSz:P.eyeSz*2.6,gap:P.gap*2.6,
                     cy:0.50,mSz:P.mSz*2.6,mCy:0.50+(P.mCy-P.cy)*2.6},P.name,"?face="+k));
+/* 원근 — 같은 얼굴을 각도만 바꿔 늘어놓는다 */
+[[-0.42,"왼쪽 −0.42"],[-0.21,"−0.21"],[0,"정면 0"],[0.21,"0.21"],[0.42,"오른쪽 0.42"]]
+  .forEach(([y,l])=>faceCell(gYaw,{eye:"ball",mouth:"squig",blush:false,
+    eyeSz:0.055,gap:0.174,cy:0.50,mSz:0.130,mCy:0.655,yaw:y,pitch:0.06},l,y===0?"E 의 값":""));
 
 DATA.EYES.forEach(([k,nm,ds])=>cellWith(eyes,2,k,"flat",nm,ds,true));
 DATA.MOUTHS.forEach(([k,nm,ds])=>cellWith(mouths,2,"arc",k,nm,ds,true));

@@ -2877,7 +2877,7 @@ const MSR_FREE = (() => { try { return /[?&]msr=1(&|$)/.test(window.location.sea
 const SKIN = (() => { try { return /[?&]skin=holo(&|$)/.test(window.location.search) ? "holo" : ""; } catch (_) { return ""; } })();
 /* 얼굴 A/B — `?face=a|b|c|d`. 없으면 얼굴을 안 그린다(지금까지의 화면 그대로).
    창업자가 "상위 4개를 앱에 얹어서 평가하겠다"고 해서 **끼웠다 뺐다 되게** 둔다. */
-const FACE = (() => { try { const m = /[?&]face=([abcd])(&|$)/.exec(window.location.search); return m ? m[1] : ""; } catch (_) { return ""; } })();
+const FACE = (() => { try { const m = /[?&]face=([abcde])(&|$)/.exec(window.location.search); return m ? m[1] : ""; } catch (_) { return ""; } })();
 
 /* ── 오늘의 상태 — **운세 방법론에서 나온다. 지어내지 않는다** ─────────────
    축 둘만 쓴다(새 축을 늘리지 않는다 — 설계 헌장 §판결문 형식 보존):
@@ -3383,6 +3383,17 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
           const dxu = Math.sin(tt * 0.55) * 0.075 + Math.sin(tt * 0.93 + 1.3) * 0.030;
           const dyu = Math.cos(tt * 0.47) * 0.088 + Math.sin(tt * 0.81 + 0.6) * 0.034;
           const P = FACE_PRESETS[FACE];
+          /* ── 얼굴이 두리번거린다 ─────────────────────────────────────
+             창업자: "눈 높이와 좌우 위치는 시선과 얼굴의 방향을 나타낼 수 있을 거 같아서
+             이건 살아있는 생명체처럼 왔다갔다 하면 좋겠어."
+             주기를 서로 나눠떨어지지 않게 잡아야 **왕복이 아니라 두리번거림**이 된다.
+             손끝을 누르면 그쪽으로 돌아본다 — 시선이 손을 따라가는 게 「보고 있다」의 전부다. */
+          let yaw = Math.sin(tt * 0.31) * 0.20 + Math.sin(tt * 0.53 + 1.7) * 0.09;
+          let pitch = Math.sin(tt * 0.24 + 0.9) * 0.11 + Math.sin(tt * 0.41) * 0.05;
+          if (touch.amt > 0.01) {
+            yaw += touch.x * 1.5 * touch.amt;
+            pitch += -touch.y * 1.0 * touch.amt;
+          }
           /* 응축·모임이면 오라가 작아지므로 얼굴도 같이 준다. 점으로 모이면 사라진다. */
           const foldV = Math.max(Math.min(Math.max(orb, 0), 1), touch.amt);
           const k = (1 - 0.35 * Math.min(Math.max(orb, 0), 1)) * (1 - touch.amt);
@@ -3395,10 +3406,11 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
             const cyr = 0.5 - dyu - wisp.y / 2.35;
             g2.save(); g2.translate((cxr - 0.5) * S, (cyr - 0.5) * S);
             drawFace(g2, S, {
-              eye: (mood && MOOD_EYE[mood.ss]) || "dot",
+              eye: P.eye || (mood && MOOD_EYE[mood.ss]) || "dot",
               mouth: P.mouth, blush: P.blush,
               cy: P.cy, gap: P.gap * k, eyeSz: P.eyeSz * k,
               mSz: P.mSz * k, mCy: P.cy + (P.mCy - P.cy) * k,
+              yaw, pitch,
             });
             g2.restore();
           }
