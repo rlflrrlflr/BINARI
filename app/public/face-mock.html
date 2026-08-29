@@ -60,6 +60,22 @@
   <h3 class="sub">눈 높이 — 위에서</h3><div class="row" id="gCy"></div>
   <h3 class="sub">입 크기와 눈–입 거리</h3><div class="row" id="gMouth"></div>
 
+  <h2>실물을 보고 — 관찰 다섯</h2>
+  <p class="lead">창업자가 보낸 캡처 5건(yurang 5.8만 · wadadabear 8.8만 · young_forest · free.hada · milletoon)을
+  보고 적는다. <b>수치는 육안 추정</b>이다 — 픽셀로 재지 않았다.</p>
+  <table class="num"><tbody>
+    <tr><td>① 흰자</td><td><b>다섯 중 넷이 없다.</b> 까만 점이 주류 · 흰자는 free.hada 하나</td></tr>
+    <tr><td>② 눈 크기</td><td>얼굴 폭의 <b>5~10%</b> <i>(우리 15% — 두 배 크다)</i></td></tr>
+    <tr><td>③ 눈 간격</td><td>얼굴 폭의 <b>40~50%</b> <i>(우리 27% — 훨씬 좁다)</i></td></tr>
+    <tr><td>④ 눈썹</td><td><b>표정의 절반을 한다.</b> 다섯 중 셋이 쓴다 <i>(우리 보드엔 아예 없었다)</i></td></tr>
+    <tr><td>⑤ 눈 높이</td><td>얼굴의 <b>55~65%</b> — 아래쪽 <i>(우리 45.5% — 높다)</i></td></tr>
+  </tbody></table>
+  <p class="warn" style="margin-top:14px">⚠ <b>캘시퍼와 인스타툰은 다른 계열이다.</b> 캘시퍼는 흰자가 핵심이고,
+  인스타툰 주류는 까만 점 + 눈썹이다. 어느 쪽으로 갈지가 첫 갈림길이다.</p>
+
+  <h3 class="sub">두 계열을 나란히</h3><div class="row" id="gSchool"></div>
+  <h3 class="sub">눈썹 넷 — 같은 눈, 눈썹만 바꿈</h3><div class="row" id="gBrow"></div>
+
   <h2>지금 값</h2>
   <table class="num"><tbody>
     <tr><td>눈 흰자</td><td>가로 15.1% · 세로 16.6%</td></tr>
@@ -94,6 +110,14 @@ function drawEyes(x, S, kind, cx, cy, gap, sz, ink){
     if(lid){ x.fillStyle=lid; x.beginPath();
       x.ellipse(ex,ey-rh*0.75,rw*1.06,rh*0.78,0,0,7); x.fill(); }
   };
+  /* ⚠ **다섯 중 넷이 흰자가 없다**(실물 관찰). 까만 점이 인스타툰 주류이고,
+     흰자는 free.hada 하나뿐이었다. 밝은 오라 위에서는 까만 점이 대비도 더 좋다. */
+  if(kind==="dot"||kind==="dotbig"){
+    const r = sz*(kind==="dotbig"?0.62:0.42);
+    x.fillStyle=ink;
+    [cx-gap,cx+gap].forEach(ex=>{ x.beginPath(); x.ellipse(ex,cy,r,r*1.18,0,0,7); x.fill(); });
+    return;
+  }
   const R1=sz*1.05, R2=sz*1.15;                       // 흰자 반지름(가로·세로)
   if(kind==="calci"){ ball(cx-gap,cy,R1,R2,0,0,sz*0.30); ball(cx+gap,cy,R1,R2,0,0,sz*0.30); }
   else if(kind==="wide"){ ball(cx-gap*1.06,cy,R1*1.24,R2*1.24,0,0,sz*0.32); ball(cx+gap*1.06,cy,R1*1.24,R2*1.24,0,0,sz*0.32); }
@@ -107,6 +131,28 @@ function drawEyes(x, S, kind, cx, cy, gap, sz, ink){
     [cx-gap,cx+gap].forEach(ex=>{ x.beginPath(); x.arc(ex,cy+sz*0.42,sz*0.92,Math.PI*1.16,Math.PI*1.84); x.stroke(); }); }
   else if(kind==="three"){ ball(cx-gap*1.12,cy+sz*0.24,R1*0.82,R2*0.82,0,0,sz*0.24); ball(cx+gap*1.12,cy+sz*0.24,R1*0.82,R2*0.82,0,0,sz*0.24);
     ball(cx,cy-sz*0.86,R1*0.66,R2*0.66,0,0,sz*0.20); }
+}
+/* ── 눈썹 — **표정의 절반이 여기 있다**(실물 관찰). 다섯 중 셋이 눈썹으로 감정을 낸다.
+   내 보드엔 아예 없었고, 그래서 눈·입만으로 감정을 짜내려다 눈이 커졌다. */
+function drawBrow(x, kind, cx, cy, gap, sz, ink){
+  if(kind==="none") return;
+  x.strokeStyle=ink; x.lineCap="round"; x.lineWidth=sz*0.19;
+  const w=sz*0.86, y=cy-sz*1.5;
+  [[-1,cx-gap],[1,cx+gap]].forEach(([d,ex])=>{
+    x.beginPath();
+    if(kind==="angry"){ x.moveTo(ex-d*w*0.5, y-sz*0.34); x.lineTo(ex+d*w*0.5, y+sz*0.16); }
+    else if(kind==="sad"){ x.moveTo(ex-d*w*0.5, y+sz*0.18); x.lineTo(ex+d*w*0.5, y-sz*0.30); }
+    else if(kind==="flat"){ x.moveTo(ex-w*0.5, y); x.lineTo(ex+w*0.5, y); }
+    else if(kind==="up"){ x.moveTo(ex-w*0.5, y+sz*0.12); x.quadraticCurveTo(ex, y-sz*0.34, ex+w*0.5, y+sz*0.12); }
+    x.stroke();
+  });
+}
+/* 볼터치 — 다섯 중 둘이 쓴다. 색만으로 "귀엽다"를 얹는 가장 싼 수단이다 */
+function drawBlush(x, on, cx, cy, gap, sz){
+  if(!on) return;
+  x.fillStyle="rgba(240,140,140,.38)";
+  [cx-gap*1.62, cx+gap*1.62].forEach(ex=>{
+    x.beginPath(); x.ellipse(ex, cy+sz*0.62, sz*0.62, sz*0.42, 0, 0, 7); x.fill(); });
 }
 function drawMouth(x, kind, cx, cy, sz, ink){
   /* ⚠ 입은 **눈보다 훨씬 작고 얇다.** 원본의 입은 지그재그가 아니라
@@ -193,8 +239,10 @@ function tuned(parent, over, label, on){
   box.appendChild(fcv); d.appendChild(box);
   const x=fcv.getContext("2d");
   x.fillStyle="rgba(255,253,246,.55)"; x.beginPath(); x.arc(S/2,S/2,S*0.34,0,7); x.fill();
-  const P=Object.assign({eye:"calci",mouth:"squig",cy:0.455,gap:0.135,sz:0.072,mcy:0.575,msz:0.085},over);
+  const P=Object.assign({eye:"calci",mouth:"squig",cy:0.455,gap:0.135,sz:0.072,mcy:0.575,msz:0.085,brow:"none",blush:false},over);
+  drawBlush(x,P.blush, S*0.5, S*P.cy, S*P.gap, S*P.sz);
   drawEyes(x,S,P.eye, S*0.5, S*P.cy, S*P.gap, S*P.sz, "#191308");
+  drawBrow(x,P.brow, S*0.5, S*P.cy, S*P.gap, S*P.sz, "#191308");
   drawMouth(x,P.mouth, S*0.5, S*P.mcy, S*P.msz, "#2a2013");
   d.insertAdjacentHTML("beforeend",'<p class="nm">'+label+'</p>');
   parent.appendChild(d);
@@ -207,6 +255,15 @@ function tuned(parent, over, label, on){
   .forEach(([v,l])=>tuned(gCy,{cy:v,mcy:v+0.12},l,v===0.455));
 [[0.065,0.545,"작고 가깝게"],[0.085,0.575,"지금"],[0.105,0.600,"크고 멀게"],[0.125,0.630,"더 크게"]]
   .forEach(([m,c,l])=>tuned(gMouth,{msz:m,mcy:c},l,m===0.085));
+
+/* 두 계열 — 캘시퍼(흰자) vs 인스타툰(까만 점). 관찰한 수치를 그대로 넣었다 */
+tuned(gSchool,{},"지금 (캘시퍼형)",true);
+tuned(gSchool,{brow:"angry"},"캘시퍼형 + 눈썹");
+tuned(gSchool,{eye:"dot",sz:0.075,gap:0.200,cy:0.520,mcy:0.620,msz:0.070},"인스타툰형 — 점눈·넓게·아래로");
+tuned(gSchool,{eye:"dot",sz:0.075,gap:0.200,cy:0.520,mcy:0.620,msz:0.070,brow:"angry"},"인스타툰형 + 눈썹");
+tuned(gSchool,{eye:"dot",sz:0.075,gap:0.200,cy:0.520,mcy:0.620,msz:0.070,brow:"angry",blush:true},"+ 볼터치");
+[["none","없음"],["flat","일자"],["angry","치켜"],["sad","내림"],["up","호"]]
+  .forEach(([b,l])=>tuned(gBrow,{eye:"dot",sz:0.075,gap:0.200,cy:0.520,mcy:0.620,msz:0.070,brow:b},l,b==="none"));
 
 DATA.EYES.forEach(([k,nm,ds])=>cellWith(eyes,2,k,"flat",nm,ds,true));
 DATA.MOUTHS.forEach(([k,nm,ds])=>cellWith(mouths,2,"arc",k,nm,ds,true));
