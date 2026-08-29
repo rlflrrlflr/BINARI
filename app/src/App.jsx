@@ -602,7 +602,7 @@ function myeongsikText(saju, sex, now) {
   return "\n[아래는 네 계산·추론용 자료다. 용어를 본문에 그대로 쓰지 마라 — 지시서의 [용어 금지] 참조]"
     + "\n십성 분포(일간 " + GAN[idx.dG] + " 기준): " + dist.map(([k, v]) => k + " " + v).join(" · ") + (sex ? "" : " — 성별 미입력: 자식운 등 남녀 구분 해석은 말하지 않는다")
     + "\n신살: " + (sins.length ? sins.map((x) => x.name).join(" · ") : "두드러진 것 없음")
-    + "\n세운(향후 5년 · 리포트 배경 전용, 판결의 시계로 쓰지 말 것): " + se.map((x) => x.year + " " + x.ganji + "(" + x.ss + ")").join(" / ")
+    + "\n세운(향후 5년 · **판결의 방향·시계로 쓰지 마라.** 근거를 서술할 때는 값을 인용해도 된다): " + se.map((x) => x.year + " " + x.ganji + "(" + x.ss + ")").join(" / ")
     + "\n띠 인연(정보 제시까지만 — 판결 근거 아님): 충 " + TTI[(idx.yJ + 6) % 12] + "띠 · 원진 " + TTI[WONJIN[idx.yJ]] + "띠 — 큰돈·보증은 신중히"
     + (tk.good.length ? "\n길일(30일 내): " + tk.good.map((d) => d.label + "(" + d.why + ")").join(" · ") + (tk.bad.length ? " / 피할 날: " + tk.bad.map((d) => d.label).join(" · ") : "") : "")
     + "\n직업 기운: 일간 " + GAN_EL[idx.dG] + " — " + JOB_EL[GAN_EL[idx.dG]] + (maxEl !== GAN_EL[idx.dG] ? " (분포 최다 " + maxEl + " 기질 겸함)" : "");
@@ -4052,7 +4052,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v168.1 · 나머지 열여섯";
+const APP_VER = "v169 · 세운·각주 정리";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
