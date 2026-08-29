@@ -389,8 +389,12 @@ function faceCell(parent, opt, label, note){
   parent.appendChild(d);
 }
 EYE_KINDS.forEach(([k,nm,ds])=>faceCell(gEyeMood,{eye:k,mouth:"smile",eyeSz:0.030,gap:0.100},nm,ds));
+/* ⚠ 앞 판에서 프리셋 칸을 **전부 무표정 점눈**으로 그렸다. 그래서 A~D 가 다 똑같아 보였고
+   "다 틀렸다"는 말을 들었다. 프리셋이 정하는 건 **크기·간격·입·볼터치**이고
+   눈 모양은 **오늘 상태**가 정한다 — 그러니 칸마다 다른 눈을 넣어야 무엇이 다른지 보인다. */
+const PRESET_EYE={a:"dot",b:"stern",c:"angry",d:"shine",e:"ball"};
 Object.entries(FACE_PRESETS).forEach(([k,P])=>
-  faceCell(gPreset,{eye:P.eye||"dot",mouth:P.mouth,blush:P.blush,eyeSz:P.eyeSz*2.6,gap:P.gap*2.6,
+  faceCell(gPreset,{eye:P.eye||PRESET_EYE[k],mouth:P.mouth,blush:P.blush,eyeSz:P.eyeSz*2.6,gap:P.gap*2.6,
                     cy:0.50,mSz:P.mSz*2.6,mCy:0.50+(P.mCy-P.cy)*2.6},P.name,"?face="+k));
 /* 원근 — 같은 얼굴을 각도만 바꿔 늘어놓는다 */
 [[-0.42,"왼쪽 −0.42"],[-0.21,"−0.21"],[0,"정면 0"],[0.21,"0.21"],[0.42,"오른쪽 0.42"]]

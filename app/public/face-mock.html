@@ -143,49 +143,68 @@
 const EYE_KINDS = [
   ["dot",    "평온",   "점 둘. 아무 일 없다"],
   ["smile",  "기쁨",   "위로 굽은 호 — 웃으면 눈이 접힌다"],
-  ["droop",  "시무룩", "바깥쪽이 처진다"],
+  ["droop",  "시무룩", "바깥쪽이 처진 눈 — 선을 안 긋는다"],
   ["wide",   "놀람",   "점이 커지고 위로 붙는다"],
-  ["sleepy", "졸림",   "위에서 눈꺼풀이 반쯤 덮는다"],
-  ["stern",  "굳음",   "위가 눌린 반달. 눈썹 없이도 단호하다"],
+  ["sleepy", "졸림",   "아래쪽만 남은 눈 — 위를 잘라낸다"],
+  ["stern",  "굳음",   "위가 평평하게 잘린 눈 — 째려봄은 절단면이다"],
   ["side",   "곁눈",   "점이 한쪽으로 — 딴 데 본다"],
   ["shine",  "들뜸",   "점 안에 반짝임. 기대하는 눈"],
   ["closed", "감음",   "선 하나. 쉬거나 참는 중"],
   ["teary",  "울먹",   "아래에 물기 한 방울"],
+  ["angry",  "화남",   "안쪽이 올라간다 — 굳음과 반대로 기울인 절단면"],
   ["ball",   "흰자",   "큰 흰자 + 작은 동공. 동공이 시선을 향한다"],
 ];
 
 function fxEyes(x, kind, cx, cy, gap, sz, ink, gaze) {
+  /* ⚠ **선을 얹지 않는다**(창업자 2026-08-29: "진짜 눈썹이 눈에 붙어있는 게 아냐.
+     눈 모양으로 그냥 표정이 읽히는 거야"). 앞 판에서 시무룩·졸림·굳음을 만들 때
+     눈 위에 선을 하나씩 그었는데, 눈에서 떨어진 선은 **눈꺼풀이 아니라 눈썹으로 읽힌다.**
+     인스타툰이 하는 건 그게 아니라 **눈의 실루엣 자체를 깎는 것**이다 —
+     위를 자르면 째려보고, 아래만 남기면 졸리고, 기울이면 처진다. 도형 하나로 끝낸다. */
   x.save();
   x.strokeStyle = ink; x.fillStyle = ink; x.lineCap = "round"; x.lineJoin = "round";
+
+  /* 눈 하나를 그린다. dir 은 바깥 방향(-1 왼눈 / +1 오른눈) */
   const eye = (ex, dir) => {
-    x.beginPath();
-    if (kind === "dot") { x.ellipse(ex, cy, sz, sz * 1.16, 0, 0, 7); x.fill(); }
-    else if (kind === "wide") { x.ellipse(ex, cy - sz * 0.22, sz * 1.5, sz * 1.62, 0, 0, 7); x.fill(); }
-    else if (kind === "smile") { x.lineWidth = sz * 0.78;
+    /* 타원을 그리되 위/아래를 잘라 쓰는 헬퍼 — 자르는 게 이 어휘의 핵심이다 */
+    /* dy 는 **바깥쪽을 올리거나 내리는 양**이다. 기울기만으로는 시무룩과 화남이
+       비슷해 보였다 — 눈 하나의 높이까지 어긋나야 확실히 갈린다. */
+    const cut = (topFrac, rw, rh, tilt, dy) => {
+      const oy = cy + (dy || 0) * dir * rh;
+      x.save();
+      x.beginPath();
+      x.rect(ex - rw * 2.2, oy - rh + rh * 2 * topFrac, rw * 4.4, rh * 4);
+      x.clip();
+      x.beginPath();
+      x.ellipse(ex, oy, rw, rh, (tilt || 0) * dir, 0, 7);
+      x.fill();
+      x.restore();
+    };
+    if (kind === "dot") { x.beginPath(); x.ellipse(ex, cy, sz, sz * 1.16, 0, 0, 7); x.fill(); }
+    else if (kind === "wide") { x.beginPath(); x.ellipse(ex, cy - sz * 0.22, sz * 1.5, sz * 1.62, 0, 0, 7); x.fill(); }
+    else if (kind === "smile") { x.lineWidth = sz * 0.78; x.beginPath();
       x.arc(ex, cy + sz * 0.62, sz * 1.22, Math.PI * 1.18, Math.PI * 1.82); x.stroke(); }
-    else if (kind === "closed") { x.lineWidth = sz * 0.72;
+    else if (kind === "closed") { x.lineWidth = sz * 0.72; x.beginPath();
       x.arc(ex, cy - sz * 0.55, sz * 1.15, Math.PI * 0.24, Math.PI * 0.76); x.stroke(); }
-    else if (kind === "droop") { x.ellipse(ex + dir * sz * 0.10, cy + sz * 0.30, sz * 0.92, sz * 0.98, 0, 0, 7); x.fill();
-      x.lineWidth = sz * 0.42; x.beginPath();
-      x.moveTo(ex - dir * sz * 1.30, cy - sz * 1.10); x.lineTo(ex + dir * sz * 1.05, cy - sz * 0.42); x.stroke(); }
-    else if (kind === "sleepy") { x.ellipse(ex, cy + sz * 0.34, sz, sz * 0.86, 0, 0, 7); x.fill();
-      x.lineWidth = sz * 0.46; x.beginPath();
-      x.moveTo(ex - sz * 1.20, cy - sz * 0.46); x.lineTo(ex + sz * 1.20, cy - sz * 0.46); x.stroke(); }
-    else if (kind === "stern") { x.ellipse(ex, cy + sz * 0.16, sz * 1.05, sz * 0.72, 0, 0, 7); x.fill();
-      x.lineWidth = sz * 0.52; x.beginPath();
-      x.moveTo(ex - sz * 1.25, cy - sz * 0.72); x.lineTo(ex + sz * 1.25, cy - sz * 0.60); x.stroke(); }
-    else if (kind === "side") { x.ellipse(ex + sz * 0.62, cy, sz * 0.95, sz * 1.10, 0, 0, 7); x.fill(); }
-    else if (kind === "shine") { x.ellipse(ex, cy, sz * 1.20, sz * 1.34, 0, 0, 7); x.fill();
+    /* 시무룩 — **바깥쪽이 처진 눈.** 타원을 바깥 아래로 기울이고 위를 살짝 자른다 */
+    else if (kind === "droop") { cut(0.20, sz * 1.16, sz * 1.30, 0.62, 0.26); }   // 바깥이 처진다
+    /* 졸림 — **아래쪽만 남은 눈.** 위를 절반 넘게 자르면 눈꺼풀이 덮인 것으로 읽힌다 */
+    else if (kind === "sleepy") { cut(0.64, sz * 1.28, sz * 1.44, 0, 0); }        // 가늘게 남는다
+    /* 굳음 — **위가 평평하게 잘린 눈.** 째려보는 눈은 선이 아니라 이 절단면이다 */
+    else if (kind === "stern") { cut(0.36, sz * 1.20, sz * 1.58, 0, 0); }         // 두껍게 남는다
+    /* 화남 — 안쪽이 올라간다. 굳음과 같은 절단에 **반대로** 기울인다 */
+    else if (kind === "angry") { cut(0.34, sz * 1.18, sz * 1.42, -0.58, -0.22); } // 안쪽이 올라간다
+    else if (kind === "side") { x.beginPath(); x.ellipse(ex + sz * 0.62, cy, sz * 0.95, sz * 1.10, 0, 0, 7); x.fill(); }
+    else if (kind === "shine") { x.beginPath(); x.ellipse(ex, cy, sz * 1.20, sz * 1.34, 0, 0, 7); x.fill();
       x.fillStyle = "rgba(255,255,255,.92)"; x.beginPath();
       x.arc(ex - sz * 0.36, cy - sz * 0.44, sz * 0.40, 0, 7); x.fill(); x.fillStyle = ink; }
     else if (kind === "ball") {
-      x.fillStyle = "#fbf7ef"; x.ellipse(ex, cy, sz, sz * 1.12, 0, 0, 7); x.fill();
+      x.fillStyle = "#fbf7ef"; x.beginPath(); x.ellipse(ex, cy, sz, sz * 1.12, 0, 0, 7); x.fill();
       x.strokeStyle = "rgba(30,22,12,.28)"; x.lineWidth = sz * 0.07; x.stroke();
       x.fillStyle = ink; x.beginPath();
-      /* 동공은 흰자 안에서 **시선 쪽으로** 굴러간다. 밖으로 안 나가게 0.42 로 묶는다. */
       x.arc(ex + (gaze ? gaze.x : 0) * sz * 0.42, cy + (gaze ? gaze.y : 0) * sz * 0.42, sz * 0.34, 0, 7); x.fill();
     }
-    else if (kind === "teary") { x.ellipse(ex, cy, sz, sz * 1.16, 0, 0, 7); x.fill();
+    else if (kind === "teary") { x.beginPath(); x.ellipse(ex, cy, sz, sz * 1.16, 0, 0, 7); x.fill();
       x.fillStyle = "rgba(120,180,225,.78)"; x.beginPath();
       x.ellipse(ex + dir * sz * 0.95, cy + sz * 1.15, sz * 0.42, sz * 0.55, 0, 0, 7); x.fill(); x.fillStyle = ink; }
   };
@@ -511,8 +530,12 @@ function faceCell(parent, opt, label, note){
   parent.appendChild(d);
 }
 EYE_KINDS.forEach(([k,nm,ds])=>faceCell(gEyeMood,{eye:k,mouth:"smile",eyeSz:0.030,gap:0.100},nm,ds));
+/* ⚠ 앞 판에서 프리셋 칸을 **전부 무표정 점눈**으로 그렸다. 그래서 A~D 가 다 똑같아 보였고
+   "다 틀렸다"는 말을 들었다. 프리셋이 정하는 건 **크기·간격·입·볼터치**이고
+   눈 모양은 **오늘 상태**가 정한다 — 그러니 칸마다 다른 눈을 넣어야 무엇이 다른지 보인다. */
+const PRESET_EYE={a:"dot",b:"stern",c:"angry",d:"shine",e:"ball"};
 Object.entries(FACE_PRESETS).forEach(([k,P])=>
-  faceCell(gPreset,{eye:P.eye||"dot",mouth:P.mouth,blush:P.blush,eyeSz:P.eyeSz*2.6,gap:P.gap*2.6,
+  faceCell(gPreset,{eye:P.eye||PRESET_EYE[k],mouth:P.mouth,blush:P.blush,eyeSz:P.eyeSz*2.6,gap:P.gap*2.6,
                     cy:0.50,mSz:P.mSz*2.6,mCy:0.50+(P.mCy-P.cy)*2.6},P.name,"?face="+k));
 /* 원근 — 같은 얼굴을 각도만 바꿔 늘어놓는다 */
 [[-0.42,"왼쪽 −0.42"],[-0.21,"−0.21"],[0,"정면 0"],[0.21,"0.21"],[0.42,"오른쪽 0.42"]]
