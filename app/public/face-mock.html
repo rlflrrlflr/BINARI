@@ -20,6 +20,12 @@
   .pick .why{font-size:11.5px;color:#6b6252;margin-top:4px}
   .pick .el{font-size:13px;font-weight:600;margin-top:6px}
   code{font-size:11.5px;color:#5d5544}
+  h3.sub{font-size:12.5px;margin:20px 0 8px;color:#5d5544;font-weight:600;letter-spacing:-.01em}
+  table.num{border-collapse:collapse;margin-top:8px;font-size:12.5px}
+  table.num td{border-bottom:1px solid #ccc5b4;padding:6px 16px 6px 0}
+  table.num td:first-child{color:#6b6252;width:150px}
+  table.num i{color:#8a8271;font-style:normal;font-size:11.5px}
+  .cell.on canvas{outline:2px solid #8c4a12;outline-offset:2px}
 </style>
 <div class="wrap">
   <h1>얼굴 시안 — 눈과 입만</h1>
@@ -41,6 +47,29 @@
   <p class="lead">눈은 <b>사주</b>(타고난 것), 입은 <b>오늘</b>(변하는 것). 같은 사람인데 오늘이 다르다는 걸
   얼굴 하나로 말할 수 있다. 아래는 목(木)의 웃는 눈에 오늘 입만 갈아 끼운 것.</p>
   <div class="row" id="moods"></div>
+
+  <h2>비교자 — 크기·간격·높이를 단계로 늘어놓았다</h2>
+  <p class="lead">⚠ <b>인스타툰 실물은 이 환경에서 못 봤다</b> — 인스타그램은 로그인이 필요하고,
+  검색으로 나온 글들(고구마팜·나무위키 등)이 전부 망 정책에 막혔다. 그림을 못 본 채 "이게 인기 그림체다"라고
+  말하면 그건 <b>근거 없는 주장</b>이다.<br>
+  그래서 대신 <b>대조할 수 있는 자를 만들었다.</b> 아래에서 마음에 드는 칸을 고르거나,
+  인스타툰 캡처를 옆에 놓고 어느 칸에 가까운지 짚어 주면 그 값으로 맞춘다.
+  숫자는 전부 <b>칸 한 변 대비 %</b>이고, 지금 앱 후보는 <b>가운데 칸</b>이다.</p>
+  <h3 class="sub">눈 크기 — 흰자 지름</h3><div class="row" id="gSize"></div>
+  <h3 class="sub">두 눈 간격 — 중심에서 중심</h3><div class="row" id="gGap"></div>
+  <h3 class="sub">눈 높이 — 위에서</h3><div class="row" id="gCy"></div>
+  <h3 class="sub">입 크기와 눈–입 거리</h3><div class="row" id="gMouth"></div>
+
+  <h2>지금 값</h2>
+  <table class="num"><tbody>
+    <tr><td>눈 흰자</td><td>가로 15.1% · 세로 16.6%</td></tr>
+    <tr><td>동공</td><td>지름 4.3% <i>(흰자의 29%)</i></td></tr>
+    <tr><td>두 눈 중심 간격</td><td>27.0% <i>(흰자 지름의 1.79배)</i></td></tr>
+    <tr><td>눈 사이 빈틈</td><td>11.9% <i>(흰자 0.79개분)</i></td></tr>
+    <tr><td>눈 높이</td><td>위에서 45.5%</td></tr>
+    <tr><td>입 폭</td><td>8.9% <i>(흰자 지름의 0.59배)</i></td></tr>
+    <tr><td>눈→입 거리</td><td>12.0% <i>(흰자 지름의 0.79배)</i></td></tr>
+  </tbody></table>
 
   <p class="lead" style="margin-top:26px">생성: <code>cd app &amp;&amp; node tools/build-face-mock.mjs</code></p>
 </div>
@@ -155,6 +184,30 @@ function cellWith(parent, elIdx, eye, mouth, nm, ds, noAura){
   d.insertAdjacentHTML("beforeend",'<p class="nm">'+nm+'</p><p class="ds">'+(ds||"")+'</p>');
   parent.appendChild(d);
 }
+/* ── 비교자 — 한 축씩만 바꾼다. 두 축을 같이 바꾸면 뭐가 원인인지 못 짚는다 ── */
+function tuned(parent, over, label, on){
+  const d=document.createElement("div"); d.className="cell"+(on?" on":"");
+  const box=document.createElement("div"); box.style.position="relative";
+  const fcv=document.createElement("canvas"); const S=CELL*2;
+  fcv.width=fcv.height=S; fcv.style.cssText="width:"+CELL+"px;height:"+CELL+"px;display:block;border-radius:12px;background:#d3cfc4";
+  box.appendChild(fcv); d.appendChild(box);
+  const x=fcv.getContext("2d");
+  x.fillStyle="rgba(255,253,246,.55)"; x.beginPath(); x.arc(S/2,S/2,S*0.34,0,7); x.fill();
+  const P=Object.assign({eye:"calci",mouth:"squig",cy:0.455,gap:0.135,sz:0.072,mcy:0.575,msz:0.085},over);
+  drawEyes(x,S,P.eye, S*0.5, S*P.cy, S*P.gap, S*P.sz, "#191308");
+  drawMouth(x,P.mouth, S*0.5, S*P.mcy, S*P.msz, "#2a2013");
+  d.insertAdjacentHTML("beforeend",'<p class="nm">'+label+'</p>');
+  parent.appendChild(d);
+}
+[[0.052,"작게 11%"],[0.062,"13%"],[0.072,"지금 15%"],[0.086,"18%"],[0.100,"크게 21%"]]
+  .forEach(([v,l])=>tuned(gSize,{sz:v},l,v===0.072));
+[[0.100,"좁게 20%"],[0.118,"24%"],[0.135,"지금 27%"],[0.155,"31%"],[0.175,"넓게 35%"]]
+  .forEach(([v,l])=>tuned(gGap,{gap:v},l,v===0.135));
+[[0.375,"높게 38%"],[0.415,"42%"],[0.455,"지금 46%"],[0.495,"50%"],[0.535,"낮게 54%"]]
+  .forEach(([v,l])=>tuned(gCy,{cy:v,mcy:v+0.12},l,v===0.455));
+[[0.065,0.545,"작고 가깝게"],[0.085,0.575,"지금"],[0.105,0.600,"크고 멀게"],[0.125,0.630,"더 크게"]]
+  .forEach(([m,c,l])=>tuned(gMouth,{msz:m,mcy:c},l,m===0.085));
+
 DATA.EYES.forEach(([k,nm,ds])=>cellWith(eyes,2,k,"flat",nm,ds,true));
 DATA.MOUTHS.forEach(([k,nm,ds])=>cellWith(mouths,2,"arc",k,nm,ds,true));
 DATA.PICK.forEach(([el,e,m,why],i)=>{
