@@ -60,18 +60,26 @@
   <h3 class="sub">눈 높이 — 위에서</h3><div class="row" id="gCy"></div>
   <h3 class="sub">입 크기와 눈–입 거리</h3><div class="row" id="gMouth"></div>
 
-  <h2>실물을 보고 — 관찰 다섯</h2>
-  <p class="lead">창업자가 보낸 캡처 5건(yurang 5.8만 · wadadabear 8.8만 · young_forest · free.hada · milletoon)을
-  보고 적는다. <b>수치는 육안 추정</b>이다 — 픽셀로 재지 않았다.</p>
+  <h2>실물을 보고 — 9건 집계</h2>
+  <p class="lead">창업자가 보낸 인스타툰 캡처 9건. <b>수치는 육안 추정</b>이다 — 픽셀로 재지 않았다.</p>
   <table class="num"><tbody>
-    <tr><td>① 흰자</td><td><b>다섯 중 넷이 없다.</b> 까만 점이 주류 · 흰자는 free.hada 하나</td></tr>
-    <tr><td>② 눈 크기</td><td>얼굴 폭의 <b>5~10%</b> <i>(우리 15% — 두 배 크다)</i></td></tr>
-    <tr><td>③ 눈 간격</td><td>얼굴 폭의 <b>40~50%</b> <i>(우리 27% — 훨씬 좁다)</i></td></tr>
-    <tr><td>④ 눈썹</td><td><b>표정의 절반을 한다.</b> 다섯 중 셋이 쓴다 <i>(우리 보드엔 아예 없었다)</i></td></tr>
-    <tr><td>⑤ 눈 높이</td><td>얼굴의 <b>55~65%</b> — 아래쪽 <i>(우리 45.5% — 높다)</i></td></tr>
+    <tr><td>deyi_min</td><td><b>22.9만</b> · 점눈(아주 작음) · 눈썹✕ · 볼터치○</td></tr>
+    <tr><td>wadadabear</td><td>8.8만 · 점눈 · 눈썹✕ · 볼터치○</td></tr>
+    <tr><td>yurang</td><td>5.8만 · 점눈 · 눈썹○ · 볼터치✕</td></tr>
+    <tr><td>ppyorong_96</td><td>3.8만 · 점눈(아주 작음) · 눈썹✕ · 볼터치○</td></tr>
+    <tr><td>jobeam_studio</td><td>5,283 · 점눈 · 눈썹✕ · 볼터치○</td></tr>
+    <tr><td>milletoon</td><td>1,809 · 점눈 · 눈썹✕ · 볼터치✕</td></tr>
+    <tr><td>young_forest</td><td>인증 · 점눈 · 눈썹○ · 볼터치✕</td></tr>
+    <tr><td>kkunoping</td><td>481 · <b>흰자</b> · 눈썹✕ · 볼터치✕</td></tr>
+    <tr><td>free.hada</td><td>163 · <b>흰자</b> · 눈썹○ · 볼터치○</td></tr>
   </tbody></table>
-  <p class="warn" style="margin-top:14px">⚠ <b>캘시퍼와 인스타툰은 다른 계열이다.</b> 캘시퍼는 흰자가 핵심이고,
-  인스타툰 주류는 까만 점 + 눈썹이다. 어느 쪽으로 갈지가 첫 갈림길이다.</p>
+  <p class="warn" style="margin-top:14px">⚠ <b>표본을 5건에서 9건으로 늘리자 내가 앞서 한 말 둘이 뒤집혔다.</b><br>
+  ① <b>눈썹은 다수파가 아니다</b> — 5건일 땐 3/5 였는데 9건에서는 <b>3/9</b>. 「표정의 절반이 눈썹」은 과했다.<br>
+  ② <b>눈 높이는 일정하지 않다</b> — 55~65% 라고 했는데 9건에서는 45~60% 로 흩어진다. 규칙이라 부를 수 없다.<br>
+  살아남은 것: <b>점눈 7/9</b> · <b>볼터치 5/9(눈썹보다 흔하다)</b> · <b>눈이 아주 작다</b>.</p>
+  <p class="lead"><b>상위 넷</b>(22.9만·8.8만·5.8만·3.8만)은 전부 점눈이고, 넷 중 셋이 볼터치,
+  넷 중 셋이 눈썹이 없다. 그리고 <b>가장 인기 있는 둘이 눈이 가장 작다.</b>
+  ⚠ 표본 9건이고 <b>상관이지 인과가 아니다</b> — 눈을 줄인다고 좋아요가 늘지는 않는다.</p>
 
   <h3 class="sub">두 계열을 나란히</h3><div class="row" id="gSchool"></div>
   <h3 class="sub">눈썹 넷 — 같은 눈, 눈썹만 바꿈</h3><div class="row" id="gBrow"></div>
@@ -247,7 +255,7 @@ function tuned(parent, over, label, on){
   d.insertAdjacentHTML("beforeend",'<p class="nm">'+label+'</p>');
   parent.appendChild(d);
 }
-[[0.052,"작게 11%"],[0.062,"13%"],[0.072,"지금 15%"],[0.086,"18%"],[0.100,"크게 21%"]]
+[[0.020,"실물급 4%"],[0.032,"7%"],[0.052,"11%"],[0.072,"지금 15%"],[0.100,"크게 21%"]]
   .forEach(([v,l])=>tuned(gSize,{sz:v},l,v===0.072));
 [[0.100,"좁게 20%"],[0.118,"24%"],[0.135,"지금 27%"],[0.155,"31%"],[0.175,"넓게 35%"]]
   .forEach(([v,l])=>tuned(gGap,{gap:v},l,v===0.135));
@@ -262,6 +270,8 @@ tuned(gSchool,{brow:"angry"},"캘시퍼형 + 눈썹");
 tuned(gSchool,{eye:"dot",sz:0.075,gap:0.200,cy:0.520,mcy:0.620,msz:0.070},"인스타툰형 — 점눈·넓게·아래로");
 tuned(gSchool,{eye:"dot",sz:0.075,gap:0.200,cy:0.520,mcy:0.620,msz:0.070,brow:"angry"},"인스타툰형 + 눈썹");
 tuned(gSchool,{eye:"dot",sz:0.075,gap:0.200,cy:0.520,mcy:0.620,msz:0.070,brow:"angry",blush:true},"+ 볼터치");
+/* 상위 넷을 그대로 옮긴 값 — 아주 작은 점눈 · 아주 넓은 간격 · 볼터치 · 눈썹 없음 */
+tuned(gSchool,{eye:"dot",sz:0.030,gap:0.235,cy:0.500,mcy:0.585,msz:0.058,blush:true},"상위 넷을 따라");
 [["none","없음"],["flat","일자"],["angry","치켜"],["sad","내림"],["up","호"]]
   .forEach(([b,l])=>tuned(gBrow,{eye:"dot",sz:0.075,gap:0.200,cy:0.520,mcy:0.620,msz:0.070,brow:b},l,b==="none"));
 
