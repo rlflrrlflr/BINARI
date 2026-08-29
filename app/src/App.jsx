@@ -3274,6 +3274,22 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
          톡 칠 때마다 오르고 천천히 식는다. 들뜨면 밝아지고 빨라지고 꼬리가 길어진다.
          ⚠ 얼굴·팔다리를 그리지 않는다. 반응하는 건 **빛의 세기와 움직임**뿐이다. */
       const wisp = { x: 0, y: 0, vx: 0, vy: 0, ex: 0 };
+      /* ── 코어의 실제 자리 ────────────────────────────────────────────────
+         ⚠ 얼굴을 드리프트+위습에만 맞췄더니 **코어에서 벗어나 떠 있었다**
+            (실측 2026-08-29: x 27.8px · y 22.4px, 383px 캔버스 기준 7%·6%).
+            빠진 건 둘이다 — ①반사광 층 c0 의 **자기 어긋남**(시간에 따라 움직인다)
+            ②`uv.y += u_sink*0.06`. 셰이더와 **같은 식으로** 다시 계산해서 쓴다.
+         이 값은 얼굴 배치에만 쓰는 게 아니라 **손끝이 얼굴 안인지 밖인지** 가르는 기준이기도 하다. */
+      const core = { x: 0.5, y: 0.5 };
+      const SPD = 1.35 * (mood ? mood.sp : 1);
+      const SINK = mood ? mood.sink * 2.2 : 0;
+      const FACE_R = 0.20;                       // 얼굴로 치는 반경(캔버스 폭 대비)
+      /* ── 손끝 두 갈래 (창업자 2026-08-29) ───────────────────────────────
+         "얼굴 안쪽에서 터치하면 누가 꾹 누른 듯이 얼굴이 한쪽으로 밀리며 귀엽게 괴로워 하고
+          얼굴 바깥에서 누르면 몸이 약간 튕겨져 나가는 느낌으로 밀려나가."
+         → 예전엔 **어디를 눌러도 손끝으로 모였다.** 얼굴이 생긴 뒤로는 그게 안 맞는다 —
+           얼굴은 누르는 대상이고, 몸통 바깥은 **밀어내는** 자리다. 둘을 가른다. */
+      let mode = "out", press = 0, pressT = 0, pdx = 0, pdy = 0;
       const TRAIL = 6;
       const trail = Array.from({ length: TRAIL }, () => [0, 0]);
       let tLast = 0;
@@ -3284,12 +3300,30 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
         touch.y = 0.5 - (src.clientY - r.top) / r.height;
       };
       const on = (e) => {
-        at(e); touch.target = 1; wisp.ex = Math.min(1.6, wisp.ex + 0.5);
+        at(e); wisp.ex = Math.min(1.6, wisp.ex + 0.5);
+        /* 얼굴 안/밖 판정 — touch 는 -0.5~0.5(위가 +y), core 는 0~1(아래가 +y) */
+        const rx = touch.x - (core.x - 0.5), ry = touch.y - (0.5 - core.y);
+        const d = Math.hypot(rx, ry);
+        mode = d < FACE_R ? "in" : "out";
+        if (mode === "in") {
+          /* 꾹 눌리면 **손끝 반대쪽으로** 밀려난다 — 말랑한 걸 누르면 그렇게 된다 */
+          pressT = 1; const n = Math.max(d, 1e-3);
+          pdx = -rx / n; pdy = -ry / n;
+          touch.target = 0;                      // 안쪽은 「모임」이 아니다
+        } else {
+          /* 튕겨나감 — 스프링 목표를 옮기지 않고 **속도만** 준다.
+             목표를 옮기면 밀려난 자리에 머무르지만, 속도만 주면 튕겼다 제자리로 돌아온다. */
+          const n = Math.max(d, 1e-3);
+          wisp.vx += (rx / n) * -3.4; wisp.vy += (ry / n) * -3.4;
+          touch.target = 0;
+        }
         /* 캔버스 밖으로 끌어도 계속 따라오게 — 없으면 가장자리에서 뚝 끊긴다 */
         try { cv.setPointerCapture(e.pointerId); } catch (_) {}
       };
-      const move = (e) => { if (touch.target > 0.5) at(e); };
-      const off = () => { touch.target = 0; };
+      const move = (e) => { if (pressT > 0.5) { at(e);
+        const rx = touch.x - (core.x - 0.5), ry = touch.y - (0.5 - core.y);
+        const n = Math.max(Math.hypot(rx, ry), 1e-3); pdx = -rx / n; pdy = -ry / n; } };
+      const off = () => { touch.target = 0; pressT = 0; };
       cv.addEventListener("pointerdown", on);
       cv.addEventListener("pointermove", move);
       cv.addEventListener("pointerup", off);
@@ -3336,7 +3370,7 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
         try { window.__BINARI_ORB = orb; } catch (_) {}
         /* 눌림(squash) — 빠르게 모일 때 살짝 납작해지고 퍼질 때 옆으로 늘어난다.
            푸딩이 "말랑"해 보이는 건 이 한 축 때문이다. */
-        gl.uniform1f(U.u_squash, Math.max(-0.34, Math.min(0.34, orbV * 0.042)   /* ⚠ 0.105 는 과했다 — 초반에 세로로 길쭉해지며(가로 99 세로 231) 오히려 면적이 줄어 '커졌다'가 눌림에 먹혔다 */));
+        gl.uniform1f(U.u_squash, Math.max(-0.34, Math.min(0.34, orbV * 0.042 + press * 0.26)   /* ⚠ 0.105 는 과했다 — 초반에 세로로 길쭉해지며(가로 99 세로 231) 오히려 면적이 줄어 '커졌다'가 눌림에 먹혔다 */));
         gl.uniform1f(U.u_t, (now - T0) / 1000);
         /* 탄생 — 흩어진 조각이 2.4초에 걸쳐 모인다. 온보딩(scatter)에서는 모이다 만 상태로 머문다.
            ⚠ 선형이 아니라 **뒤로 갈수록 느리게**(ease-out) 해야 '모여서 자리를 잡는' 것으로 읽힌다. */
@@ -3355,6 +3389,8 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
         }
         touch.amt += (touch.target - touch.amt) * (1 - Math.exp(-dt / (touch.target > touch.amt ? 0.06 : 0.85)  /* 모임은 즉각, 풀림은 여운 */));
         const gather = Math.max(touch.amt, rk * 0.7);
+        /* 눌림은 빨리 차고 천천히 풀린다 — 물러났다 돌아오는 여운이 「말랑」이다 */
+        press += (pressT - press) * (1 - Math.exp(-dt / (pressT > press ? 0.05 : 0.30)));
 
         /* 위습 물리 — 목표(손끝 또는 제자리)로 끌리되 **감쇠가 낮아 지나쳤다 돌아온다.**
            그 오버슈트가 "살아 있는 것이 다가온다"로 읽힌다. 임계감쇠로 두면 다시 기계가 된다. */
@@ -3385,6 +3421,26 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
         const spd = Math.hypot(wisp.vx, wisp.vy);
         gl.uniform1f(U.u_tailK, Math.min(1, spd * 0.55));
         gl.uniform2fv(U.u_trail, new Float32Array(trail.flat()));
+        /* ── 코어 좌표 (셰이더 식 그대로) ─────────────────────────────────
+           R·zc·orbC 는 FIELD_FRAG 과 **같은 상수**여야 한다. 한쪽만 고치면 또 어긋난다. */
+        {
+          const tS = ((now - T0) / 1000) * SPD;
+          const zc = 0.5 + 0.5 * Math.sin(tS * 0.38);
+          const ob = Math.min(Math.max(orb, 0), 1);
+          const foldJ = Math.max(ob, gather);
+          const Rj = (0.320 + (0.208 - 0.320) * ob) * (1 + (0.20 - 1) * gather)
+                   * (0.90 + (1.12 - 0.90) * zc) * (1 + 0.020 * Math.sin(tS * 0.85));
+                    /* ⚠ **c0(반사광 층) 어긋남을 쓰면 안 된다** — 처음에 그걸 코어로 잡았다가
+             얼굴이 더 내려갔다(실측 눈 중점이 블롭 무게중심보다 26px 아래).
+             c0 는 다섯 층 중 하나일 뿐이고, 눈이 앉아야 할 자리는 **밝기 전체의 무게중심**이다.
+             그 중심은 캔버스 정중앙보다 **위**에 있다 — 불꽃이 위로 뻗기 때문이다.
+             들어올림은 상수가 아니라 R 에 비례한다(응축하면 불꽃이 짧아지니 덜 올라간다). */
+          const lift = 0.068 * (Rj / 0.323) * (1 - 0.55 * foldJ);
+          const dfx = Math.sin(tS * 0.55) * 0.075 + Math.sin(tS * 0.93 + 1.3) * 0.030;
+          const dfy = Math.cos(tS * 0.47) * 0.088 + Math.sin(tS * 0.81 + 0.6) * 0.034;
+          core.x = 0.5 + dfx + wisp.x / 2.35;
+          core.y = 0.5 - dfy - wisp.y / 2.35 + SINK * 0.06 - lift;
+        }
         gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLES, 0, 3);
 
         /* ── 얼굴 (?face=a|b|c|d) ─────────────────────────────────────────
@@ -3397,9 +3453,7 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
           if (fx.width !== S) { fx.width = S; fx.height = S; }
           const g2 = fx.getContext("2d");
           g2.clearRect(0, 0, S, S);
-          const tt = ((now - T0) / 1000) * (1.35 * (mood ? mood.sp : 1));
-          const dxu = Math.sin(tt * 0.55) * 0.075 + Math.sin(tt * 0.93 + 1.3) * 0.030;
-          const dyu = Math.cos(tt * 0.47) * 0.088 + Math.sin(tt * 0.81 + 0.6) * 0.034;
+          const tt = ((now - T0) / 1000) * SPD;
           const P = FACE_PRESETS[FACE];
           /* ── 얼굴이 두리번거린다 ─────────────────────────────────────
              창업자: "눈 높이와 좌우 위치는 시선과 얼굴의 방향을 나타낼 수 있을 거 같아서
@@ -3412,10 +3466,8 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
           let yaw = Math.sin(tt * 0.31) * 0.40 + Math.sin(tt * 0.53 + 1.7) * 0.17;
           let pitch = Math.sin(tt * 0.24 + 0.9) * 0.22 + Math.sin(tt * 0.41) * 0.10;
           const roll = Math.sin(tt * 0.19 + 2.2) * 0.085 + Math.sin(tt * 0.37 + 0.4) * 0.030;
-          if (touch.amt > 0.01) {
-            yaw += touch.x * 1.5 * touch.amt;
-            pitch += -touch.y * 1.0 * touch.amt;
-          }
+          /* 눌리면 **눌린 쪽으로 고개가 돌아간다** — 손가락을 쳐다보는 게 아니라 밀리는 것이다 */
+          if (press > 0.01) { yaw += -pdx * 0.55 * press; pitch += pdy * 0.40 * press; }
           /* 응축·모임이면 오라가 작아지므로 얼굴도 같이 준다. 점으로 모이면 사라진다. */
           /* 깜빡임 진행 — 감았다 뜨는 건 대칭이 아니다. 감기는 빠르고 뜨기는 느리다. */
           const dms = dt * 1000;
@@ -3437,15 +3489,22 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
             /* ⚠ 손끝 좌표를 직접 쓰면 안 된다 — 위습은 **스프링으로 뒤따라오므로**
                손끝과 실제 위치가 다르다. 셰이더가 쓰는 `u_wisp` 를 그대로 역산한다.
                셰이더의 uv 는 위가 +y 이고 화면은 아래가 +y 라 부호가 뒤집힌다. */
-            const cxr = 0.5 + dxu + wisp.x / 2.35;
-            const cyr = 0.5 - dyu - wisp.y / 2.35;
+            /* ⚠ 예전엔 드리프트+위습만 썼다 — 그래서 **코어에서 떠 있었다**(실측 x 28px·y 22px).
+               지금은 위에서 셰이더와 같은 식으로 푼 `core` 를 그대로 쓴다.
+               눌리면 그 위에 밀린 만큼을 더한다. */
+            const cxr = core.x + pdx * 0.052 * press;
+            const cyr = core.y - pdy * 0.052 * press;
             g2.save(); g2.translate((cxr - 0.5) * S, (cyr - 0.5) * S);
+            /* ── 귀엽게 괴로워한다 ────────────────────────────────────────
+               "귀엽게"의 정체는 **눈을 질끈 감고 입이 흔들리는 것**이다.
+               새 눈·입을 만들지 않는다 — 있는 것 중 그 뜻을 가진 둘로 갈아끼운다. */
+            const hurt = press > 0.30;
             drawFace(g2, S, {
-              eye: P.eye || (mood && MOOD_EYE[mood.ss]) || "dot",
-              mouth: P.mouth, blush: P.blush,
+              eye: hurt ? "closed" : (P.eye || (mood && MOOD_EYE[mood.ss]) || "dot"),
+              mouth: hurt ? "wave" : P.mouth, blush: P.blush,
               cy: P.cy, gap: P.gap * k, eyeSz: P.eyeSz * k,
               mSz: P.mSz * k, mCy: P.cy + (P.mCy - P.cy) * k,
-              yaw, pitch, roll, blink,
+              yaw, pitch, roll, blink: hurt ? blink * 0.4 : blink,
             });
             g2.restore();
           }

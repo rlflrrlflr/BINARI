@@ -129,8 +129,11 @@ ck("⑪ z(앞뒤)로 커졌다 작아진다", dz > 25, `면적 변화 ${dz}%`);
    창업자 실기 제보: "폰에서 왜 잡아서 드래그하려면 스크롤이 되지?"
    원인은 캔버스에 `touch-action:none` 이 없어 브라우저가 그 제스처를 스크롤로 가져간 것.
    ⚠ **스크롤 위치로는 검증이 안 된다** — 로비는 스크롤이 없어서 늘 0 이다.
-      대신 **위습이 손끝을 끝까지 따라왔는가**로 잰다. 제스처를 뺏기면 pointermove 가
-      중간에 끊겨 위습이 목표에 못 간다(실측 0.42 vs 0.25). */
+   ⚠ **2026-08-29 재작성.** 예전엔 「위습이 손끝을 끝까지 따라왔는가」로 쟀는데,
+      인터랙션이 바뀌어(안쪽=눌림 / 바깥=튕겨나감) **손끝을 따라오지 않는다**.
+      옛 검사는 고쳐진 버그가 아니라 **그때의 동작**을 못 박고 있었다 — 그래서 오검출이 났다.
+      원인을 직접 문다: ①캔버스의 touch-action 이 none 인가(이게 그 버그의 정체다)
+      ②드래그가 실제로 장을 움직이는가(방향은 인터랙션 설계에 맡기고 크기만 본다). */
 const tctx = await b.newContext({ viewport: { width: 393, height: 852 }, hasTouch: true, isMobile: true });
 const tp = await tctx.newPage();
 await tp.goto(BASE + "/?skin=holo"); await tp.waitForTimeout(1000);
@@ -138,6 +141,8 @@ await tp.goto(BASE + "/?skin=holo"); await tp.waitForTimeout(1000);
 const store = await page.evaluate(() => JSON.stringify(localStorage));
 await tp.evaluate((j) => { const o = JSON.parse(j); for (const k in o) localStorage.setItem(k, o[k]); }, store);
 await tp.goto(BASE + "/?skin=holo"); await tp.waitForTimeout(2600);
+const ta = await tp.evaluate(() => getComputedStyle(document.querySelector("canvas")).touchAction);
+ck("⑫-a 캔버스가 제스처를 브라우저에 안 넘긴다", ta === "none", `touch-action: ${ta}`);
 const tbox = await tp.evaluate(() => { const r = document.querySelector("canvas").getBoundingClientRect();
   return { l: r.left, t: r.top, w: r.width, h: r.height }; });
 const wy = () => tp.evaluate(() => {
@@ -150,18 +155,19 @@ const wy = () => tp.evaluate(() => {
   return sw ? sy / sw / H : null;
 });
 const cdp = await tctx.newCDPSession(tp);
+const before = await wy();
 const cx = tbox.l + tbox.w * 0.5, y0 = tbox.t + tbox.h * 0.30, y1 = tbox.t + tbox.h * 0.78;
 await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: cx, y: y0 }] });
+let peak = 0;
 for (let i = 1; i <= 8; i++) {
   await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: cx, y: y0 + (y1 - y0) * i / 8 }] });
   await tp.waitForTimeout(50);
+  const v = await wy(); if (v !== null && before !== null) peak = Math.max(peak, Math.abs(v - before));
 }
-const got = await wy();
 await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
 await tctx.close();
-/* 목표는 캔버스 아래쪽(정규화 0.22). 0.32 보다 위에 있으면 중간에 끊긴 것이다. */
-ck("⑫ 폰 드래그를 스크롤에 안 뺏긴다", got !== null && got < 0.32,
-   got === null ? "위습 못 찾음" : `위습 y ${got.toFixed(3)} (목표 0.22, 0.32 미만이어야)`);
+/* 드리프트만으로 이 짧은 사이에 움직이는 폭은 0.02 미만이다(무입력 실측). 그 두 배를 문턱으로. */
+ck("⑫-b 드래그가 장을 실제로 움직인다", peak > 0.04, `이동 ${peak.toFixed(3)} (0.04 초과여야)`);
 await b.close();
 
 const pass = R.filter(Boolean).length;
