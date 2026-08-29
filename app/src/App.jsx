@@ -1252,7 +1252,10 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
         </div>
       )}
 
-      <p className="imph">너는 어떤 사람인가</p>
+      {/* 목차 — 그려진 섹션에서 읽는다(위 DocNav 주석). 각인은 조건부 섹션이 셋이다 */}
+      <DocNav scopeRef={readRef} deps={[r]} />
+
+      <p className="imph" data-tag="너">너는 어떤 사람인가</p>
       <p className="impdcl">너는 <b>{r.core.surface.w}</b>{josa(r.core.surface.w, "이야", "야")}.<Ref n={r.core.n1} /></p>
       <p className="impp">{r.core.surface.d}.</p>
       <div className="impcore">
@@ -1268,7 +1271,7 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
       <p className="impfix"><b>그래서 필요한 건 하나야</b> — <H t={r.core.block.fix} />.</p>
 
       {r.saga && <>
-        <p className="imph">너의 이야기 <i>내가 지켜본 대로</i></p>
+        <p className="imph" data-tag="이야기">너의 이야기 <i>내가 지켜본 대로</i></p>
         <p className="impsaga"><H t={r.saga.prologue} /><Ref n={r.saga.n} /></p>
         <JourneyMap />
         {r.saga.chapters.map((ch, i) => (
@@ -1284,7 +1287,7 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
         <p className="impepi"><H t={r.saga.epilogue} /></p>
       </>}
 
-      <p className="imph">아홉 하늘 <i>각자 다른 걸 본다</i></p>
+      <p className="imph" data-tag="아홉 하늘">아홉 하늘 <i>각자 다른 걸 본다</i></p>
       <p className="impp">아홉 문명이 <b>서로 다른 질문</b>을 맡았어. 같은 걸 아홉 번 묻지 않아 —
         사주가 <b>못 하는 질문</b>을 하나씩 나눠 가졌어. 삶을 열두 자리로 쪼개는 축, 방위, 날의 무게,
         시작에 강한가 마무리에 강한가. <b>사주에는 이 질문 자체가 없어.</b></p>
@@ -1296,24 +1299,24 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
         </div>
       ))}
 
-      <p className="imph">사주와 다르게 읽히는 곳 <i>여기가 갈리는 지점이야</i></p>
+      <p className="imph" data-tag="갈리는 곳">사주와 다르게 읽히는 곳 <i>여기가 갈리는 지점이야</i></p>
       <p className="impp">사주 한 벌만 봤으면 <b>못 나왔을 것들</b>이야. 겹치는 건 더 무겁게 보고,
         어긋나는 건 어긋난 채로 둬 — <b>사람은 한 줄로 안 적혀.</b></p>
       {r.clash.map((c, i) => (
         <div className="impclash" key={i}><b>{c.t}</b><Ref n={c.n} /><p><H t={c.w} /></p></div>
       ))}
 
-      <p className="imph">생김새 <i>거울 앞에서 바로 확인돼</i></p>
+      <p className="imph" data-tag="생김새">생김새 <i>거울 앞에서 바로 확인돼</i></p>
       <div className="improws">{r.body.map(Row)}</div>
 
-      <p className="imph">언제 네가 너 같지 않은가</p>
+      <p className="imph" data-tag="흔들릴 때">언제 네가 너 같지 않은가</p>
       <p className="impp">사람은 늘 같지 않아. <b>차분한 사람도 무너질 때가 있고, 순한 사람도 사나워질 때가 있어.</b> 네 곁에 있을 사람들이 알아야 할 건 네가 어떤 사람인지가 아니라 <b>언제 네가 달라지는지</b>야.</p>
       {r.trig.map((t, i) => (<div className="imptrig" key={i}><b>{t.t}</b><Ref n={t.n} /><p>{t.w}</p></div>))}
       <MonthChart />
       <p className="impwhen"><b>해마다</b> {r.when.hardMonths.length ? `${r.when.hardMonths.join("·")}월이 무겁다` : "특별히 무거운 달은 없다"}
         {r.when.softMonths.length ? ` · ${r.when.softMonths.join("·")}월이 순하다` : ""}.<Ref n={r.when.n} /> 무거운 달엔 새로 시작하지 말고 하던 걸 지켜.</p>
 
-      <p className="imph">네 삶의 {["","한","두","세","네","다섯","여섯","일곱","여덟","아홉"][r.domains.length] || r.domains.length} 자리 <i>태어날 때 · 자라면서 · 지금 · 앞으로</i></p>
+      <p className="imph" data-tag="삶의 자리">네 삶의 {["","한","두","세","네","다섯","여섯","일곱","여덟","아홉"][r.domains.length] || r.domains.length} 자리 <i>태어날 때 · 자라면서 · 지금 · 앞으로</i></p>
       {r.domains.map((d, i) => (
         <div className="impdom" key={i}>
           <p className="impdh">{d.t}<Ref n={d.n} /></p>
@@ -1333,7 +1336,7 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
       ))}
 
       {r.work && <>
-        <p className="imph">직장생활 <i>어떤 일이 맞나가 아니라, 조직에서 어떻게 굴러가나</i></p>
+        <p className="imph" data-tag="직장">직장생활 <i>어떤 일이 맞나가 아니라, 조직에서 어떻게 굴러가나</i></p>
         <p className="impp">맞는 직업을 골라도 <b>조직에서 못 버티는 사람</b>이 있어. 축이 다르거든.
           여긴 <b>네가 어떻게 일하고, 누구랑 맞고, 어디까지 가고, 언제 움직이나</b>를 봐.</p>
         <div className="improws">{r.work.rows.map(Row)}</div>
@@ -1356,13 +1359,13 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
 
       {r.compass && (r.compass.self || r.compass.mate) && <Compass />}
       {r.mate && <>
-        <p className="imph">{r.mateMode === "wed" ? "짝 — 이미 곁에 있는 사람" : "짝 — 누구를 만나나"}
+        <p className="imph" data-tag="짝">{r.mateMode === "wed" ? "짝 — 이미 곁에 있는 사람" : "짝 — 누구를 만나나"}
           {r.mateMode === "wed" ? <i>생김새는 네가 더 잘 알아</i> : null}</p>
         <div className="improws">{r.mate.map(Row)}</div>
       </>}
       {!r.mate && <p className="impmsg">짝 자리는 <b>성별이 있어야</b> 어느 글자가 그 인연인지 갈려 — 프로필에 더하면 열려.</p>}
 
-      <p className="imph">여든 해 — 네 인생 지도</p>
+      <p className="imph" data-tag="인생 지도">여든 해 — 네 인생 지도</p>
       {r.bands.length === 0 && <p className="impmsg">열 해 단위 큰 흐름은 <b>성별이 있어야</b> 방향이 서.</p>}
       <LifeChart />
       {r.bands.map((b, i) => (
@@ -1375,7 +1378,7 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
         </div>
       ))}
 
-      <p className="imph">지금 확인해 보아라 <i>오늘 알 수 있는 것들</i></p>
+      <p className="imph" data-tag="확인">지금 확인해 보아라 <i>오늘 알 수 있는 것들</i></p>
       <p className="impp">왜 그런지는 안 적었어. <b>대신 확인할 방법을 줄게.</b> 아래가 맞는지는 네가 이미 알아.
         <b>일곱 이상 맞으면</b> 나머지도 참고할 만하고, <b>여섯 이하면 접어 둬.</b></p>
       {r.checks.map(([q, w], i) => (
@@ -1646,6 +1649,71 @@ function TzMeet({ mine, theirs }) {
   );
 }
 
+/* ═══════════ 문서 목차 — 긴 문서에서 길을 잃지 않게 (v170) ═══════════
+   유저 제보: *"내용이 너무 길기도 하고, 내가 보려고 했던 내용을 다시 위로 올리니까 어디였는지
+   찾기 어려운데 … '고정 목차나 내비게이션바' 배치하면 어떨까요?"* + *"섹션별 타이틀이 잘 눈에
+   안 들어와서 … 타이틀을 위에 박으면 한눈에 들어오기 수월할 것 같습니다."*
+
+   맞다. 각인은 섹션이 **열둘**이고 세로로만 이어져 있어서, 되읽으러 온 사람이 매번 처음부터 스크롤한다.
+   그리고 §알 권리(2026-08-06 판정)가 *"값을 치른 문서는 줄 수 있는 걸 다 주고 완결시킨다"* 라고
+   정해 놓은 이상 **문서는 앞으로도 길다** — 짧게 만드는 게 답이 아니라 **길을 놓는 게** 답이다.
+
+   ⚠ **왼쪽 사이드바로 안 만든다.** 제보는 "좌측이나 어디"였는데 이 앱은 폭 430px 기준이다 —
+     세로 목차를 옆에 세우면 본문이 반으로 줄어든다. 그래서 **위에 붙는 가로 띠**로 한다.
+   ⚠ **목차를 손으로 안 적는다.** 섹션 일부는 조건부로만 그려진다(짝·직장·삶의 자리…).
+     목록을 따로 적으면 **없는 자리로 보내는 목차**가 된다 — 이 리포가 오늘만 두 번 겪은 사고다.
+     그래서 **그려진 DOM 에서 읽는다**(`.imph[data-tag]`). 섹션이 빠지면 칩도 같이 빠진다.
+   ⚠ 각인·궁합이 **같은 컴포넌트**를 쓴다. 두 벌이 되면 갈린다. */
+function DocNav({ scopeRef, deps }) {
+  const [secs, setSecs] = useState([]);
+  const [cur, setCur] = useState(0);
+  useEffect(() => {
+    const root = scopeRef.current; if (!root) return;
+    const hs = [...root.querySelectorAll(".imph[data-tag]")];
+    hs.forEach((h, i) => { if (!h.id) h.id = `sec${i}`; });
+    setSecs(hs.map((h, i) => ({ id: h.id || `sec${i}`, tag: h.dataset.tag })));
+    if (!hs.length) return;
+    /* 지금 읽는 자리를 칩이 따라간다 — 안 따라가면 "여기가 어디인지"를 여전히 모른다.
+       ⚠ **처음엔 띠를 너무 좁게 잡았다**(-25%/-70% = 화면의 5%). 눌러서 건너뛰면 제목이 그 틈을
+         **지나쳐 버려서** 활성 칩이 안 따라왔다(실측: 「삶의 자리」로 갔는데 칩은 「너」에 남음).
+         띠를 넓히고, 지나갔더라도 **화면 위쪽에 있는 마지막 제목**을 현재로 친다. */
+    const pick = () => {
+      let k = 0;
+      const line = window.innerHeight * 0.3;
+      hs.forEach((h, i) => { if (h.getBoundingClientRect().top <= line) k = i; });
+      setCur(k);
+    };
+    const io = new IntersectionObserver(pick, { rootMargin: "-10% 0px -55% 0px", threshold: 0 });
+    hs.forEach((h) => io.observe(h));
+    /* 부드러운 스크롤이 끝난 뒤에도 한 번 더 본다 — IO 는 교차 순간에만 울린다 */
+    const sc = root.closest(".readwrap") || window;
+    let t = null;
+    const onScroll = () => { clearTimeout(t); t = setTimeout(pick, 90); };
+    sc.addEventListener("scroll", onScroll, { passive: true });
+    pick();
+    return () => { io.disconnect(); sc.removeEventListener("scroll", onScroll); clearTimeout(t); };
+  }, deps);
+  useEffect(() => {   // 현재 칩을 가로 띠 안에서도 보이게 — 칩이 열둘이라 화면 밖으로 나간다
+    /* ⚠ `scrollIntoView` 를 쓰면 **문서까지 같이 움직인다** — 칩을 보이게 하려다 방금 이동한
+       자리를 흔든다. 가로 위치만 직접 계산한다(세로는 건드리지 않는다). */
+    try {
+      const nav = document.querySelector(".docnav"), on = nav?.querySelector(".on");
+      if (nav && on) nav.scrollTo({ left: on.offsetLeft - nav.clientWidth / 2 + on.offsetWidth / 2, behavior: "smooth" });
+    } catch (_) {}
+  }, [cur]);
+  if (secs.length < 3) return null;   // 셋 미만이면 목차가 오히려 소음이다
+  return (
+    <nav className="docnav" aria-label="문서 목차">
+      {secs.map((x, i) => (
+        <button key={x.id} className={"docchip" + (i === cur ? " on" : "")}
+          onClick={() => { document.getElementById(x.id)?.scrollIntoView({ behavior: "smooth", block: "start" }); track("doc_nav", { to: x.tag }); }}>
+          {x.tag}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
 function MatchDoc({ saju, birth, onClose, onMet, pre = null }) {
   const [notesOn, setNotesOn] = useState(false);
   const [f, setF] = useState(() => { try { return JSON.parse(localStorage.getItem(MATCH_LAST_KEY) || "{}"); } catch { return {}; } });
@@ -1805,10 +1873,12 @@ function MatchDoc({ saju, birth, onClose, onMet, pre = null }) {
       {/* ⚠ `clash` 를 **여기로 올렸다.** 예전엔 인도 여덟 자리 **다음**에 있었는데,
           위 그림과 **같은 말**을 문단으로 한 번 더 하는 꼴이라 ①아무도 거기까지 안 내려가고
           ②내려간 사람에겐 중복이었다. 그림 바로 뒤에 두면 「사건 → 왜 → 상세」 순서가 된다. */}
-      <p className="imph">{r.clash.t}</p>
+      <DocNav scopeRef={readRef} deps={[r]} />
+
+      <p className="imph" data-tag="갈림">{r.clash.t}</p>
       <div className="impclash"><p><H t={r.clash.w} /><Ref n={r.clash.n} /></p></div>
 
-      <p className="imph">아홉 하늘이 각각 뭐라고 하는가</p>
+      <p className="imph" data-tag="아홉 하늘">아홉 하늘이 각각 뭐라고 하는가</p>
       {r.rows.map((x, i) => (
         <div className={"impsky" + (x.v >= 1 ? " up" : x.v <= -1 ? " dn" : "")} key={i}>
           <p className="impskh"><i>{x.from}</i>{x.ask}<Ref n={x.n} /></p>
@@ -1830,7 +1900,7 @@ function MatchDoc({ saju, birth, onClose, onMet, pre = null }) {
           말해 왔는데 정작 **일 축이 없었다.** 각인의 「같이 일하면 좋은 사람」이 오행 한 줄로 끝나던 것을
           여기로 이어 붙인다 — 유저가 아는 건 오행이 아니라 사람이다. */}
       {r.work && <>
-        <p className="imph">같이 일하면 어떤가 <i>연애 말고 일의 눈으로</i></p>
+        <p className="imph" data-tag="같이 일하면">같이 일하면 어떤가 <i>연애 말고 일의 눈으로</i></p>
         <p className="impp">위 아홉 축을 <b>일의 눈으로 다시 읽은 것</b>이야. 새로 계산한 건 없고
           <b>총점에도 안 들어가</b> — 연애 궁합과 일 궁합을 한 숫자로 뭉개지 않으려고.</p>
         <div className="improws">{r.work.rows.map(Row)}</div>
@@ -1839,7 +1909,7 @@ function MatchDoc({ saju, birth, onClose, onMet, pre = null }) {
           우리 몫은 <b>무엇을 조심하면 되는지</b>까지야.<Ref n={r.work.n} /></p>
       </>}
 
-      <p className="imph">조심할 것 <i>헤어지라는 말은 안 해</i></p>
+      <p className="imph" data-tag="조심할 것">조심할 것 <i>헤어지라는 말은 안 해</i></p>
       {r.care.map((c, i) => (<div className="imptrig" key={i}><p><H t={c} /></p></div>))}
 
       <p className="imph2">굳이 한 줄로 하면</p>
@@ -4039,7 +4109,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v169 · 오늘은 두 하늘이 말한다";
+const APP_VER = "v170 · 길을 놓는다";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -6197,6 +6267,34 @@ export default function App() {
       finalize([...tosses, c]);
     }, fly);
   };
+  /* ── 한 번에 던지기 (2026-08-28 창업자 지시로 **되살림**) ─────────────────────
+     ⚠ **v142 에서 일부러 지웠던 버튼이다.** 그때 사유는 창업자 지시였고 이랬다 —
+       *"무료로 바꾼 이상 일정 허들은 남겨야겠어"* + 「그 버튼이 있으면 재미도 마찰도 동시에 무너진다」.
+       이번 지시(*"일괄 던지기 버튼도 추가해 … 없애기 직전으로 롤백"*)가 그 결정을 뒤집는다.
+       **지운 이유를 지우지 않는다** — 다음 세션이 "왜 있지" 하고 또 걷어내지 않도록 여기 남긴다.
+     ⚠ 되살리되 **여섯 번을 한 번으로 압축할 뿐 결과 규칙은 그대로**다:
+       `oneCoin()` 을 여섯 번 부르고(같은 확률), 변효 판정·`finalize` 도 같은 길을 탄다.
+       한 번에 던졌다고 다른 괘가 나오면 그건 다른 물건이다.
+     ⚠ 계측은 던진 횟수만큼 남긴다(`ritual_tossed` × 남은 수, `bulk: true`) —
+       한 건으로 뭉치면 「몇 번째에서 이탈하나」를 못 읽는다. v142 가 그 계측을 만든 이유가 그거다. */
+  const tossAll = () => {
+    if (tosses.length >= 6 || busy || tossing) return;
+    const need = 6 - tosses.length;
+    setFlyMs(900); setTossing(true);
+    setTimeout(() => {
+      setTossing(false);
+      agitateRef.current = true;
+      setTimeout(() => { agitateRef.current = false; }, 1400);
+      const nt = [...tosses];
+      while (nt.length < 6) {
+        const c = oneCoin();
+        track("ritual_tossed", { n: nt.length + 1, v: c.v, moving: c.v === 6 || c.v === 9, held_ms: 0, bulk: true });
+        nt.push(c);
+      }
+      track("ritual_bulk", { at: 6 - need, threw: need });
+      finalize(nt);
+    }, 900);
+  };
   const startCharge = () => { if (tosses.length >= 6 || busy || tossing) return; chargeRef.current = Date.now(); setCharging(true); };
   const cancelCharge = () => { chargeRef.current = 0; setCharging(false); };
   /* onClick 이 실제 던지기다 — pointerup 이든 키보드(Enter/Space)든 항상 온다.
@@ -7619,6 +7717,9 @@ export default function App() {
                         <button className="btn gold throwbtn" onPointerDown={startCharge} onPointerLeave={cancelCharge} onPointerCancel={cancelCharge} onClick={doThrow} disabled={busy || tossing}>
                           {tossing ? "공중에…" : charging ? "놓으면 던져져" : `던진다 (${tosses.length}/6)`}
                         </button>
+                        {/* 한 번에 던지기 — **한 수 아래 자리**에 둔다(ghost). 손으로 던지는 게 기본이고
+                            이건 급한 사람의 우회로다. 같은 무게로 두면 아무도 여섯 번 안 던진다. */}
+                        <button className="btn ghost sm bulkbtn" onClick={tossAll} disabled={busy || tossing}>한 번에 던지기</button>
                         <p className="fine">{tosses.length === 5 ? "마지막 한 번이야." : "오래 쥐어도 결과는 안 바뀌어."}</p>
                       </div>
                     /* ⚠ 대기 문구를 여기서 반복하지 않는다 — 위 `.brooding` 이 의식과 무관하게 이미 띄운다.
@@ -8152,6 +8253,7 @@ const CSS = `
 .moodline{font-family:sans-serif;font-size:13px;letter-spacing:.06em;color:#cfc4e2;margin:0 0 2px;text-align:center;line-height:1.7}
 .moodline b{color:#f5d98b;font-weight:600;font-size:15px}
 .moodline span{display:block;font-size:10.5px;color:#8a7f95;letter-spacing:.02em;margin-top:2px}
+.bulkbtn{margin:8px auto 0;display:block}
 .moodline i{display:block;font-style:normal;font-size:12.5px;color:#cfc4e2;letter-spacing:0;line-height:1.65;margin-top:5px;word-break:keep-all;text-wrap:balance}
 .wakehint{font-family:sans-serif;font-size:12px;letter-spacing:.16em;color:#d8c79a;margin-top:22px;animation:wakePulse 2.4s ease-in-out infinite;text-shadow:0 1px 10px rgba(4,3,10,.85)}
 /* v75: 공유 판결 랜딩 — 링크로 들어온 사람이 '실제 판결 카드'를 그대로 본다 */
@@ -8668,8 +8770,34 @@ const CSS = `
 .imptitle{font-size:25px;color:#f0e2b8;margin:12px 0 0;line-height:1.4;letter-spacing:-.01em}
 .impsub{font-size:12px;color:#9d8fb5;line-height:1.7;margin:10px 0 0}
 .impsub b{color:#e6dff2}
-.imph{margin:26px 0 10px !important;color:#c9b98f !important;letter-spacing:.16em;font-size:10.5px !important;border-top:1px solid #c9b98f22;padding-top:14px}
-.imph i{font-style:normal;float:right;letter-spacing:.04em;color:#6f6580;font-size:9.5px}
+/* ── 섹션 제목 (v170) ────────────────────────────────────────────────────
+   유저 제보: *"섹션별 타이틀이 잘 눈에 안 들어와서"* — 맞다. 10.5px 에 자간 .16em 이라
+   **제목이 아니라 라벨로** 읽혔다. 열두 섹션짜리 문서에서 그건 이정표 노릇을 못 한다.
+   ⚠ 부제(i 요소)를 오른쪽 띄우기에서 **아랫줄**로 내렸다 — 폭 430px 에서 오른쪽에 붙이면
+     제목과 한 줄에 끼어 둘 다 안 읽힌다.
+   ⚠ scroll-margin-top 은 목차 띠 높이만큼. 없으면 눌러서 간 제목이 띠 밑에 깔린다.
+     (⚠ 이 주석은 CSS 템플릿 리터럴 안이다 — **백틱 금지**. 이 세션에서만 세 번 끊어 먹었다.) */
+.imph{margin:34px 0 12px !important;color:#f0e2b8 !important;letter-spacing:-.01em;font-size:16px !important;font-weight:600;border-top:1px solid #c9b98f33;padding-top:18px;scroll-margin-top:52px;line-height:1.45}
+.imph::before{content:"";display:block;width:22px;height:2px;background:#c9b98f;opacity:.55;margin:0 0 10px}
+.imph i{font-style:normal;display:block;float:none;letter-spacing:.02em;color:#8a7f95;font-size:11.5px;font-weight:400;margin-top:4px;line-height:1.55}
+
+/* ── 문서 목차 띠 (v170) ─────────────────────────────────────────────────
+   ⚠ 왼쪽 세로 목차가 아니라 **위에 붙는 가로 띠**다 — 폭 430px 에서 세로 목차는 본문을 반으로 줄인다.
+   ⚠ .readwrap 이 스크롤 컨테이너라 sticky 의 기준이 그것이다. top:0 으로 붙는다. */
+.docnav{position:sticky;top:0;z-index:6;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;
+  margin:0 -18px 4px;padding:9px 18px;background:rgba(11,8,23,.92);backdrop-filter:blur(8px);
+  border-bottom:1px solid rgba(201,185,143,.16);
+  /* 오른쪽에 닫기(.escx fixed 40px + 16px)가 떠 있다 — 그만큼 비우지 않으면 마지막 칩이 그 밑에 깔린다.
+     실물 스샷으로 잡았다(「확인」 칩이 X 뒤에 있었다). */
+  padding-right:74px;scroll-padding-right:74px}
+.docnav::-webkit-scrollbar{display:none}
+.docchip{flex:0 0 auto;background:transparent;border:1px solid rgba(159,143,196,.28);border-radius:999px;
+  color:#9b90b8;font-family:sans-serif;font-size:11.5px;padding:5px 11px;cursor:pointer;white-space:nowrap}
+.docchip.on{border-color:rgba(245,217,139,.6);color:#f5d98b;background:rgba(245,217,139,.10)}
+.stage.holo .docnav{background:rgba(217,213,202,.94);border-bottom-color:rgba(80,72,55,.18)}
+.stage.holo .docchip{border-color:rgba(80,72,55,.28);color:#6b6252}
+.stage.holo .docchip.on{border-color:#a8823f;color:#8c4a12;background:rgba(168,130,63,.12)}
+@media (prefers-reduced-motion:reduce){.docnav{scroll-behavior:auto}}
 .impdcl{font-size:19px;line-height:1.62;color:#f0e2b8;margin:4px 0 0}
 .impdcl b{color:#f5d98b}
 .impdcl2{font-size:17px;line-height:1.6;color:#f0e2b8;margin:4px 0 0}

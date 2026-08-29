@@ -15,9 +15,17 @@ const ck = (c, m, d = "") => { c ? (pass++, console.log("PASS — " + m + (d ? "
 
 /* ── 소스 성질 ── */
 ck(/const COIN_RITUAL = true;/.test(SRC), "의식이 켜져 있다");
-/* ⚠ 문자열이 아니라 **함수**로 본다 — 「한 번에 던지기」는 위 주석에 "없앴다"고 적혀 있어서
-   문자열로 잡으면 그 설명 자체가 검사를 깨뜨린다(v140 에서 실제로 깼다). */
-ck(!/tossAll/.test(SRC), "건너뛰기 함수(tossAll)가 없다 — 그 버튼이 있으면 재미도 마찰도 무너진다");
+/* ⚠ **이 줄이 2026-08-28 에 뒤집혔다.** v142 는 「한 번에 던지기」를 **없는 것**으로 못 박았고
+   사유도 창업자 지시였다(*"무료로 바꾼 이상 일정 허들은 남겨야겠어"*).
+   이번 지시가 그 결정을 뒤집는다(*"일괄 던지기 버튼도 추가해 … 없애기 직전으로 롤백"*).
+   **없앤 이유를 지우지 않는다** — 코드 주석에 남겼고, 검사는 「없다」에서 **「있되 같은 규칙으로 돈다」**로
+   자리를 옮긴다. 지우기만 하면 다음 판에 아무 규칙 없이 도는 버튼이 된다. */
+ck(/const tossAll = /.test(SRC), "한 번에 던지기가 있다(2026-08-28 되살림)");
+/* 압축이지 다른 규칙이 아니다 — 같은 oneCoin()·같은 finalize() 를 탄다 */
+ck(/const tossAll = [\s\S]{0,700}?oneCoin\(\)/.test(SRC) && /const tossAll = [\s\S]{0,900}?finalize\(nt\)/.test(SRC),
+   "한 번에 던져도 같은 동전·같은 마무리를 쓴다");
+/* ⚠ 쥔 시간이 결과에 안 섞이는 규칙은 그대로다 — oneCoin 은 여전히 인자를 안 받는다 */
+ck(/const oneCoin = \(\) =>/.test(SRC), "동전은 여전히 인자를 안 받는다(손맛이 결과에 안 섞인다)");
 ck(/track\("ritual_started"/.test(SRC) && /track\("ritual_tossed"/.test(SRC) && /track\("ritual_abandoned"/.test(SRC),
    "계측 셋이 다 있다 — 다음에 끌 땐 감이 아니라 이 셋을 읽는다");
 ck(/const oneCoin = \(\) =>/.test(SRC), "oneCoin 이 인자를 안 받는다 — 쥔 시간이 결과에 못 섞인다");
@@ -42,7 +50,7 @@ try {
   await p.waitForTimeout(400);
 
   ck(await p.getByRole("button", { name: /^던진다 \(/ }).isVisible(), "의식 화면이 뜬다");
-  ck((await p.getByRole("button", { name: /한 번에/ }).count()) === 0, "건너뛸 버튼이 화면에 없다");
+  ck((await p.getByRole("button", { name: /한 번에/ }).count()) === 1, "한 번에 던지기가 화면에 있다");
   ck((await p.getByText("물음을 고칠래").count()) === 1, "빠져나갈 길은 있다 — 마찰이지 감금이 아니다");
 
   for (let i = 0; i < 6; i++) {
@@ -64,6 +72,40 @@ try {
   const shown = vs.filter((e) => e.ev === "verdict_shown").pop();
   ck(!!shown, "판결까지 간다");
   ck(!!shown && shown.props.ritual !== false, "판결이 의식 경로로 기록된다");
+
+/* ── ⑧ 한 번에 던지기 (2026-08-28 창업자 지시로 되살림) ─────────────────────
+     ⚠ **이 파일의 ck() 는 `ck(조건, 설명)` 순서다.** 처음에 설명을 앞에 써서 **항상 통과하는 빈 검사**
+     여섯을 넣을 뻔했다(문자열이 조건 자리에 들어가면 늘 참이다). 순서를 확인하고 쓴다.
+   ⚠ **v142 에서 일부러 지웠던 버튼이다**(그때도 창업자 지시: "무료로 바꾼 이상 허들은 남겨야겠어").
+       이번 지시가 그 결정을 뒤집는다. **지운 이유를 지우지 않는다** — 코드 주석에 남겼고,
+       여기서는 되살린 버튼이 **같은 규칙으로 도는지**를 문다. 압축은 하되 결과는 안 바뀐다. */
+  {
+    const p8 = await b.newPage({ viewport: { width: 430, height: 932 } });
+    await onboard(p8, BASE, "?trackdebug");
+    await p8.locator("textarea.qbox").fill("한 번에 던져도 같은 규칙인가");
+    await p8.getByRole("button", { name: /판결을 청한다/ }).click();
+    await p8.waitForTimeout(700);
+    const bulk = p8.getByRole("button", { name: "한 번에 던지기" });
+    ck(await bulk.isVisible().catch(() => false), "⑧ 한 번에 던지기 버튼이 있다");
+    /* 손으로 던지는 게 기본이고 이건 우회로다 — 같은 무게(gold)로 두면 아무도 여섯 번 안 던진다 */
+    ck(!((await bulk.getAttribute("class")) || "").includes("gold"),
+       "⑧ 손으로 던지기보다 아래 위계다(gold 아님)", (await bulk.getAttribute("class")) || "");
+    await bulk.click();
+    await p8.waitForTimeout(1600);
+    /* 여섯 획이 한 번에 맺힌다 — 압축이지 다른 규칙이 아니다 */
+    ck((await p8.locator(".hexlines .hline").count()) === 6, "⑧ 여섯 획이 한 번에 맺힌다",
+       `${await p8.locator(".hexlines .hline").count()}획`);
+    const evs8 = await p8.evaluate(() => window.__binariEvents || []);
+    const tossed = evs8.filter((e) => e.ev === "ritual_tossed");
+    /* ⚠ **한 건으로 뭉치지 않는다.** 뭉치면 「몇 번째에서 이탈하나」를 못 읽는다 —
+       v142 가 그 계측을 만든 이유가 정확히 그것이다. */
+    ck(tossed.length === 6, "⑧ 계측은 던진 횟수만큼 남는다", `${tossed.length}건`);
+    ck(tossed.every((e) => e.props.bulk === true), "⑧ 한 번에 던진 것이 표시된다");
+    ck(tossed.every((e) => [6, 7, 8, 9].includes(e.props.v)),
+       "⑧ 값이 6~9 범위를 안 벗어난다(손으로 던진 것과 같은 동전)",
+       [...new Set(tossed.map((e) => e.props.v))].join(","));
+    await p8.close();
+  }
 } catch (e) {
   fail++; console.log("FAIL — 실주행 예외 · " + String(e).slice(0, 220));
 } finally { await b.close(); }
