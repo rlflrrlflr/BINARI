@@ -31,35 +31,35 @@ const pal = (k) => { const b = FIX[k] || EL_COLOR[k]; const s = FIX[SAENG[k]] ||
 /* ── 눈 여덟 · 입 여섯 ────────────────────────────────────────────────
    전부 **선과 점만**이다. 흰자·눈동자·속눈썹을 그리는 순간 사람 얼굴이 된다. */
 const EYES = [
-  ["dot",   "점",        "가장 조용하다. 있는 듯 없는 듯"],
-  ["arc",   "웃는 눈",   "아래로 굽은 호 — 웃고 있다"],
-  ["half",  "반쯤 감김", "나른하고 느긋하다"],
-  ["round", "동그란 눈", "크고 또렷 — 깨어 있다"],
-  ["slit",  "세로 눈",   "고양이 눈. 예리하고 재고 있다"],
-  ["line",  "감은 눈",   "가로선 — 고요하거나 참고 있다"],
-  ["three", "세 눈",     "인간이 아니라는 표시. 신비 쪽"],
-  ["spark", "별 눈",     "들떠 있다. 반짝임과 같은 문법"],
+  ["calci", "캘시퍼 눈",  "큰 흰자 + 작은 동공. 원본이 이 구조다"],
+  ["wide",  "더 크게",    "흰자를 더 키우면 어리고 순해진다"],
+  ["small", "작은 동공",  "동공이 작을수록 놀란·멍한 인상"],
+  ["side",  "곁눈",       "동공이 한쪽으로 — 삐딱하게 보는 중"],
+  ["half",  "반쯤 감김",  "위에서 눈꺼풀이 덮인다. 나른"],
+  ["arc",   "웃는 눈",    "흰자를 접고 호만 남긴다"],
+  ["slit",  "세로 동공",  "고양이 눈. 예리하게 재는 중"],
+  ["three", "세 눈",      "인간이 아니라는 표시"],
 ];
 const MOUTHS = [
-  ["dot",   "점 입",   "말이 없다"],
-  ["smile", "미소",    "호 하나 — 온화"],
-  ["zig",   "지그재그", "캘시퍼의 그 입. 장난기"],
-  ["o",     "오",      "놀람·감탄"],
-  ["flat",  "일자",    "단정하고 무표정"],
-  ["wave",  "물결",    "말하는 중 · 흔들림"],
+  ["squig", "구불선",   "캘시퍼의 그 입. 얇고 비대칭"],
+  ["flat",  "일자",     "단정하고 무표정"],
+  ["smile", "미소",     "호 하나 — 온화"],
+  ["frown", "삐죽",     "한쪽이 내려간다. 시무룩"],
+  ["o",     "오",       "놀람·감탄"],
+  ["wave",  "물결",     "말하는 중"],
 ];
 /* 오행별 추천 조합 — **근거는 오행의 성질**이다. 임의로 고른 게 아니다 */
 const PICK = [
-  ["화", "round", "zig",   "타오른다 — 크게 뜨고 장난스럽게"],
+  ["화", "wide",  "squig", "타오른다 — 크게 뜨고 입은 구불구불"],
   ["수", "half",  "wave",  "흐른다 — 나른하고 말이 물결친다"],
   ["목", "arc",   "smile", "자란다 — 웃는 눈에 온화한 입"],
   ["금", "slit",  "flat",  "벼린다 — 재는 눈에 단정한 입"],
-  ["토", "dot",   "dot",   "품는다 — 가장 말이 적다"],
+  ["토", "small", "frown", "품는다 — 멍하고 시무룩. 말이 적다"],
 ];
 /* 오늘 상태는 **입만** 바꾼다 — 눈은 사주(타고난 것), 입은 오늘(변하는 것) */
 const MOOD_MOUTH = [
   ["손대는 게 잘 풀려", "smile"], ["말이 잘 나와", "wave"], ["계산이 잘 서", "flat"],
-  ["괜히 마음이 급해져", "zig"], ["버텨야 하는 날이야", "flat"], ["누가 받쳐 주는 느낌이야", "smile"],
+  ["괜히 마음이 급해져", "squig"], ["버텨야 하는 날이야", "frown"], ["누가 받쳐 주는 느낌이야", "smile"],
 ];
 
 const DATA = { els: ["화","수","목","금","토"].map((k) => ({ k, c: pal(k) })), EYES, MOUTHS, PICK, MOOD_MOUTH };
@@ -118,33 +118,49 @@ const hex2rgb=h=>[parseInt(h.slice(1,3),16)/255,parseInt(h.slice(3,5),16)/255,pa
 
 /* ── 얼굴 그리기 — 전부 선과 점만. 흰자·눈동자·속눈썹은 없다 ───────────── */
 function drawEyes(x, S, kind, cx, cy, gap, sz, ink){
-  x.strokeStyle=ink; x.fillStyle=ink; x.lineCap="round"; x.lineJoin="round";
-  const eye=(ex)=>{
-    x.beginPath();
-    if(kind==="dot"){ x.arc(ex,cy,sz*0.30,0,7); x.fill(); }
-    else if(kind==="arc"){ x.lineWidth=sz*0.30; x.arc(ex,cy+sz*0.34,sz*0.72,Math.PI*1.18,Math.PI*1.82); x.stroke(); }
-    else if(kind==="half"){ x.lineWidth=sz*0.26; x.arc(ex,cy-sz*0.10,sz*0.62,Math.PI*0.14,Math.PI*0.86); x.stroke(); }
-    else if(kind==="round"){ x.arc(ex,cy,sz*0.56,0,7); x.fill(); }
-    else if(kind==="slit"){ x.lineWidth=sz*0.30; x.moveTo(ex,cy-sz*0.66); x.lineTo(ex,cy+sz*0.66); x.stroke(); }
-    else if(kind==="line"){ x.lineWidth=sz*0.26; x.moveTo(ex-sz*0.62,cy); x.lineTo(ex+sz*0.62,cy); x.stroke(); }
-    else if(kind==="three"){ x.arc(ex,cy,sz*0.42,0,7); x.fill(); }
-    else if(kind==="spark"){ x.lineWidth=sz*0.24;
-      for(let i=0;i<4;i++){const a=i*Math.PI/4; x.moveTo(ex-Math.cos(a)*sz*0.6, cy-Math.sin(a)*sz*0.6);
-        x.lineTo(ex+Math.cos(a)*sz*0.6, cy+Math.sin(a)*sz*0.6);} x.stroke(); }
+  /* ⚠ **캘시퍼 눈의 핵심은 흰자다.** 처음엔 검은 점·선만 그렸는데 그건 이모티콘이지
+     캘시퍼가 아니다(창업자가 원본을 보내 줘서 알았다). 큰 흰 타원 + 작은 검은 동공,
+     그리고 두 눈 사이가 넓다. 흰자가 있어야 **시선**이 생기고 표정이 산다. */
+  const WHITE="#fbf7ef";
+  /* ⚠ ball 이 y 를 클로저로만 쓰다가 **세 번째 눈을 위에 못 놓아** 모양이 깨졌다.
+     y 를 인자로 받는다 — 눈이 셋인 배치는 이게 없으면 성립하지 않는다. */
+  const ball=(ex, ey, rw, rh, px, py, pr, lid)=>{
+    x.fillStyle=WHITE; x.beginPath(); x.ellipse(ex,ey,rw,rh,0,0,7); x.fill();
+    x.strokeStyle="rgba(30,22,12,.30)"; x.lineWidth=sz*0.06; x.stroke();
+    x.fillStyle=ink; x.beginPath(); x.ellipse(ex+px,ey+py,pr,pr*(kind==="slit"?2.6:1),0,0,7); x.fill();
+    if(lid){ x.fillStyle=lid; x.beginPath();
+      x.ellipse(ex,ey-rh*0.75,rw*1.06,rh*0.78,0,0,7); x.fill(); }
   };
-  eye(cx-gap); eye(cx+gap);
-  if(kind==="three"){ x.beginPath(); x.arc(cx, cy-gap*0.95, sz*0.34,0,7); x.fill(); }
+  const R1=sz*1.05, R2=sz*1.15;                       // 흰자 반지름(가로·세로)
+  if(kind==="calci"){ ball(cx-gap,cy,R1,R2,0,0,sz*0.30); ball(cx+gap,cy,R1,R2,0,0,sz*0.30); }
+  else if(kind==="wide"){ ball(cx-gap*1.06,cy,R1*1.24,R2*1.24,0,0,sz*0.32); ball(cx+gap*1.06,cy,R1*1.24,R2*1.24,0,0,sz*0.32); }
+  else if(kind==="small"){ ball(cx-gap,cy,R1,R2,0,0,sz*0.17); ball(cx+gap,cy,R1,R2,0,0,sz*0.17); }
+  else if(kind==="side"){ ball(cx-gap,cy,R1,R2,sz*0.42,0,sz*0.28); ball(cx+gap,cy,R1,R2,sz*0.42,0,sz*0.28); }
+  else if(kind==="half"){ ball(cx-gap,cy,R1,R2,0,sz*0.16,sz*0.28); ball(cx+gap,cy,R1,R2,0,sz*0.16,sz*0.28);
+    x.strokeStyle=ink; x.lineWidth=sz*0.20; x.lineCap="round";
+    [cx-gap,cx+gap].forEach(ex=>{ x.beginPath(); x.moveTo(ex-R1,cy-R2*0.34); x.lineTo(ex+R1,cy-R2*0.34); x.stroke(); }); }
+  else if(kind==="slit"){ ball(cx-gap,cy,R1,R2,0,0,sz*0.155); ball(cx+gap,cy,R1,R2,0,0,sz*0.155); }
+  else if(kind==="arc"){ x.strokeStyle=ink; x.lineWidth=sz*0.26; x.lineCap="round";
+    [cx-gap,cx+gap].forEach(ex=>{ x.beginPath(); x.arc(ex,cy+sz*0.42,sz*0.92,Math.PI*1.16,Math.PI*1.84); x.stroke(); }); }
+  else if(kind==="three"){ ball(cx-gap*1.12,cy+sz*0.24,R1*0.82,R2*0.82,0,0,sz*0.24); ball(cx+gap*1.12,cy+sz*0.24,R1*0.82,R2*0.82,0,0,sz*0.24);
+    ball(cx,cy-sz*0.86,R1*0.66,R2*0.66,0,0,sz*0.20); }
 }
 function drawMouth(x, kind, cx, cy, sz, ink){
-  x.strokeStyle=ink; x.fillStyle=ink; x.lineCap="round"; x.lineJoin="round"; x.beginPath();
-  if(kind==="dot"){ x.arc(cx,cy,sz*0.22,0,7); x.fill(); }
-  else if(kind==="smile"){ x.lineWidth=sz*0.24; x.arc(cx,cy-sz*0.30,sz*0.80,Math.PI*0.20,Math.PI*0.80); x.stroke(); }
-  else if(kind==="zig"){ x.lineWidth=sz*0.22; const w=sz*1.15,n=4;
-    x.moveTo(cx-w/2,cy); for(let i=1;i<=n;i++) x.lineTo(cx-w/2+w*i/n, cy+(i%2?sz*0.36:0)); x.stroke(); }
-  else if(kind==="o"){ x.lineWidth=sz*0.22; x.arc(cx,cy,sz*0.44,0,7); x.stroke(); }
-  else if(kind==="flat"){ x.lineWidth=sz*0.22; x.moveTo(cx-sz*0.62,cy); x.lineTo(cx+sz*0.62,cy); x.stroke(); }
-  else if(kind==="wave"){ x.lineWidth=sz*0.22; const w=sz*1.2;
-    x.moveTo(cx-w/2,cy); for(let i=0;i<=20;i++){const t=i/20; x.lineTo(cx-w/2+w*t, cy+Math.sin(t*Math.PI*2)*sz*0.24);} x.stroke(); }
+  /* ⚠ 입은 **눈보다 훨씬 작고 얇다.** 원본의 입은 지그재그가 아니라
+     가늘게 구불거리는 선이고, 한쪽이 내려가 비대칭이다. */
+  x.strokeStyle=ink; x.fillStyle=ink; x.lineCap="round"; x.lineJoin="round";
+  x.lineWidth=sz*0.16; x.beginPath();
+  const w=sz*1.05;
+  if(kind==="squig"){ x.moveTo(cx-w/2,cy);
+    for(let i=0;i<=24;i++){ const t=i/24;
+      x.lineTo(cx-w/2+w*t, cy+Math.sin(t*Math.PI*2.6)*sz*0.16 + t*sz*0.13); } x.stroke(); }
+  else if(kind==="flat"){ x.moveTo(cx-w*0.42,cy); x.lineTo(cx+w*0.42,cy); x.stroke(); }
+  else if(kind==="smile"){ x.arc(cx,cy-sz*0.26,sz*0.58,Math.PI*0.22,Math.PI*0.78); x.stroke(); }
+  else if(kind==="frown"){ x.moveTo(cx-w*0.42,cy-sz*0.10);
+    x.quadraticCurveTo(cx, cy+sz*0.20, cx+w*0.42, cy+sz*0.16); x.stroke(); }
+  else if(kind==="o"){ x.ellipse(cx,cy,sz*0.28,sz*0.34,0,0,7); x.stroke(); }
+  else if(kind==="wave"){ x.moveTo(cx-w/2,cy);
+    for(let i=0;i<=24;i++){ const t=i/24; x.lineTo(cx-w/2+w*t, cy+Math.sin(t*Math.PI*2)*sz*0.18); } x.stroke(); }
 }
 
 /* ── 오라 한 칸 = 작은 WebGL 캔버스 + 그 위 2D 얼굴 ───────────────────── */
@@ -195,8 +211,8 @@ function makeCell(elIdx, eye, mouth, noAura){
   /* 얼굴 — 오라 중심에 얹는다. 잉크는 코어색보다 진하게(읽혀야 한다) */
   const x=fcv.getContext("2d"); const S=CELL*2;
   x.clearRect(0,0,S,S);
-  drawEyes(x,S,eye, S*0.5, S*0.46, S*0.115, S*0.052, "rgba(22,17,8,.92)");
-  drawMouth(x,mouth, S*0.5, S*0.60, S*0.075, "rgba(22,17,8,.92)");
+  drawEyes(x,S,eye, S*0.5, S*0.455, S*0.135, S*0.072, "#191308");
+  drawMouth(x,mouth, S*0.5, S*0.575, S*0.085, "#2a2013");
   return box;
 }
 function cellWith(parent, elIdx, eye, mouth, nm, ds, noAura){
