@@ -349,6 +349,7 @@ _initSuperProps();
 
 /* ───── 만세력 계산 ───── */
 const GAN = ["갑","을","병","정","무","기","경","신","임","계"];
+const GANH = ["甲","乙","丙","丁","戊","己","庚","辛","壬","癸"];   // 근거 줄에서 '을'이 조사로 안 읽히게
 const JI = ["자","축","인","묘","진","사","오","미","신","유","술","해"];
 const GAN_EL = ["목","목","화","화","토","토","금","금","수","수"];
 const JI_EL = ["수","토","목","목","토","화","화","토","금","금","토","수"];
@@ -2864,29 +2865,70 @@ const guardianSize = (vp) => (SKIN === "holo"
 const MSR_FREE = (() => { try { return /[?&]msr=1(&|$)/.test(window.location.search); } catch (_) { return false; } })();
 const SKIN = (() => { try { return /[?&]skin=holo(&|$)/.test(window.location.search) ? "holo" : ""; } catch (_) { return ""; } })();
 
-/* ── 오늘의 상태 — **운세 방법론에서 나온다. 지어내지 않는다** ─────────────
-   축 둘만 쓴다(새 축을 늘리지 않는다 — 설계 헌장 §판결문 형식 보존):
-     ① 오늘 일진의 일간을 **내 일간이 보는 십성** — 날마다 바뀌고 사람마다 다르다
-     ② 달 위상 — 밝기에만 아주 약하게
-   ⚠ 이 값은 **판결에 안 들어간다.** 화면 상태(색·속도·밝기)만 만든다.
-      판결 축에 얹으면 그건 축을 늘리는 것이고 헌장 위반이다. */
+/* ── 오늘의 상태 — **두 체계를 섞는다** (2026-08-28 창업자 결정) ──────────────
+   **왜 섞나.** 전엔 사주 하나(일진 십성)만 썼는데, 십성은 **일간 10개**만 보므로
+   실측 반복 주기가 **정확히 10일**이었다 — 한 달에 세 번 같은 문장을 본다.
+   매일 여는 화면에서 그건 짧다. 그리고 더 큰 문제: CLAUDE.md 는 우리 방어자산을
+   *"판결 하나가 11개 체계를 동시에 싣는다 — 경쟁 8개사는 전원 만세력 단일 엔진"* 이라고 적는데,
+   **유저가 매일 보는 한 줄에서는 우리도 만세력 단일 엔진**이었다.
+
+   섞는 방식은 이 리포의 원칙 그대로 — **평균이 아니라 분업**(match.js 파일 머리):
+     ① **사주 일진 십성**(10종) → **오늘 무엇이 잘 되나**
+     ② **인도 타라**(9종, 오늘 달의 나크샤트라 vs 내 나크샤트라) → **오늘 움직여도 되나**
+   둘은 **다른 질문에 답한다.** 합산하지 않고 나란히 적는다.
+   실측: 십성 10일 · 타라는 달이 27수를 1.0119일에 하나씩 지나 딱 떨어지지 않는다 →
+   **섞으면 90가지, 400일 안에 정확한 반복 없음**(`scratchpad/mix.mjs` 로 잰 값).
+
+   ⚠ 축을 늘린 게 아니다 — 타라는 궁합 축 ③(아쉬타쿠타)이 이미 쓰는 값이고,
+     계산도 `sidIdx()` 하나 더 부르는 게 전부다. **판결에는 여전히 안 들어간다.**
+   ⚠ 달 위상은 그대로 **밝기에만** 아주 약하게(±6%). 글자로는 안 나선다.
+
+   ── 문구 규칙 (창업자 2026-08-28: *"혼자 파고들게 돼 = 뭘…? 이해가 안 돼"*) ──
+   맞다. 「혼자 파고들게 돼」는 **속마음을 이름 붙인 것**이지 오늘 뭘 하라는 말이 아니다.
+   이 리포는 같은 교정을 이미 한 번 했다 — 곁 역할표(`match.js` ROLE, 2026-08-15 규칙 3
+   「좋은 말이 아니라 쓸모」). 그때 이름을 **구조 서술**에서 **쓸모**로 바꿨다.
+   여기도 같은 규칙을 건다: **모든 줄이 「그래서 오늘 뭘」에 답한다.**
+     (X) "혼자 파고들게 돼"  ← 그래서 뭘?
+     (O) "혼자 파고드는 게 잘 되는 날 — 사람 만나는 일정은 내일로 미뤄"
+   기분을 말하지 말고 **오늘 할 일과 미룰 일**을 말한다. */
 const MOOD = {
-  /* ⚠ `l` 은 **화면에 그대로 나가는 말**이다. 창업자 지적(2026-08-28): "‘오늘은 또렷함’ 이게 무슨 말이야?
-     직관적으로 쓰라는 게 지침이잖아." 십성 이름(또렷함·잠김…)은 우리 내부 어휘지 유저 말이 아니다.
-     그래서 `l` 은 **그 기운이 오늘 뭘 하는지**를 짧은 서술로 적는다. 십성은 `ss` 로 따로 남는다.
-     `axis` 는 근거 줄에 쓰는 일상어 — 「…자리」 어휘는 곁 역할표와 같은 계열이다(match.js ROLE). */
-  비견: { l: "쉽게 안 흔들려",        axis: "같은 자리",     warm: 0.00, sp: 0.92, lum: 1.00, ch: 0.85, sink: 0.00 },
-  겁재: { l: "괜히 마음이 급해져",    axis: "같은 자리",     warm: 0.18, sp: 1.22, lum: 1.06, ch: 1.30, sink: -0.05 },
-  식신: { l: "손대는 게 잘 풀려",     axis: "내보내는 자리", warm: 0.30, sp: 1.16, lum: 1.12, ch: 1.00, sink: -0.10 },
-  상관: { l: "말이 잘 나와",          axis: "내보내는 자리", warm: 0.22, sp: 1.34, lum: 1.10, ch: 1.45, sink: -0.08 },
-  정재: { l: "계산이 잘 서",          axis: "쥐는 자리",     warm: 0.05, sp: 0.90, lum: 1.04, ch: 0.70, sink: 0.00 },
-  편재: { l: "판을 벌이고 싶어져",    axis: "쥐는 자리",     warm: 0.24, sp: 1.10, lum: 1.06, ch: 1.20, sink: -0.06 },
-  정관: { l: "정한 대로 가는 게 편해", axis: "누르는 자리",  warm: -0.05, sp: 0.86, lum: 0.98, ch: 0.62, sink: 0.04 },
-  편관: { l: "버텨야 하는 날이야",    axis: "누르는 자리",   warm: -0.22, sp: 0.74, lum: 0.84, ch: 1.15, sink: 0.16 },
-  정인: { l: "누가 받쳐 주는 느낌이야", axis: "받쳐 주는 자리", warm: 0.12, sp: 0.82, lum: 1.02, ch: 0.72, sink: 0.02 },
-  편인: { l: "혼자 파고들게 돼",      axis: "받쳐 주는 자리", warm: -0.18, sp: 0.70, lum: 0.88, ch: 0.80, sink: 0.14 },
+  /* `l` 은 화면에 그대로 나가는 말 — **오늘 뭘 하면 좋은가**.
+     `axis` 는 근거 줄의 일상어(「…자리」 — 곁 역할표와 같은 계열). `ss` 로 십성을 따로 남긴다. */
+  비견: { l: "남 눈치 안 보고 정해도 되는 날이야",     axis: "같은 자리",     warm: 0.00, sp: 0.92, lum: 1.00, ch: 0.85, sink: 0.00 },
+  겁재: { l: "서두르다 손해 보기 쉬워 — 돈 나가는 결정은 하루 미뤄", axis: "같은 자리", warm: 0.18, sp: 1.22, lum: 1.06, ch: 1.30, sink: -0.05 },
+  식신: { l: "만들던 걸 오늘 끝내면 잘 끝나",           axis: "내보내는 자리", warm: 0.30, sp: 1.16, lum: 1.12, ch: 1.00, sink: -0.10 },
+  상관: { l: "말이 술술 나와 — 오래 남을 말이니 뱉기 전에 한 번 삼켜", axis: "내보내는 자리", warm: 0.22, sp: 1.34, lum: 1.10, ch: 1.45, sink: -0.08 },
+  정재: { l: "숫자가 잘 맞아 — 정산·계약 볼 게 있으면 오늘", axis: "쥐는 자리",  warm: 0.05, sp: 0.90, lum: 1.04, ch: 0.70, sink: 0.00 },
+  편재: { l: "판을 벌이기 좋은 날 — 대신 뒷정리는 내일의 네 몫이야", axis: "쥐는 자리", warm: 0.24, sp: 1.10, lum: 1.06, ch: 1.20, sink: -0.06 },
+  정관: { l: "정해진 대로 가면 편한 날 — 새로 우기지 마",  axis: "누르는 자리",   warm: -0.05, sp: 0.86, lum: 0.98, ch: 0.62, sink: 0.04 },
+  편관: { l: "누가 밀어붙이는 날 — 받아치지 말고 오늘은 버텨", axis: "누르는 자리", warm: -0.22, sp: 0.74, lum: 0.84, ch: 1.15, sink: 0.16 },
+  정인: { l: "도와줄 사람이 붙는 날 — 혼자 안고 있지 말고 물어봐", axis: "받쳐 주는 자리", warm: 0.12, sp: 0.82, lum: 1.02, ch: 0.72, sink: 0.02 },
+  편인: { l: "혼자 파고드는 게 잘 되는 날 — 사람 만나는 일정은 내일로", axis: "받쳐 주는 자리", warm: -0.18, sp: 0.70, lum: 0.88, ch: 0.80, sink: 0.14 },
 };
-function todayMood(saju) {
+/* ── 인도 타라 — 「오늘 움직여도 되나」 ─────────────────────────────────────
+   베다 전통이 **택일**에 쓰는 값이다(여행·개시). 오늘 달의 나크샤트라가 내 나크샤트라에서
+   몇 번째냐를 아홉으로 나눈 나머지 — 배당은 전통 그대로라 **변환이 없다**.
+   ⚠ 코드의 `% 9` 는 아홉째(파라마미트라)를 **0** 으로 낸다. 궁합 축 ③ 이 이미 그 표현을 쓰고
+     `![3,5,7]` 로 흉을 가른다 — 같은 표현을 여기서도 쓴다(두 벌이 되면 갈린다).
+   문구 규칙은 위와 같다: **오늘 하라/미뤄라**로 적는다. 「길하다/흉하다」는 안 쓴다 —
+   그건 옮긴 말이 아니라 원문 용어이고, 이 앱은 용어를 화면에 안 낸다. */
+/* ⚠ **원어(자나·삼파트·미트라…)를 화면에 안 낸다.** 첫 판에 근거 줄이 「달은 삼파트자리」로 나갔는데
+   그건 옮긴 말이 아니라 산스크리트 용어이고, 「자리」를 붙여도 뜻이 하나도 안 전해진다.
+   이 앱은 화면에 용어를 안 낸다(설계 헌장) — 대신 **「…자리」 우리말**로 적는다.
+   어휘 계열은 곁 역할표·`axis` 와 같다(match.js ROLE). 원어는 여기 주석에만 남긴다:
+   1 자나 · 2 삼파트 · 3 비파트 · 4 크셰마 · 5 프라티야크 · 6 사다나 · 7 나이다나 · 8 미트라 · 9 파라마미트라. */
+const TARA = {
+  1: ["제 자리에 있는 날 — 새로 벌이기보다 벌여 둔 걸 정리해", "네 자리"],
+  2: ["들어올 게 있으면 오늘 움직여 — 청구·제안은 오늘이 낫다", "들어오는 자리"],
+  3: ["오늘 새로 시작한 건 자꾸 되돌아와 — 시작은 미루고 하던 것만", "걸리는 자리"],
+  4: ["무리 안 하면 순하게 가는 날 — 미뤄 둔 잔일을 치워", "순한 자리"],
+  5: ["한 번에 안 통하는 날 — 중요한 연락은 두 번 확인해", "막히는 자리"],
+  6: ["끝을 볼 수 있는 날 — 오래 끌던 걸 오늘 매듭지어", "이루는 자리"],
+  7: ["오늘 내린 큰 결정은 내일 다시 봐 — 되돌리기 어려운 건 미뤄", "무너지는 자리"],
+  8: ["사람이 도와주는 날 — 혼자 하지 말고 붙잡고 물어봐", "벗의 자리"],
+  0: ["뭘 해도 덜 걸리는 날 — 미뤘던 것 중 제일 어려운 걸 오늘 해", "가장 좋은 벗의 자리"],
+};
+function todayMood(saju, birth) {
   try {
     if (!saju?.idx) return null;
     const n = new Date();
@@ -2894,6 +2936,22 @@ function todayMood(saju) {
     if (!td?.idx) return null;
     const ss = sipseong(saju.idx.dG, td.idx.dG);            // 내 일간이 오늘 일간을 보는 관계
     const m = MOOD[ss]; if (!m) return null;
+    /* 타라 — 오늘 달의 나크샤트라 vs 내 나크샤트라. 궁합 축 ③ 과 **같은 식**이다.
+       생년월일이 없으면(있을 리 없지만) 이 줄만 빠지고 나머지는 그대로 돈다. */
+    let tara = null;
+    if (birth?.y) {
+      /* ⚠ **나크샤트라를 새로 계산하지 않는다.** App.jsx 는 이미 `moonPlacements()` 로 뽑고
+         있고(세 군데가 같은 줄을 쓴다), `sky.js` 의 `sidIdx()` 와 아야남샤 식이 **글자까지 같다**.
+         새 경로를 만들면 같은 사람의 나크샤트라가 화면마다 갈릴 수 있다 — 이 리포가 납음에서
+         실제로 겪은 사고다(궁합 노방토 / 각인 대림목). 있는 문을 쓴다. */
+      const myNak = NAKSHATRA.indexOf(moonPlacements(+birth.y, +birth.m, +birth.d,
+        +birth.h || 12, +birth.min || 0, !!birth.noHour).nakshatra);
+      const tNak = NAKSHATRA.indexOf(moonPlacements(n.getFullYear(), n.getMonth() + 1, n.getDate(), 12, 0, true).nakshatra);
+      if (myNak >= 0 && tNak >= 0) {
+        const ti = ((tNak - myNak + 27) % 27 + 1) % 9;
+        tara = { i: ti, l: TARA[ti][0], name: TARA[ti][1] };
+      }
+    }
     /* 달 나이 — moonPhase() 는 이름·해설만 돌려주므로(frac 없음) 같은 식으로 직접 잰다 */
     const age = ((jdn(n.getFullYear(), n.getMonth() + 1, n.getDate()) - 2451550) % 29.53059 + 29.53059) % 29.53059;
     const full = 1 - Math.abs(age / 29.53059 - 0.5) * 2;      // 보름=1 · 그믐=0
@@ -2901,7 +2959,7 @@ function todayMood(saju) {
     /* 오늘 상태가 **빛의 형태**를 고른다 — 쐐기(예민)/뭉게(기분좋음)/지지직(힘듦).
        매핑은 aura-spec.json §moods 에 있다. 없으면 뭉게 기본값. */
     const w = AURA.moods[ss] || { ray: 0.3, puff: 0.6, flicker: 0.1 };
-    return { ss, day: GAN[td.idx.dG], moon: moon && moon.name, ...m, w, lum: m.lum * (0.94 + 0.12 * full) };
+    return { ss, day: GAN[td.idx.dG], moon: moon && moon.name, tara, ...m, w, lum: m.lum * (0.94 + 0.12 * full) };
   } catch (_) { return null; }
 }
 
@@ -3981,7 +4039,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v168 · 궁합은 무료다";
+const APP_VER = "v169 · 오늘은 두 하늘이 말한다";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -5949,7 +6007,7 @@ export default function App() {
   /* v140 오늘의 상태 — `?skin=holo` 에서만 쓴다. **날짜+명식이 같으면 같은 값**이라
      useMemo 로 굳힌다(매 렌더 새 객체면 size 처럼 deps 를 건드려 WebGL 이 재생성된다). */
   const _today = new Date().toDateString();
-  const mood = useMemo(() => (SKIN === "holo" ? todayMood(saju) : null), [saju, _today]);
+  const mood = useMemo(() => (SKIN === "holo" ? todayMood(saju, birth) : null), [saju, birth, _today]);
   /* v134.2 곁 명부 — 이제 **실제 데이터가 붙는다**(작업지시_역할과초대 §D).
      명부의 유일한 입구는 궁합을 돌리는 순간이다(MatchDoc onMet). 저장·정렬·파생은 전부 위 모듈 함수에 있다. */
   const [gyeot, setGyeot] = useState(() => readGyeot());
@@ -7319,7 +7377,14 @@ export default function App() {
                   ⚠ 근거를 같이 적는다. 안 적으면 지어낸 말로 읽히고, 실제로 지어낸 게 아니다 —
                      오늘 일진의 일간을 내 일간이 보는 십성이다. 판결에는 안 들어간다. */}
               {SKIN === "holo" && mood && (
-                <p className="moodline fade">오늘은 <b>{mood.l}</b><span>오늘 하늘 기운 {mood.day} · 네 기운엔 {mood.axis}{mood.moon ? " · " + mood.moon : ""}</span></p>
+                <p className="moodline fade">오늘은 <b>{mood.l}</b>
+                  {/* 타라는 **다른 질문에 답한다** — 십성이 「무엇이 잘 되나」면 이건 「움직여도 되나」다.
+                      그래서 합치지 않고 나란히 둔다(match.js 의 분업 원칙과 같다). */}
+                  {mood.tara && <i className="moodtara">{mood.tara.l}</i>}
+                  {/* ⚠ 「오늘 하늘 기운 을」이 **목적격 조사처럼 읽힌다**(십간 열 중 '을' 하나가 그렇다).
+                      한자를 붙여 가른다 — 이 앱은 이름 칸에서 이미 한자를 쓴다. */}
+                  <span>오늘 하늘 기운 {mood.day}({GANH[GAN.indexOf(mood.day)] || ""}) · 네 기운엔 {mood.axis}
+                    {mood.tara ? ` · 달은 ${mood.tara.name}` : ""}{mood.moon ? " · " + mood.moon : ""}</span></p>
               )}
               {/* ⚠ **깨우는 건 더블탭이다** — `tryWake` 가 `now - wakeTapRef < 350` 일 때만 `setAwake(true)` 를 부르고
                   그 호출부는 파일 전체에 하나뿐이다. 옆 탭(곁)은 「두 번 두드려봐」로 이미 정확히 적고 있는데
@@ -8014,6 +8079,7 @@ const CSS = `
 .stage.holo .moodline{font-family:'Noto Serif KR',serif;font-size:13px;color:#6b6252;letter-spacing:0;line-height:1.5}
 .stage.holo .moodline b{display:block;font-size:20px;color:#8c4a12;font-weight:600;letter-spacing:-.015em;margin:2px 0 5px}
 .stage.holo .moodline span{display:block;font-family:sans-serif;font-size:10.5px;letter-spacing:.02em;color:#8a8271}
+.stage.holo .moodline i{color:#4d4535}
 .stage.holo .verbadge{color:#a09883}
 /* ── 검은 판용 그림자·어두운 패널을 걷어낸다 ────────────────────────────────
    text-shadow 만 끄면 절반이다. 검은 배경 UI 는 **박스 그림자와 어두운 판**으로 요소를 띄우는데,
@@ -8086,6 +8152,7 @@ const CSS = `
 .moodline{font-family:sans-serif;font-size:13px;letter-spacing:.06em;color:#cfc4e2;margin:0 0 2px;text-align:center;line-height:1.7}
 .moodline b{color:#f5d98b;font-weight:600;font-size:15px}
 .moodline span{display:block;font-size:10.5px;color:#8a7f95;letter-spacing:.02em;margin-top:2px}
+.moodline i{display:block;font-style:normal;font-size:12.5px;color:#cfc4e2;letter-spacing:0;line-height:1.65;margin-top:5px;word-break:keep-all;text-wrap:balance}
 .wakehint{font-family:sans-serif;font-size:12px;letter-spacing:.16em;color:#d8c79a;margin-top:22px;animation:wakePulse 2.4s ease-in-out infinite;text-shadow:0 1px 10px rgba(4,3,10,.85)}
 /* v75: 공유 판결 랜딩 — 링크로 들어온 사람이 '실제 판결 카드'를 그대로 본다 */
 .sharedwrap{position:fixed;inset:0;z-index:60;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:34px 20px;background:radial-gradient(120% 78% at 50% 14%,#161029,#0b0817 58%,#060409);text-align:center;overflow-y:auto}
