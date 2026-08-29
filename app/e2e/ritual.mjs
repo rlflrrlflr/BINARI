@@ -5,7 +5,7 @@
    ⚠ 의식이 다시 꺼지면(`COIN_RITUAL = false`) 던질 버튼이 없다. 그때는 조용히 통과한다 —
      검사가 스위치 상태에 안 묶이게. */
 export async function throwCoins(page, { timeout = 20000 } = {}) {
-  const btn = () => page.getByRole("button", { name: /쥐었다 놓아 던진다/ });
+  const btn = () => page.getByRole("button", { name: /^던진다 \(/ });
   if (await btn().count() === 0) return false;          // 의식이 꺼져 있다 — 할 일 없음
   for (let i = 0; i < 6; i++) {
     await btn().click({ timeout });

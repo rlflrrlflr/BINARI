@@ -2844,6 +2844,22 @@ const guardianSize = (vp) => (SKIN === "holo"
    홀로그램 = 낱알을 없애는 게 아니라 **겹쳐서 안 보이게** 하는 것이다.
    점을 키우고 알파를 낮추면 같은 셰이더가 연속 그라데이션이 된다(실측: guardian-holo.html).
    그래서 형태 축(u_form)·색 체계·오행 규칙은 전부 그대로 살아 있다. */
+/* ── 「타고난 그릇」 무료 노출 스위치 (v143, 창업자 지시 2026-08-27) ──────────────
+   *"타고난 그릇은 우리 리포트 9,900원짜리의 일부로 보여질 정도로 너무 상세한데,
+     일단은 보여주지 않는 걸로 하자."*
+
+   ⚠ **§알 권리(헌장 2026-08-06)와 충돌하지 않는다 — 국면이 다르다.** 그 조항은
+     *"값을 치른 문서를 여는 유저"* 에게 정보를 클릭 뒤에 숨기지 말라는 것이다.
+     여기는 **값을 안 치른 판결 카드 뒷면**이고, 문제는 은닉이 아니라 **반대로 과잉 무상 제공**이다 —
+     각인(9,900원)이 팔려는 두께를 판결 카드가 공짜로 먼저 준다.
+     ⚠ 단 v109 주석이 이 블록을 §알 권리 근거로 '기본 펼침'으로 만들었다.
+       **그 결정을 뒤집는 것이므로, 되돌릴 때 v109 의 근거(실유저 지적 2건)를 같이 읽어라.**
+
+   ⚠ **컴포넌트는 지우지 않는다.** COIN_RITUAL 과 같은 이유다 —
+     지웠다가 되살리면 같은 물건이 안 나온다. 각인에 편입하든 여기로 되돌리든 원본이 있어야 한다.
+   ⚠ `?msr=1` 로 열린다. 검사(report-check 122항)가 그 문으로 들어가므로
+     **숨긴 동안에도 회귀가 계속 잡힌다.** 안 그러면 122항이 통째로 잠든다. */
+const MSR_FREE = (() => { try { return /[?&]msr=1(&|$)/.test(window.location.search); } catch (_) { return false; } })();
 const SKIN = (() => { try { return /[?&]skin=holo(&|$)/.test(window.location.search) ? "holo" : ""; } catch (_) { return ""; } })();
 
 /* ── 오늘의 상태 — **운세 방법론에서 나온다. 지어내지 않는다** ─────────────
@@ -2995,7 +3011,10 @@ void main(){
   float sh = 1.0 + (0.085*sin(ang*2.0 + t*0.21) + 0.050*sin(ang*3.0 - t*0.17)) * (1.0 - fold);
   /* ⚠ 곁 전이가 "느리다"는 건 시간만의 문제가 아니었다 — **줄어드는 양이 19% 뿐**이라
      0.5초 안에 다 끝나도 변화가 안 보였다. 응축 폭을 키운다(면적으로는 -57%). */
-  float R  = mix(0.320, 0.208, clamp(u_orb,0.0,1.0)) * mix(1.0, 0.20, tk) * mix(0.90, 1.12, zc) * (1.0 + 0.020*sin(t*0.85)) * sh;
+  /* ⚠ 여기 clamp 가 있어서 **커지는 쪽 오버슈트가 죽었다.** v159 에 "0~1 로 자르면
+     오버슈트가 죽는다"고 적어 놓고 정작 반경 식에 넣었다 — 예비동작이 안 보이던 이유.
+     자르지 않아도 안전하다: orb 는 -0.18~1.28 로 이미 묶여 있고 그 범위에서 R>0 이다. */
+  float R  = mix(0.320, 0.208, u_orb) * mix(1.0, 0.20, tk) * mix(0.90, 1.12, zc) * (1.0 + 0.020*sin(t*0.85)) * sh;
 
   /* 물방울 — 위로 갈수록 좁아진다. 상하대칭 타원은 눈알이나 세포로 읽힌다.
      ⚠ **이 변형만 u_orb 에 안 물려 있어** 곁에서도 위가 좁아졌다(실측 세로/가로 0.93).
@@ -3253,18 +3272,35 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
          스프링으로 바꾸면 지나쳤다 되돌아오며 두어 번 출렁인다. 그게 푸딩이다.
          ⚠ orb 를 0~1 로 자르면 오버슈트가 죽는다. 살짝 넘치게 두되(-0.18~1.28)
             그 이상은 막는다 — 넘치면 반경 식이 음수 쪽으로 간다. */
-      let orb = 0, orbV = 0, last = performance.now();
+      let orb = 0, orbV = 0, orbLast = 0, antUntil = 0, last = performance.now();
       const T0 = performance.now();
       const draw = () => {
         raf = requestAnimationFrame(draw);
         const now = performance.now(), dt = Math.min(0.05, (now - last) / 1000); last = now;
         const orbT = orbRef && orbRef.current ? 1 : 0;
-        orbV += ((orbT - orb) * 190 - orbV * 10.0) * dt;     // K 크고 D 낮게 = 빠르고 말랑
-        orb = Math.max(-0.18, Math.min(1.28, orb + orbV * dt));
+        /* ── 예비동작 (창업자 2026-08-28: "작아지면서 뽀잉이 아니고 **커졌다가** 작아지면서
+           뽀잉으로 해야 아 변했구나!라는 게 확실히 느껴질 거 같아") ──────────────────
+           애니메이션의 anticipation 이다. 목표로 곧장 가면 "도착"만 보이고,
+           **반대로 한 번 밀었다 가야** 변화가 읽힌다.
+           탭이 바뀌는 순간 속도에 **반대 방향 임펄스**를 준다 —
+           곁으로 갈 땐 잠깐 더 퍼졌다가 모이고, 판결로 돌아올 땐 잠깐 더 오므렸다 퍼진다. */
+        /* ── 예비동작을 **시간으로 확보한다** ────────────────────────────────────
+           ⚠ 두 번 실패했다. ①속도 임펄스는 같은 프레임에 스프링이 상쇄했고
+           ②위치를 반대편으로 던지는 것도 K=190 이라 **120ms 만에 지나가** 안 보였다.
+           스프링 하나로는 시작점만 바뀔 뿐 머무는 시간이 없다.
+           그래서 0.17초 동안 **목표 자체를 반대편에 둔다** — 그동안 확실히 커지고,
+           만료되면 실제 목표로 당겨지며 지나쳤다 돌아온다. 그게 "커졌다 → 작아지며 뽀잉". */
+        if (orbT !== orbLast) { antUntil = now + 170; orbLast = orbT; }
+        const goal = now < antUntil ? (orbT > 0.5 ? -0.35 : 1.25) : orbT;
+        orbV += ((goal - orb) * 190 - orbV * 10.0) * dt;     // K 크고 D 낮게 = 빠르고 말랑
+        orb = Math.max(-0.45, Math.min(1.30, orb + orbV * dt));   // 아래로 넓힌 만큼 '먼저 커지는' 폭이 산다
         gl.uniform1f(U.u_orb, Math.abs(orb) < 0.0004 ? 0 : orb);
+        /* 응축값을 밖에 노출한다 — 화면을 읽어(readPixels) 재면 프레임당 100ms 넘게 걸려
+           **300ms 짜리 전환을 못 본다**(실측). 검사는 이 값을 본다. */
+        try { window.__BINARI_ORB = orb; } catch (_) {}
         /* 눌림(squash) — 빠르게 모일 때 살짝 납작해지고 퍼질 때 옆으로 늘어난다.
            푸딩이 "말랑"해 보이는 건 이 한 축 때문이다. */
-        gl.uniform1f(U.u_squash, Math.max(-0.9, Math.min(0.72, orbV * 0.105)));
+        gl.uniform1f(U.u_squash, Math.max(-0.34, Math.min(0.34, orbV * 0.042)   /* ⚠ 0.105 는 과했다 — 초반에 세로로 길쭉해지며(가로 99 세로 231) 오히려 면적이 줄어 '커졌다'가 눌림에 먹혔다 */));
         gl.uniform1f(U.u_t, (now - T0) / 1000);
         /* 탄생 — 흩어진 조각이 2.4초에 걸쳐 모인다. 온보딩(scatter)에서는 모이다 만 상태로 머문다.
            ⚠ 선형이 아니라 **뒤로 갈수록 느리게**(ease-out) 해야 '모여서 자리를 잡는' 것으로 읽힌다. */
@@ -3943,7 +3979,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v165 · 궁합은 무료다";
+const APP_VER = "v166 · 궁합은 무료다";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -7494,9 +7530,9 @@ export default function App() {
                   {tosses.length < 6
                     ? <div className="w100">
                         <button className="btn gold throwbtn" onPointerDown={startCharge} onPointerLeave={cancelCharge} onPointerCancel={cancelCharge} onClick={doThrow} disabled={busy || tossing}>
-                          {tossing ? "동전이 공중에…" : charging ? "손 안에서 구르는 중… 놓으면 던져져" : `쥐었다 놓아 던진다 (${tosses.length}/6)`}
+                          {tossing ? "공중에…" : charging ? "놓으면 던져져" : `던진다 (${tosses.length}/6)`}
                         </button>
-                        <p className="fine">{tosses.length === 5 ? "마지막 한 번이야." : "오래 쥐고 있어도 돼 — 손에 머무는 시간만 길어지고, 나오는 건 하늘이 정해."}</p>
+                        <p className="fine">{tosses.length === 5 ? "마지막 한 번이야." : "오래 쥐어도 결과는 안 바뀌어."}</p>
                       </div>
                     /* ⚠ 대기 문구를 여기서 반복하지 않는다 — 위 `.brooding` 이 의식과 무관하게 이미 띄운다.
                          v140 에서 둘이 같은 문장을 동시에 그려 검사가 strict mode 로 깨졌다(brood-check ②·④). */
@@ -7571,7 +7607,7 @@ export default function App() {
                     {/* 괘 이름은 뒷면(지표 이름을 짚어도 되는 자리)에만 — 앞면에선 유저가 못 알아듣는 한자였다 */}
                     {hexInfo && <p className="vhex">卦 {hexInfo.name}{hexInfo.moving.length > 0 && ` → ${hexInfo.toName}`}</p>}
                     {detail?.reasons ? <ul className="vr">{detail.reasons.map((r, i) => <li key={i}><b>{r.axis}</b>{r.vote && <em className="vote">{r.vote}</em>}<p>{gyeotFillNames(r.text, gyeotSorted)}</p></li>)}</ul> : <p className="gathering">조각들이 근거를 모으고 있어<span className="dots"><i>.</i><i>.</i><i>.</i></span></p>}
-                    {saju && saju.idx && <MyeongsikReport saju={saju} sex={birth.sex} birth={birth} />}
+                    {MSR_FREE && saju && saju.idx && <MyeongsikReport saju={saju} sex={birth.sex} birth={birth} />}
                     {detail?.disclaimer && <p className="disc">{detail.disclaimer}</p>}
                   </div>
                 </div>
