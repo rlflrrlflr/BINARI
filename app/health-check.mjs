@@ -1005,7 +1005,11 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
   /* (X) 로 시작하는 줄 = 모델에게 보여주는 나쁜 예. 금지어가 거기 있는 건 의도다. */
   const dropX = (s) => s.split("\n").filter((l) => !/\(X\)/.test(l)).join("\n");
   const ZONES = [
-    ["서신 4장 지시", dropX(cut(app, `4) "누구와`, `5) "무엇을 걸고"`))],
+    /* ⚠ 종료 앵커에서 **닫는 따옴표를 뺐다** (2026-08-29). 프롬프트 5장 제목에 부제를 붙이면서
+       `5) "무엇을 걸고"` 라는 문자열이 사라졌고, 그러면 `cut` 의 indexOf 가 −1 → **파일 끝까지**를
+       4장 구역으로 잡아 오탐이 터진다(단언 "풀어준다"·자격참칭 "전문가" 등 무관한 줄이 걸린다).
+       앵커는 **제목의 앞부분만** 문다 — 뒤를 손봐도 구역이 안 무너지게. */
+    ["서신 4장 지시", dropX(cut(app, `4) "누구와`, `5) "무엇을 걸고`))],
     ["서신 목차", cut(app, "const LETTER_SECTIONS =", "\n")],
     ["궁합 역할표", cut(mj, "const ROLE = {", "\n  };")],
     ["곁 사이 문구", cut(app, "const GYEOT_REL_LINE = {", "\n};")],
@@ -1017,6 +1021,22 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
     [/도움이\s*안\s*(된|돼)|피해라|피하라|멀리\s*해라/, "부정 판정(피해라·도움이 안 된다)"],
     [/상담(사|을 받|해 ?줄)|전문가|멘토/, "자격 참칭(상담·전문가·멘토)"],
   ];
+  /* ⚠ **금지어에는 짝이 있어야 한다 (2026-08-29 신설).**
+     서신 프롬프트는 「쓰지 않는 말」로 용어를 금지만 하고 **대체어를 안 줬다.** 그래서 실제로
+     본문 10건 중 5건에 「명식」이 그대로 나갔다. 서신에는 앞면의 `FRONT_JARGON` 같은
+     **사후 가드가 0**이라 프롬프트가 유일한 방어선이다 — 짝이 빠지면 그대로 샌다.
+     SYS 스스로도 같은 진단을 적어 놨다: *"이 목록은 외워서 지켜지지 않는다 … 고쳐 쓴 짝을 따라라."* */
+  {
+    const banZone = cut(app, "쓰지 않는 말:", "\n바꿔 쓰는 말(이어서)");   // ⚠ 짝 줄까지 삼키면 금지어가 뭉개져 잡힌다
+    const pairZone = (app.match(/바꿔 쓰는 말[\s\S]*?\n\*\*목록을 외워서/) || [""])[0];
+    const banned = (banZone.split(":")[1] || "").split("·").map((x) => x.trim()).filter(Boolean);
+    const noPair = banned.filter((w) => !new RegExp(w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*=").test(pairZone));
+    add(noPair.length ? "주의" : "정상",
+      noPair.length ? "서신 금지어에 대체어 짝이 없다" : "서신 금지어 — 전부 대체어 짝이 있다",
+      noPair.length ? `짝 없는 말: ${noPair.join(" · ")}` : `${banned.length}개 전부 짝 있음`,
+      noPair.length ? "「바꿔 쓰는 말(이어서)」 줄에 `금지어=쉬운 말` 짝을 더하세요. 금지만 하면 모델은 그대로 씁니다 — 실측으로 확인된 누출 경로입니다." : "");
+  }
+
   const hits = [], missing = [];
   for (const [zone, text] of ZONES) {
     if (!text) { missing.push(zone); continue; }
