@@ -3066,9 +3066,21 @@ void main(){
      헤일로가 삼각으로 부풀었다. 굴곡·비율·물방울·층 어긋남을 다 껐는데도 각져 보인 게 이것 때문.
      곁에서는 **형태 변조만** 접는다 — 감정은 밝기·색으로 계속 실린다. */
   float puffK = 1.0 + lobe*u_puffP.z*1.35*u_wt.y*(1.0 - fold*0.92);   // ⚠ 2.2 는 헤일로를 세잎클로버로 갈랐다
-  float ph   = floor(t*u_flkP.x);
-  float fl   = 1.0 - u_flkP.y*hash(vec2(ph, 7.3));
-  fl *= mix(0.34, 1.0, step(u_flkP.z, hash(vec2(ph, 19.1))));
+  /* ⚠ **여기가 「수호신이 깜빡인다」의 원인이었다**(창업자 제보 2026-08-29).
+     예전 판은 floor(t*11) — 값이 **계단**이라 한 프레임 만에 최대 0.73 튀었고,
+     그게 아래 alpha 전체에 곱해져 **물체가 통째로 명멸했다**. 실측: 초당 1.1회,
+     그때 밝기가 0.27 배까지 내려갔다. 불꽃은 깜빡이지 않는다 — 흔들린다. 셋을 고친다.
+       ① 계단 사이를 잇는다(smoothstep) — 점프가 사라지고 파르르 떠는 결만 남는다
+       ② 급락의 바닥을 0.34 → 0.72 로 올린다. 「나갈 듯 말 듯」은 남기고 「꺼짐」만 없앤다
+       ③ **위쪽만 흔들린다**(아래 live 의 up 가중) — 밑동까지 같이 가면
+          그건 불꽃의 흔들림이 아니라 물체의 깜빡임으로 읽힌다 */
+  float fp   = t*u_flkP.x*0.68;
+  float ph   = floor(fp);
+  float fe   = smoothstep(0.0, 1.0, fract(fp));
+  float fn   = mix(hash(vec2(ph, 7.3)),  hash(vec2(ph+1.0, 7.3)),  fe);
+  float fd   = mix(step(u_flkP.z, hash(vec2(ph, 19.1))),
+                   step(u_flkP.z, hash(vec2(ph+1.0, 19.1))), fe);
+  float fl   = (1.0 - u_flkP.y*fn) * mix(0.72, 1.0, fd);
 
   /* ── 다섯 층. **중심이 저마다 어긋나고 저마다 다른 속도로 떠다닌다** ────
      ⚠ 어긋남이 크면 코어가 화면 밖으로 밀려 **한쪽으로 쏠린 얼룩**이 된다(실기에서 그랬다).
@@ -3165,7 +3177,7 @@ void main(){
   /* ⚠ 마스크를 **사각형**(max(|x|,|y|))으로 잡으면 헤일로가 캔버스를 채울 때 그 사각 자국이
      그대로 드러난다(실기에서 각진 얼룩으로 보였다). 원형으로 감싼다. */
   float vig  = smoothstep(1.02, 0.56, length(uv)*2.0);
-  float live  = mix(1.0, fl, u_wt.z);
+  float live  = mix(1.0, mix(1.0, fl, 0.22 + 0.78*up), u_wt.z);   // 밑동은 안 흔들린다
   float bornK = 0.20 + 0.80*u_born;               // 흩어져 있을 땐 옅지만 **보이기는 해야 한다**
   float touchK = (1.0 + tk*0.62) * (1.0 + u_ex*0.28);   // 모이면 진해지고, 들뜨면 더 환해진다
   gl_FragColor = vec4(outc, clamp(sum*u_lum*live*vig*bornK*touchK, 0.0, 1.0));
@@ -3290,6 +3302,12 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
          스프링으로 바꾸면 지나쳤다 되돌아오며 두어 번 출렁인다. 그게 푸딩이다.
          ⚠ orb 를 0~1 로 자르면 오버슈트가 죽는다. 살짝 넘치게 두되(-0.18~1.28)
             그 이상은 막는다 — 넘치면 반경 식이 음수 쪽으로 간다. */
+      /* ── 눈 깜빡임 ─────────────────────────────────────────────────────
+         창업자: "얼굴은 계속 움직임이 있어야 함." 두리번거림만으로는 **밀랍인형**이다 —
+         살아 있다는 신호 중 사람이 가장 먼저 읽는 건 깜빡임이다.
+         사람은 2~6초에 한 번, 100~150ms 동안 감는다. 가끔 두 번 연달아 감는 것까지 넣는다
+         — 규칙적으로 감으면 그건 또 기계다. */
+      let blinkNext = 1400 + Math.random() * 2600, blinkT = -1, blinkDouble = false;
       let orb = 0, orbV = 0, orbLast = 0, antUntil = 0, last = performance.now();
       const T0 = performance.now();
       const draw = () => {
@@ -3388,13 +3406,30 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
              이건 살아있는 생명체처럼 왔다갔다 하면 좋겠어."
              주기를 서로 나눠떨어지지 않게 잡아야 **왕복이 아니라 두리번거림**이 된다.
              손끝을 누르면 그쪽으로 돌아본다 — 시선이 손을 따라가는 게 「보고 있다」의 전부다. */
-          let yaw = Math.sin(tt * 0.31) * 0.20 + Math.sin(tt * 0.53 + 1.7) * 0.09;
-          let pitch = Math.sin(tt * 0.24 + 0.9) * 0.11 + Math.sin(tt * 0.41) * 0.05;
+          /* ⚠ 진폭을 키웠다(2026-08-29). 예전 값(yaw 0.20)은 눈이 화면에서 **2px 남짓** 움직여
+             사실상 정지로 보였다 — 눈이 3% 로 작아지면서 더 안 보인다. 원근이 보이려면
+             고개가 실제로 돌아야 한다. 주기는 여전히 서로 나눠떨어지지 않게 둔다. */
+          let yaw = Math.sin(tt * 0.31) * 0.40 + Math.sin(tt * 0.53 + 1.7) * 0.17;
+          let pitch = Math.sin(tt * 0.24 + 0.9) * 0.22 + Math.sin(tt * 0.41) * 0.10;
+          const roll = Math.sin(tt * 0.19 + 2.2) * 0.085 + Math.sin(tt * 0.37 + 0.4) * 0.030;
           if (touch.amt > 0.01) {
             yaw += touch.x * 1.5 * touch.amt;
             pitch += -touch.y * 1.0 * touch.amt;
           }
           /* 응축·모임이면 오라가 작아지므로 얼굴도 같이 준다. 점으로 모이면 사라진다. */
+          /* 깜빡임 진행 — 감았다 뜨는 건 대칭이 아니다. 감기는 빠르고 뜨기는 느리다. */
+          const dms = dt * 1000;
+          if (blinkT < 0) blinkNext -= dms;
+          if (blinkT < 0 && blinkNext <= 0) { blinkT = 0; blinkDouble = Math.random() < 0.22; }
+          let blink = 0;
+          if (blinkT >= 0) {
+            blinkT += dms;
+            const D = blinkDouble ? 420 : 150;
+            const u = blinkT / D;
+            if (u >= 1) { blinkT = -1; blinkNext = 1400 + Math.random() * 2600; }
+            else if (blinkDouble) blink = Math.abs(Math.sin(u * Math.PI * 2));
+            else blink = u < 0.4 ? u / 0.4 : 1 - (u - 0.4) / 0.6;
+          }
           const foldV = Math.max(Math.min(Math.max(orb, 0), 1), touch.amt);
           const k = (1 - 0.35 * Math.min(Math.max(orb, 0), 1)) * (1 - touch.amt);
           if (k > 0.05) {
@@ -3410,7 +3445,7 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
               mouth: P.mouth, blush: P.blush,
               cy: P.cy, gap: P.gap * k, eyeSz: P.eyeSz * k,
               mSz: P.mSz * k, mCy: P.cy + (P.mCy - P.cy) * k,
-              yaw, pitch,
+              yaw, pitch, roll, blink,
             });
             g2.restore();
           }

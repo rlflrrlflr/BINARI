@@ -96,7 +96,7 @@ export function drawMouth(x, kind, cx, cy, sz, ink) {
   if (kind === "none") return;
   x.save();
   x.strokeStyle = ink; x.fillStyle = ink; x.lineCap = "round"; x.lineJoin = "round";
-  x.lineWidth = sz * 0.16; x.beginPath();
+  x.lineWidth = sz * 0.22; x.beginPath();
   const w = sz * 1.05;
   if (kind === "squig") { x.moveTo(cx - w / 2, cy);
     for (let i = 0; i <= 24; i++) { const t = i / 24;
@@ -112,11 +112,15 @@ export function drawMouth(x, kind, cx, cy, sz, ink) {
 }
 
 /* 볼터치 — 인스타툰 9건 중 5건이 쓴다(눈썹 3건보다 흔하다) */
-export function drawBlush(x, on, cx, cy, gap, sz) {
+/* pts 를 주면 **그 자리에** 찍는다 — 얼굴이 돌 때 홍조만 제자리에 남으면 붙여 놓은 표가 난다.
+   안 주면 예전처럼 gap 으로 계산한다(보드의 옛 그림이 그 경로를 쓴다). */
+export function drawBlush(x, on, cx, cy, gap, sz, pts) {
   if (!on) return;
   x.save(); x.fillStyle = "rgba(238,132,132,.34)";
-  [cx - gap * 1.55, cx + gap * 1.55].forEach((ex) => {
-    x.beginPath(); x.ellipse(ex, cy + sz * 1.5, sz * 1.5, sz, 0, 0, 7); x.fill(); });
+  const P = pts || [{ px: cx - gap * 1.55, py: cy + sz * 1.5, s: 1 },
+                    { px: cx + gap * 1.55, py: cy + sz * 1.5, s: 1 }];
+  P.forEach((q) => { x.beginPath();
+    x.ellipse(q.px, q.py, sz * 1.5 * (q.s == null ? 1 : q.s), sz, 0, 0, 7); x.fill(); });
   x.restore();
 }
 
@@ -129,13 +133,16 @@ export const FACE_PRESETS = {
   /* ⚠ cy 를 0.50(캔버스 중앙)으로 두면 **눈이 코어보다 0.07 아래**에 온다(실측).
      오라의 밝은 중심은 캔버스 정중앙이 아니다 — 반사광 층(c0)이 위로 치우쳐 있고
      불꽃 형태가 위로 뻗기 때문이다. 그만큼 올려 잡는다. */
-  a: { name: "A · 아주 작은 점 (22.9만형)", eyeSz: 0.019, gap: 0.072, cy: 0.433, blush: true,
+  /* ⚠ 눈 크기·간격은 **넷이 같다**(창업자 2026-08-29 보드에서 직접 고름: "눈크기 3%, 간격 26%").
+     프리셋이 가르는 건 이제 **눈 모양·입·홍조**뿐이다 — 기하는 고정값이다.
+     eyeSz 는 보드의 「점 지름」의 절반이다(0.030/2 = 0.015). gap 도 같은 관계(0.260/2). */
+  a: { name: "A · 아주 작은 점 (22.9만형)", eyeSz: 0.015, gap: 0.130, cy: 0.433, blush: true,
        mouth: "smile", mSz: 0.050, mCy: 0.493 },
-  b: { name: "B · 작은 점 (8.8만형)",        eyeSz: 0.027, gap: 0.066, cy: 0.431, blush: true,
+  b: { name: "B · 작은 점 (8.8만형)",        eyeSz: 0.015, gap: 0.130, cy: 0.431, blush: true,
        mouth: "wave",  mSz: 0.060, mCy: 0.491 },
-  c: { name: "C · 굳은 눈 (5.8만형)",        eyeSz: 0.025, gap: 0.062, cy: 0.429, blush: false,
+  c: { name: "C · 굳은 눈 (5.8만형)",        eyeSz: 0.015, gap: 0.130, cy: 0.429, blush: false,
        mouth: "flat",  mSz: 0.056, mCy: 0.489 },
-  d: { name: "D · 반짝임 (3.8만형)",         eyeSz: 0.021, gap: 0.078, cy: 0.435, blush: true,
+  d: { name: "D · 반짝임 (3.8만형)",         eyeSz: 0.015, gap: 0.130, cy: 0.435, blush: true,
        mouth: "squig", mSz: 0.052, mCy: 0.497 },
   /* ⚠ E(흰자)는 **뺐다**(창업자 2026-08-29: "흰자 있으니까 이상하다 e 제외하자").
      밝은 미색 오라 위에서 흰자는 배경과 붙어 눈이 뜬 것처럼 보인다 —
@@ -171,7 +178,7 @@ export function project(u, v, yaw, pitch) {
 export function drawFace(x, S, opt) {
   const P = Object.assign({ eye: "dot", mouth: "smile", cy: 0.50, gap: 0.115,
     eyeSz: 0.022, mSz: 0.055, mCy: 0.565, blush: true, ink: "#191308",
-    yaw: 0, pitch: 0 }, opt);
+    yaw: 0, pitch: 0, roll: 0, blink: 0 }, opt);
   const { yaw, pitch } = P;
   /* 얼굴이 놓인 구의 반지름(화면 단위). 이 값이 곧 **원근의 세기**다 —
      크면 조금만 돌려도 크게 미끄러지고, 작으면 거의 평면이 된다. */
@@ -182,11 +189,18 @@ export function drawFace(x, S, opt) {
   /* ⚠ 투영값을 그대로 쓰면 **얼굴 전체가 회전 방향으로 밀려난다** — 구가 도니 앞면도 옮겨간다.
      실기에서 얼굴이 오라 중심을 벗어나 가장자리에 붙었다. 카툰의 머리는 **제자리에서 돌기만** 한다.
      그래서 얼굴 정중앙(u=v=0)의 이동량을 빼서 중심을 고정하고, 회전은 요소 배치에만 남긴다. */
+  /* ── 고개 기울임(roll) ─────────────────────────────────────────────
+     yaw·pitch 만으로는 **좌우·상하 왕복**이라 기계처럼 보인다. 살아 있는 머리는 기운다.
+     회전은 얼굴 중심을 축으로 걸고, 배치는 그대로 두어 원근 계산과 섞이지 않게 한다. */
+  if (P.roll) { x.save(); x.translate(cx, cyPx); x.rotate(P.roll); x.translate(-cx, -cyPx); }
   const c0 = project(0, 0, yaw, pitch);
   const put = (u, v) => { const q = project(u, v, yaw, pitch);
     return { px: cx + (q.x - c0.x) * RAD, py: cyPx + (q.y - c0.y) * RAD, z: q.z }; };
 
-  drawBlush(x, P.blush, cx, cyPx, S * P.gap, S * P.eyeSz);
+  /* 홍조도 같은 구 위에 있다. 눈보다 조금 바깥·조금 아래. */
+  drawBlush(x, P.blush, cx, cyPx, S * P.gap, S * P.eyeSz,
+    [-1, 1].map((sd) => { const q = put(sd * eu * 1.32, 0.42 * eu);
+      return { px: q.px, py: q.py, s: Math.max(0.30, Math.abs(q.z)) }; }));
 
   /* 눈 둘을 따로 투영한다 — **각자 다른 z 를 갖는 게 원근의 전부다** */
   [[-eu, -1], [eu, 1]].forEach(([u, side]) => {
@@ -196,7 +210,9 @@ export function drawFace(x, S, opt) {
     x.save();
     x.translate(e.px, e.py);
     /* 가로로 눌린다 — 구 표면이 기울어질수록 정면 투영이 좁아진다 */
-    x.scale(Math.max(0.28, Math.abs(e.z)) * 1.0 + 0.0, 1);
+    /* 세로는 **깜빡임**이 먹는다 — 감으면 점이 납작한 선이 된다.
+       눈 종류를 갈아끼우지 않고 눌러서 감기므로 어떤 모양에도 그대로 붙는다. */
+    x.scale(Math.max(0.28, Math.abs(e.z)), Math.max(0.06, 1 - P.blink));
     x.translate(-e.px, -e.py);
     drawEyes(x, P.eye, e.px, e.py, 0, S * P.eyeSz * near, P.ink,
       { x: yaw * 1.6, y: pitch * 1.6 });
@@ -212,4 +228,5 @@ export function drawFace(x, S, opt) {
     drawMouth(x, P.mouth, m.px, m.py, S * P.mSz * near, P.ink);
     x.restore();
   }
+  if (P.roll) x.restore();
 }
