@@ -19,6 +19,15 @@ const SRC = readFileSync(resolve(APPDIR, "src/App.jsx"), "utf8");
 const { sliceConst } = await import("./lib/extract.mjs");
 const FIELD_FRAG = sliceConst(SRC, "FIELD_FRAG");
 const EL_COLOR = new Function("return " + SRC.match(/const EL_COLOR = (\{[\s\S]*?\});/)[1])();
+/* ⚠ 얼굴 그리기는 **앱과 같은 파일**(src/lib/face.js)을 그대로 읽어 넣는다.
+   보드가 제 함수를 따로 들고 있으면 앱과 갈린다 — 셰이더에서 두 번 겪은 사고다. */
+/* ⚠ 보드에는 캘시퍼 계열(흰자) 그림 함수가 **같은 이름으로 이미 있다.** 그대로 넣으면
+   나중에 정의된 쪽이 이기고 시그니처가 달라 **아무것도 안 그려진다**(실제로 그랬다).
+   두 체계를 다 남기려면 이름을 갈라야 한다 — face.js 쪽에 fx 접두어를 붙인다. */
+const FACE_JS = readFileSync(resolve(APPDIR, "src/lib/face.js"), "utf8")
+  .replace(/^export /gm, "").replace(/^import .*$/gm, "")
+  .replace(/\bdrawEyes\b/g, "fxEyes").replace(/\bdrawMouth\b/g, "fxMouth")
+  .replace(/\bdrawBlush\b/g, "fxBlush");
 
 /* 밝은 판 보정·헤일로 색은 앱과 같은 규칙(HOLO_FIX·HOLO_SAENG·mixHex) */
 const FIX = { 금: ["#5b76b8", "#8fb0e6", "#1d2436"] };
@@ -126,6 +135,20 @@ const HTML = `<!doctype html><meta charset="utf-8">
   <h3 class="sub">눈 높이 — 위에서</h3><div class="row" id="gCy"></div>
   <h3 class="sub">입 크기와 눈–입 거리</h3><div class="row" id="gMouth"></div>
 
+  <h2>눈만으로 표정을 낸다 — 눈썹 없이</h2>
+  <p class="lead">창업자 제안(2026-08-29): "눈썹 없이 눈 만으로 표정을 드러낼 수 있을 거 같아."
+  9건 집계에서 <b>눈썹은 3/9 로 소수파</b>였으니 방향이 맞다. 그럼 감정은 어디서 나오나 —
+  <b>눈 모양 자체가 바뀐다.</b> 아래 열 가지가 그 어휘다. 입은 전부 같게 두었다(미소).</p>
+  <div class="row" id="gEyeMood"></div>
+  <p class="lead" style="margin-top:6px">오늘 상태 10종(십성)에 하나씩 붙였다 —
+  비견 평온 · 겁재 놀람 · 식신 기쁨 · 상관 들뜸 · 정재 굳음 · 편재 곁눈 · 정관 감음 · 편관 시무룩 · 정인 기쁨 · 편인 졸림.
+  <b>눈은 오늘, 입도 오늘</b>이 된다(전엔 입만 오늘이었다).</p>
+
+  <h2>앱에 얹은 넷 — <code>?skin=holo&amp;face=a|b|c|d</code></h2>
+  <p class="lead">인기 상위 넷의 값을 옮긴 프리셋이다. <b>이건 앱에 실제로 들어갔다</b> —
+  주소에 <code>&amp;face=a</code> 를 붙이면 보인다. 안 붙이면 얼굴 없는 지금 화면 그대로다.</p>
+  <div class="row" id="gPreset"></div>
+
   <h2>실물을 보고 — 9건 집계</h2>
   <p class="lead">창업자가 보낸 인스타툰 캡처 9건. <b>수치는 육안 추정</b>이다 — 픽셀로 재지 않았다.</p>
   <table class="num"><tbody>
@@ -164,6 +187,7 @@ const HTML = `<!doctype html><meta charset="utf-8">
   <p class="lead" style="margin-top:26px">생성: <code>cd app &amp;&amp; node tools/build-face-mock.mjs</code></p>
 </div>
 <script>
+${FACE_JS}
 const DATA=${JSON.stringify(DATA)};
 const FRAG=${JSON.stringify(FIELD_FRAG)};
 const VERT="attribute vec2 a;void main(){gl_Position=vec4(a,0.,1.);}";
@@ -340,6 +364,23 @@ tuned(gSchool,{eye:"dot",sz:0.075,gap:0.200,cy:0.520,mcy:0.620,msz:0.070,brow:"a
 tuned(gSchool,{eye:"dot",sz:0.030,gap:0.235,cy:0.500,mcy:0.585,msz:0.058,blush:true},"상위 넷을 따라");
 [["none","없음"],["flat","일자"],["angry","치켜"],["sad","내림"],["up","호"]]
   .forEach(([b,l])=>tuned(gBrow,{eye:"dot",sz:0.075,gap:0.200,cy:0.520,mcy:0.620,msz:0.070,brow:b},l,b==="none"));
+
+/* ── 눈만으로 표정 · 앱 프리셋 — **face.js 의 drawFace 를 그대로 쓴다** ── */
+function faceCell(parent, opt, label, note){
+  const d=document.createElement("div"); d.className="cell";
+  const c=document.createElement("canvas"); const S=CELL*2;
+  c.width=c.height=S; c.style.cssText="width:"+CELL+"px;height:"+CELL+"px;display:block;border-radius:12px;background:#d3cfc4";
+  d.appendChild(c);
+  const x=c.getContext("2d");
+  x.fillStyle="rgba(255,253,246,.55)"; x.beginPath(); x.arc(S/2,S/2,S*0.30,0,7); x.fill();
+  drawFace(x,S,Object.assign({cy:0.50,mCy:0.575},opt));
+  d.insertAdjacentHTML("beforeend",'<p class="nm">'+label+'</p>'+(note?'<p class="ds">'+note+'</p>':''));
+  parent.appendChild(d);
+}
+EYE_KINDS.forEach(([k,nm,ds])=>faceCell(gEyeMood,{eye:k,mouth:"smile",eyeSz:0.030,gap:0.100},nm,ds));
+Object.entries(FACE_PRESETS).forEach(([k,P])=>
+  faceCell(gPreset,{eye:"dot",mouth:P.mouth,blush:P.blush,eyeSz:P.eyeSz*2.6,gap:P.gap*2.6,
+                    cy:0.50,mSz:P.mSz*2.6,mCy:0.50+(P.mCy-P.cy)*2.6},P.name,"?face="+k));
 
 DATA.EYES.forEach(([k,nm,ds])=>cellWith(eyes,2,k,"flat",nm,ds,true));
 DATA.MOUTHS.forEach(([k,nm,ds])=>cellWith(mouths,2,"arc",k,nm,ds,true));

@@ -4,6 +4,8 @@ import { readMatch, matchAxes, roleOf, ROLE } from "./lib/match.js";
 /* 오라 스펙 — 레퍼런스를 값으로 적은 단일 진실 원천. 셰이더 상수를 코드에 안 박는다.
    시제품 보드(tools/build-holo-field.mjs)도 **같은 파일**을 읽는다 — 보드와 앱이 어긋날 수 없다. */
 import AURA from "./lib/aura-spec.json";
+/* 얼굴 — 오라 위에 얹는 2D 층. 시안 보드와 **같은 모듈**을 쓴다(두 벌로 갈리지 않게). */
+import { drawFace, FACE_PRESETS, MOOD_EYE } from "./lib/face.js";
 
 /* ───── 계측(PostHog) — 휴면-준비: VITE_POSTHOG_KEY 없으면 완전 무동작 ───── */
 const AKEY = import.meta.env.VITE_POSTHOG_KEY;
@@ -2863,6 +2865,9 @@ const guardianSize = (vp) => (SKIN === "holo"
      **숨긴 동안에도 회귀가 계속 잡힌다.** 안 그러면 122항이 통째로 잠든다. */
 const MSR_FREE = (() => { try { return /[?&]msr=1(&|$)/.test(window.location.search); } catch (_) { return false; } })();
 const SKIN = (() => { try { return /[?&]skin=holo(&|$)/.test(window.location.search) ? "holo" : ""; } catch (_) { return ""; } })();
+/* 얼굴 A/B — `?face=a|b|c|d`. 없으면 얼굴을 안 그린다(지금까지의 화면 그대로).
+   창업자가 "상위 4개를 앱에 얹어서 평가하겠다"고 해서 **끼웠다 뺐다 되게** 둔다. */
+const FACE = (() => { try { const m = /[?&]face=([abcd])(&|$)/.exec(window.location.search); return m ? m[1] : ""; } catch (_) { return ""; } })();
 
 /* ── 오늘의 상태 — **운세 방법론에서 나온다. 지어내지 않는다** ─────────────
    축 둘만 쓴다(새 축을 늘리지 않는다 — 설계 헌장 §판결문 형식 보존):
@@ -3182,6 +3187,7 @@ const HOLO_MOON = ["#46557f", "#93a6d0", "#b7a9d6"];
 
 function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFail }) {
   const ref = useRef(null);
+  const faceRef = useRef(null);
   useEffect(() => {
     const cv = ref.current; if (!cv) return;
     let gl = null, raf = 0, dead = false;
@@ -3352,6 +3358,41 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
         gl.uniform1f(U.u_tailK, Math.min(1, spd * 0.55));
         gl.uniform2fv(U.u_trail, new Float32Array(trail.flat()));
         gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+        /* ── 얼굴 (?face=a|b|c|d) ─────────────────────────────────────────
+           **오라를 따라다녀야 한다.** 위습은 드리프트로 떠다니고 손끝으로 옮겨가며
+           응축하면 작아지므로, 얼굴이 캔버스 한가운데 고정되면 곧바로 어긋나 보인다.
+           셰이더가 쓰는 좌표를 여기서 같은 식으로 다시 계산해 얹는다.
+           ⚠ 셰이더의 `p = (uv - drift)*2.35` 와 뒤집힌 관계다 — 화면 y 는 아래로 증가한다. */
+        if (FACE && faceRef.current) {
+          const fx = faceRef.current;
+          if (fx.width !== S) { fx.width = S; fx.height = S; }
+          const g2 = fx.getContext("2d");
+          g2.clearRect(0, 0, S, S);
+          const tt = ((now - T0) / 1000) * (1.35 * (mood ? mood.sp : 1));
+          const dxu = Math.sin(tt * 0.55) * 0.075 + Math.sin(tt * 0.93 + 1.3) * 0.030;
+          const dyu = Math.cos(tt * 0.47) * 0.088 + Math.sin(tt * 0.81 + 0.6) * 0.034;
+          const P = FACE_PRESETS[FACE];
+          /* 응축·모임이면 오라가 작아지므로 얼굴도 같이 준다. 점으로 모이면 사라진다. */
+          const foldV = Math.max(Math.min(Math.max(orb, 0), 1), touch.amt);
+          const k = (1 - 0.35 * Math.min(Math.max(orb, 0), 1)) * (1 - touch.amt);
+          if (k > 0.05) {
+            g2.globalAlpha = Math.min(1, k * 1.4) * (0.25 + 0.75 * bornV);
+            /* ⚠ 손끝 좌표를 직접 쓰면 안 된다 — 위습은 **스프링으로 뒤따라오므로**
+               손끝과 실제 위치가 다르다. 셰이더가 쓰는 `u_wisp` 를 그대로 역산한다.
+               셰이더의 uv 는 위가 +y 이고 화면은 아래가 +y 라 부호가 뒤집힌다. */
+            const cxr = 0.5 + dxu + wisp.x / 2.35;
+            const cyr = 0.5 - dyu - wisp.y / 2.35;
+            g2.save(); g2.translate((cxr - 0.5) * S, (cyr - 0.5) * S);
+            drawFace(g2, S, {
+              eye: (mood && MOOD_EYE[mood.ss]) || "dot",
+              mouth: P.mouth, blush: P.blush,
+              cy: P.cy, gap: P.gap * k, eyeSz: P.eyeSz * k,
+              mSz: P.mSz * k, mCy: P.cy + (P.mCy - P.cy) * k,
+            });
+            g2.restore();
+          }
+        }
       };
       draw();
       return () => {
@@ -3372,8 +3413,16 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
   }, [saju, mood, size, scatter]);
   /* ⚠ `touchAction:"none"` 이 없으면 **폰에서 드래그가 스크롤로 새어 나간다**(실기 제보 2026-08-28).
      입자 엔진(GuardianCanvasGL)은 처음부터 이걸 걸고 있었는데 색장에만 빠져 있었다. */
-  return <canvas ref={ref} className="gcv" aria-hidden="true"
+  const cv = <canvas ref={ref} className="gcv" aria-hidden="true"
     style={{ width: size, height: size, touchAction: "none", cursor: "pointer" }} />;
+  if (!FACE) return cv;
+  /* 얼굴은 **별도 2D 캔버스**로 겹친다 — 셰이더에 넣으면 선이 뭉개지고, 오라를 건드리게 된다.
+     포인터는 아래 오라 캔버스가 받아야 하므로 `pointerEvents:none`. */
+  return (<span style={{ position: "relative", display: "block", width: size, height: size }}>
+    {cv}
+    <canvas ref={faceRef} aria-hidden="true"
+      style={{ position: "absolute", left: 0, top: 0, width: size, height: size, pointerEvents: "none" }} />
+  </span>);
 }
 
 function GuardianCanvasGL({ saju, zo, num, moon, birth, agitateRef, reactRef, restRef, broodRef, orbRef, gyeotRef, popRef, mood, size = 340, onFail }) {
