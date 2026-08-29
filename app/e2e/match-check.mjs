@@ -6,6 +6,7 @@
    ④ 헤어지라고 말하지 않는가
    실행: node app/e2e/match-check.mjs */
 import { readMatch } from "../src/lib/match.js";
+import { readFileSync } from "fs";
 
 const R = []; const ck = (n, p, g = "") => { R.push(p); console.log(`${p ? "PASS" : "FAIL"} — ${n}${g ? " · " + g : ""}`); };
 const st = (x) => String(x).replace(/<[^>]+>/g, "");
@@ -254,6 +255,46 @@ ck("시(時)를 몰라도 죽지 않는다",
   ck("⑩ 덧줄이 머리글과 같은 말을 반복하지 않는다",
      kinds.머리글이내부갈림 === 0 || kinds.덧줄 < 3000, JSON.stringify(kinds));
   ck("⑩ '동아시아는 맞다 하고 동아시아는 갈린다' 같은 문장이 안 나온다", !kinds.버그, `${kinds.버그 || 0}건`);
+}
+
+/* ⑪ 문구가 엔진보다 더 말하지 않는가 (2026-08-29 신설)
+   문장 감사가 잡은 **확정 거짓 둘**을 무는 자리다. 여태 이 둘을 무는 검사가 **0건**이었고,
+   그래서 「기질이 다름」을 「잘 맞아」로 말하는 상태가 오래 살아 있었다.
+   ⚠ 값이 아니라 **성질**을 본다 — 문턱 숫자를 바꿔도 거짓이 되살아나면 여기서 걸린다. */
+{
+  const src = readFileSync(new URL("../src/lib/match.js", import.meta.url), "utf8");
+
+  /* ①가나 5점 = 기질이 **다름**. 그게 「잘 맞아」 목록에 들어가면 안 된다.
+     sky.js: 같으면 6 / 한쪽이 인간족이면 5 / 그 외 0 → 5/6=0.833 이 옛 문턱(0.8)을 통과했다. */
+  ck("⑪ 高 판정이 만점만 센다(비율 문턱이 아니다)",
+     /akHigh = akRows\.filter\(\(x\) => x\.sc === x\.max\)/.test(src),
+     /akHigh = akRows\.filter\(\(x\) => x\.ratio/.test(src) ? "비율 문턱이 살아 있다" : "sc===max");
+
+  /* ②바르나는 `VARNA[rA] >= VARNA[rB]` 라 **동급도 1점**이다.
+     1점을 「갈렸다」고 말하면 동급(전수 40.0%)에게 거짓이 된다. */
+  ck("⑪ 바르나 1점을 '갈렸다'고 말하지 않는다",
+     !/주도권이 자연스럽게 갈려/.test(src),
+     /주도권으로 안 부딪히는/.test(src) ? "안 부딪히는 결" : "문구 미확인");
+
+  /* 실제 산출물에서도 확인 — 소스만 보면 다른 곳에서 되살아날 수 있다 */
+  let hitGana = 0, hitVarna = 0, n = 0;
+  for (let dG = 0; dG < 10; dG++) for (let dJ = 0; dJ < 12; dJ++) {
+    const rr = readMatch({ a: A, b: P(dG, dJ, 1996, (dJ % 12) + 1, (dG % 27) + 1, 10) });
+    const all = st(JSON.stringify(rr));
+    n++;
+    /* 「…가 잘 맞아」 목록에 든 항목은 전부 만점이어야 한다 */
+    const ak = rr.rows && rr.rows.find((x) => /여덟 항목|무엇이 맞/.test(String(x.from || x.ask || "")));
+    if (ak && /잘 맞아/.test(st(ak.w || ""))) {
+      /* ⚠ 「…가 잘 맞아. 대신 …이 낮아」 한 문장에 高·低 목록이 **둘 다** 들어 있다.
+         「잘 맞아」 앞부분만 잘라야 한다 — 통째로 훑으면 낮은 항목까지 잡혀 검사가 늘 실패한다. */
+      const hi = st(ak.w).split("잘 맞아")[0];
+      const named = (rr.akRows || []).filter((x) => hi.includes(x.label));
+      if (named.some((x) => x.sc !== x.max)) hitGana++;
+    }
+    if (/주도권이 자연스럽게 갈려/.test(all)) hitVarna++;
+  }
+  ck("⑪ 산출물에서도 만점 아닌 항목이 '잘 맞아'에 안 든다", hitGana === 0, `${hitGana}/${n}`);
+  ck("⑪ 산출물에서도 '주도권이 갈려'가 안 나온다", hitVarna === 0, `${hitVarna}/${n}`);
 }
 
 const pass = R.filter(Boolean).length;
