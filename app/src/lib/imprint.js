@@ -642,7 +642,11 @@ export function readImprint({ saju, ladder, birth, sex, now = new Date(), lat = 
     if (sunH === h) return { w: `<b>서양 셈도 여기를 네 인생의 중심으로 봐.</b> 두 셈이 겹쳐 — 이 자리는 무겁게 읽어야 해.`, n: fn(`태양이 ${h}하우스(${HOUSE_KO[h]}). 동아시아·서양 두 축이 같은 영역을 가리킨다.`) };
     if (moonH0 === h) return { w: `<b>서양 셈은 여기를 네 마음이 쉬는 곳으로 봐.</b> 잘하는 자리가 아니라 <b>돌아오는 자리</b>라는 뜻이야.`, n: fn(`달이 ${h}하우스(${HOUSE_KO[h]}).`) };
     if (pofH0 === h) return { w: `<b>서양 셈은 여기를 복이 도는 자리로 봐.</b> 애쓴 것보다 더 돌아오는 영역이야.`, n: fn(`파트오브포춘이 ${h}하우스(${HOUSE_KO[h]}).`) };
-    return { w: `서양 셈으로는 이 자리가 조용해. <b>사주가 더 무겁게 보는 영역</b>이라는 뜻이야 — 여기 적힌 건 동아시아 쪽 판단이 주도한 거야.`, n: fn(`${h}하우스(${HOUSE_KO[h]})에 해·달·파트 어느 것도 없다. 두 축이 갈리는 자리라 그렇게 표시했다.`) };
+    /* ⚠ **여기가 아홉 중 여섯 이상을 차지한다** — 해·달·파트는 셋뿐이라 나머지는 전부 이 분기로 떨어진다.
+       예전엔 그 여섯이 **토씨까지 같은 문장**이었다(가상 명식 둘 다 9중 7이 동일).
+       같은 파일이 이미 같은 사고를 한 번 고쳤다 — *"같은 문장이 다섯 번 나오면 조립품인 걸 즉시 안다."*
+       그래서 **하우스 이름을 불러 자리마다 다르게 만든다.** 새 계산은 0이다 — `HOUSE_KO[h]` 는 이미 있다. */
+    return { w: `서양 셈은 이 자리를 <b>${HOUSE_KO[h]}</b>의 자리로 불러. 그런데 네 해도 달도 복도 여기엔 없어 — <b>사주가 더 무겁게 보는 영역</b>이라는 뜻이고, 여기 적힌 건 동아시아 쪽 판단이 주도한 거야.`, n: fn(`${h}하우스(${HOUSE_KO[h]})에 해·달·파트 어느 것도 없다. 두 축이 갈리는 자리라 그렇게 표시했다.`) };
   };
   const D = [];
   const putD = (k, t, a, b2, c, d, n) => D.push({ k, t, steps: [["새겨질 때", a], ["자라면서", b2], ["지금", c], ["앞으로", d]], n, west: westLine(k) });
@@ -965,7 +969,7 @@ export function readImprint({ saju, ladder, birth, sex, now = new Date(), lat = 
     putS("동아시아 소리", "여덟 글자와 소리가 같은 말을 하나", ny,
       `태어난 해의 소리는 <b>${ny}</b>, ${EL_KO2[nayinEl]}의 기운이야. ` +
       `${nayinEl === me ? `여덟 글자와 <b>같은 ${EL_KO2[me]}</b>이라 결이 한 방향으로 모여. 네 성질이 뚜렷한 이유야.`
-        : `여덟 글자는 <b>${EL_KO2[me]}</b>인데 소리는 <b>${EL_KO2[nayinEl]}</b>야. <b>같은 사주 안에서도 두 층이 갈려</b> — 사람들이 널 한 마디로 못 부르는 이유가 여기 있어.`}`,
+        : `여덟 글자는 <b>${EL_KO2[me]}</b>인데 소리는 <b>${EL_KO2[nayinEl]}</b>${jong(EL_KO2[nayinEl]) ? "이야" : "야"}. <b>같은 사주 안에서도 두 층이 갈려</b> — 사람들이 널 한 마디로 못 부르는 이유가 여기 있어.`}`,
       `납음 ${ny}(${nayinEl}) vs 일간 ${GANK[idx.dG]}(${me}). 이름에 오행이 들어 있어 <b>변환이 없다</b>.`);
   }
 
@@ -976,7 +980,7 @@ export function readImprint({ saju, ladder, birth, sex, now = new Date(), lat = 
   const clash = [];
   if (split) clash.push({ t: "겉과 속", w: `여덟 글자는 너를 <b>${SURFACE[me].w}</b>이라고 해. 그런데 서양 해자리(${sun})는 <b>${INNER[innerEl].w}</b>이라고 해. <b>둘이 안 맞아.</b> 사주만 보면 네 겉모습만 읽고 끝나. 남들이 아는 너와 네가 아는 네가 다른 이유가 여기 있어.`,
     n: fn(`일간 ${me} vs 서양 ${sun}(${ZO_EL[sun]}) — 오행과 사원소가 다른 방향을 가리킨다.`) });
-  if (nayinEl && nayinEl !== me) clash.push({ t: "글자와 소리", w: `같은 사주 안에서도 갈려. 여덟 글자는 <b>${EL_KO2[me]}</b>인데 태어난 해의 소리는 <b>${EL_KO2[nayinEl]}</b>야. 요즘 사주 풀이는 대개 소리를 안 봐 — 그래서 <b>이 층이 통째로 빠진 채</b> 읽히고 있어.`,
+  if (nayinEl && nayinEl !== me) clash.push({ t: "글자와 소리", w: `같은 사주 안에서도 갈려. 여덟 글자는 <b>${EL_KO2[me]}</b>인데 태어난 해의 소리는 <b>${EL_KO2[nayinEl]}</b>${jong(EL_KO2[nayinEl]) ? "이야" : "야"}. 요즘 사주 풀이는 대개 소리를 안 봐 — 그래서 <b>이 층이 통째로 빠진 채</b> 읽히고 있어.`,
     n: fn(`납음 ${nayin(+birth.y)}(${nayinEl}) vs 일간 ${me}.`) });
   if (onlyDasha.length) clash.push({ t: "시간의 마디", w: `사주는 열 해마다 균등하게 끊어. 인도 셈은 <b>120년을 아홉으로 불균등하게</b> 끊어. 그래서 <b>${onlyDasha.join("·")}세</b>는 사주로 보면 아무 일 없는 해인데 인도 셈으로는 판이 바뀌는 해야. <b>사주만 보면 이 해를 놓쳐.</b>`,
     n: fn(`다샤 전환 ${dashaTurn.join("·")}세 중 대운 전환과 3년 이상 떨어진 것: ${onlyDasha.join("·")}세.`) });

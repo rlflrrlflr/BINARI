@@ -112,7 +112,7 @@ const b = await chromium.launch((process.env.CHROME_PATH ? { executablePath: pro
   const dt = Date.now() - t0;
   ck("② 대기 문구 전환(약 5초 뒤)", dt >= 4000 && dt <= 7000, `${(dt / 1000).toFixed(1)}초`);
   await page.waitForSelector(".sealwrap", { state: "detached", timeout: 8000 });
-  ck("③ 로비 복귀 + 수호신 한마디", await page.getByText("기다림이 짙을수록 가야할길은 투명해진다.").isVisible().catch(() => false));
+  ck("③ 로비 복귀 + 수호신 한마디", await page.getByText("기다림이 짙을수록 가야 할 길은 투명해진다.").isVisible().catch(() => false));   // v168: 띄어쓰기만 고침(문장은 그대로)
   ck("④ 추가 질문 유도 문구", await page.getByText("지금 물어도 돼", { exact: false }).isVisible().catch(() => false));
   const evs = await page.evaluate(() => (window.__binariEvents || []).map((e) => e.ev));
   const seq = ["letter_clicked", "letter_intent_confirmed", "letter_seal_shown", "letter_wait_shown", "letter_lobby_returned"];

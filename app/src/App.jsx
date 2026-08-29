@@ -747,7 +747,7 @@ function lifeDomains(ctx) {
     const ent = Object.entries(ssn).sort((a, b) => b[1] - a[1]);
     const topV = ent.length ? ent[0][1] : 0;
     const tops = ent.filter(([, v]) => v === topV);
-    put("마음", "마음 — 어떤 사람으로 발급됐나", "m",
+    put("마음", "마음 — 어떤 사람으로 새겨졌나", "m",
       `여덟 자리 중 *너 자신을 가리키는 한 글자는 ${GAN[idx.dG]} — ${EL_KO[me]}*야. ${EL_READ[me]} 그리고 너를 받치는 글자가 ${G.비겁 + G.인성}개라 *${STR_KO[strength]}*으로 나와`,
       topV <= 1 || tops.length >= 4
         ? "기운이 *고르게 흩어져 있어* — 한쪽으로 쏠린 성격이 아니야. \"이런 사람\"이라고 한 단어로 안 묶이는 대신, 어느 판에 놓여도 그럭저럭 굴러가"
@@ -1258,11 +1258,11 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
       <p className="impp">{r.core.surface.d}.</p>
       <div className="impcore">
         <p className="impk2">그 런 데</p>
-        <p className="impcv">네 속은 다르다. <b>{r.core.inner.w}.</b><Ref n={r.core.n2} /></p>
+        <p className="impcv">그런데 네 속은 달라. <b>{r.core.inner.w}.</b><Ref n={r.core.n2} /></p>
         <p className="impcw">{r.core.inner.d}. {r.core.split ? "겉으로 보이는 모습과 속이 다른 사람이야." : "겉과 속이 같은 방향이라 오해는 덜 받아."}</p>
       </div>
       <CoreFig />
-      <p className="impp"><b>그리고 네게는 {r.core.block.t}{josa(r.core.block.t, "이", "가")} 얇아.</b><Ref n={r.core.n3} /> {r.core.block.s}. {r.core.block.w}</p>
+      <p className="impp"><b>그리고 네게 가장 얇은 건 이거야 — {r.core.block.s}.</b><Ref n={r.core.n3} /> {r.core.block.s}. {r.core.block.w}</p>
       {/* fix 는 imprint.js 에서 `<b>` 를 품고 온다(burn·d·w 와 같은 계열). `{}` 로 꽂으면 React 가
           이스케이프해서 **화면에 태그가 글자로 보인다** — 실제로 그랬다(값을 치른 문서에서, 가장 강조한 줄에서).
           같은 파일의 다른 필드는 전부 <H> 를 거치고 있었고 이 한 줄만 빠져 있었다. */}
@@ -1957,7 +1957,7 @@ function MyeongsikReportBody({ saju, sex, birth }) {
   useEffect(() => { track("report_shown", { sinsal: sins.length, top_ss: dist[0] ? dist[0][0] : null, strength, lack_el: lackEl.join("") || null, yong: ys.eokbu.join("") || null, yong_agree: ys.agree }); }, []);
   return (
     <div className="msr" onClick={(e) => e.stopPropagation()}>
-      <button className="msrbtn" onClick={() => setOpen(!open)}>{open ? "▴ 타고난 그릇 접기" : "▾ 타고난 그릇 — 명식 깊이 보기"}</button>
+      <button className="msrbtn" onClick={() => setOpen(!open)}>{open ? "▴ 타고난 그릇 접기" : "▾ 타고난 그릇 — 네 여덟 글자를 깊이 보기"}</button>
       {open && (
         <div className="msrbody">
           {/* v109: 명식 원판 — 지금까지 사주 여덟 글자와 오행 개수는 '온보딩 연출'에만 있었다.
@@ -2208,6 +2208,16 @@ const HEX_NAMES = { 천천:"중천건",천택:"천택리",천화:"천화동인",
   수천:"수천수",수택:"수택절",수화:"수화기제",수뢰:"수뢰둔",수풍:"수풍정",수수:"중수감",수산:"수산건",수지:"수지비",
   산천:"산천대축",산택:"산택손",산화:"산화비",산뢰:"산뢰이",산풍:"산풍고",산수:"산수몽",산산:"중산간",산지:"산지박",
   지천:"지천태",지택:"지택림",지화:"지화명이",지뢰:"지뢰복",지풍:"지풍승",지수:"지수사",지산:"지산겸",지지:"중지곤" };
+/* 삼괘를 우리말로 — 「중수감」은 유저가 못 읽는다. **이름을 빼지 않고 병기를 붙인다**
+   (§A 처방: 낯선 이름을 쉽게 만드는 게 아니라 이름 뒤를 채운다).
+   ⚠ 새 표가 아니다 — `TRI_EL` 의 여덟 글자를 그대로 옮긴 것뿐이라 어긋날 수 없다. */
+const TRI_KO = { 천: "하늘", 택: "못", 화: "불", 뢰: "우레", 풍: "바람", 수: "물", 산: "산", 지: "땅" };
+const hexPlain = (lines) => {
+  const bit = (v) => (v % 2 ? "1" : "0");
+  const lo = lines.slice(0, 3).map(bit).join(""), up = lines.slice(3).map(bit).join("");
+  const u = TRI_KO[TRI_EL[up]], d = TRI_KO[TRI_EL[lo]];
+  return u && d ? (u === d ? `위아래가 다 ${d}` : `위는 ${u}, 아래는 ${d}`) : "";
+};
 const hexName = (lines) => { // lines: 아래→위, 각 6~9
   const bit = (v) => (v % 2 ? "1" : "0");
   const lo = lines.slice(0, 3).map(bit).join(""), up = lines.slice(3).map(bit).join("");
@@ -4030,7 +4040,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v168 · 궁합은 무료다";
+const APP_VER = "v168.1 · 나머지 열여섯";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -4080,9 +4090,14 @@ const LETTER_SECTIONS = ["네가 망설인 자리", "여덟 글자가 이 일을
 const GAN_READ = { 갑: "곧게 자라려는 나무", 을: "휘어도 끝내 자라는 덩굴", 병: "한낮의 해", 정: "어둠에 켜 두는 등불", 무: "움직이지 않는 산", 기: "받아서 기르는 땅", 경: "아직 벼려지지 않은 쇠", 신: "이미 날이 선 칼", 임: "흐름이 큰 물", 계: "스며드는 비" };
 function letterPreview(saju, hesit) {
   const g = saju?.dayGan || "";
-  const head = GAN_READ[g] ? `네 일간은 ${g} — ${GAN_READ[g]}야.` : "네 여덟 글자를 먼저 펼쳤어.";
+  const head = GAN_READ[g] ? `네 여덟 글자 가운데 너 자신을 나타내는 글자는 ${g} — ${GAN_READ[g]}야.` : "네 여덟 글자를 먼저 펼쳤어.";
   const mid = hesit ? `네가 망설인 이유로 "${hesit}"를 골랐지. 거기부터 짚을게.` : "너는 이미 한쪽으로 기울어 있었어. 그런데도 물었지.";
-  return `${head} ${mid} 지표들은 갈라졌지만 갈라진 자리마다 같은 것을 가리키더라. 네가 두려워한 건 결과가 아니라, 되돌릴 수 없다는 사실이었어.`;
+  /* ⚠ 예전엔 「지표들은 갈라졌지만 갈라진 자리마다 같은 것을 가리키더라」였다 (2026-08-29 정정).
+     조건 없는 고정 문자열인데 실측 `verdict_shown` 240건 중 **만장일치가 119건(49.6%)** —
+     두 번에 한 번은 표를 눈앞에 띄워 놓고 "갈라졌다"고 말하고 있었다.
+     뒤 문장(「네가 두려워한 건 …」)도 뺐다 — 근거 없는 심중 단정이다.
+     ⚠ 시그니처는 그대로 둔다. `health-check.mjs` 가 `letterPreview(saju, hesit)` 를 문다. */
+  return `${head} ${mid} 아홉 하늘이 각자 다른 것을 봤어 — 그걸 한자리에 모아서 적을게.`;
 }
 /* v104: '받을게'(= 가짜 결제 완료) 이후의 대기 연출.
    서신은 아직 만들지 않는다. 대신 "주문했다 → 기다린다 → 로비로 돌아간다"까지를 실제로 태워 보고
@@ -4092,7 +4107,7 @@ const LETTER_SEAL_MS = 5000;    // 1단계: 봉인 연출
 const LETTER_WAIT_MS = 2000;    // 2단계: '곧 답변이 있을 것이다'
 const LETTER_SEAL_LINE = "수호신이 붓을 들었어";
 const LETTER_WAIT_LINE = "곧 답변이 있을 것이다.";
-const LETTER_LOBBY_LINE = "기다림이 짙을수록 가야할길은 투명해진다.";
+const LETTER_LOBBY_LINE = "기다림이 짙을수록 가야 할 길은 투명해진다.";
 const LETTER_NUDGE_LINE = "서신은 내가 쓰고 있을게. 그 사이에 더 걸리는 게 있으면 — 지금 물어도 돼.";
 /* 서신이 도착한 뒤에도 유도 문구는 남는다. 도착과 동시에 사라지면 '한 번 더 묻게 하기'라는
    이 연출의 목적이 정작 제일 좋은 타이밍에 없어진다(실측: e2e ④가 이걸 잡았다). */
@@ -4167,9 +4182,16 @@ direction=${dir} / verdict="${res?.verdict || ""}" / category=${res?.category ||
 서신은 아래 다섯 장으로 이뤄진다. 전체 흐름을 알고 쓰되, **네가 맡은 장의 본문만** 출력한다.
 맡지 않은 장의 내용은 한 줄도 쓰지 않는다(다른 조각이 그 장을 쓰고 있다).
 
+[겹치지 않기 — 다른 조각은 네 글을 못 본다]
+⚠ 너와 다른 조각은 **같은 프로필·같은 근거를 통째로 받고 서로의 출력을 못 본다.** 그래서 재료를 나눠 쓴다.
+1·2장은 **이 사람이 어떤 사람인가**만 쓴다 — 기운의 개수, 성향, 이 영역이 두터운지 빈지.
+3·4·5장은 **언제 · 누구와 · 무엇을 걸고**만 쓴다 — 기운 개수를 다시 세지 않고, 성향을 다시 진단하지 않는다.
+앞 장을 받아야 할 땐 설명하지 말고 **한 마디로만** 받는다.
+
 [전체 구성 — 각 장 280~380자. 제목은 아래 그대로 쓴다]
 1) "네가 망설인 자리" — 유저가 쓴 질문을 직접 인용하며 연다.${hesit ? ` 유저는 망설인 이유로 "${hesit}"를 골랐다 — 이걸 짚는다.` : ""} 그다음 **이 사람의 명식에서 이런 종류의 결정이 유독 어려운 이유**를 십성 분포로 진단한다(관성이 두터우면 남의 눈이 먼저 보이고, 비겁이 많으면 묻지 않고 밀어붙이고, 식상이 많으면 벌여놓고 못 거둔다 — 실제 분포대로). 위로가 아니라 진단이다.
 2) "여덟 글자가 이 일을 보는 눈" — 이 질문이 걸린 영역(돈·일·사람·몸)이 이 사람 명식에서 **두터운 자리인지 빈 자리인지**를 일간·오행 개수·십성으로 말한다. 카드 뒷면 근거를 반복하지 말고, 그 근거들이 왜 그렇게 갈렸는지 한 겹 아래로 내려간다.
+   **그리고 여덟 글자 밖의 하늘을 최소 하나 끌어온다.** 태어난 밤의 달·달자리·별자리·마야 문양·수(數) 중 이 질문에 걸리는 것 하나를 골라, 그것이 여덟 글자와 **같은 말을 하는지 다른 말을 하는지** 밝힌다. 기법 이름은 쓰지 않는다 — "태어난 밤의 달이 물자리라"처럼 **값이 말하는 바**로 쓴다. 이 서신의 이름이 「아홉 하늘」인데 한 하늘만 쓰면 이름값을 안 한 것이다.
 3) "언제 — 흐름과 움직일 날" — **이 서신에서 가장 중요한 장.** 지금 어느 열 해의 어디쯤인지, 올해의 결, 다음 석 달의 결. 그리고 **실제로 움직일 날을 프로필의 길일에서 골라 두셋 찍는다.** "때가 되면"은 금지. 날짜를 못 찍으면 "이달 하순"·"추석 전"처럼 폭을 주되 반드시 시점을 남긴다.
 4) "누구와 — 도울 사람, 몫을 갈라 둘 자리" — 프로필의 신살·합충으로 이번 일에서 **힘이 되는 띠·사람 유형**과 **조심할 자리**를 짚는다. 방위·직업 오행이 이 질문에 걸리면 함께. 프로필에 없는 것은 지어내지 않는다 — 있는 것만 쓴다.
    **부딪히는 띠는 반드시 '쓸모'로 쓴다 — 사람을 미워할 이유로 주지 않는다.** 무료 명식 리포트는 이미 그렇게 쓰고 있다("미워하란 게 아니라, 큰돈·보증만 조심하란 뜻이야"). 값을 받는 서신이 그보다 험하면 안 된다.
@@ -4890,7 +4912,10 @@ HOLD는 '판단 못 하겠음'이 아니라 **'지표가 지금은 멈추라고 
     (X·앞면)"무오 대운이라 밀어붙일 때야" → (O·앞면)"앞으로 십 년은 밀어붙이면 되는 판이야."
     (X·앞면)"중수감이라 지금 뛰면 빠져" → (O·앞면)"지금 뛰면 빠져. 물이 겹겹인 때야."
 - 주역 괘가 제공된 경우: reasons에 '주역' 축을 반드시 포함한다. 단 verdict·subline에는 **괘 이름·효 번호를 절대 쓰지 말고**(둔괘·태괘·수뢰둔·초효 등 금지) 그 괘가 말하는 바만 일상어로 녹인다 — 괘 이름을 짚는 건 reasons(상세)에서만. (X)"둔괘가 말하는 시작의 진통이 있어" (O)"시작에 진통이 따르는 때야".
-- 마야(촐킨) 축은 매 판결 reasons에 반드시 포함한다 — 자주 누락되던 축이니 절대 빼지 말 것. 그 사람의 촐킨 톤(1~13)·날개(20신성)의 실제 값을 짚어 GO/STOP/중립을 말한다(예: "이믹스 날개에 4의 톤 — 터를 다지는 힘이 실린 날이야", "카반 날개의 흔들림이 지금은 발을 붙잡아"). 마야 특유의 신화적·이색적 어감을 살려 한 줄에 재미를 준다.
+- 마야(촐킨) 축은 매 판결 reasons에 반드시 포함한다 — 자주 누락되던 축이니 절대 빼지 말 것. 그 사람의 촐킨 톤(1~13)·날개(20신성)의 실제 값을 짚어 GO/STOP/중립을 말한다.
+  (O)"이믹스 날개에 4의 톤 — 새로 벌이는 날이 아니라 하던 걸 매듭짓는 날이야. 오늘은 도장까지만 찍어."
+  (O)"카반 날개 — 마음이 하루에도 몇 번 바뀌는 자리야. 오늘 정한 건 내일 아침에 한 번 더 읽고 보내."
+  **마야도 다른 축과 같은 규칙을 그대로 받는다 — 신화적 어감은 앞 단(용어)까지고, 뒷 단은 반드시 눈에 보이는 일로 끝난다.** 앞 단만 이색적이고 뒷 단이 은유로 끝나면 그건 아무 말도 안 한 것이다.
 - total은 이번 판결에 참여한 지표 수와 일치시키고, against는 그중 반대표 수다.
 - 토정비결 괘상수가 제공되면 당년 전체 흐름의 참고 지표(타이밍 층)로 쓴다. 단, 해당 괘의 원문 풀이를 확실히 알지 못하면 원문 문장을 지어내 인용하지 말고 흐름 참고로만 쓴다.
 - 열린 질문("몇 시까지 일할까", "뭘 먹을까", "언제 갈까")은 GO/STOP 이분법으로 회피하지 말고, 지표를 근거로 구체값 하나를 찍어 verdict로 답한다. (O)"10시까지만. 그 뒤는 내일의 몫이야." (X)"일하지 마." 질문이 요구한 단위(시각·항목·날짜)로 답하는 게 판결이다.
@@ -5306,9 +5331,18 @@ function gyeotPromptLine(list, myDG) {
     return `곁${i + 1}=${r ? r.name : "자리를 아직 못 읽은 곁"}`;
   });
   if (!parts.length) return "";
+  /* ⚠ **무엇을 말해도 되는지까지 적는다 (2026-08-29 신설).**
+     예전엔 「언제 꺼낼지」만 정하고 「무엇을 말해도 되는지」가 없었다. 그런데 반대 방향 압력이 실재한다 —
+     SYS 가 「회피 금지 … 조건부 단언을 내린다」를 요구하므로, 곁에 대해서도 단언하려 든다.
+     **상대는 이 앱을 쓴 적도 동의한 적도 없는 제3자**이고, 우리가 그 사람에 대해 아는 건
+     **자리 이름 하나뿐**이다. 그걸로 그 사람의 마음·형편·의사를 말하면 그건 지어낸 것이다.
+     ⚠ 문자열 두 줄이라 값이 싸다. 나쁜 출력을 실제로 본 건 아니지만 **막는 비용이 0에 가깝다.** */
   return `\n[곁] 네 곁에 선 사람들: ${parts.join(" · ")}. `
     + `**누가/사람/도움/함께를 묻는 질문에만** 이 중에서 골라 \`곁1\` 같은 표기를 그대로 써서 답한다`
-    + `(앱이 이름으로 바꿔 보여준다). 없으면 억지로 고르지 말고 곁 얘기를 꺼내지 마라.`;
+    + `(앱이 이름으로 바꿔 보여준다). 없으면 억지로 고르지 말고 곁 얘기를 꺼내지 마라.`
+    + `\n⚠ 곁에 대해서는 **네가 아는 것(자리 이름)까지만** 말한다. 그 사람이 무엇을 할지·어떻게 생각하는지·`
+    + `도와줄지 말지는 **말하지 마라** — 우리가 아는 건 자리 하나뿐이고, 그 사람은 이 앱을 쓴 적이 없다.`
+    + `\n쓰는 법은 하나다: **유저가 할 행동**으로 말한다. (X)"곁2가 도와줄 거야" (X)"곁1은 지금 여유가 없어" (O)"곁1한테 먼저 한 줄 보내 봐."`;
 }
 /* 모델이 쓴 `곁1` 을 실제 이름으로 되돌린다. 이름이 비어 있으면 사람이 없는 게 아니라
    **부를 말이 없는 것**이므로 「곁에 선 사람」으로 바꾼다 — 자리표가 화면에 그대로 나가면 안 된다. */
@@ -5793,7 +5827,7 @@ function InviteLanding({ id, onOnboard, onDismiss }) {
       track("invite_answered", { notify });
       setR({ mySaju: my, myBirth, aAxes: d.aAxes });
     } catch (e) {
-      setErr(String(e?.message || e));
+      { const _m = String(e?.message || e); setErr(/[가-힣]/.test(_m) ? _m : "지금은 둘 사이를 볼 수 없어 — 잠시 뒤 다시 해 줄래?"); }   // 위와 같은 이유
     } finally { setBusy(false); }
   };
 
@@ -6164,7 +6198,7 @@ export default function App() {
     if (nt.length === 6) {
       const lines = nt.map(x => x.v);
       const moving = lines.map((v, i) => (v === 6 || v === 9 ? i : -1)).filter(i => i >= 0);
-      const hi = { name: hexName(lines), toName: hexName(lines.map(v => (v === 6 ? 7 : v === 9 ? 8 : v))), moving };
+      const hi = { name: hexName(lines), toName: hexName(lines.map(v => (v === 6 ? 7 : v === 9 ? 8 : v))), moving, plain: hexPlain(lines) };
       setHexInfo(hi);
       setTimeout(() => judge(hi), 800);
     }
@@ -6379,7 +6413,9 @@ export default function App() {
       } catch (_) { /* 유저가 공유시트를 닫은 것 — 실패가 아니다 */ return; }
       try { await navigator.clipboard.writeText(`${text}\n${url}`); setShared(true); setTimeout(() => setShared(false), 2200); } catch (_) {}
     } catch (e) {
-      setInviteErr(`초대를 못 만들었어 — ${String(e?.message || e)}`);
+      /* ⚠ 가드 없이 붙이면 「초대를 못 만들었어 — Failed to fetch」가 뜬다.
+         같은 파일 판결 실패 경로가 이미 한글 메시지일 때만 통과시킨다 — 그 방식을 그대로 쓴다. */
+      { const _m = String(e?.message || e); setInviteErr(`초대를 못 만들었어 — ${/[가-힣]/.test(_m) ? _m : "잠시 뒤 다시 해 줄래?"}`); }
     } finally { setInviteBusy(""); }
   };
   const tryGyeotOpen = () => {
@@ -7159,7 +7195,7 @@ export default function App() {
                   ③"이 자리에 같이 보일 거야" → 자리(슬롯)를 암시한다. §5 빈 슬롯 금지와 아슬아슬하다
                   ⚠ 결핍을 말하지 않는다 — "아직 없어"는 §5 개수 표기 금지의 정신을 문장으로 어기는 것이다. */}
               <p className="gname under">곁</p>
-              {saju && <p className="gsay">{EL_TRAIT[saju.main]} 네 곁에, 오늘도 이렇게 서 있어.</p>}
+              {saju && <p className="gsay">{EL_TRAIT[saju.main]} 너 — 오늘도 이렇게 네 곁에 서 있어.</p>}
               {/* ── 2층 · 곁에 선 사람들 (곁탭IA §4) ────────────────────────────
                  비어 있으면 **세지 않는다** — "0명"도 빈 슬롯도 안 만든다(§5). 1층이 이미 화면을 완결한다. */}
               {gyeotSorted.length === 0 ? (
@@ -7410,7 +7446,7 @@ export default function App() {
                 <div className="daily fade">
                   <p className="dtag">아침 문안 · 오늘 하루만 — 자정에 사라져</p>
                   <p className="dmain">오늘은 <b>{dailyData.mood.k}</b>. {dailyData.mood.line}</p>
-                  <p className="dsub">오늘의 일진 {dailyData.ilju} · 오늘 밤 달 {dailyData.mp.name}</p>
+                  <p className="dsub">오늘 하늘의 두 글자 {dailyData.ilju} — 날마다 바뀌는 오늘의 결이야 · 오늘 밤 달 {dailyData.mp.name}</p>
                   <button className="btn ghost sm" onClick={() => { try { store.setItem(DAILY_KEY, todayStr()); } catch (_) {} track("daily_received", { streak: streak ? streak.count : 0 }); setDailySeen(true); }}>받았어</button>
                 </div>
               )}
@@ -7607,7 +7643,7 @@ export default function App() {
                       </div>
                     /* ⚠ 대기 문구를 여기서 반복하지 않는다 — 위 `.brooding` 이 의식과 무관하게 이미 띄운다.
                          v140 에서 둘이 같은 문장을 동시에 그려 검사가 strict mode 로 깨졌다(brood-check ②·④). */
-                    : hexInfo && <p className="sub2 mt">괘가 맺혔어 — <b>{hexInfo.name}</b>{hexInfo.moving.length > 0 && <> · 기운은 <b>{hexInfo.toName}</b> 쪽으로 움직이고 있어</>}</p>}
+                    : hexInfo && <p className="sub2 mt">괘가 맺혔어 — <b>{hexInfo.name}</b>{hexInfo.plain ? ` (${hexInfo.plain})` : ""}{hexInfo.moving.length > 0 && <> · 기운은 <b>{hexInfo.toName}</b> 쪽으로 움직이고 있어</>}</p>}
                   {!busy && !tossing && tosses.length < 6 && <button className="resetlink" onClick={abandonRitual}>물음을 고칠래</button>}
                 </div>
               )}
