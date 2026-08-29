@@ -2877,7 +2877,7 @@ const MSR_FREE = (() => { try { return /[?&]msr=1(&|$)/.test(window.location.sea
 const SKIN = (() => { try { return /[?&]skin=holo(&|$)/.test(window.location.search) ? "holo" : ""; } catch (_) { return ""; } })();
 /* 얼굴 A/B — `?face=a|b|c|d`. 없으면 얼굴을 안 그린다(지금까지의 화면 그대로).
    창업자가 "상위 4개를 앱에 얹어서 평가하겠다"고 해서 **끼웠다 뺐다 되게** 둔다. */
-const FACE = (() => { try { const m = /[?&]face=([abcde])(&|$)/.exec(window.location.search); return m ? m[1] : ""; } catch (_) { return ""; } })();
+const FACE = (() => { try { const m = /[?&]face=([abcd])(&|$)/.exec(window.location.search); return m ? m[1] : ""; } catch (_) { return ""; } })();
 
 /* ── 오늘의 상태 — **운세 방법론에서 나온다. 지어내지 않는다** ─────────────
    축 둘만 쓴다(새 축을 늘리지 않는다 — 설계 헌장 §판결문 형식 보존):

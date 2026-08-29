@@ -123,66 +123,30 @@ const HTML = `<!doctype html><meta charset="utf-8">
   얼굴 하나로 말할 수 있다. 아래는 목(木)의 웃는 눈에 오늘 입만 갈아 끼운 것.</p>
   <div class="row" id="moods"></div>
 
-  <h2>비교자 — 크기·간격·높이를 단계로 늘어놓았다</h2>
-  <p class="lead">⚠ <b>인스타툰 실물은 이 환경에서 못 봤다</b> — 인스타그램은 로그인이 필요하고,
-  검색으로 나온 글들(고구마팜·나무위키 등)이 전부 망 정책에 막혔다. 그림을 못 본 채 "이게 인기 그림체다"라고
-  말하면 그건 <b>근거 없는 주장</b>이다.<br>
-  그래서 대신 <b>대조할 수 있는 자를 만들었다.</b> 아래에서 마음에 드는 칸을 고르거나,
-  인스타툰 캡처를 옆에 놓고 어느 칸에 가까운지 짚어 주면 그 값으로 맞춘다.
-  숫자는 전부 <b>칸 한 변 대비 %</b>이고, 지금 앱 후보는 <b>가운데 칸</b>이다.</p>
-  <h3 class="sub">눈 크기 — 흰자 지름</h3><div class="row" id="gSize"></div>
+  <h2>눈만으로 표정 — 눈썹 없이</h2>
+  <p class="lead">눈썹을 그리지 않는다. <b>눈 모양 자체를 깎아서</b> 표정을 만든다 —
+  실루엣의 위를 자르면 굳은 눈, 바깥을 내리면 시무룩, 바깥을 올리면 화남이 된다.</p>
+  <div class="row" id="gEyeMood"></div>
+
+  <h2>카툰 원근 — 얼굴이 도는 방향</h2>
+  <p class="lead">2D 그림이지만 구면에 얹어 투영한다. 도는 쪽 눈이 가까워져 커지고, 먼 쪽은 눌린다.</p>
+  <div class="row" id="gYaw"></div>
+
+  <h2>앱 프리셋 A–D</h2>
+  <p class="lead"><code>?skin=holo&amp;face=a</code> 로 실제 앱에서 볼 수 있다. E(흰자)는 제외됐다.</p>
+  <div class="row" id="gPreset"></div>
+
+  <h2>비교자 — 점눈 기준으로 다시</h2>
+  <p class="warn">⚠ <b>앞 판의 비교자는 흰자 눈으로 그려져 있었다</b> — 앱에 실제로 쓰는 그림과 달랐다.
+  흰자는 뺐으므로(<b>E 제외</b>) 아래는 전부 <b>점눈</b>이다. 숫자는 칸 한 변 대비 %.</p>
+  <h3 class="sub">눈 크기 — 점 지름</h3><div class="row" id="gSize"></div>
   <h3 class="sub">두 눈 간격 — 중심에서 중심</h3><div class="row" id="gGap"></div>
   <h3 class="sub">눈 높이 — 위에서</h3><div class="row" id="gCy"></div>
   <h3 class="sub">입 크기와 눈–입 거리</h3><div class="row" id="gMouth"></div>
-
-  <h2>눈만으로 표정을 낸다 — 눈썹 없이</h2>
-  <p class="lead">창업자 제안(2026-08-29): "눈썹 없이 눈 만으로 표정을 드러낼 수 있을 거 같아."
-  9건 집계에서 <b>눈썹은 3/9 로 소수파</b>였으니 방향이 맞다. 그럼 감정은 어디서 나오나 —
-  <b>눈 모양 자체가 바뀐다.</b> 아래 열 가지가 그 어휘다. 입은 전부 같게 두었다(미소).</p>
-  <div class="row" id="gEyeMood"></div>
-  <p class="lead" style="margin-top:6px">오늘 상태 10종(십성)에 하나씩 붙였다 —
-  비견 평온 · 겁재 놀람 · 식신 기쁨 · 상관 들뜸 · 정재 굳음 · 편재 곁눈 · 정관 감음 · 편관 시무룩 · 정인 기쁨 · 편인 졸림.
-  <b>눈은 오늘, 입도 오늘</b>이 된다(전엔 입만 오늘이었다).</p>
-
-  <h2>카툰 원근 — 각도에 따라 도는 얼굴</h2>
-  <p class="lead">창업자 지적(2026-08-29): "카툰 렌더링 보면 2d인데 각도에 따라 원근감도 생기고 그렇잖아 /
-  지금은 그냥 이미지가 냅다 붙은 거 같아서 단조로워." 맞다 — 눈·입을 <b>평면에 고정 좌표로</b> 찍고 있었다.
-  고치는 법은 카툰이 늘 쓰던 것: <b>얼굴 요소를 구 표면에 놓고 각도로 돌린 뒤 정사영</b>한다.
-  그러면 셋이 <b>동시에</b> 일어난다 — ①먼 쪽 눈이 작아지고 ②두 눈 간격이 좁아지고 ③가로로 눌린다.
-  하나만 하면 미끄러진 것으로 보이고, 셋이 같이 가야 <b>돌았다</b>로 읽힌다.</p>
-  <div class="row" id="gYaw"></div>
-  <p class="lead" style="margin-top:6px">앱에서는 이 각도가 <b>스스로 왔다갔다</b> 한다 —
-  주기를 나눠떨어지지 않게 잡아 왕복이 아니라 <b>두리번거림</b>이 되게 했다.
-  그리고 <b>손끝을 누르면 그쪽으로 돌아본다.</b> 흰자 눈(E)은 동공까지 시선을 따라간다.</p>
-
-  <h2>앱에 얹은 다섯 — <code>?skin=holo&amp;face=a|b|c|d|e</code></h2>
-  <p class="lead">인기 상위 넷의 값을 옮긴 프리셋이다. <b>이건 앱에 실제로 들어갔다</b> —
-  주소에 <code>&amp;face=a</code> 를 붙이면 보인다. 안 붙이면 얼굴 없는 지금 화면 그대로다.</p>
-  <div class="row" id="gPreset"></div>
-
-  <h2>실물을 보고 — 9건 집계</h2>
-  <p class="lead">창업자가 보낸 인스타툰 캡처 9건. <b>수치는 육안 추정</b>이다 — 픽셀로 재지 않았다.</p>
-  <table class="num"><tbody>
-    <tr><td>deyi_min</td><td><b>22.9만</b> · 점눈(아주 작음) · 눈썹✕ · 볼터치○</td></tr>
-    <tr><td>wadadabear</td><td>8.8만 · 점눈 · 눈썹✕ · 볼터치○</td></tr>
-    <tr><td>yurang</td><td>5.8만 · 점눈 · 눈썹○ · 볼터치✕</td></tr>
-    <tr><td>ppyorong_96</td><td>3.8만 · 점눈(아주 작음) · 눈썹✕ · 볼터치○</td></tr>
-    <tr><td>jobeam_studio</td><td>5,283 · 점눈 · 눈썹✕ · 볼터치○</td></tr>
-    <tr><td>milletoon</td><td>1,809 · 점눈 · 눈썹✕ · 볼터치✕</td></tr>
-    <tr><td>young_forest</td><td>인증 · 점눈 · 눈썹○ · 볼터치✕</td></tr>
-    <tr><td>kkunoping</td><td>481 · <b>흰자</b> · 눈썹✕ · 볼터치✕</td></tr>
-    <tr><td>free.hada</td><td>163 · <b>흰자</b> · 눈썹○ · 볼터치○</td></tr>
-  </tbody></table>
-  <p class="warn" style="margin-top:14px">⚠ <b>표본을 5건에서 9건으로 늘리자 내가 앞서 한 말 둘이 뒤집혔다.</b><br>
-  ① <b>눈썹은 다수파가 아니다</b> — 5건일 땐 3/5 였는데 9건에서는 <b>3/9</b>. 「표정의 절반이 눈썹」은 과했다.<br>
-  ② <b>눈 높이는 일정하지 않다</b> — 55~65% 라고 했는데 9건에서는 45~60% 로 흩어진다. 규칙이라 부를 수 없다.<br>
-  살아남은 것: <b>점눈 7/9</b> · <b>볼터치 5/9(눈썹보다 흔하다)</b> · <b>눈이 아주 작다</b>.</p>
-  <p class="lead"><b>상위 넷</b>(22.9만·8.8만·5.8만·3.8만)은 전부 점눈이고, 넷 중 셋이 볼터치,
-  넷 중 셋이 눈썹이 없다. 그리고 <b>가장 인기 있는 둘이 눈이 가장 작다.</b>
-  ⚠ 표본 9건이고 <b>상관이지 인과가 아니다</b> — 눈을 줄인다고 좋아요가 늘지는 않는다.</p>
-
-  <h3 class="sub">두 계열을 나란히</h3><div class="row" id="gSchool"></div>
-  <h3 class="sub">눈썹 넷 — 같은 눈, 눈썹만 바꿈</h3><div class="row" id="gBrow"></div>
+  <h3 class="sub">크기 × 간격 — 조합으로 보기</h3>
+  <p class="lead">한 축씩 보면 각각은 괜찮아 보여도 <b>조합에서 무너지는 자리</b>가 있다 —
+  큰 눈에 좁은 간격은 몰려 보이고, 작은 눈에 넓은 간격은 흩어져 보인다. 세로가 크기, 가로가 간격.</p>
+  <div id="gMatrix"></div>
 
   <h2>지금 값</h2>
   <table class="num"><tbody>
@@ -356,25 +320,50 @@ function tuned(parent, over, label, on){
   d.insertAdjacentHTML("beforeend",'<p class="nm">'+label+'</p>');
   parent.appendChild(d);
 }
-[[0.020,"실물급 4%"],[0.032,"7%"],[0.052,"11%"],[0.072,"지금 15%"],[0.100,"크게 21%"]]
-  .forEach(([v,l])=>tuned(gSize,{sz:v},l,v===0.072));
-[[0.100,"좁게 20%"],[0.118,"24%"],[0.135,"지금 27%"],[0.155,"31%"],[0.175,"넓게 35%"]]
-  .forEach(([v,l])=>tuned(gGap,{gap:v},l,v===0.135));
-[[0.375,"높게 38%"],[0.415,"42%"],[0.455,"지금 46%"],[0.495,"50%"],[0.535,"낮게 54%"]]
-  .forEach(([v,l])=>tuned(gCy,{cy:v,mcy:v+0.12},l,v===0.455));
-[[0.065,0.545,"작고 가깝게"],[0.085,0.575,"지금"],[0.105,0.600,"크고 멀게"],[0.125,0.630,"더 크게"]]
-  .forEach(([m,c,l])=>tuned(gMouth,{msz:m,mcy:c},l,m===0.085));
+/* ⚠ 예전엔 tuned()(옛 흰자 함수)로 그렸다 — **앱과 다른 그림**이었다.
+   이제 전부 face.js 의 drawFace 를 쓴다. 값은 점 지름 기준이라 eyeSz 는 그 절반이다. */
+function bar(parent, list, key, fmt, cur){
+  list.forEach(([v,l])=>{
+    const o={eye:"dot",mouth:"squig",eyeSz:0.030,gap:0.100,cy:0.50,mSz:0.070,mCy:0.585};
+    if(key==="eyeSz") o.eyeSz=v/2;
+    else if(key==="gap") o.gap=v/2;
+    else if(key==="cy"){ o.cy=v; o.mCy=v+0.085; }
+    else if(key==="m"){ o.mSz=v[0]; o.mCy=v[1]; }
+    const d=document.createElement("div"); d.className="cell"+(l===cur?" on":"");
+    const c=document.createElement("canvas"); const S=CELL*2;
+    c.width=c.height=S; c.style.cssText="width:"+CELL+"px;height:"+CELL+"px;display:block;border-radius:12px;background:#d3cfc4";
+    d.appendChild(c);
+    const x=c.getContext("2d");
+    x.fillStyle="rgba(255,253,246,.55)"; x.beginPath(); x.arc(S/2,S/2,S*0.30,0,7); x.fill();
+    drawFace(x,S,o);
+    d.insertAdjacentHTML("beforeend",'<p class="nm">'+l+'</p>');
+    parent.appendChild(d);
+  });
+}
+bar(gSize,[[0.030,"3%"],[0.045,"4.5%"],[0.060,"6%"],[0.075,"7.5%"],[0.090,"9%"],[0.110,"11%"]],"eyeSz",0,"6%");
+bar(gGap,[[0.120,"12%"],[0.160,"16%"],[0.200,"20%"],[0.250,"25%"],[0.300,"30%"],[0.350,"35%"]],"gap",0,"20%");
+bar(gCy,[[0.42,"42%"],[0.46,"46%"],[0.50,"50%"],[0.54,"54%"],[0.58,"58%"]],"cy",0,"50%");
+bar(gMouth,[[[0.050,0.560],"작고 가깝게"],[[0.070,0.585],"지금"],[[0.090,0.610],"크고 멀게"],[[0.110,0.640],"더 크게"]],"m",0,"지금");
 
-/* 두 계열 — 캘시퍼(흰자) vs 인스타툰(까만 점). 관찰한 수치를 그대로 넣었다 */
-tuned(gSchool,{},"지금 (캘시퍼형)",true);
-tuned(gSchool,{brow:"angry"},"캘시퍼형 + 눈썹");
-tuned(gSchool,{eye:"dot",sz:0.075,gap:0.200,cy:0.520,mcy:0.620,msz:0.070},"인스타툰형 — 점눈·넓게·아래로");
-tuned(gSchool,{eye:"dot",sz:0.075,gap:0.200,cy:0.520,mcy:0.620,msz:0.070,brow:"angry"},"인스타툰형 + 눈썹");
-tuned(gSchool,{eye:"dot",sz:0.075,gap:0.200,cy:0.520,mcy:0.620,msz:0.070,brow:"angry",blush:true},"+ 볼터치");
-/* 상위 넷을 그대로 옮긴 값 — 아주 작은 점눈 · 아주 넓은 간격 · 볼터치 · 눈썹 없음 */
-tuned(gSchool,{eye:"dot",sz:0.030,gap:0.235,cy:0.500,mcy:0.585,msz:0.058,blush:true},"상위 넷을 따라");
-[["none","없음"],["flat","일자"],["angry","치켜"],["sad","내림"],["up","호"]]
-  .forEach(([b,l])=>tuned(gBrow,{eye:"dot",sz:0.075,gap:0.200,cy:0.520,mcy:0.620,msz:0.070,brow:b},l,b==="none"));
+/* 크기 × 간격 매트릭스 — 조합에서 무너지는 자리를 본다 */
+const SZ=[[0.030,"3%"],[0.050,"5%"],[0.070,"7%"],[0.095,"9.5%"]];
+const GP=[[0.140,"14%"],[0.200,"20%"],[0.260,"26%"],[0.330,"33%"]];
+gMatrix.insertAdjacentHTML("beforeend",
+  '<div style="display:flex;gap:8px;margin-left:64px">'+GP.map(g=>'<div class="hd" style="width:'+CELL+'px">간격 '+g[1]+'</div>').join("")+'</div>');
+SZ.forEach(([sv,sl])=>{
+  const row=document.createElement("div"); row.style.cssText="display:flex;gap:8px;align-items:center;margin-bottom:8px";
+  row.insertAdjacentHTML("beforeend",'<div class="rl" style="width:56px;text-align:right">'+sl+'</div>');
+  GP.forEach(([gv])=>{
+    const c=document.createElement("canvas"); const S=CELL*2;
+    c.width=c.height=S; c.style.cssText="width:"+CELL+"px;height:"+CELL+"px;display:block;border-radius:12px;background:#d3cfc4";
+    row.appendChild(c);
+    const x=c.getContext("2d");
+    x.fillStyle="rgba(255,253,246,.55)"; x.beginPath(); x.arc(S/2,S/2,S*0.30,0,7); x.fill();
+    drawFace(x,S,{eye:"dot",mouth:"squig",eyeSz:sv/2,gap:gv/2,cy:0.50,mSz:0.070,mCy:0.585});
+  });
+  gMatrix.appendChild(row);
+});
+
 
 /* ── 눈만으로 표정 · 앱 프리셋 — **face.js 의 drawFace 를 그대로 쓴다** ── */
 function faceCell(parent, opt, label, note){
@@ -392,7 +381,7 @@ EYE_KINDS.forEach(([k,nm,ds])=>faceCell(gEyeMood,{eye:k,mouth:"smile",eyeSz:0.03
 /* ⚠ 앞 판에서 프리셋 칸을 **전부 무표정 점눈**으로 그렸다. 그래서 A~D 가 다 똑같아 보였고
    "다 틀렸다"는 말을 들었다. 프리셋이 정하는 건 **크기·간격·입·볼터치**이고
    눈 모양은 **오늘 상태**가 정한다 — 그러니 칸마다 다른 눈을 넣어야 무엇이 다른지 보인다. */
-const PRESET_EYE={a:"dot",b:"stern",c:"angry",d:"shine",e:"ball"};
+const PRESET_EYE={a:"dot",b:"stern",c:"angry",d:"shine"};
 Object.entries(FACE_PRESETS).forEach(([k,P])=>
   faceCell(gPreset,{eye:P.eye||PRESET_EYE[k],mouth:P.mouth,blush:P.blush,eyeSz:P.eyeSz*2.6,gap:P.gap*2.6,
                     cy:0.50,mSz:P.mSz*2.6,mCy:0.50+(P.mCy-P.cy)*2.6},P.name,"?face="+k));

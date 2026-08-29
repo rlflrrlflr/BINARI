@@ -13,7 +13,10 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-const SRC = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../src/App.jsx"), "utf8");
+import { execSync } from "node:child_process";
+const HERE = dirname(fileURLToPath(import.meta.url));
+const SRC = readFileSync(resolve(HERE, "../src/App.jsx"), "utf8");
+const GEN = resolve(HERE, "../tools/build-face-mock.mjs");
 
 /* 검사 대상 — **한 덩어리로 쓰는** 템플릿 상수. 새 셰이더가 생기면 여기 이름을 더한다.
    ⚠ sim 엔진 셰이더(SIM_FRAG·RND_FRAG 등)는 뺀다 — 그쪽은 `\` + SHAPE_UNI + \`` 처럼
@@ -35,6 +38,15 @@ for (const m of marks) {
   });
 }
 ck("템플릿 안에 백틱이 없다", bad.length === 0, bad.join(" | ") || "깨끗");
+
+/* ⚠ 2026-08-29 추가 — **세 번째 백틱 사고는 App.jsx 가 아니라 보드 생성기에서 났다.**
+   `tools/build-face-mock.mjs` 는 HTML 을 템플릿 리터럴로 조립하는데, 주석에 백틱을 넣어
+   생성기가 파싱 단계에서 죽었다. 여기서 상수 이름을 하나 더 외우는 것보다
+   **문법이 통과하는지 직접 묻는 게** 낫다 — 어느 상수든, 앞으로 새로 생기는 것까지 잡힌다. */
+let genErr = "";
+try { execSync(`node --check ${JSON.stringify(GEN)}`, { stdio: "pipe" }); }
+catch (e) { genErr = String(e.stderr || e).split("\n").find((l) => l.includes("Error")) || "파싱 실패"; }
+ck("보드 생성기가 파싱된다", !genErr, genErr || "build-face-mock.mjs 문법 정상");
 
 const pass = R.filter(Boolean).length;
 console.log(`\n=== 템플릿 백틱: ${pass}/${R.length} ${pass === R.length ? "PASS" : "FAIL"} ===`);
