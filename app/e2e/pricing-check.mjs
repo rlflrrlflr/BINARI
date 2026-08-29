@@ -23,9 +23,15 @@ ok(/_superProps\s*=\s*\{[^}]*pricing_mode:\s*PRICING_MODE/.test(SRC),
 ok(/\$set:\s*\{\s*free_issued:\s*true\s*\}/.test(SRC),
    "free_issued 가 person 속성이다 — 기기를 바꿔도 안 끊긴다");
 ok(/\$set_once:/.test(SRC), "첫 수령 시점·종류는 \$set_once 라 덮이지 않는다");
-/* 세 상품 전부 걸려 있어야 한다 — 서신만 걸면 각인·궁합 수령자가 새 나간다 */
-for (const k of ["letter", "imprint", "match"])
+/* 값을 받는 상품 전부에 걸려 있어야 한다 — 서신만 걸면 각인 수령자가 새 나간다.
+   ⚠ **궁합은 2026-08-28 에 빠졌다**(창업자 "궁합 공짜로 풀자"). 이 표식의 뜻은
+     「**유료** 상품을 공짜로 받은 사람」인데, 진짜 무료 상품에까지 걸면 거의 모든 유저가
+     표식을 달고 **표식이 아무것도 안 가른다** — 결제를 붙이는 날 유료 전환 분모를 오염시키는 게
+     정확히 그쪽이다. 무료 상품이 다시 늘면 여기 목록이 아니라 그 상품의 값 표시부터 확인해라. */
+for (const k of ["letter", "imprint"])
   ok(new RegExp(`markFreeIssue\\("${k}"\\)`).test(SRC), `${k} 발행 지점에 표식이 걸려 있다`);
+ok(!/markFreeIssue\("match"\)/.test(SRC.replace(/\/\*[\s\S]*?\*\//g, "")),
+   "무료 상품(궁합)에는 표식을 안 건다 — 걸면 표식이 아무도 안 가른다");
 ok((SRC.match(/function markFreeIssue/g) || []).length === 1,
    "표식 함수가 하나다 — 문이 갈리면 한쪽만 고쳐진다");
 ok(/if \(_superProps\.free_issued\) return;/.test(SRC), "사람당 한 번만 발사한다");

@@ -1434,7 +1434,11 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
    각인의 애드온이다 — **내 명식이 이미 있어야** 열린다. 그래서 각인의 자연스러운 2차 구매가 되고,
    각인의 최대 약점(평생 1회)을 메운다: 궁합은 **사람 수만큼 다시 산다.**
    상대 생년월일만 받는다. 이름·연락처는 안 받는다 — 남의 개인정보를 우리가 들고 있을 이유가 없다. */
-const MATCH_PRICE = 4900;
+/* ⚠ **궁합은 2026-08-28 창업자 결정으로 무료다**("궁합 공짜로 풀자").
+   값 상수를 남겨 두면 다음 세션이 "표시만 지운 유료 상품"으로 읽는다 — 아예 없앤다.
+   ⚠ 그래서 `markFreeIssue("match")` 도 뗐다. 그 표식의 뜻은 **「유료 상품을 공짜로 받은 사람」**인데,
+     진짜 무료 상품에까지 걸면 거의 모든 유저가 표식을 달고 **표식이 아무것도 안 가른다.**
+     결제를 붙이는 날 유료 전환 분모를 오염시키는 건 그쪽이다. 서신·각인 둘에만 남긴다. */
 
 /* D-3: 각인·궁합의 **분모**. 서신은 `verdict_shown` 이 노출이라 클릭률이 계산됐는데
    로비의 두 상품은 대응 이벤트가 없어 분자만 쌓이고 있었다.
@@ -1442,7 +1446,6 @@ const MATCH_PRICE = 4900;
 function OfferShown({ records }) {
   useEffect(() => {
     trackVisitOnce("imprint_offer_shown", { price: IMPRINT_PRICE, nth_verdict: records.length });
-    trackVisitOnce("match_offer_shown", { price: MATCH_PRICE, nth_verdict: records.length });
   }, []);
   return null;
 }
@@ -1718,7 +1721,7 @@ function MatchDoc({ saju, birth, onClose, onMet, pre = null }) {
           /* ⚠ **이름(nm)은 저장에서 뺀다.** MATCH_LAST_KEY 는 폼을 되살리는 값인데, 이름까지 남기면
              다음 사람 궁합을 볼 때 **앞사람 이름이 미리 채워져** 엉뚱한 사람에게 붙는다. */
           try { const { nm: _drop, ...keep } = f; localStorage.setItem(MATCH_LAST_KEY, JSON.stringify(keep)); } catch {}
-          track("match_run", { has_hour: f.h != null, named: !!(f.nm || "").trim() }); markFreeIssue("match");   // 결정 8 · ⚠ 이름 자체가 아니라 **적었는지 여부**만 센다
+          track("match_run", { has_hour: f.h != null, named: !!(f.nm || "").trim(), free: true });   // ⚠ 이름 자체가 아니라 **적었는지 여부**만 센다
           /* 곁 명부에 한 자리 — **명부에 사람이 생기는 유일한 입구**다.
              위로 올려 보내는 건 파생값(지문·오행·일간)과 유저가 적은 이름뿐이다.
              **생년월일은 이 콜백 밖으로 안 나간다** — 지문으로만 남는다. */
@@ -3940,7 +3943,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v164 · 같은 문서를 본다";
+const APP_VER = "v165 · 궁합은 무료다";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -7071,10 +7074,13 @@ export default function App() {
                     ⚠ 곁탭IA §5 「곁 탭 첫 화면을 결제벽으로 만들지 마라」와 부딪히지 않게 재는 곳:
                       이건 상품 진열이 아니라 **자리를 채우는 유일한 경로의 안내**다. 그래서
                       값을 안 쓰고(가격 없음), 강조 버튼(gold)도 안 쓴다 — 있는 문 하나를 가리킬 뿐이다. */}
+                {/* ⚠ **탭을 옮기지 않는다**(v165). 예전엔 판결 탭으로 보내고 문서를 열었는데,
+                    궁합이 판결 탭에서 빠진 뒤로는 **없는 자리로 보내는 셈**이 된다. 문서는 화면을 덮으므로
+                    탭을 바꿀 이유가 애초에 없었다 — 닫으면 곁 탭으로 그대로 돌아온다. */}
                 <button className="btn ghost mt" onClick={() => {
                   track("gyeot_empty_cta", { from: "gyeot" });
-                  setTab("judge"); setMatchOpen(true);
-                }}>궁합을 보면 그 사람을 부르게 돼</button></>
+                  setMatchOpen(true);
+                }}>둘 사이를 보면 그 사람이 곁에 서</button></>
               ) : !gyeotOpen ? (<>
                 {/* 닫힌 상태 — 목록 대신 **곁이 돌고 있다는 사실**만. 판결 탭의 "두드려봐"와 같은 자리다.
                     ⚠ 여기에 인원수를 안 쓴다. 세는 건 열고 나서 **자리(역할)** 를 세는 것뿐이다(§5). */}
@@ -7399,10 +7405,13 @@ export default function App() {
                 <button className="btn ghost mt w100" onClick={() => { track("imprint_clicked", { price: IMPRINT_PRICE, nth_verdict: records.length }); setImprintOpen(true); }}>
                   각인 — 네가 어떻게 만들어졌는지 · {IMPRINT_PRICE.toLocaleString()}원 <span className="impbadge">시험 발행</span>
                 </button>
-                <button className="btn ghost mt w100" onClick={() => { track("match_clicked", { price: MATCH_PRICE, nth_verdict: records.length }); setMatchOpen(true); }}>
-                  궁합 — 그 사람과 너 · {MATCH_PRICE.toLocaleString()}원 <span className="impbadge">시험 발행</span>
-                </button>
-                <p className="fine">둘 다 <b>지금은 값을 안 받아.</b> 결제는 아직 연결돼 있지 않고, 적힌 값은
+                {/* ⚠ **궁합 버튼을 판결 탭에서 뺐다**(2026-08-28 창업자: "판결 탭에서 궁합 없애").
+                    궁합은 이제 **곁 탭의 기능**이다 — 사람을 들이는 유일한 입구이고, 결과가 곁 명부로
+                    이어진다. 로비에 두면 판결(혼자 묻는 자리)과 곁(사람이 서는 자리)이 섞이고,
+                    같은 문이 두 곳에 있으면 어느 쪽이 본진인지 흐려진다.
+                    ⚠ 값도 뗐다(같은 날 창업자 결정: "궁합 공짜로 풀자") — 아래 fine 이 「둘 다」였던 것도
+                      이제 각인 하나다. 문구를 안 고치면 화면이 없는 버튼을 가리킨다. */}
+                <p className="fine"><b>지금은 값을 안 받아.</b> 결제는 아직 연결돼 있지 않고, 적힌 값은
                   <b> "이만하면 받겠어?"</b>를 묻는 표시야.</p>
               </>)}
               {/* 판결록은 '되읽으러 오는' 자산이다 — 새 판결을 안 물어도 다시 오는 이유가 된다.

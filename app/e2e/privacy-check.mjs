@@ -383,9 +383,16 @@ return anon;`)();
   ck("D-1 질감을 명식에서 뽑는다(저장값 미사용)",
      /texture\(saju, zo, num, moon\)/.test(src) && !/mem\?\.tex|mbti \|\| texture\(/.test(src));
   ck("D-3 각인 버튼이 값을 보여준다", /각인 — 네가 어떻게 만들어졌는지 · \{IMPRINT_PRICE/.test(src));
-  ck("D-3 궁합 버튼이 값을 보여준다", /궁합 — 그 사람과 너 · \{MATCH_PRICE/.test(src));
-  ck("D-3 세 상품 모두 노출 이벤트가 있다",
-     /imprint_offer_shown/.test(src) && /match_offer_shown/.test(src) && /letter_price_shown/.test(src));
+  /* ⚠ **궁합은 2026-08-28 부터 무료다**(창업자 "궁합 공짜로 풀자") — 값을 보여줄 게 없다.
+     검사를 지우지 않고 **뒤집는다**: 무료로 푼 상품이 값 표시를 달고 있으면 그게 거짓말이다.
+     그리고 상수 자체가 남아 있으면 다음 세션이 "표시만 지운 유료 상품"으로 읽는다. */
+  ck("D-3 궁합은 값을 안 보여준다(무료로 풀었다)",
+     !/MATCH_PRICE/.test(src.replace(/\/\*[\s\S]*?\*\//g, "")) && !/궁합 — 그 사람과 너 ·/.test(src));
+  /* 값을 받는 상품만 같은 자로 잰다 — 궁합이 무료가 되면서 이 프레임에서 빠졌다(위 참조) */
+  ck("D-3 값을 받는 두 상품에 노출 이벤트가 있다",
+     /imprint_offer_shown/.test(src) && /letter_price_shown/.test(src));
+  ck("D-3 무료가 된 상품의 노출 이벤트는 걷었다(분모를 남겨 두지 않는다)",
+     !/match_offer_shown/.test(src.replace(/\/\*[\s\S]*?\*\//g, "")));
   ck("D-3 노출은 방문당 1회로 묶는다(분모가 안 부푼다)", /trackVisitOnce\("imprint_offer_shown"/.test(src));
 }
 

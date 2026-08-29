@@ -55,8 +55,7 @@ ck("imprint_read 는 열람당 1건(중복 없음)",
    (await evs(page)).filter((e) => e.ev === "imprint_read").length === 1);
 
 /* ── 궁합 ─────────────────────────────────────────────────────────────── */
-await page.getByRole("button", { name: /궁합 —/ }).click();
-await page.waitForSelector(".readwrap", { timeout: 8000 });
+await (await import("./open-match.mjs")).openMatch(page);
 ck("궁합이 열리면 match_opened", !!(await one(page, "match_opened")));
 
 // 상대 생년월일은 가상 값이다(CLAUDE.md §운영 규칙)

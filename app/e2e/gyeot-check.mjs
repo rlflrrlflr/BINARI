@@ -96,7 +96,7 @@ ck("③ 판결 화면 문구 보존 — 판결을 청한다",
   await onboard(p3, BASE, "?trackdebug");
   await p3.getByRole("button", { name: "곁", exact: true }).click();
   await p3.waitForTimeout(900);
-  const cta = p3.getByRole("button", { name: /부르게 돼/ });
+  const cta = p3.getByRole("button", { name: /부르게 돼|곁에 서/ });
   ck("⑥ 곁이 비면 나갈 문이 있다", (await cta.count()) === 1);
   /* §5 금지 — 첫 화면이 결제벽이 되면 안 된다. 문 하나를 가리키는 것과 값을 파는 건 다르다. */
   const panel = await p3.locator(".gyeotpanel").innerText();
@@ -122,7 +122,7 @@ ck("③ 판결 화면 문구 보존 — 판결을 청한다",
   await p3.locator("canvas").first().dblclick();
   await p3.waitForTimeout(900);
   ck("⑥ 궁합을 보면 그 사람이 실제로 곁에 선다", (await p3.locator(".gyeotlist li").count()) === 1);
-  ck("⑥ 곁이 서면 '비었다' 안내는 사라진다", (await p3.getByRole("button", { name: /부르게 돼/ }).count()) === 0);
+  ck("⑥ 곁이 서면 '비었다' 안내는 사라진다", (await p3.getByRole("button", { name: /부르게 돼|곁에 서/ }).count()) === 0);
   /* 창업자 결정 1(절충안) — 궁합만 본 사람은 정식 자리가 아니라 '답 대기'로 흐리게 선다 */
   /* 창업자 결정 1(절충안)의 층 구분은 그대로다. 다만 화면 말은 「부른 곁」이고,
      **라벨을 글자로 안 붙이기로** 했으므로(곁탭IA 어휘확장) 흐리기로만 갈린다 — 그걸 본다. */
@@ -148,7 +148,7 @@ ck("③ 판결 화면 문구 보존 — 판결을 청한다",
     window.claude = { complete: async (p) => { window.__prompts.push(p); return p.includes("[이미 확정된 판결]") ? c2 : c1; } };
   }, { c1: C1, c2: C2 });
   await onboard(p4, BASE, "?trackdebug");
-  await p4.getByRole("button", { name: /궁합|그 사람과/ }).first().click();
+  await (await import("./open-match.mjs")).openMatch(p4);
   await p4.waitForTimeout(600);
   await p4.locator(".impname").fill(NAME);
   const ins = p4.locator(".impask input.impnum");

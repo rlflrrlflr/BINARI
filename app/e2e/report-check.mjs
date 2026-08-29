@@ -234,10 +234,16 @@ await onboard(page);
      판결이 한 번 돌고 나면 사라진다 — 뒤에 두면 "진입점이 없다"고 헛울음이 난다(실제로 그랬다). */
   /* ── v125 궁합 — 각인의 애드온. 생년월일 + (v136부터) 부를 이름을 받고 연락처는 안 받는다 ── */
   {
-    const mb = page.getByRole("button", { name: /궁합 — 그 사람과 너/ });
-    ck("궁합 진입점이 로비에 있다", (await mb.count()) === 1);
+    /* ⚠ **궁합은 2026-08-28 부터 로비에 없다**(창업자 "판결 탭에서 궁합 없애"). 곁 탭의 기능이다 —
+       사람을 들이는 유일한 입구이고 결과가 곁 명부로 이어진다. 검사를 지우지 않고 **뒤집는다**:
+       로비에 없어야 하고, 곁 탭에 있어야 한다. 둘 다 안 물면 다음 판에 조용히 되살아난다. */
+    ck("궁합 진입점이 로비에 없다", (await page.getByRole("button", { name: /궁합 — 그 사람과 너/ }).count()) === 0);
+    const { openMatch } = await import("./open-match.mjs");
+    await openMatch(page);
+    const mb = page.locator(".impask");
+    ck("궁합 진입점이 곁 탭에 있다", (await mb.count()) === 1);
     if (await mb.count()) {
-      await mb.first().click(); await page.waitForTimeout(350);
+      await page.waitForTimeout(350);
       const ask = await page.locator(".imp").innerText();
       ck("궁합 — 상대 생년월일을 묻는다", (await page.locator(".imp .impnum").count()) >= 3);
       /* v136 — 이름은 **받는다**(창업자 결정). 대신 지켜야 하는 두 가지를 여기서 본다:
