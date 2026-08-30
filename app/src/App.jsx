@@ -3711,7 +3711,11 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
      (창업자 실기 제보 2026-08-29: "파란색 전체 블럭이 잡히네..?").
      touch-action 은 **스크롤**을 막을 뿐 **선택**을 막지 않는다. 둘은 다른 채널이다.
      누르는 대상에 선택·길게눌러 메뉴·탭 하이라이트가 붙을 이유가 없으므로 전부 끈다. */
-  const cv = <canvas ref={ref} className="gcv" aria-hidden="true"
+  /* ⚠ `data-renderer` 가 **빠져 있었다.** 공유 카드는 살아 있는 수호신 캔버스를 한 장 떠서
+     얹는데(`grabGuardianFrame`), 그 검색이 `canvas[data-renderer]` 다. 다른 렌더러 셋에는
+     붙어 있고 색장에만 없었다 — 그래서 홀로에서는 **카드의 수호신 초상이 통째로 빈다.**
+     렌더러를 새로 만들면서 이 약속을 안 지킨 것이다. */
+  const cv = <canvas ref={ref} className="gcv" aria-hidden="true" data-renderer="field"
     style={{ width: size, height: size, touchAction: "none", cursor: "pointer",
              userSelect: "none", WebkitUserSelect: "none",
              WebkitTouchCallout: "none", WebkitTapHighlightColor: "transparent" }} />;
@@ -3720,7 +3724,7 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
      포인터는 아래 오라 캔버스가 받아야 하므로 `pointerEvents:none`. */
   return (<span style={{ position: "relative", display: "block", width: size, height: size }}>
     {cv}
-    <canvas ref={faceRef} aria-hidden="true"
+    <canvas ref={faceRef} aria-hidden="true" data-face-overlay="1"
       style={{ position: "absolute", left: 0, top: 0, width: size, height: size, pointerEvents: "none" }} />
   </span>);
 }
@@ -4712,9 +4716,24 @@ function grabGuardianFrame() {
     const list = document.querySelectorAll("canvas[data-renderer]");
     let best = null;
     list.forEach((c) => { if (c.width && (!best || c.width > best.width)) best = c; });
-    return best;
+    if (!best) return null;
+    /* ⚠ 얼굴은 **별도 캔버스**다. 오라만 뜨면 카드에서 수호신이 **얼굴 없이** 나온다 —
+       화면에서는 둘이 겹쳐 보이지만 그건 CSS 가 겹쳐 준 것이지 한 장이 아니다.
+       같은 크기의 얼굴 층이 있으면 여기서 합쳐 **한 장으로** 돌려준다. */
+    const face = document.querySelector("canvas[data-face-overlay]");
+    if (!face || !face.width || face.width !== best.width) return best;
+    const out = document.createElement("canvas");
+    out.width = best.width; out.height = best.height;
+    const g = out.getContext("2d");
+    g.drawImage(best, 0, 0);
+    g.drawImage(face, 0, 0, out.width, out.height);
+    return out;
   } catch (_) { return null; }
 }
+/* 검사에서 **이 함수 자체**를 부르라고 내놓는다(선례: `__BINARI_ORB`·`__BINARI_R`).
+   ⚠ e2e 가 같은 로직을 베껴서 재면 **검사의 복사본을 검사하는 것**이 된다 —
+   실제로 그렇게 짰다가 합성을 빼도 통과하는 걸 확인했다(2026-08-30). */
+if (typeof window !== "undefined") window.__BINARI_GRAB = grabGuardianFrame;
 function buildBujeokPoster({ saju, direction, seed, tosses, hexInfo, category, against, total, verdict, guardian }) {
   const W = 1080, H = 1920;
   const cv = document.createElement("canvas"); cv.width = W; cv.height = H;

@@ -196,11 +196,15 @@ const wy = () => tp.evaluate(() => {
 });
 const cdp = await tctx.newCDPSession(tp);
 const before = await wy();
-const cx = tbox.l + tbox.w * 0.5, y0 = tbox.t + tbox.h * 0.30, y1 = tbox.t + tbox.h * 0.78;
+/* ⚠ 손끝 x 를 가운데(0.5)로 두면 시작점이 **얼굴 반경 경계(0.20)에 정확히 걸린다** —
+   안이면 「눌림」이라 몸통이 안 움직여 이 검사가 0.000 으로 떨어진다(실제로 그랬다).
+   이 검사가 묻는 건 「제스처를 브라우저에 뺏기지 않는가」지 안/밖 판정이 아니므로
+   **명백한 바깥**을 잡는다. */
+const cx = tbox.l + tbox.w * 0.12, y0 = tbox.t + tbox.h * 0.30, y1 = tbox.t + tbox.h * 0.78;
 await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: cx, y: y0 }] });
 let peak = 0;
 for (let i = 1; i <= 8; i++) {
-  await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: cx, y: y0 + (y1 - y0) * i / 8 }] });
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: cx + tbox.w * 0.055 * i, y: y0 + (y1 - y0) * i / 8 }] });
   await tp.waitForTimeout(50);
   const v = await wy(); if (v !== null && before !== null) peak = Math.max(peak, Math.abs(v - before));
 }
@@ -208,6 +212,42 @@ await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] }
 await tctx.close();
 /* 드리프트만으로 이 짧은 사이에 움직이는 폭은 0.02 미만이다(무입력 실측). 그 두 배를 문턱으로. */
 ck("⑫-b 드래그가 장을 실제로 움직인다", peak > 0.04, `이동 ${peak.toFixed(3)} (0.04 초과여야)`);
+/* ── ⑬ **공유 카드가 수호신을 찾을 수 있는가** ──────────────────────────
+   공유 카드(부적·각인·궁합)는 살아 있는 수호신 캔버스를 한 장 떠서 얹는다
+   (`grabGuardianFrame()` → `canvas[data-renderer]`). 그런데 색장 렌더러를 새로 만들면서
+   그 표식을 안 붙였다 — **홀로에서는 카드의 수호신 초상이 통째로 비어 있었다**(2026-08-30 발견).
+   화면에서는 멀쩡히 보이니 눈으로는 절대 안 잡힌다. 그리고 얼굴은 **별도 캔버스**라
+   표식만 붙여서는 얼굴 없는 수호신이 나간다. 둘 다 여기서 문다. */
+/* ⚠ 얼굴은 `?face=` 로만 뜬다. 그냥 두면 ⑬-b 는 **한 번도 실행되지 않는 공허한 검사**다 —
+   온보딩을 마친 이 페이지 그대로 얼굴을 켜고 다시 들어간다. */
+await page.goto(BASE + "/?skin=holo&face=a"); await page.waitForTimeout(2600);
+const frame = await page.evaluate(() => {
+  /* ⚠ 로직을 **베끼지 않는다.** 앱의 `grabGuardianFrame` 을 그대로 부른다 —
+     베껴서 재면 합성이 앱에서 빠져도 검사가 통과한다(실제로 그랬다). */
+  const grab = window.__BINARI_GRAB;
+  if (typeof grab !== "function") return { found: false, why: "__BINARI_GRAB 미노출" };
+  const out = grab();
+  if (!out || !out.width) return { found: false, why: "프레임을 못 떴다" };
+  const face = document.querySelector("canvas[data-face-overlay]");
+  const g = out.getContext ? out.getContext("2d") : null;
+  /* WebGL 캔버스가 그대로 오면 2d 컨텍스트를 못 얻는다 — 그건 합성을 안 했다는 뜻이다 */
+  if (!g) return { found: true, face: !!face, aura: -1, ink: 0, raw: true };
+  const d = g.getImageData(0, 0, out.width, out.height).data;
+  let aura = 0, ink = 0;
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] > 30) aura++;
+    if (d[i + 3] > 90 && d[i] < 120) ink++;
+  }
+  return { found: true, face: !!face, aura, ink, w: out.width };
+});
+ck("⑬-a 공유 카드가 수호신 프레임을 뜬다", frame.found && frame.aura > 500,
+   frame.found ? `오라 픽셀 ${frame.aura} (500 초과여야)` : frame.why || "못 떴다");
+/* 얼굴은 `?face=` 를 켰을 때만 뜬다 — 이 걸음은 안 켰으므로 층이 없는 게 정상이다.
+   층이 있는데 잉크가 0 이면 합성이 빠진 것이다. */
+ck("⑬-b 얼굴 층이 있으면 같이 떠진다", !frame.face || (!frame.raw && frame.ink > 20),
+   !frame.face ? "얼굴 층 없음(?face= 미사용 — 정상)"
+   : frame.raw ? "합성을 안 하고 원본 캔버스를 그대로 돌려줬다" : `잉크 픽셀 ${frame.ink}`);
+
 await b.close();
 
 const pass = R.filter(Boolean).length;
