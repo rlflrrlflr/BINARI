@@ -3724,7 +3724,11 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
           const dfx = Math.sin(tS * 0.55) * 0.075 + Math.sin(tS * 0.93 + 1.3) * 0.030;
           const dfy = Math.cos(tS * 0.47) * 0.088 + Math.sin(tS * 0.81 + 0.6) * 0.034;
           core.x = 0.5 + dfx + wisp.x / 2.35;
-          core.y = 0.5 - dfy - wisp.y / 2.35 + SINK * 0.06 - lift;
+          /* ⚠ **`uv.y += u_sink*0.06` 을 그대로 베끼면 얼굴이 몸보다 두 배 내려간다.**
+             셰이더는 장 전체를 0.06 만큼 내리지만, 캔버스 밖으로 나간 부분이 잘려
+             **눈에 보이는 무게중심은 절반만** 움직인다(실측: SINK=1 에서 몸 16px vs 얼굴 35px).
+             얼굴은 「식」이 아니라 「보이는 몸」을 따라가야 한다 — 실측으로 맞춘 값이다. */
+          core.y = 0.5 - dfy - wisp.y / 2.35 + SINK * 0.028 - lift;
           /* ⚠ **시선은 「떠다님」만 봐야 한다.** core 에는 탭 전환으로 몸이 줄어드는 몫(lift)이
              섞여 있어서, 곁으로 갈 때 그 변화가 **속도로 잡히고 → 고개가 홱 돌고 → 앞면이 던져져
              전이 중 실루엣이 찌그러졌다**(검사 ⑩-b 가 물었다). 크기 변화는 고개 방향이 아니다.
