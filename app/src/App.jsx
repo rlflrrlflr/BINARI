@@ -4330,7 +4330,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v171 · 길을 놓는다";
+const APP_VER = "v172 · 수호신이 말한다";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -6225,6 +6225,51 @@ function InviteLanding({ id, onOnboard, onDismiss }) {
   );
 }
 
+/* ═══════════ 수호신이 말하는 자리 (v172 · 홀로 전용) ═══════════════════════
+   창업자: *"「다시 왔네 강석우, 기다렸어」 이 부분을 수호신이 말하는 공간으로 두자.
+   처음엔 웰커밍 멘트, 인터랙션하는 거에 따라 대사가 바뀌는 걸로."*
+
+   ⚠ **모델을 안 부른다.** 이 줄 하나 때문에 판결 원가가 붙으면 안 된다 —
+     같은 날 창업자가 원가를 물었고, 지금 API 를 태우는 건 판결과 서신 둘뿐이다. 여기는 표다.
+   ⚠ **전부 「반응」이다. 먼저 말을 걸지 않는다.** 설계 헌장 §모를 권리 —
+     판결 국면에서 시스템이 먼저 펼치는 push 는 금지다. 그래서 **가만히 있으면 아무 말도 안 한다**
+     (혼잣말 타이머를 안 만든 이유다). 환영 한 줄만 예외이고, 그건 지금도 있던 줄이다.
+   ⚠ **새 캐릭터가 아니다.** 말하는 건 이미 있는 수호신이고, 목소리는 그 사람 **오행에서** 나온다 —
+     같은 손짓에도 화(火)와 수(水)가 다르게 답한다. 헌장 §페르소나(신규 캐릭터 금지)를 안 건드린다.
+   ⚠ **홀로에서만.** 기존 화면은 한 줄도 안 바뀐다.
+
+   말버릇을 오행으로 가른 이유: 수호신의 정체가 그 사람의 오행이라고 앱이 이미 말하고 있다
+   (`guardianIntro` — "나는 '…'의 기운을 두른 존재야"). 목소리가 거기서 안 나오면 그건 딴 사람이다. */
+const GSAY = {
+  목: { touch1: "간지러워. 그렇게 만지면 자꾸 자라잖아.",
+        touch2: "계속 만질 거야? 나 오늘 좀 뻗고 싶긴 해.",
+        touchN: "알았어 알았어, 자랄게. 뭐가 그렇게 급해?",
+        wake:  "그래, 이제 말해 봐. 어디까지 뻗을지 같이 보자.",
+        back:  "곁을 보고 왔네. 뿌리는 옆으로 뻗는 거야." },
+  화: { touch1: "앗, 뜨거워. …아니 내가 뜨거운 거지.",
+        touch2: "자꾸 건드리면 더 타올라. 알고 그러는 거지?",
+        touchN: "야. 나 지금 꽤 밝아졌어. 봤어?",
+        wake:  "좋아, 물어봐. 태울 건 태워야지.",
+        back:  "곁에 다녀왔네. 불은 옮겨붙는 거 알지?" },
+  토: { touch1: "…응. 여기 있어.",
+        touch2: "안 가. 걱정 마.",
+        touchN: "그만 만져도 돼. 나 안 흔들려.",
+        wake:  "그래. 천천히 말해 봐. 다 듣고 있어.",
+        back:  "곁을 보고 왔구나. 사람은 땅처럼 쌓이는 거야." },
+  금: { touch1: "손끝이 차갑네. 나도 그래.",
+        touch2: "또? 벼려지려면 두드려야 하긴 하지.",
+        touchN: "됐어, 충분히 날 섰어.",
+        wake:  "말해. 잘라 줄 건 잘라 줄게.",
+        back:  "곁을 봤구나. 누굴 둘지는 네가 정해." },
+  수: { touch1: "…파문이 생겼어.",
+        touch2: "자꾸 건드리면 바닥이 안 보여.",
+        touchN: "가라앉을 시간을 좀 줘.",
+        wake:  "그래. 깊은 데까지 가 보자.",
+        back:  "곁을 보고 왔네. 물은 사람을 따라 흘러." },
+};
+/* 오행이 없거나(있을 리 없지만) 표에 빠진 경우 — 목소리를 지어내지 않고 조용히 환영으로 돌아간다 */
+const gsay = (el, key) => (GSAY[el] || {})[key] || null;
+
 /* ═══════════════ 앱 ═══════════════ */
 export default function App() {
   const [mem] = useState(loadMemory);             // v16(B1): 부팅 시 기억 1회 로드
@@ -6383,6 +6428,19 @@ export default function App() {
     })();
     return () => { alive = false; timers.forEach(clearTimeout); };
   }, [!!saju]);
+
+  /* 곁을 보고 오면 그 사실에 반응한다 — 이것도 유저 행동에 대한 반응이지 먼저 거는 말이 아니다.
+     ⚠ 첫 렌더에는 안 울린다(`_tabSeen`) — 앱을 열자마자 「돌아왔네」가 뜨면 그건 거짓말이다. */
+  const _tabSeen = useRef(null);
+  useEffect(() => {
+    if (_tabSeen.current === null) { _tabSeen.current = tab; return; }
+    if (_tabSeen.current === tab) return;
+    const from = _tabSeen.current; _tabSeen.current = tab;
+    /* ⚠ **곁 탭에는 이 자리가 없다.** 처음엔 곁으로 갈 때도 대사를 갈았는데,
+       그 탭은 인사 블록을 안 그려서 **써 놓고 화면에 못 나오는 말**이었다(실측으로 잡았다).
+       그래서 곁에 대한 반응은 **돌아왔을 때** 판결 탭에서 한다. 안 보이는 말은 안 만든다. */
+    if (from === "gyeot" && tab === "judge") say("back");
+  }, [tab]);
 
   const [bujeok, setBujeok] = useState(false);  // v7: 부적
   const [convo, setConvo] = useState(mem?.convo || []); // v14: 대화 기억 — 이전 질문·판결 누적(최근 6턴)
@@ -6660,13 +6718,35 @@ export default function App() {
      방문 내내 세어 두었다가 화면을 떠날 때 한 건으로 묶어 보낸다.
      기록은 1건인데 "몇 번 만졌고 얼마나 오래 붙들었는지"는 그대로 남는다. */
   const touchRef = useRef({ taps: 0, first: 0, last: 0, sent: false });
+  /* ── 수호신이 말하는 자리 (v172 · 홀로 전용) ────────────────────────────────
+     ⚠ **전부 반응이다.** 먼저 말을 걸지 않는다(§모를 권리) — 손짓이 있을 때만 바뀐다.
+     ⚠ 모델을 안 부른다. 표에서 고른다(`GSAY`) — 목소리는 그 사람 **오행**에서 나온다. */
+  const [gSay, setGSay] = useState(null);
+  const say = (key) => { const l = gsay(saju?.main, key); if (l) setGSay(l); };
   const tryWake = () => {                                   // v52: 수동 더블탭(모바일·데스크탑 동일)
     const now = performance.now();
     const t = touchRef.current;
     t.taps += 1; t.last = now; if (!t.first) t.first = now;
-    if (now - wakeTapRef.current < 350) { wakeTapRef.current = 0; if (!awake) { setAwake(true); trackVisitOnce("guardian_wake", {}); } }
-    else { wakeTapRef.current = now; }
+    if (now - wakeTapRef.current < 350) {
+      wakeTapRef.current = 0;
+      if (!awake) {
+        setAwake(true); trackVisitOnce("guardian_wake", {}); say("wake");
+        /* 한 마디만 하고 물러난다 — 위 주석 참조(v55 의 「순수 질문입력 구간」을 안 깬다) */
+        clearTimeout(sayClearRef.current);
+        sayClearRef.current = setTimeout(() => setGSay(null), 2600);
+      }
+    } else {
+      wakeTapRef.current = now;
+      /* 손짓이 쌓일수록 말이 바뀐다 — 같은 답을 세 번 하면 그건 반응이 아니라 자동응답이다.
+         ⚠ `t.taps` 는 방문 내내 쌓이는 값이라(계측용) 그대로 쓰면 두 번째 방문부터 늘 「그만 만져」다.
+           **깨어난 뒤 눌린 것만** 세지 않도록 여기서 따로 센다. */
+      sayTapRef.current += 1;
+      say(sayTapRef.current === 1 ? "touch1" : sayTapRef.current === 2 ? "touch2" : "touchN");
+    }
   };
+  const sayTapRef = useRef(0);
+  const sayClearRef = useRef(null);
+  useEffect(() => () => clearTimeout(sayClearRef.current), []);
   /* 곁 명부 열기 — tryWake 와 **같은 350ms 규칙**을 쓴다. 문법이 같아야 배우는 게 하나뿐이다. */
   /* ── 곁에게 초대를 보낸다 (작업지시_초대와회신 §3 · 창업자 게이트 2026-08-26) ─────
      게이트: **첫 곁은 내가 직접 넣어 공짜로 보고, 그 다음부터는 그 사람이 직접 넣어야 한다.**
@@ -7714,7 +7794,13 @@ export default function App() {
                   <p className="gsay fade" style={{ animationDelay: "1.5s" }}>{letterDoc && !letterDoc._err ? LETTER_NUDGE_DONE : LETTER_NUDGE_LINE}</p>
                 </div>
               ) : returning ? (
-                <p className="gsay fade">{"다시 왔네" + (birth.name ? ", " + birth.name : "") + ". 기다렸어."}</p>
+                /* ⚠ **홀로에서만** 말하는 자리가 된다 — 기존 화면은 한 줄도 안 바뀐다.
+                   `key` 를 문장에 걸어 **말이 바뀔 때마다 다시 떠오르게** 한다(안 걸면 글자만 슬쩍 갈린다). */
+                SKIN === "holo"
+                  ? <p className="gsay gtalk fade" key={gSay || "hello"}>
+                      {gSay || ("다시 왔네" + (birth.name ? ", " + birth.name : "") + ". 기다렸어.")}
+                    </p>
+                  : <p className="gsay fade">{"다시 왔네" + (birth.name ? ", " + birth.name : "") + ". 기다렸어."}</p>
               ) : justBorn ? (
                 <div><p className="gsay born fade">— 다시 만났네. 내가 너의 수호신이야.</p><p className="gsay fade" style={{ animationDelay: ".95s" }}>{guardianIntro}</p><p className="gsay sprite fade" style={{ animationDelay: "1.9s" }}>아, 조각 하나는 달빛에 물들어 곁에 남았어. 까불 거야 — '정령'이야.</p></div>
               ) : null}
@@ -7740,6 +7826,17 @@ export default function App() {
           {ritual && <div className="residue" style={{ "--elc": saju ? EL_COLOR[saju.main][0] : "#f5d98b" }} />}
           {phase >= 1 && !res && awake && (
             <div className={`fade gpanel ${asking ? "asking" : ""}`}>
+              {/* ⚠ **말하는 자리가 여기서 끊기고 있었다.** 깨우면 위 인사 블록이 통째로 사라져서
+                  「그래, 이제 말해 봐」가 **써 놓고 화면에 못 나오는 대사**였다(실측으로 잡았다).
+                  깨우기는 이 화면에서 제일 큰 손짓인데 거기 반응이 없으면 말하는 자리가 아니다.
+                  ⚠ **그런데 이 구간은 v55 가 「수호신이 물러난 순수 질문입력 구간」으로 정해 둔 자리다**
+                    (`asking` 은 「타이핑 중」이 아니라 깨어난 상태 그 자체다 — 처음엔 그걸 몰라서
+                     `!asking` 을 걸었고 대사가 영영 안 나왔다).
+                    그 결정을 깨지 않는다: **물러나면서 한 마디만 하고 스스로 사라진다**(2.6초).
+                    그 뒤엔 질문 칸만 남는다 — 유저가 말할 차례다. */}
+              {SKIN === "holo" && gSay && !busy && !ritual && (
+                <p className="gsay gtalk fade" key={gSay}>{gSay}</p>
+              )}
               {returning && !res && !busy && !ritual && (!birth.name || !birth.sex) && (addOpen ? (
                 <div className="addpanel fade">
                   {!birth.name && <input className="in wide center" lang="ko" placeholder="너를 뭐라고 부를까?" maxLength={12} value={addName} onChange={e => setAddName(e.target.value)} />}
@@ -8422,6 +8519,11 @@ const CSS = `
 .stage.holo .gname{color:#2a2419}
 .stage.holo .gname.under{color:#2a2419;letter-spacing:.02em;font-weight:600}
 .stage.holo .wakehint{font-size:11px;letter-spacing:.20em;color:#7f7663;font-weight:500;animation:none}
+/* 말이 바뀔 때마다 다시 떠오른다 — 글자만 슬쩍 갈리면 「바뀌었다」가 안 읽힌다.
+   ⚠ 움직임 줄이기에서는 자리만 잡고 멈춘다(이 앱의 규칙). */
+.gtalk{animation:gtalkIn .5s cubic-bezier(.22,.7,.25,1) both}
+@keyframes gtalkIn{from{opacity:0;transform:translateY(5px);filter:blur(2px)}to{opacity:1;transform:none;filter:none}}
+@media (prefers-reduced-motion:reduce){.gtalk{animation:none}}
 .stage.holo .fine{font-size:11.5px;letter-spacing:0;color:#6b6252;line-height:1.75}
 /* 오늘 상태는 **한 문장**이다 — 명사 딱지가 아니라 사람 말이라 서체도 본문 격으로 올린다 */
 .stage.holo .moodline{font-family:'Noto Serif KR',serif;font-size:13px;color:#6b6252;letter-spacing:0;line-height:1.5}
