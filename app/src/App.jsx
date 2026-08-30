@@ -5431,6 +5431,24 @@ const MATCH_LAST_KEY = "binari.match_last.v1";
    ⚠ 두 층 (창업자 결정 2026-08-15 #1): 회신이 온 사람은 `곁`, 내가 궁합만 본 사람은 `대기` — 흐리게 선다.
       지금은 회신 레그가 없으므로 새로 드는 사람은 전부 `대기`다. 스키마만 먼저 깔아 둔다. */
 const GYEOT_KEY = "binari.gyeot.v1";
+/* ── 게이트 기억 (2026-08-30 창업자 지시 「다 반영」) ────────────────────────
+   창업자 게이트는 「첫 곁은 내가 직접 넣어 공짜, 그 다음부터는 그 사람이 직접 넣는다」인데,
+   그 조건을 **「지금 곁이 몇이냐」로만** 재고 있었다. 그래서 명부를 전부 지우면 빈 상태로 돌아가
+   무료 직접 입력이 되살아났다 — 지우고 넣고를 반복하면 상한이 없다(2026-08-30 실측).
+   그래서 「곁이 비었나」가 아니라 **「그 한 번을 이미 썼나」** 를 따로 기억한다.
+
+   ⚠ **초대 자리를 지우는 것과 구별된다.** 이 값은 직접 입력이 실제로 성사됐을 때만 서므로,
+     초대만 만들었다가 지운 사람은 무료 한 번을 **안 쓴 것**이고 문이 그대로 열려 있다.
+     (예전엔 초대를 만들기만 해도 명부가 차서 문이 닫혔다 — 자물쇠가 자기에게 걸렸다.)
+
+   ⚠ **홈의 「처음부터 다시」로는 지워진다. 이건 구멍이 아니라 결정이다.**
+     그 버튼은 곁만이 아니라 이름·생년월일까지 **나를 통째로** 지운다("다른 사람이야?").
+     여기서까지 값을 남기면 **폰을 물려받은 진짜 새 사람**이 첫 한 명을 영영 못 쓴다.
+     경계선: **곁만 지우는 건 우회, 나를 통째로 지우는 건 새 사람.** 그리고 온보딩을 다시
+     밟아야 하므로 초대 링크를 보내는 것보다 품이 더 든다 — 허들로서 이미 성립한다. */
+const GYEOT_FREE_KEY = "binari.gyeot.freefirst.v1";
+const usedFreeFirst = () => { try { return store.getItem(GYEOT_FREE_KEY) === "1"; } catch (_) { return false; } };
+const markFreeFirst = () => { try { store.setItem(GYEOT_FREE_KEY, "1"); } catch (_) {} };
 /* ── 곁의 두 층 — 어휘 정본은 곁탭IA 「어휘 확장」(2026-08-16) ────────────────
    창업자 결정은 "회신 온 사람 / 궁합만 본 사람"의 **층 구분**이었고 그건 그대로 채택했다.
    다만 「답 대기」라는 **말**은 디자인 레인이 기각했다 — ①행정 용어라 세계관이 관공서가 되고
@@ -6362,6 +6380,8 @@ export default function App() {
   /* v134.2 곁 명부 — 이제 **실제 데이터가 붙는다**(작업지시_역할과초대 §D).
      명부의 유일한 입구는 궁합을 돌리는 순간이다(MatchDoc onMet). 저장·정렬·파생은 전부 위 모듈 함수에 있다. */
   const [gyeot, setGyeot] = useState(() => readGyeot());
+  /* 게이트 기억(§GYEOT_FREE_KEY). 곁 길이가 아니라 **무료 한 번을 썼나**가 문의 조건이다. */
+  const [freeUsed, setFreeUsed] = useState(() => usedFreeFirst());
   const gyeotSorted = useMemo(() => (saju ? gyeotOrder(gyeot) : []), [gyeot, saju]);
   /* 써머리를 **한 번만** 계산해 표와 목록이 같은 색인을 쓰게 한다. 각자 계산하면 정렬이 어긋나는 날
      같은 자리에 다른 번호가 붙고, 그때 색인은 짝을 이어 주는 게 아니라 **틀린 짝을 이어 준다.** */
@@ -7563,10 +7583,22 @@ export default function App() {
                 {/* ⚠ **탭을 옮기지 않는다**(v165). 예전엔 판결 탭으로 보내고 문서를 열었는데,
                     궁합이 판결 탭에서 빠진 뒤로는 **없는 자리로 보내는 셈**이 된다. 문서는 화면을 덮으므로
                     탭을 바꿀 이유가 애초에 없었다 — 닫으면 곁 탭으로 그대로 돌아온다. */}
-                <button className="btn ghost mt" onClick={() => {
-                  track("gyeot_empty_cta", { from: "gyeot" });
-                  setMatchOpen(true);
-                }}>둘 사이를 보면 그 사람이 곁에 서</button></>
+                {/* 게이트(§GYEOT_FREE_KEY). 무료 한 번을 아직 안 썼을 때만 직접 입력 문이 선다.
+                    ⚠ **쓴 뒤에도 이 자리를 비워 두면 안 된다** — 곁을 다 지운 사람이 「부르면 나와 같이
+                      돌아」라는 문장만 보고 **부르는 방법이 없는 화면**에 서게 된다. 그건 안내가 아니라
+                      핀잔이다(바로 위 B-2 주석이 같은 실패를 이미 이름 붙여 놨다). 문을 초대로 바꾼다. */}
+                {!freeUsed ? (
+                  <button className="btn ghost mt" onClick={() => {
+                    track("gyeot_empty_cta", { from: "gyeot" });
+                    setMatchOpen(true);
+                  }}>둘 사이를 보면 그 사람이 곁에 서</button>
+                ) : (<>
+                  <p className="fine gyegate">생일을 대신 넣어 보는 건 한 번이었어 —
+                    <b> 이제 그 사람이 직접 넣어야 서</b></p>
+                  {inviteErr && <p className="err gyerr">{inviteErr}</p>}
+                  <button className="btn ghost mt" disabled={inviteBusy === "new"}
+                    onClick={() => inviteNew()}>{inviteBusy === "new" ? "만드는 중…" : "부를 사람에게 링크 보내기"}</button>
+                </>)}</>
               ) : !gyeotOpen ? (<>
                 {/* 닫힌 상태 — 목록 대신 **곁이 돌고 있다는 사실**만. 판결 탭의 "두드려봐"와 같은 자리다.
                     ⚠ 여기에 인원수를 안 쓴다. 세는 건 열고 나서 **자리(역할)** 를 세는 것뿐이다(§5). */}
@@ -7684,7 +7716,13 @@ export default function App() {
                   return (
                     <div className="gask">
                       <p>{nm ? <><b>{nm}</b>{josa(nm, "을", "를")} 곁에서 지울까?</> : <>이 곁을 지울까?</>}</p>
-                      <p className="fine">지우면 되돌릴 수 없어. 다시 보려면 궁합을 새로 봐야 해.</p>
+                      {/* ⚠ **이 줄이 거짓이 됐다 (2026-08-30).** 「궁합을 새로 보면 된다」는 곁을 다 지우면
+    직접 입력이 되살아나던 시절의 말이다. 이제 무료 한 번은 기억되므로, 지운 사람에게
+    남는 길은 **그 사람에게 링크를 보내는 것뿐**이다. 화면이 실제로 되는 일만 말해야 한다. */}
+                      <p className="fine">지우면 되돌릴 수 없어.{" "}
+                        {g?.inv ? <>부르던 건 여기서 끊겨 — 다시 부르려면 링크를 새로 보내야 해.</>
+                          : freeUsed ? <><b>다시 세우려면 그 사람이 직접 넣어야 해</b> — 링크를 보내는 길만 남아.</>
+                          : <>다시 보려면 둘 사이를 새로 봐야 해.</>}</p>
                       <div className="gaskrow">
                         <button className="btn ghost sm" onClick={() => setGyeotAsk("")}>아니, 둘래</button>
                         <button className="btn ghost sm del" onClick={() => {
@@ -7733,6 +7771,19 @@ export default function App() {
                   <b> 생일은 이제 그 사람이 직접 넣어</b></p>
                 <button className="btn ghost mt" disabled={inviteBusy === "new"}
                   onClick={() => inviteNew()}>{inviteBusy === "new" ? "만드는 중…" : "한 사람 더 부를래"}</button>
+                {/* ⚠ **초대를 먼저 만든 사람이 무료 한 번을 잃고 있었다 (2026-08-30).**
+                    게이트를 「곁이 비었나」로 재던 시절에는, 링크를 만들기만 해도 명부에 자리가 서서
+                    직접 입력 문이 닫혔다 — **아무에게도 안 보내도** 그랬다. 자물쇠가 자기에게 걸린 것이다.
+                    규칙은 원래 「곁이 비어 있을 때만」이 아니라 **「한 사람은 내가 넣어도 된다」**였다.
+                    그래서 조건을 명부 길이가 아니라 §GYEOT_FREE_KEY 로 옮기고, 아직 안 쓴 사람에게는
+                    여기서도 그 문을 그대로 연다. 순서가 어떻든 무료는 정확히 한 번이다. */}
+                {!freeUsed && (<>
+                  <p className="fine gyegate">한 사람은 네가 생일을 넣어 봐도 돼 — <b>딱 한 번이야</b></p>
+                  <button className="btn ghost mt" onClick={() => {
+                    track("gyeot_empty_cta", { from: "gyeot_roster" });
+                    setMatchOpen(true);
+                  }}>내가 생일을 넣어 볼래</button>
+                </>)}
                 <button className="btn ghost mt" onClick={() => { setGyeotOpen(false); track("gyeot_roster_closed", {}); }}>접어둘게</button>
               </>)}
             </div>
@@ -8223,6 +8274,9 @@ export default function App() {
                 /* ⚠ **새로 든 사람만** 연출한다. 같은 사람을 다시 보면 명부는 시각만 갱신되므로
                    위성이 늘지 않는데, 그때도 터뜨리면 "뽑았다"가 거짓말이 된다. */
                 const had = gyeot.some((x) => x.key === e.key);
+                /* 게이트(§GYEOT_FREE_KEY) — **여기가 무료 한 번이 소진되는 유일한 자리다.**
+                   `onMet` 은 직접 입력 폼의 제출에서만 온다(초대 회신은 `pre` 라 `onMet` 이 없다). */
+                markFreeFirst(); setFreeUsed(true);
                 setGyeot((p) => gyeotAdd(p, e));
                 if (!had) setGyeotJoined({ name: (e.name || "").trim(), at: Date.now() });
               }} />

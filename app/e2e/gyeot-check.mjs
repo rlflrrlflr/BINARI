@@ -224,10 +224,55 @@ ck("③ 판결 화면 문구 보존 — 판결을 청한다",
      (await p5.getByRole("button", { name: /곁에 서|부르게 돼|둘 사이를 보면/ }).count()) === 0);
   ck("⑧ 남는 문은 초대뿐이다", (await p5.getByRole("button", { name: "한 사람 더 부를래" }).count()) === 1);
   /* 성질 검사 ③: 왜 초대인지가 버튼 위에 적혀 있다 (창업자 지시 2026-08-30) */
-  const gate = await p5.locator(".gyegate").innerText().catch(() => "");
+  const gate = (await p5.locator(".gyegate").allInnerTexts()).join(" ");
   ck("⑧ 초대 버튼 위에 이유가 적혀 있다", /직접 넣어/.test(gate), gate.replace(/\s+/g, " ").slice(0, 60));
   ck("⑧ 안내에 개수·값이 안 섞인다(§5)", !/\d\s*(명|개)|원|₩/.test(gate));
+  /* 성질 검사 ④: **곁을 전부 지워도 무료 한 번이 되살아나지 않는다.**
+     예전엔 게이트를 「지금 곁이 몇이냐」로만 재서, 지우고 넣고를 반복하면 상한이 없었다. */
+  await p5.locator(".gyeotlist li .gx").first().click();
+  await p5.waitForTimeout(400);
+  const ask = (await p5.locator(".gask").innerText()).replace(/\s+/g, " ");
+  ck("⑧ 지우기 확인이 되는 일만 말한다(궁합을 새로 보면 된다고 안 한다)",
+     /직접 넣어야 해/.test(ask) && !/둘 사이를 새로 봐야 해/.test(ask), ask.slice(0, 70));
+  await p5.getByRole("button", { name: "지울래" }).click();
+  await p5.waitForTimeout(1200);
+  ck("⑧ 곁을 전부 지웠다", (await roster()) === 0);
+  await p5.reload(); await p5.waitForTimeout(2600);
+  await p5.getByRole("button", { name: "곁", exact: true }).click();
+  await p5.waitForTimeout(900);
+  ck("⑧ 다 지우고 새로고침해도 직접 입력 문이 안 돌아온다",
+     (await p5.getByRole("button", { name: /둘 사이를 보면/ }).count()) === 0);
+  ck("⑧ 대신 초대 문이 선다(막다른 길을 안 만든다)",
+     (await p5.getByRole("button", { name: /링크 보내기/ }).count()) === 1);
+  ck("⑧ 기억이 남아 있다", (await p5.evaluate(() => localStorage.getItem("binari.gyeot.freefirst.v1"))) === "1");
   await p5.close();
+}
+
+/* ── ⑨ 게이트 — 초대를 먼저 만들어도 무료 한 번은 안 없어진다 ─────────────
+   예전엔 링크를 만들기만 해도(아무에게도 안 보내도) 명부에 자리가 서서 직접 입력 문이 닫혔다.
+   규칙은 「곁이 비어 있을 때만」이 아니라 **「한 사람은 내가 넣어도 된다」**다. */
+{
+  const p6 = await b.newPage({ viewport: { width: 430, height: 932 } });
+  p6.setDefaultTimeout(9000);
+  await onboard(p6, BASE);
+  await p6.getByRole("button", { name: "곁", exact: true }).click();
+  await p6.waitForTimeout(900);
+  /* 곁이 빈 상태에서 무료 문이 서 있다 — 그 문을 안 쓰고 명부를 채운 뒤에도 살아 있어야 한다 */
+  ck("⑨ 아직 안 썼으면 무료 문이 있다", (await p6.getByRole("button", { name: /둘 사이를 보면/ }).count()) === 1);
+  await p6.evaluate(() => {
+    const now = Date.now();
+    localStorage.setItem("binari.gyeot.v1", JSON.stringify([{ key: "inv:testonly", el: null, dg: null, name: "", inv: "testonly", at: now }]));
+  });
+  await p6.reload(); await p6.waitForTimeout(2600);
+  await p6.getByRole("button", { name: "곁", exact: true }).click();
+  await p6.waitForTimeout(900);
+  await p6.locator("canvas").first().dblclick();
+  await p6.waitForTimeout(1300);
+  ck("⑨ 부르던 자리가 있어도 무료 문은 살아 있다",
+     (await p6.getByRole("button", { name: "내가 생일을 넣어 볼래" }).count()) === 1);
+  ck("⑨ 그 문이 한 번뿐임을 말한다",
+     /딱 한 번이야/.test((await p6.locator(".gyegate").allInnerTexts()).join(" ")));
+  await p6.close();
 }
 
 await b.close();
