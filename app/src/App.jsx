@@ -3198,7 +3198,11 @@ void main(){
      즉 **삼각형**이고 그게 헤일로 반경(r3·r4)에 곱해진다. 곁에서도 감정 가중치가 살아 있어
      헤일로가 삼각으로 부풀었다. 굴곡·비율·물방울·층 어긋남을 다 껐는데도 각져 보인 게 이것 때문.
      곁에서는 **형태 변조만** 접는다 — 감정은 밝기·색으로 계속 실린다. */
-  float puffK = 1.0 + lobe*u_puffP.z*1.35*u_wt.y*(1.0 - fold*0.92);   // ⚠ 2.2 는 헤일로를 세잎클로버로 갈랐다
+  /* ⚠ 접는 계수가 **0.92 라 8% 가 남아 있었다** — 그 잔량이 곁에서 삼각으로 읽혔다
+     (지표를 교정하고 재니 3주기 성분 0.096, 원 0.001·삼각 0.278 사이). 1.0 으로 끝까지 접는다.
+     헌장과도 맞는다 — "곁에서는 형태 변조만 접고 감정은 밝기·색으로 싣는다"였는데,
+     그 문장을 코드가 92% 만 지키고 있었다. */
+  float puffK = 1.0 + lobe*u_puffP.z*1.35*u_wt.y*(1.0 - fold);   // ⚠ 2.2 는 헤일로를 세잎클로버로 갈랐다
   /* ⚠ **여기가 「수호신이 깜빡인다」의 원인이었다**(창업자 제보 2026-08-29).
      예전 판은 floor(t*11) — 값이 **계단**이라 한 프레임 만에 최대 0.73 튀었고,
      그게 아래 alpha 전체에 곱해져 **물체가 통째로 명멸했다**. 실측: 초당 1.1회,
@@ -3310,7 +3314,12 @@ void main(){
   /* ⚠ 마스크를 **사각형**(max(|x|,|y|))으로 잡으면 헤일로가 캔버스를 채울 때 그 사각 자국이
      그대로 드러난다(실기에서 각진 얼룩으로 보였다). 원형으로 감싼다. */
   float vig  = smoothstep(1.02, 0.56, length(uv)*2.0);
-  float live  = mix(1.0, mix(1.0, fl, 0.22 + 0.78*up), u_wt.z);   // 밑동은 안 흔들린다
+  /* ⚠ **곁에서는 접는다.** up 가중은 「불꽃 위쪽이 흔들린다」인데, 곁의 수호신은
+     불꽃이 아니라 **응축된 구슬**이다. 세로 밝기 기울기가 남으면 임계 실루엣이 찌그러져
+     둥글지 않게 읽힌다(홀로 검사 ⑩ 삼각 성분 0.06 → 0.17 로 튀었다).
+     형태 변조를 곁에서 접는 것과 같은 계열의 처리다 — 여기만 빠져 있었다. */
+  float flW   = mix(0.22 + 0.78*up, 1.0, fold);
+  float live  = mix(1.0, mix(1.0, fl, flW), u_wt.z * (1.0 - fold*0.85));
   float bornK = 0.20 + 0.80*u_born;               // 흩어져 있을 땐 옅지만 **보이기는 해야 한다**
   float touchK = (1.0 + tk*0.62) * (1.0 + u_ex*0.28);   // 모이면 진해지고, 들뜨면 더 환해진다
   gl_FragColor = vec4(outc, clamp(sum*u_lum*live*vig*bornK*touchK, 0.0, 1.0));
@@ -3410,10 +3419,17 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
       /* ── 코어의 실제 자리 ────────────────────────────────────────────────
          ⚠ 얼굴을 드리프트+위습에만 맞췄더니 **코어에서 벗어나 떠 있었다**
             (실측 2026-08-29: x 27.8px · y 22.4px, 383px 캔버스 기준 7%·6%).
-            빠진 건 둘이다 — ①반사광 층 c0 의 **자기 어긋남**(시간에 따라 움직인다)
-            ②`uv.y += u_sink*0.06`. 셰이더와 **같은 식으로** 다시 계산해서 쓴다.
+            빠진 건 둘이다 — ①`uv.y += u_sink*0.06` ②불꽃이 위로 뻗는 만큼의 **들어올림**
+            (아래 lift — 상수가 아니라 R·응축에 따라 변한다). 셰이더와 같은 식으로 다시 푼다.
          이 값은 얼굴 배치에만 쓰는 게 아니라 **손끝이 얼굴 안인지 밖인지** 가르는 기준이기도 하다. */
       const core = { x: 0.5, y: 0.5 };
+      /* ── 몸의 속도 ────────────────────────────────────────────────────
+         ⚠ **얼굴과 몸이 따로 놀던 진짜 이유**(창업자 2026-08-29: "구심축이 다른 느낌이야").
+            얼굴의 두리번거림이 **자기만의 사인파**였다 — 몸은 몸대로 떠다니고 고개는 고개대로
+            돌았으니, 위치는 같아도 **축이 둘**이었다. 하나로 묶는다:
+            **고개는 몸이 가는 쪽을 향한다.** 그러면 축이 하나가 된다 —
+            생물이 움직이는 방향을 보는 것과 같은 이치고, 사인파를 아무리 맞춰도 이건 못 흉내낸다. */
+      const look = { x: 0, y: 0, px: 0.5, py: 0.5, had: false };
       const SPD = 1.35 * (mood ? mood.sp : 1);
       const SINK = mood ? mood.sink * 2.2 : 0;
       const FACE_R = 0.20;                       // 얼굴로 치는 반경(캔버스 폭 대비)
@@ -3422,7 +3438,7 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
           얼굴 바깥에서 누르면 몸이 약간 튕겨져 나가는 느낌으로 밀려나가."
          → 예전엔 **어디를 눌러도 손끝으로 모였다.** 얼굴이 생긴 뒤로는 그게 안 맞는다 —
            얼굴은 누르는 대상이고, 몸통 바깥은 **밀어내는** 자리다. 둘을 가른다. */
-      let mode = "out", press = 0, pressT = 0, pdx = 0, pdy = 0;
+      let mode = "out", press = 0, pressT = 0, pdx = 0, pdy = 0, shove = 0;
       const TRAIL = 6;
       const trail = Array.from({ length: TRAIL }, () => [0, 0]);
       let tLast = 0;
@@ -3433,6 +3449,7 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
         touch.y = 0.5 - (src.clientY - r.top) / r.height;
       };
       const on = (e) => {
+        try { e.preventDefault(); } catch (_) {}
         at(e); wisp.ex = Math.min(1.6, wisp.ex + 0.5);
         /* 얼굴 안/밖 판정 — touch 는 -0.5~0.5(위가 +y), core 는 0~1(아래가 +y) */
         const rx = touch.x - (core.x - 0.5), ry = touch.y - (0.5 - core.y);
@@ -3444,19 +3461,22 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
           pdx = -rx / n; pdy = -ry / n;
           touch.target = 0;                      // 안쪽은 「모임」이 아니다
         } else {
-          /* 튕겨나감 — 스프링 목표를 옮기지 않고 **속도만** 준다.
-             목표를 옮기면 밀려난 자리에 머무르지만, 속도만 주면 튕겼다 제자리로 돌아온다. */
-          const n = Math.max(d, 1e-3);
-          wisp.vx += (rx / n) * -3.4; wisp.vy += (ry / n) * -3.4;
+          /* ⚠ **한 번 튕기고 끝이면 안 보인다**(창업자 2026-08-29: "몸 바깥에서 터치하는 게
+             잘 안 먹혀 / 터치한 채로 드래그하면 드래그하는 대로 밀리는 느낌이 나야지").
+             임펄스 한 방은 0.5초면 스프링이 되돌려 놓아서 **누른 줄도 모른다.**
+             누르고 있는 **동안 계속** 밀어야 한다 — 물리는 draw 안에서 매 프레임 건다.
+             여기서는 「지금 밀고 있다」만 세운다. */
+          shove = 1;
           touch.target = 0;
         }
         /* 캔버스 밖으로 끌어도 계속 따라오게 — 없으면 가장자리에서 뚝 끊긴다 */
         try { cv.setPointerCapture(e.pointerId); } catch (_) {}
       };
-      const move = (e) => { if (pressT > 0.5) { at(e);
+      const move = (e) => { if (shove) { at(e); return; }
+        if (pressT > 0.5) { at(e);
         const rx = touch.x - (core.x - 0.5), ry = touch.y - (0.5 - core.y);
         const n = Math.max(Math.hypot(rx, ry), 1e-3); pdx = -rx / n; pdy = -ry / n; } };
-      const off = () => { touch.target = 0; pressT = 0; };
+      const off = () => { touch.target = 0; pressT = 0; shove = 0; };
       cv.addEventListener("pointerdown", on);
       cv.addEventListener("pointermove", move);
       cv.addEventListener("pointerup", off);
@@ -3534,6 +3554,15 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
         const K = held ? 170 : 30, D = held ? 11.5 : 5.8;
         wisp.vx += ((tx - wisp.x) * K - wisp.vx * D) * dt;
         wisp.vy += ((ty - wisp.y) * K - wisp.vy * D) * dt;
+        /* ── 밀어내기 (바깥을 누르고 있는 동안) ──────────────────────────
+           손끝에서 **멀어지는 방향**으로 계속 민다. 가까울수록 세게 — 그래야
+           손가락이 몸통을 밀고 지나가는 것으로 읽힌다(먼 데서도 같은 힘이면 순간이동이다). */
+        if (shove) {
+          const rx = wisp.x - touch.x * 2.35, ry = wisp.y - touch.y * 2.35;
+          const dd2 = Math.max(0.10, Math.hypot(rx, ry));
+          const f = 26 / (dd2 + 0.45);
+          wisp.vx += (rx / dd2) * f * dt; wisp.vy += (ry / dd2) * f * dt;
+        }
         /* 도착하면 손끝 둘레를 **맴돈다** — 접선 방향으로 살짝 민다(키우기 게임의 '따라다님') */
         const ddx = tx - wisp.x, ddy = ty - wisp.y, dd = Math.hypot(ddx, ddy);
           /* ⚠ 맴도는 힘이 세면 **손끝에 안 붙고 주위를 돈다** — 실측에서 목표의 70%까지만 왔다.
@@ -3573,6 +3602,13 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
           const dfy = Math.cos(tS * 0.47) * 0.088 + Math.sin(tS * 0.81 + 0.6) * 0.034;
           core.x = 0.5 + dfx + wisp.x / 2.35;
           core.y = 0.5 - dfy - wisp.y / 2.35 + SINK * 0.06 - lift;
+          /* 속도는 저역통과로 매끈하게 — 날것으로 쓰면 고개가 떤다 */
+          if (look.had && dt > 1e-4) {
+            const k = 1 - Math.exp(-dt / 0.22);
+            look.x += ((core.x - look.px) / dt - look.x) * k;
+            look.y += ((core.y - look.py) / dt - look.y) * k;
+          }
+          look.px = core.x; look.py = core.y; look.had = true;
         }
         gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLES, 0, 3);
 
@@ -3593,14 +3629,15 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
              이건 살아있는 생명체처럼 왔다갔다 하면 좋겠어."
              주기를 서로 나눠떨어지지 않게 잡아야 **왕복이 아니라 두리번거림**이 된다.
              손끝을 누르면 그쪽으로 돌아본다 — 시선이 손을 따라가는 게 「보고 있다」의 전부다. */
-          /* ⚠ 진폭을 키웠다(2026-08-29). 예전 값(yaw 0.20)은 눈이 화면에서 **2px 남짓** 움직여
-             사실상 정지로 보였다 — 눈이 3% 로 작아지면서 더 안 보인다. 원근이 보이려면
-             고개가 실제로 돌아야 한다. 주기는 여전히 서로 나눠떨어지지 않게 둔다. */
-          let yaw = Math.sin(tt * 0.31) * 0.40 + Math.sin(tt * 0.53 + 1.7) * 0.17;
-          let pitch = Math.sin(tt * 0.24 + 0.9) * 0.22 + Math.sin(tt * 0.41) * 0.10;
-          const roll = Math.sin(tt * 0.19 + 2.2) * 0.085 + Math.sin(tt * 0.37 + 0.4) * 0.030;
+          /* 고개는 **몸이 가는 쪽**을 본다. 자기 사인파로 돌면 축이 둘이 된다.
+             residual 사인파는 아주 작게만 남긴다 — 완전히 빼면 몸이 멈췄을 때 얼굴도 굳는다. */
+          let yaw = look.x * 5.2 + Math.sin(tt * 0.31) * 0.075;
+          let pitch = look.y * 4.0 + Math.sin(tt * 0.24 + 0.9) * 0.045;
+          /* 도는 쪽으로 **기울어진다** — 몸이 왼쪽으로 가면 고개가 그쪽으로 넘어간다 */
+          const roll = -look.x * 1.6 + Math.sin(tt * 0.19 + 2.2) * 0.022;
           /* 눌리면 **눌린 쪽으로 고개가 돌아간다** — 손가락을 쳐다보는 게 아니라 밀리는 것이다 */
-          if (press > 0.01) { yaw += -pdx * 0.55 * press; pitch += pdy * 0.40 * press; }
+          /* ⚠ 0.55/0.40 은 과했다 — 눌리는 순간 고개가 30° 넘게 돌아 **표정이 안 읽혔다.** */
+          if (press > 0.01) { yaw += -pdx * 0.26 * press; pitch += pdy * 0.18 * press; }
           /* 응축·모임이면 오라가 작아지므로 얼굴도 같이 준다. 점으로 모이면 사라진다. */
           /* 깜빡임 진행 — 감았다 뜨는 건 대칭이 아니다. 감기는 빠르고 뜨기는 느리다. */
           const dms = dt * 1000;
@@ -3631,13 +3668,21 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
             /* ── 귀엽게 괴로워한다 ────────────────────────────────────────
                "귀엽게"의 정체는 **눈을 질끈 감고 입이 흔들리는 것**이다.
                새 눈·입을 만들지 않는다 — 있는 것 중 그 뜻을 가진 둘로 갈아끼운다. */
+            /* ⚠ 예전엔 `closed`(아래로 휜 호)를 썼다 — **안 아파 보인다**(창업자 2026-08-29).
+               그건 흐뭇하게 감은 눈이다. 아픈 눈은 안쪽으로 꺾인다(`wince`). */
             const hurt = press > 0.30;
             drawFace(g2, S, {
-              eye: hurt ? "closed" : (P.eye || (mood && MOOD_EYE[mood.ss]) || "dot"),
+              eye: hurt ? "wince" : (P.eye || (mood && MOOD_EYE[mood.ss]) || "dot"),
               mouth: hurt ? "wave" : P.mouth, blush: P.blush,
-              cy: P.cy, gap: P.gap * k, eyeSz: P.eyeSz * k,
-              mSz: P.mSz * k, mCy: P.cy + (P.mCy - P.cy) * k,
-              yaw, pitch, roll, blink: hurt ? blink * 0.4 : blink,
+              /* ⚠ 아픈 눈은 **커져야 읽힌다.** 3% 점 크기 그대로 >< 를 그렸더니
+                 6px 안에 획 셋이 겹쳐 **X 자국**이 됐다(실기 확인). 표정은 크기를 요구한다. */
+              /* ⚠ eyeSz 를 키우면 **홍조까지 같이 커진다**(홍조가 눈 크기를 쓴다).
+                 눈만 키우는 배율을 따로 넘긴다. */
+              cy: P.cy, gap: P.gap * k, eyeSz: P.eyeSz * k, eyeScale: hurt ? 1.9 : 1,
+              mSz: P.mSz * k * (hurt ? 1.35 : 1), mCy: P.cy + (P.mCy - P.cy) * k,
+              yaw, pitch, roll, blink: hurt ? 0 : blink,
+              /* 누른 축으로 찌그러진다 — 방향은 손끝→얼굴 벡터의 **반대**(=밀린 쪽) */
+              squish: press, sqx: pdx, sqy: -pdy,
             });
             g2.restore();
           }
@@ -3662,8 +3707,14 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
   }, [saju, mood, size, scatter]);
   /* ⚠ `touchAction:"none"` 이 없으면 **폰에서 드래그가 스크롤로 새어 나간다**(실기 제보 2026-08-28).
      입자 엔진(GuardianCanvasGL)은 처음부터 이걸 걸고 있었는데 색장에만 빠져 있었다. */
+  /* ⚠ `touchAction:"none"` 만으로는 부족했다 — **드래그하면 주변 텍스트가 통째로 파랗게 잡혔다**
+     (창업자 실기 제보 2026-08-29: "파란색 전체 블럭이 잡히네..?").
+     touch-action 은 **스크롤**을 막을 뿐 **선택**을 막지 않는다. 둘은 다른 채널이다.
+     누르는 대상에 선택·길게눌러 메뉴·탭 하이라이트가 붙을 이유가 없으므로 전부 끈다. */
   const cv = <canvas ref={ref} className="gcv" aria-hidden="true"
-    style={{ width: size, height: size, touchAction: "none", cursor: "pointer" }} />;
+    style={{ width: size, height: size, touchAction: "none", cursor: "pointer",
+             userSelect: "none", WebkitUserSelect: "none",
+             WebkitTouchCallout: "none", WebkitTapHighlightColor: "transparent" }} />;
   if (!FACE) return cv;
   /* 얼굴은 **별도 2D 캔버스**로 겹친다 — 셰이더에 넣으면 선이 뭉개지고, 오라를 건드리게 된다.
      포인터는 아래 오라 캔버스가 받아야 하므로 `pointerEvents:none`. */

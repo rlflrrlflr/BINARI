@@ -24,13 +24,20 @@ export const EYE_KINDS = [
   ["stern",  "굳음",   "위가 평평하게 잘린 눈 — 째려봄은 절단면이다"],
   ["side",   "곁눈",   "점이 한쪽으로 — 딴 데 본다"],
   ["shine",  "들뜸",   "점 안에 반짝임. 기대하는 눈"],
+  ["wince", "질끈(아픔)", "안쪽으로 꺾인 선 둘 — 아기 볼 눌린 눈"],
   ["closed", "감음",   "선 하나. 쉬거나 참는 중"],
   ["teary",  "울먹",   "아래에 물기 한 방울"],
   ["angry",  "화남",   "안쪽이 올라간다 — 굳음과 반대로 기울인 절단면"],
   ["ball",   "흰자",   "큰 흰자 + 작은 동공. 동공이 시선을 향한다"],
 ];
 
-export function drawEyes(x, kind, cx, cy, gap, sz, ink, gaze) {
+/* ⚠ `only` 를 주면 **그 한쪽만** 그린다(-1 왼눈 / +1 오른눈).
+   없으면 예전처럼 둘 다 그린다(보드의 옛 그림이 그 경로를 쓴다).
+   왜 필요한가: drawFace 는 눈을 **하나씩 따로 투영**해서 gap 0 으로 부른다.
+   그런데 drawEyes 는 그 자리에 좌우 눈을 **겹쳐** 그렸다 — 점처럼 좌우대칭인 모양은
+   티가 안 났지만 시무룩·화남·질끈처럼 **비대칭인 눈은 제 거울상과 겹쳐 X 자국**이 됐다.
+   실기에서 질끈(><)이 전부 ✗ 로 보인 게 이것 때문이다. */
+export function drawEyes(x, kind, cx, cy, gap, sz, ink, gaze, only) {
   /* ⚠ **선을 얹지 않는다**(창업자 2026-08-29: "진짜 눈썹이 눈에 붙어있는 게 아냐.
      눈 모양으로 그냥 표정이 읽히는 거야"). 앞 판에서 시무룩·졸림·굳음을 만들 때
      눈 위에 선을 하나씩 그었는데, 눈에서 떨어진 선은 **눈꺼풀이 아니라 눈썹으로 읽힌다.**
@@ -69,6 +76,19 @@ export function drawEyes(x, kind, cx, cy, gap, sz, ink, gaze) {
     else if (kind === "stern") { cut(0.36, sz * 1.20, sz * 1.58, 0, 0); }         // 두껍게 남는다
     /* 화남 — 안쪽이 올라간다. 굳음과 같은 절단에 **반대로** 기울인다 */
     else if (kind === "angry") { cut(0.34, sz * 1.18, sz * 1.42, -0.58, -0.22); } // 안쪽이 올라간다
+    /* 질끈 — **아래로 휜 호(⌣)는 안 아파 보인다**(창업자 2026-08-29). 그건 흐뭇하게 감은 눈이다.
+       아픈 눈은 **안쪽으로 꺾인다** — >< 가 그 뜻이고, 선 두 개로 끝난다.
+       눈썹을 그리는 게 아니다. **눈 자체가 꺾인 것**이다. */
+    else if (kind === "wince") {
+      /* ⚠ 획을 좁고 두껍게 그렸더니 **X 자국**으로 뭉쳤다(실기 확인). >< 는 **가로로 길어야** 읽힌다. */
+      x.lineWidth = sz * 0.26; x.lineCap = "round";
+      const ww = sz * 1.55, hh = sz * 0.92;
+      x.beginPath();
+      x.moveTo(ex + dir * ww, cy - hh);         // 바깥 위
+      x.lineTo(ex - dir * ww * 0.55, cy);       // 안쪽 꼭짓점
+      x.lineTo(ex + dir * ww, cy + hh);         // 바깥 아래
+      x.stroke();
+    }
     else if (kind === "side") { x.beginPath(); x.ellipse(ex + sz * 0.62, cy, sz * 0.95, sz * 1.10, 0, 0, 7); x.fill(); }
     else if (kind === "shine") { x.beginPath(); x.ellipse(ex, cy, sz * 1.20, sz * 1.34, 0, 0, 7); x.fill();
       x.fillStyle = "rgba(255,255,255,.92)"; x.beginPath();
@@ -83,7 +103,9 @@ export function drawEyes(x, kind, cx, cy, gap, sz, ink, gaze) {
       x.fillStyle = "rgba(120,180,225,.78)"; x.beginPath();
       x.ellipse(ex + dir * sz * 0.95, cy + sz * 1.15, sz * 0.42, sz * 0.55, 0, 0, 7); x.fill(); x.fillStyle = ink; }
   };
-  eye(cx - gap, -1); eye(cx + gap, 1);
+  if (only === -1) eye(cx, -1);
+  else if (only === 1) eye(cx, 1);
+  else { eye(cx - gap, -1); eye(cx + gap, 1); }
   x.restore();
 }
 
@@ -179,7 +201,7 @@ export function project(u, v, yaw, pitch) {
 export function drawFace(x, S, opt) {
   const P = Object.assign({ eye: "dot", mouth: "smile", cy: 0.50, gap: 0.115,
     eyeSz: 0.022, mSz: 0.055, mCy: 0.565, blush: true, ink: "#191308",
-    yaw: 0, pitch: 0, roll: 0, blink: 0 }, opt);
+    yaw: 0, pitch: 0, roll: 0, blink: 0, squish: 0, sqx: 1, sqy: 0, eyeScale: 1 }, opt);
   const { yaw, pitch } = P;
   /* 얼굴이 놓인 구의 반지름(화면 단위). 이 값이 곧 **원근의 세기**다 —
      크면 조금만 돌려도 크게 미끄러지고, 작으면 거의 평면이 된다. */
@@ -190,6 +212,17 @@ export function drawFace(x, S, opt) {
   /* ⚠ 투영값을 그대로 쓰면 **얼굴 전체가 회전 방향으로 밀려난다** — 구가 도니 앞면도 옮겨간다.
      실기에서 얼굴이 오라 중심을 벗어나 가장자리에 붙었다. 카툰의 머리는 **제자리에서 돌기만** 한다.
      그래서 얼굴 정중앙(u=v=0)의 이동량을 빼서 중심을 고정하고, 회전은 요소 배치에만 남긴다. */
+  /* ── 아기 볼 누르기 ────────────────────────────────────────────────
+     창업자 2026-08-29: "얼굴 터치하면 아기 얼굴 누른 거처럼 느껴지면 좋겠어."
+     아기 볼은 **밀리기만 하지 않는다** — 누른 축으로 납작해지고 직각으로 부푼다.
+     부피가 보존되는 것처럼 보여야 「살」로 읽힌다. 좌표계를 누른 방향으로 돌려서
+     그 축으로만 눌렀다가 되돌린다. */
+  if (P.squish > 0.01) {
+    const a = Math.atan2(P.sqy, P.sqx);
+    x.save(); x.translate(cx, cyPx); x.rotate(a);
+    x.scale(1 - 0.30 * P.squish, 1 + 0.20 * P.squish);
+    x.rotate(-a); x.translate(-cx, -cyPx);
+  }
   /* ── 고개 기울임(roll) ─────────────────────────────────────────────
      yaw·pitch 만으로는 **좌우·상하 왕복**이라 기계처럼 보인다. 살아 있는 머리는 기운다.
      회전은 얼굴 중심을 축으로 걸고, 배치는 그대로 두어 원근 계산과 섞이지 않게 한다. */
@@ -213,10 +246,11 @@ export function drawFace(x, S, opt) {
     /* 가로로 눌린다 — 구 표면이 기울어질수록 정면 투영이 좁아진다 */
     /* 세로는 **깜빡임**이 먹는다 — 감으면 점이 납작한 선이 된다.
        눈 종류를 갈아끼우지 않고 눌러서 감기므로 어떤 모양에도 그대로 붙는다. */
-    x.scale(Math.max(0.28, Math.abs(e.z)), Math.max(0.06, 1 - P.blink));
+    /* ⚠ 바닥이 0.28 이면 옆으로 돌았을 때 표정 획이 **세로 지그재그**로 뭉친다. 0.48 로 올린다. */
+    x.scale(Math.max(0.48, Math.abs(e.z)), Math.max(0.06, 1 - P.blink));
     x.translate(-e.px, -e.py);
-    drawEyes(x, P.eye, e.px, e.py, 0, S * P.eyeSz * near, P.ink,
-      { x: yaw * 1.6, y: pitch * 1.6 });
+    drawEyes(x, P.eye, e.px, e.py, 0, S * P.eyeSz * near * P.eyeScale, P.ink,
+      { x: yaw * 1.6, y: pitch * 1.6 }, side);
     x.restore();
   });
 
@@ -230,4 +264,5 @@ export function drawFace(x, S, opt) {
     x.restore();
   }
   if (P.roll) x.restore();
+  if (P.squish > 0.01) x.restore();
 }

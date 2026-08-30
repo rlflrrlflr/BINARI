@@ -76,27 +76,67 @@ await step("⑨ 탄생");
    그래서 **무게중심에서 각도별 반경**을 재고 그 편차를 본다. 삼각형이면 3주기로 크게 흔들린다.
    원인은 매번 달랐다(각도 굴곡 sin(ang*3) · 층 어긋남 · 뭉게 변조 lobes=3) —
    전부 "각도에 3이 곱해진 항"이었고, 화면에는 똑같이 삼각형으로 나온다. */
-const rad = () => page.evaluate(() => {
-  const c = document.querySelector("canvas"), g = c.getContext("webgl");
-  const W = c.width, H = c.height, a = new Uint8Array(4 * W * H);
-  g.readPixels(0, 0, W, H, g.RGBA, g.UNSIGNED_BYTE, a);
-  const A = (x, y) => a[4 * (y * W + x) + 3];
+/* ⚠ **2026-08-30 지표 교체.** 예전 판은 광선마다 **알파가 처음 90 아래로 떨어지는 점**을
+   반경으로 삼았다. 그런데 셰이더는 화면 전체에 그레인(픽셀 단위 난수)을 뿌린다 —
+   가장자리는 기울기가 완만해서 **난수 한 픽셀이 광선을 일찍 끊는다.** 그래서 이 값이
+   같은 코드에서도 0.14~0.17 로 흔들렸고(오늘 확인: 오늘 작업 이전 커밋도 0.163),
+   통과·실패가 운에 좌우됐다. **형태가 아니라 노이즈를 재고 있었다.**
+   셋을 고친다 — ①광선 위 3픽셀 평균으로 문턱을 넘겨 그레인을 눌러 없앤다
+   ②마지막으로 문턱을 넘은 지점을 반경으로 쓴다(첫 교차가 아니라)
+   ③여러 프레임을 평균낸다. 그리고 **지표 자체를 먼저 검증한다**(아래 ⑩-0). */
+const HARM = `(A, W, H) => {
   let sx = 0, sy = 0, sw = 0;
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const v = A(x, y); if (v > 60) { sx += x * v; sy += y * v; sw += v; } }
   const cx = sx / sw, cy = sy / sw, rs = [];
   for (let i = 0; i < 72; i++) {
     const th = i / 72 * Math.PI * 2, dx = Math.cos(th), dy = Math.sin(th);
     let r = 0;
-    for (let t = 1; t < W; t++) { const x = Math.round(cx + dx * t), y = Math.round(cy + dy * t);
-      if (x < 0 || y < 0 || x >= W || y >= H) break; if (A(x, y) < 90) break; r = t; }
+    for (let t = 1; t < W; t++) {
+      const x = Math.round(cx + dx * t), y = Math.round(cy + dy * t);
+      if (x < 1 || y < 1 || x >= W - 1 || y >= H - 1) break;
+      const m = (A(x, y) + A(x - 1, y) + A(x + 1, y) + A(x, y - 1) + A(x, y + 1)) / 5;
+      if (m >= 90) r = t; else if (t > r + 6) break;
+    }
     rs.push(r);
   }
-  /* 3주기 성분만 뽑는다 — 삼각형의 지문이다. 전체 편차는 층 구조 때문에 늘 크게 나온다. */
   let re = 0, im = 0;
   for (let i = 0; i < 72; i++) { const th = i / 72 * Math.PI * 2 * 3; re += rs[i] * Math.cos(th); im += rs[i] * Math.sin(th); }
   const mean = rs.reduce((s, v) => s + v, 0) / rs.length;
-  return +(2 * Math.hypot(re, im) / 72 / mean).toFixed(3);
-});
+  return mean > 0 ? 2 * Math.hypot(re, im) / 72 / mean : 0;
+}`;
+/* ⑩-0 **지표를 먼저 믿을 수 있는지 본다.** 합성 도형으로 눈금을 맞춘다 —
+   원은 낮게, 둥근 삼각형은 높게 나와야 이 문턱(0.06)이 뜻을 갖는다.
+   이걸 안 하면 "낮게 나왔다"가 둥글다는 뜻인지 지표가 죽었다는 뜻인지 모른다. */
+const cal = await page.evaluate((src) => {
+  const harm = eval(src), N = 220;
+  const mk = (tri) => { const c = document.createElement("canvas"); c.width = c.height = N;
+    const g = c.getContext("2d"); g.fillStyle = "#fff";
+    g.beginPath();
+    if (!tri) g.arc(N / 2, N / 2, N * 0.32, 0, 7);
+    else { for (let i = 0; i < 3; i++) { const a = i / 3 * Math.PI * 2 - Math.PI / 2;
+      const x = N / 2 + Math.cos(a) * N * 0.36, y = N / 2 + Math.sin(a) * N * 0.36;
+      i ? g.lineTo(x, y) : g.moveTo(x, y); } g.closePath(); }
+    g.fill();
+    const d = g.getImageData(0, 0, N, N).data;
+    return harm((x, y) => d[4 * (y * N + x) + 3], N, N); };
+  return { circle: +mk(false).toFixed(3), tri: +mk(true).toFixed(3) };
+}, HARM);
+ck("⑩-0 지표가 원과 삼각형을 가른다", cal.circle < 0.03 && cal.tri > 0.10,
+   `원 ${cal.circle} / 삼각 ${cal.tri}`);
+const rad = async () => {
+  const v = [];
+  for (let i = 0; i < 5; i++) {
+    v.push(await page.evaluate((src) => {
+      const harm = eval(src);
+      const c = document.querySelector("canvas"), g = c.getContext("webgl");
+      const W = c.width, H = c.height, a = new Uint8Array(4 * W * H);
+      g.readPixels(0, 0, W, H, g.RGBA, g.UNSIGNED_BYTE, a);
+      return harm((x, y) => a[4 * (y * W + x) + 3], W, H);
+    }, HARM));
+    await page.waitForTimeout(130);
+  }
+  return +(v.reduce((s, x) => s + x, 0) / v.length).toFixed(3);
+};
 /* ⚠ 판결과 **비교**하지 않는다 — 판결 오라는 캔버스를 거의 채워서 등고선이 경계에 걸리고
       3주기 성분이 0 으로 나온다(측정이 안 되는 것이지 둥근 게 아니다). 곁의 절대값만 본다. */
 await page.getByRole("button", { name: "곁" }).click(); await page.waitForTimeout(2400);
