@@ -3092,6 +3092,7 @@ precision highp float;
 uniform vec2  u_res, u_off;
 uniform float u_t, u_form, u_orb, u_warm, u_speed, u_lum, u_sink, u_grain;
 uniform float u_born, u_touchAmt, u_ex, u_squash, u_tailK;
+uniform vec3  u_look;   // (yaw, pitch, roll) — 얼굴이 보는 방향. 몸도 이 값을 쓴다
 uniform vec2  u_touch, u_wisp;
 uniform vec2  u_trail[6];
 uniform vec3  u_c1, u_c2, u_c3, u_bg;
@@ -3186,7 +3187,20 @@ void main(){
   /* 물방울 — 위로 갈수록 좁아진다. 상하대칭 타원은 눈알이나 세포로 읽힌다.
      ⚠ **이 변형만 u_orb 에 안 물려 있어** 곁에서도 위가 좁아졌다(실측 세로/가로 0.93).
         비율·일렁임·혀는 다 껐는데 물방울 하나가 남아 "둥근 디자인"이 안 됐다. */
-  vec2 w = e;
+  /* ── 고개가 도는 쪽으로 **몸이 따라간다** ────────────────────────────────
+     창업자 2026-08-30: "얼굴과 몸이 동떨어진 느낌이 나. 특히 얼굴을 돌렸을 때.
+     살아있는 생명체라면 어떻게 생겼을지 생각해봐."
+     맞다 — 얼굴은 구 위에서 도는데 몸은 **시간 사인파로만** 흔들렸다. 둘이 같은 시계를
+     안 보니 두 물체로 읽힌다. 살아 있는 것은 고개를 돌리면 **몸이 먼저 기울고 뒤따라 돈다.**
+     같은 값(u_look)으로 셋을 건다 — ①무게가 그쪽으로 쏠리고 ②기울인 쪽으로 몸이 기울고
+     ③아래에서 도는 쪽이 밝아지고 반대쪽이 그늘로 들어간다.
+     ⚠ 얼굴·팔다리를 그리는 게 아니다. 움직이는 건 **덩어리와 빛**뿐이다(헌장). */
+  vec2 lk = vec2(u_look.x, -u_look.y);
+  /* ⚠ **곁에서는 접는다.** 기울임(전단)은 원을 찌그러뜨려 「둥근 구슬」을 깬다 —
+     실측 3주기 성분이 0.001 → 0.128 로 튀었다. 형태 변조를 곁에서 접는 다른 항들과 같은 처리다.
+     쏠림은 절반만 남긴다(위치 이동이라 둥근 정도는 안 건드리지만, 구슬이 흔들려 보이면 안 된다). */
+  vec2 w = e - lk * R * 0.22 * (1.0 - fold);      // 무게가 고개 쪽으로 쏠린다(중심이 그쪽으로 간다)
+  w.x += w.y * u_look.z * 0.55 * (1.0 - fold);    // 고개를 기울이면 몸이 같이 기운다
   w.y *= 1.0 + 0.20*smoothstep(-0.3, 1.3, e.y/max(R,1e-3)) * (1.0 - fold);
   /* ── 불꽃의 일렁임 (창업자 2026-08-28: "세포보다는 불꽃의 일렁임 느낌이여") ──────
      세포와 불꽃을 가르는 건 **방향**이다. 세포는 사방이 같고, 불꽃은 아래가 뭉치고
@@ -3339,7 +3353,18 @@ void main(){
   float live  = mix(1.0, mix(1.0, fl, flW), u_wt.z * (1.0 - fold*0.85));
   float bornK = 0.20 + 0.80*u_born;               // 흩어져 있을 땐 옅지만 **보이기는 해야 한다**
   float touchK = (1.0 + tk*0.62) * (1.0 + u_ex*0.28);   // 모이면 진해지고, 들뜨면 더 환해진다
-  gl_FragColor = vec4(outc, clamp(sum*u_lum*live*vig*bornK*touchK, 0.0, 1.0));
+  /* 도는 쪽이 밝고 반대쪽은 그늘 — **구가 돌고 있다는 신호는 형태가 아니라 빛이 낸다.**
+     이게 얼굴과 몸을 한 물체로 묶는 가장 센 단서다. 1주기(한쪽↔반대쪽) 변조라
+     곁의 둥근 실루엣(3주기로 재는 검사 ⑩)은 건드리지 않는다. */
+  /* ⚠ 두 번 틀렸다.
+     ①0.46 은 과했다 — 음영이 밝기 무게중심을 기하 이동보다 더 끌고 가서 얼굴이 밝은 앞면이
+       아니라 **그늘 쪽에** 놓였다.
+     ②e/R 을 그대로 쓰고 clamp 로 잘랐더니 **알파에 직선 경계**가 생겨 곁 구슬이
+       안 둥글어졌다(3주기 성분 0.001 → 0.128). clamp 는 형태를 만든다.
+     정규화하면 값이 ±|lk| 안에 갇혀 자를 필요가 없고, 경계도 안 생긴다. */
+  float turn = dot(normalize(e + 1e-4), lk);
+  float shade = 1.0 + turn * 0.30 * (1.0 - fold);
+  gl_FragColor = vec4(outc, clamp(sum*u_lum*live*vig*bornK*touchK*shade, 0.0, 1.0));
 }`;
 /* 밝은 바탕용 보정 — **원색(EL_COLOR)은 안 건드린다.** 금의 c2(#e8f2ff)는 거의 흰색이라
    밝은 바탕에서 통째로 사라진다(시제품 첫 판에서 금 줄이 안 보였다). 이 렌더러에서만 한 칸 낮춘다. */
@@ -3387,7 +3412,7 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
       const la = gl.getAttribLocation(pg, "a"); gl.enableVertexAttribArray(la);
       gl.vertexAttribPointer(la, 2, gl.FLOAT, false, 0, 0);
-      const U = {}; ["u_res","u_off","u_t","u_form","u_orb","u_warm","u_speed","u_lum","u_sink","u_grain","u_c1","u_c2","u_c3","u_bg","u_wt","u_bite","u_rayP","u_puffP","u_flkP","u_baseP","u_born","u_touch","u_touchAmt","u_wisp","u_ex","u_trail","u_squash","u_tailK"]
+      const U = {}; ["u_res","u_off","u_t","u_form","u_orb","u_warm","u_speed","u_lum","u_sink","u_grain","u_c1","u_c2","u_c3","u_bg","u_wt","u_bite","u_rayP","u_puffP","u_flkP","u_baseP","u_born","u_touch","u_touchAmt","u_wisp","u_ex","u_trail","u_squash","u_tailK","u_look"]
         .forEach((k) => { U[k] = gl.getUniformLocation(pg, k); });
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const S = Math.round(size * dpr); cv.width = S; cv.height = S;
@@ -3447,6 +3472,8 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
             **고개는 몸이 가는 쪽을 향한다.** 그러면 축이 하나가 된다 —
             생물이 움직이는 방향을 보는 것과 같은 이치고, 사인파를 아무리 맞춰도 이건 못 흉내낸다. */
       const look = { x: 0, y: 0, px: 0.5, py: 0.5, had: false };
+      const gaze = { yaw: 0, pitch: 0, roll: 0 };   // 얼굴과 몸이 **같이** 쓰는 값
+      let coreR = 0.32;
       const SPD = 1.35 * (mood ? mood.sp : 1);
       const SINK = mood ? mood.sink * 2.2 : 0;
       const FACE_R = 0.20;                       // 얼굴로 치는 반경(캔버스 폭 대비)
@@ -3530,10 +3557,14 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
            스프링 하나로는 시작점만 바뀔 뿐 머무는 시간이 없다.
            그래서 0.17초 동안 **목표 자체를 반대편에 둔다** — 그동안 확실히 커지고,
            만료되면 실제 목표로 당겨지며 지나쳤다 돌아온다. 그게 "커졌다 → 작아지며 뽀잉". */
-        if (orbT !== orbLast) { antUntil = now + 170; orbLast = orbT; }
-        const goal = now < antUntil ? (orbT > 0.5 ? -0.35 : 1.25) : orbT;
+        /* ⚠ **확대 폭을 키웠다**(창업자 2026-08-30: "확대 모션을 좀더 크게, 좀 더 뽀잉").
+           예전 -0.35 는 반경이 4% 커지는 데 그쳤다 — "커졌다"가 안 읽힌다.
+           키울 곳이 둘이다: ①예비동작 목표 ②**아래 clamp**. clamp 가 -0.45 라
+           목표를 아무리 낮춰도 거기서 잘렸다 — 목표만 고치면 아무 일도 안 일어난다. */
+        if (orbT !== orbLast) { antUntil = now + 190; orbLast = orbT; }
+        const goal = now < antUntil ? (orbT > 0.5 ? -0.85 : 1.45) : orbT;
         orbV += ((goal - orb) * 190 - orbV * 10.0) * dt;     // K 크고 D 낮게 = 빠르고 말랑
-        orb = Math.max(-0.45, Math.min(1.30, orb + orbV * dt));   // 아래로 넓힌 만큼 '먼저 커지는' 폭이 산다
+        orb = Math.max(-0.72, Math.min(1.34, orb + orbV * dt));   // 아래로 넓힌 만큼 '먼저 커지는' 폭이 산다
         gl.uniform1f(U.u_orb, Math.abs(orb) < 0.0004 ? 0 : orb);
         /* 응축값을 밖에 노출한다 — 화면을 읽어(readPixels) 재면 프레임당 100ms 넘게 걸려
            **300ms 짜리 전환을 못 본다**(실측). 검사는 이 값을 본다. */
@@ -3615,18 +3646,45 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
              그 중심은 캔버스 정중앙보다 **위**에 있다 — 불꽃이 위로 뻗기 때문이다.
              들어올림은 상수가 아니라 R 에 비례한다(응축하면 불꽃이 짧아지니 덜 올라간다). */
           const lift = 0.068 * (Rj / 0.323) * (1 - 0.55 * foldJ);
+          coreR = Rj;
           const dfx = Math.sin(tS * 0.55) * 0.075 + Math.sin(tS * 0.93 + 1.3) * 0.030;
           const dfy = Math.cos(tS * 0.47) * 0.088 + Math.sin(tS * 0.81 + 0.6) * 0.034;
           core.x = 0.5 + dfx + wisp.x / 2.35;
           core.y = 0.5 - dfy - wisp.y / 2.35 + SINK * 0.06 - lift;
           /* 속도는 저역통과로 매끈하게 — 날것으로 쓰면 고개가 떤다 */
+          /* ⚠ **속도 추정은 폭발한다.** dt 가 한 프레임만 작게 튀어도 (Δ/dt) 가 치솟고,
+             저역통과로도 다 안 눌린다 — 실측에서 고개가 **138° 까지 돌았다**(yaw 2.41rad).
+             원인은 물리가 아니라 나눗셈이다. 순간값부터 잘라 넣는다. */
           if (look.had && dt > 1e-4) {
             const k = 1 - Math.exp(-dt / 0.22);
-            look.x += ((core.x - look.px) / dt - look.x) * k;
-            look.y += ((core.y - look.py) / dt - look.y) * k;
+            const cl = (v) => Math.max(-0.16, Math.min(0.16, v));
+            look.x += (cl((core.x - look.px) / dt) - look.x) * k;
+            look.y += (cl((core.y - look.py) / dt) - look.y) * k;
           }
           look.px = core.x; look.py = core.y; look.had = true;
         }
+        /* ── 시선을 **여기서** 정한다 ─────────────────────────────────────
+           ⚠ 예전엔 얼굴 블록 안에서 계산했다 — 그러면 셰이더는 이미 그려진 뒤라
+           **몸이 그 값을 못 쓴다.** 얼굴과 몸이 따로 논 구조적 원인이 이것이다.
+           한 곳에서 풀어 둘 다에게 준다. */
+        {
+          const tt2 = ((now - T0) / 1000) * SPD;
+          const lim = (v, m) => Math.max(-m, Math.min(m, v));
+          gaze.yaw = lim(look.x * 5.2, 0.40) + Math.sin(tt2 * 0.31) * 0.075;
+          gaze.pitch = lim(look.y * 4.0, 0.26) + Math.sin(tt2 * 0.24 + 0.9) * 0.045;
+          gaze.roll = lim(-look.x * 1.6, 0.17) + Math.sin(tt2 * 0.19 + 2.2) * 0.022;
+          if (press > 0.01) { gaze.yaw += -pdx * 0.26 * press; gaze.pitch += pdy * 0.18 * press; }
+          /* ⚠ **몸만 옮기면 얼굴이 뒤에 남는다.** 셰이더가 `w = e - lk*R*0.30` 으로
+             덩어리를 고개 쪽으로 보냈으니, 얼굴도 **같은 만큼** 가야 얼굴이 몸의 앞면에 붙어 있다.
+             실기에서 이걸 빼먹었더니 몸은 돌았는데 얼굴만 제자리라 아까보다 더 따로 놀았다.
+             ⚠ 이 이동은 `look`(속도 추정) 이후에 더한다 — 앞에 두면 자기 이동이 속도로 되먹임된다. */
+          core.x += gaze.yaw * coreR * 0.22 / 2.35;
+          core.y += gaze.pitch * coreR * 0.22 / 2.35;
+        }
+        gl.uniform3f(U.u_look, gaze.yaw, gaze.pitch, gaze.roll);
+        /* 검사용으로 내놓는다 — 「몸이 고개를 따라가는가」는 이 값과 몸의 무게중심을
+           맞대야 잴 수 있다(선례: __BINARI_ORB·__BINARI_GRAB). */
+        try { window.__BINARI_GAZE = gaze.yaw; } catch (_) {}
         gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLES, 0, 3);
 
         /* ── 얼굴 (?face=a|b|c|d) ─────────────────────────────────────────
@@ -3646,15 +3704,8 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
              이건 살아있는 생명체처럼 왔다갔다 하면 좋겠어."
              주기를 서로 나눠떨어지지 않게 잡아야 **왕복이 아니라 두리번거림**이 된다.
              손끝을 누르면 그쪽으로 돌아본다 — 시선이 손을 따라가는 게 「보고 있다」의 전부다. */
-          /* 고개는 **몸이 가는 쪽**을 본다. 자기 사인파로 돌면 축이 둘이 된다.
-             residual 사인파는 아주 작게만 남긴다 — 완전히 빼면 몸이 멈췄을 때 얼굴도 굳는다. */
-          let yaw = look.x * 5.2 + Math.sin(tt * 0.31) * 0.075;
-          let pitch = look.y * 4.0 + Math.sin(tt * 0.24 + 0.9) * 0.045;
-          /* 도는 쪽으로 **기울어진다** — 몸이 왼쪽으로 가면 고개가 그쪽으로 넘어간다 */
-          const roll = -look.x * 1.6 + Math.sin(tt * 0.19 + 2.2) * 0.022;
-          /* 눌리면 **눌린 쪽으로 고개가 돌아간다** — 손가락을 쳐다보는 게 아니라 밀리는 것이다 */
-          /* ⚠ 0.55/0.40 은 과했다 — 눌리는 순간 고개가 30° 넘게 돌아 **표정이 안 읽혔다.** */
-          if (press > 0.01) { yaw += -pdx * 0.26 * press; pitch += pdy * 0.18 * press; }
+          /* 위에서 푼 값을 그대로 쓴다 — 몸에 넘긴 것과 **같은 값**이어야 한 물체로 읽힌다 */
+          const yaw = gaze.yaw, pitch = gaze.pitch, roll = gaze.roll;
           /* 응축·모임이면 오라가 작아지므로 얼굴도 같이 준다. 점으로 모이면 사라진다. */
           /* 깜빡임 진행 — 감았다 뜨는 건 대칭이 아니다. 감기는 빠르고 뜨기는 느리다. */
           const dms = dt * 1000;
@@ -3695,8 +3746,14 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
                  6px 안에 획 셋이 겹쳐 **X 자국**이 됐다(실기 확인). 표정은 크기를 요구한다. */
               /* ⚠ eyeSz 를 키우면 **홍조까지 같이 커진다**(홍조가 눈 크기를 쓴다).
                  눈만 키우는 배율을 따로 넘긴다. */
-              cy: P.cy, gap: P.gap * k, eyeSz: P.eyeSz * k, eyeScale: hurt ? 1.9 : 1,
-              mSz: P.mSz * k * (hurt ? 1.35 : 1), mCy: P.cy + (P.mCy - P.cy) * k,
+              /* ⚠ **살이 가운데로 몰려야 한다**(창업자 2026-08-30: "실제 사람 얼굴을 누르면
+                 살이 가운데에 몰리는 느낌이 드는데 이건 그런 게 없어서 타격감이 덜하다").
+                 축으로 눌리기만 하면 「미끄러진」 것이고, **이목구비가 서로 가까워져야** 「눌린」 것이다.
+                 눈 간격과 눈–입 거리를 같이 줄인다 — 살이 모이면 그 위에 얹힌 것도 모인다. */
+              cy: P.cy, gap: P.gap * k * (1 - 0.42 * press), eyeSz: P.eyeSz * k,
+              eyeScale: hurt ? 1.9 : 1,
+              mSz: P.mSz * k * (hurt ? 1.35 : 1),
+              mCy: P.cy + (P.mCy - P.cy) * k * (1 - 0.45 * press),
               yaw, pitch, roll, blink: hurt ? 0 : blink,
               /* 누른 축으로 찌그러진다 — 방향은 손끝→얼굴 벡터의 **반대**(=밀린 쪽) */
               squish: press, sqx: pdx, sqy: -pdy,

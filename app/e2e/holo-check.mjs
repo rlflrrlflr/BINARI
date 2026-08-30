@@ -95,14 +95,18 @@ const HARM = `(A, W, H) => {
       const x = Math.round(cx + dx * t), y = Math.round(cy + dy * t);
       if (x < 1 || y < 1 || x >= W - 1 || y >= H - 1) break;
       const m = (A(x, y) + A(x - 1, y) + A(x + 1, y) + A(x, y - 1) + A(x, y + 1)) / 5;
-      if (m >= 90) r = t; else if (t > r + 6) break;
+      /* ⚠ 틈 허용을 6 으로 뒀더니 광선이 **코어 경계를 건너뛰어 헤일로까지** 갔다 —
+         방향마다 갔다 안 갔다 하니 반경이 두 값으로 갈리고 3주기 성분이 튄다.
+         같은 코드에서 0.03 과 0.15 가 번갈아 나온 원인이 이것이다(오브 자체는 3주기 0.002 로 둥글다).
+         틈은 2 픽셀까지만 — 그레인은 위의 5픽셀 평균이 이미 누른다. */
+      if (m >= 90) r = t; else if (t > r + 2) break;
     }
     rs.push(r);
   }
   let re = 0, im = 0;
   for (let i = 0; i < 72; i++) { const th = i / 72 * Math.PI * 2 * 3; re += rs[i] * Math.cos(th); im += rs[i] * Math.sin(th); }
   const mean = rs.reduce((s, v) => s + v, 0) / rs.length;
-  return mean > 0 ? 2 * Math.hypot(re, im) / 72 / mean : 0;
+  return { h: mean > 0 ? 2 * Math.hypot(re, im) / 72 / mean : 0, mean: mean, min: Math.min(...rs), max: Math.max(...rs) };
 }`;
 /* ⑩-0 **지표를 먼저 믿을 수 있는지 본다.** 합성 도형으로 눈금을 맞춘다 —
    원은 낮게, 둥근 삼각형은 높게 나와야 이 문턱(0.06)이 뜻을 갖는다.
@@ -119,7 +123,7 @@ const cal = await page.evaluate((src) => {
     g.fill();
     const d = g.getImageData(0, 0, N, N).data;
     return harm((x, y) => d[4 * (y * N + x) + 3], N, N); };
-  return { circle: +mk(false).toFixed(3), tri: +mk(true).toFixed(3) };
+  return { circle: +mk(false).h.toFixed(3), tri: +mk(true).h.toFixed(3) };
 }, HARM);
 ck("⑩-0 지표가 원과 삼각형을 가른다", cal.circle < 0.03 && cal.tri > 0.10,
    `원 ${cal.circle} / 삼각 ${cal.tri}`);
@@ -131,17 +135,28 @@ const rad = async () => {
       const c = document.querySelector("canvas"), g = c.getContext("webgl");
       const W = c.width, H = c.height, a = new Uint8Array(4 * W * H);
       g.readPixels(0, 0, W, H, g.RGBA, g.UNSIGNED_BYTE, a);
-      return harm((x, y) => a[4 * (y * W + x) + 3], W, H);
+      const r0 = harm((x, y) => a[4 * (y * W + x) + 3], W, H);
+      return { h: r0.h, mean: r0.mean, min: r0.min, max: r0.max, orb: window.__BINARI_ORB, W: W };
     }, HARM));
     await page.waitForTimeout(130);
   }
-  return +(v.reduce((s, x) => s + x, 0) / v.length).toFixed(3);
+  const avg = (k) => v.reduce((s2, x) => s2 + x[k], 0) / v.length;
+  return { h: +avg("h").toFixed(3), mean: +avg("mean").toFixed(1),
+           min: +avg("min").toFixed(1), max: +avg("max").toFixed(1),
+           orb: v[0].orb, W: v[0].W };
 };
 /* ⚠ 판결과 **비교**하지 않는다 — 판결 오라는 캔버스를 거의 채워서 등고선이 경계에 걸리고
       3주기 성분이 0 으로 나온다(측정이 안 되는 것이지 둥근 게 아니다). 곁의 절대값만 본다. */
+/* ⚠ **깨우고 나서 재야 한다.** 여기서 바로 곁으로 가면 수호신이 아직 「두드려봐」 상태라
+   장이 흐리고 들쭉날쭉하다 — 그 상태를 재면 광선마다 임계 교차가 딴 데서 나서 3주기 성분이
+   0.14 로 나온다(같은 오브를 깨운 뒤 재면 0.002 다. 두 측정을 맞대어 확인했다).
+   창업자가 「곁 탭 안 둥그런데」라고 한 건 **깨운 뒤의 화면**이다. 그 상태를 재야 한다. */
+await page.locator("canvas").first().dblclick();
+await page.waitForSelector("textarea.qbox", { timeout: 12000 }); await page.waitForTimeout(900);
 await page.getByRole("button", { name: "곁" }).click(); await page.waitForTimeout(2400);
 const gyeot3 = await rad();
-ck("⑩ 곁이 둥글다 — 삼각(3주기) 성분", gyeot3 < 0.06, `${gyeot3} (0.06 미만이어야)`);
+ck("⑩ 곁이 둥글다 — 삼각(3주기) 성분", gyeot3.h < 0.06,
+   `${gyeot3.h} (0.06 미만이어야) · 반경 평균 ${gyeot3.mean} 최소 ${gyeot3.min} 최대 ${gyeot3.max} · orb ${gyeot3.orb} · 캔버스 ${gyeot3.W}`);
 
 /* ── ⑪ xyz 로 **눈에 보이게** 떠다니는가 ─────────────────────────────────
    ⚠ 창업자가 "xyz 축으로 움직이고 있는 건 맞아?" 라고 물었다. 실제로 움직이고는
@@ -189,10 +204,12 @@ const wy = () => tp.evaluate(() => {
   const c = document.querySelector("canvas"), g = c.getContext("webgl");
   const W = c.width, H = c.height, a = new Uint8Array(4 * W * H);
   g.readPixels(0, 0, W, H, g.RGBA, g.UNSIGNED_BYTE, a);
-  let sy = 0, sw = 0;
+  /* ⚠ **가로도 재야 한다.** 밀어내기는 손끝 반대 방향이라 **주로 가로로** 간다 —
+     세로만 재면 크게 밀렸는데도 0.000 이 나온다(실제로 그래서 오검출이 났다). */
+  let sx = 0, sy = 0, sw = 0;
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const v = a[4 * (y * W + x) + 3];
-    if (v > 170) { sy += y * v; sw += v; } }
-  return sw ? sy / sw / H : null;
+    if (v > 170) { sx += x * v; sy += y * v; sw += v; } }
+  return sw ? { x: sx / sw / W, y: sy / sw / H } : null;
 });
 const cdp = await tctx.newCDPSession(tp);
 const before = await wy();
@@ -206,7 +223,8 @@ let peak = 0;
 for (let i = 1; i <= 8; i++) {
   await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: cx + tbox.w * 0.055 * i, y: y0 + (y1 - y0) * i / 8 }] });
   await tp.waitForTimeout(50);
-  const v = await wy(); if (v !== null && before !== null) peak = Math.max(peak, Math.abs(v - before));
+  const v = await wy(); if (v !== null && before !== null)
+    peak = Math.max(peak, Math.abs(v.x - before.x), Math.abs(v.y - before.y));
 }
 await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
 await tctx.close();
