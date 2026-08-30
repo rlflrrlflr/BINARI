@@ -4,6 +4,8 @@ import { readMatch, matchAxes, roleOf, ROLE } from "./lib/match.js";
 /* 오라 스펙 — 레퍼런스를 값으로 적은 단일 진실 원천. 셰이더 상수를 코드에 안 박는다.
    시제품 보드(tools/build-holo-field.mjs)도 **같은 파일**을 읽는다 — 보드와 앱이 어긋날 수 없다. */
 import AURA from "./lib/aura-spec.json";
+/* 얼굴 — 오라 위에 얹는 2D 층. 시안 보드와 **같은 모듈**을 쓴다(두 벌로 갈리지 않게). */
+import { drawFace, FACE_PRESETS, MOOD_EYE } from "./lib/face.js";
 
 /* ───── 계측(PostHog) — 휴면-준비: VITE_POSTHOG_KEY 없으면 완전 무동작 ───── */
 const AKEY = import.meta.env.VITE_POSTHOG_KEY;
@@ -601,7 +603,7 @@ function myeongsikText(saju, sex, now) {
   return "\n[아래는 네 계산·추론용 자료다. 용어를 본문에 그대로 쓰지 마라 — 지시서의 [용어 금지] 참조]"
     + "\n십성 분포(일간 " + GAN[idx.dG] + " 기준): " + dist.map(([k, v]) => k + " " + v).join(" · ") + (sex ? "" : " — 성별 미입력: 자식운 등 남녀 구분 해석은 말하지 않는다")
     + "\n신살: " + (sins.length ? sins.map((x) => x.name).join(" · ") : "두드러진 것 없음")
-    + "\n세운(향후 5년 · 리포트 배경 전용, 판결의 시계로 쓰지 말 것): " + se.map((x) => x.year + " " + x.ganji + "(" + x.ss + ")").join(" / ")
+    + "\n세운(향후 5년 · **판결의 방향·시계로 쓰지 마라.** 근거를 서술할 때는 값을 인용해도 된다): " + se.map((x) => x.year + " " + x.ganji + "(" + x.ss + ")").join(" / ")
     + "\n띠 인연(정보 제시까지만 — 판결 근거 아님): 충 " + TTI[(idx.yJ + 6) % 12] + "띠 · 원진 " + TTI[WONJIN[idx.yJ]] + "띠 — 큰돈·보증은 신중히"
     + (tk.good.length ? "\n길일(30일 내): " + tk.good.map((d) => d.label + "(" + d.why + ")").join(" · ") + (tk.bad.length ? " / 피할 날: " + tk.bad.map((d) => d.label).join(" · ") : "") : "")
     + "\n직업 기운: 일간 " + GAN_EL[idx.dG] + " — " + JOB_EL[GAN_EL[idx.dG]] + (maxEl !== GAN_EL[idx.dG] ? " (분포 최다 " + maxEl + " 기질 겸함)" : "");
@@ -746,7 +748,7 @@ function lifeDomains(ctx) {
     const ent = Object.entries(ssn).sort((a, b) => b[1] - a[1]);
     const topV = ent.length ? ent[0][1] : 0;
     const tops = ent.filter(([, v]) => v === topV);
-    put("마음", "마음 — 어떤 사람으로 발급됐나", "m",
+    put("마음", "마음 — 어떤 사람으로 새겨졌나", "m",
       `여덟 자리 중 *너 자신을 가리키는 한 글자는 ${GAN[idx.dG]} — ${EL_KO[me]}*야. ${EL_READ[me]} 그리고 너를 받치는 글자가 ${G.비겁 + G.인성}개라 *${STR_KO[strength]}*으로 나와`,
       topV <= 1 || tops.length >= 4
         ? "기운이 *고르게 흩어져 있어* — 한쪽으로 쏠린 성격이 아니야. \"이런 사람\"이라고 한 단어로 안 묶이는 대신, 어느 판에 놓여도 그럭저럭 굴러가"
@@ -1260,11 +1262,11 @@ function ImprintDoc({ saju, birth, sex, onClose }) {
       <p className="impp">{r.core.surface.d}.</p>
       <div className="impcore">
         <p className="impk2">그 런 데</p>
-        <p className="impcv">네 속은 다르다. <b>{r.core.inner.w}.</b><Ref n={r.core.n2} /></p>
+        <p className="impcv">그런데 네 속은 달라. <b>{r.core.inner.w}.</b><Ref n={r.core.n2} /></p>
         <p className="impcw">{r.core.inner.d}. {r.core.split ? "겉으로 보이는 모습과 속이 다른 사람이야." : "겉과 속이 같은 방향이라 오해는 덜 받아."}</p>
       </div>
       <CoreFig />
-      <p className="impp"><b>그리고 네게는 {r.core.block.t}{josa(r.core.block.t, "이", "가")} 얇아.</b><Ref n={r.core.n3} /> {r.core.block.s}. {r.core.block.w}</p>
+      <p className="impp"><b>그리고 네게 가장 얇은 건 이거야 — {r.core.block.s}.</b><Ref n={r.core.n3} /> {r.core.block.s}. {r.core.block.w}</p>
       {/* fix 는 imprint.js 에서 `<b>` 를 품고 온다(burn·d·w 와 같은 계열). `{}` 로 꽂으면 React 가
           이스케이프해서 **화면에 태그가 글자로 보인다** — 실제로 그랬다(값을 치른 문서에서, 가장 강조한 줄에서).
           같은 파일의 다른 필드는 전부 <H> 를 거치고 있었고 이 한 줄만 빠져 있었다. */}
@@ -1697,19 +1699,24 @@ function DocNav({ scopeRef, deps }) {
     /* ⚠ `scrollIntoView` 를 쓰면 **문서까지 같이 움직인다** — 칩을 보이게 하려다 방금 이동한
        자리를 흔든다. 가로 위치만 직접 계산한다(세로는 건드리지 않는다). */
     try {
-      const nav = document.querySelector(".docnav"), on = nav?.querySelector(".on");
+      const nav = document.querySelector(".docstrip"), on = nav?.querySelector(".on");
       if (nav && on) nav.scrollTo({ left: on.offsetLeft - nav.clientWidth / 2 + on.offsetWidth / 2, behavior: "smooth" });
     } catch (_) {}
   }, [cur]);
   if (secs.length < 3) return null;   // 셋 미만이면 목차가 오히려 소음이다
   return (
+    /* ⚠ **배경(띠)과 스크롤 영역을 갈랐다.** 하나로 두면 칩이 스크롤하며 닫기(✕) 밑을 지나간다 —
+       여백(padding-right)으로도, 끝에 빈 자리를 둬도 못 막는다. **지나갈 수 있는 폭 자체**를 줄여야 한다.
+       띠는 화면 끝까지(배경이 이어지고) 칩은 ✕ 앞에서 멎는다. */
     <nav className="docnav" aria-label="문서 목차">
+     <div className="docstrip">
       {secs.map((x, i) => (
         <button key={x.id} className={"docchip" + (i === cur ? " on" : "")}
           onClick={() => { document.getElementById(x.id)?.scrollIntoView({ behavior: "smooth", block: "start" }); track("doc_nav", { to: x.tag }); }}>
           {x.tag}
         </button>
       ))}
+     </div>
     </nav>
   );
 }
@@ -2026,7 +2033,7 @@ function MyeongsikReportBody({ saju, sex, birth }) {
   useEffect(() => { track("report_shown", { sinsal: sins.length, top_ss: dist[0] ? dist[0][0] : null, strength, lack_el: lackEl.join("") || null, yong: ys.eokbu.join("") || null, yong_agree: ys.agree }); }, []);
   return (
     <div className="msr" onClick={(e) => e.stopPropagation()}>
-      <button className="msrbtn" onClick={() => setOpen(!open)}>{open ? "▴ 타고난 그릇 접기" : "▾ 타고난 그릇 — 명식 깊이 보기"}</button>
+      <button className="msrbtn" onClick={() => setOpen(!open)}>{open ? "▴ 타고난 그릇 접기" : "▾ 타고난 그릇 — 네 여덟 글자를 깊이 보기"}</button>
       {open && (
         <div className="msrbody">
           {/* v109: 명식 원판 — 지금까지 사주 여덟 글자와 오행 개수는 '온보딩 연출'에만 있었다.
@@ -2277,6 +2284,16 @@ const HEX_NAMES = { 천천:"중천건",천택:"천택리",천화:"천화동인",
   수천:"수천수",수택:"수택절",수화:"수화기제",수뢰:"수뢰둔",수풍:"수풍정",수수:"중수감",수산:"수산건",수지:"수지비",
   산천:"산천대축",산택:"산택손",산화:"산화비",산뢰:"산뢰이",산풍:"산풍고",산수:"산수몽",산산:"중산간",산지:"산지박",
   지천:"지천태",지택:"지택림",지화:"지화명이",지뢰:"지뢰복",지풍:"지풍승",지수:"지수사",지산:"지산겸",지지:"중지곤" };
+/* 삼괘를 우리말로 — 「중수감」은 유저가 못 읽는다. **이름을 빼지 않고 병기를 붙인다**
+   (§A 처방: 낯선 이름을 쉽게 만드는 게 아니라 이름 뒤를 채운다).
+   ⚠ 새 표가 아니다 — `TRI_EL` 의 여덟 글자를 그대로 옮긴 것뿐이라 어긋날 수 없다. */
+const TRI_KO = { 천: "하늘", 택: "못", 화: "불", 뢰: "우레", 풍: "바람", 수: "물", 산: "산", 지: "땅" };
+const hexPlain = (lines) => {
+  const bit = (v) => (v % 2 ? "1" : "0");
+  const lo = lines.slice(0, 3).map(bit).join(""), up = lines.slice(3).map(bit).join("");
+  const u = TRI_KO[TRI_EL[up]], d = TRI_KO[TRI_EL[lo]];
+  return u && d ? (u === d ? `위아래가 다 ${d}` : `위는 ${u}, 아래는 ${d}`) : "";
+};
 const hexName = (lines) => { // lines: 아래→위, 각 6~9
   const bit = (v) => (v % 2 ? "1" : "0");
   const lo = lines.slice(0, 3).map(bit).join(""), up = lines.slice(3).map(bit).join("");
@@ -2934,6 +2951,9 @@ const guardianSize = (vp) => (SKIN === "holo"
      **숨긴 동안에도 회귀가 계속 잡힌다.** 안 그러면 122항이 통째로 잠든다. */
 const MSR_FREE = (() => { try { return /[?&]msr=1(&|$)/.test(window.location.search); } catch (_) { return false; } })();
 const SKIN = (() => { try { return /[?&]skin=holo(&|$)/.test(window.location.search) ? "holo" : ""; } catch (_) { return ""; } })();
+/* 얼굴 A/B — `?face=a|b|c|d`. 없으면 얼굴을 안 그린다(지금까지의 화면 그대로).
+   창업자가 "상위 4개를 앱에 얹어서 평가하겠다"고 해서 **끼웠다 뺐다 되게** 둔다. */
+const FACE = (() => { try { const m = /[?&]face=([abcd])(&|$)/.exec(window.location.search); return m ? m[1] : ""; } catch (_) { return ""; } })();
 
 /* ── 오늘의 상태 — **두 체계를 섞는다** (2026-08-28 창업자 결정) ──────────────
    **왜 섞나.** 전엔 사주 하나(일진 십성)만 썼는데, 십성은 **일간 10개**만 보므로
@@ -3179,9 +3199,21 @@ void main(){
      헤일로가 삼각으로 부풀었다. 굴곡·비율·물방울·층 어긋남을 다 껐는데도 각져 보인 게 이것 때문.
      곁에서는 **형태 변조만** 접는다 — 감정은 밝기·색으로 계속 실린다. */
   float puffK = 1.0 + lobe*u_puffP.z*1.35*u_wt.y*(1.0 - fold*0.92);   // ⚠ 2.2 는 헤일로를 세잎클로버로 갈랐다
-  float ph   = floor(t*u_flkP.x);
-  float fl   = 1.0 - u_flkP.y*hash(vec2(ph, 7.3));
-  fl *= mix(0.34, 1.0, step(u_flkP.z, hash(vec2(ph, 19.1))));
+  /* ⚠ **여기가 「수호신이 깜빡인다」의 원인이었다**(창업자 제보 2026-08-29).
+     예전 판은 floor(t*11) — 값이 **계단**이라 한 프레임 만에 최대 0.73 튀었고,
+     그게 아래 alpha 전체에 곱해져 **물체가 통째로 명멸했다**. 실측: 초당 1.1회,
+     그때 밝기가 0.27 배까지 내려갔다. 불꽃은 깜빡이지 않는다 — 흔들린다. 셋을 고친다.
+       ① 계단 사이를 잇는다(smoothstep) — 점프가 사라지고 파르르 떠는 결만 남는다
+       ② 급락의 바닥을 0.34 → 0.72 로 올린다. 「나갈 듯 말 듯」은 남기고 「꺼짐」만 없앤다
+       ③ **위쪽만 흔들린다**(아래 live 의 up 가중) — 밑동까지 같이 가면
+          그건 불꽃의 흔들림이 아니라 물체의 깜빡임으로 읽힌다 */
+  float fp   = t*u_flkP.x*0.68;
+  float ph   = floor(fp);
+  float fe   = smoothstep(0.0, 1.0, fract(fp));
+  float fn   = mix(hash(vec2(ph, 7.3)),  hash(vec2(ph+1.0, 7.3)),  fe);
+  float fd   = mix(step(u_flkP.z, hash(vec2(ph, 19.1))),
+                   step(u_flkP.z, hash(vec2(ph+1.0, 19.1))), fe);
+  float fl   = (1.0 - u_flkP.y*fn) * mix(0.72, 1.0, fd);
 
   /* ── 다섯 층. **중심이 저마다 어긋나고 저마다 다른 속도로 떠다닌다** ────
      ⚠ 어긋남이 크면 코어가 화면 밖으로 밀려 **한쪽으로 쏠린 얼룩**이 된다(실기에서 그랬다).
@@ -3278,7 +3310,7 @@ void main(){
   /* ⚠ 마스크를 **사각형**(max(|x|,|y|))으로 잡으면 헤일로가 캔버스를 채울 때 그 사각 자국이
      그대로 드러난다(실기에서 각진 얼룩으로 보였다). 원형으로 감싼다. */
   float vig  = smoothstep(1.02, 0.56, length(uv)*2.0);
-  float live  = mix(1.0, fl, u_wt.z);
+  float live  = mix(1.0, mix(1.0, fl, 0.22 + 0.78*up), u_wt.z);   // 밑동은 안 흔들린다
   float bornK = 0.20 + 0.80*u_born;               // 흩어져 있을 땐 옅지만 **보이기는 해야 한다**
   float touchK = (1.0 + tk*0.62) * (1.0 + u_ex*0.28);   // 모이면 진해지고, 들뜨면 더 환해진다
   gl_FragColor = vec4(outc, clamp(sum*u_lum*live*vig*bornK*touchK, 0.0, 1.0));
@@ -3310,6 +3342,7 @@ const HOLO_MOON = ["#46557f", "#93a6d0", "#b7a9d6"];
 
 function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFail }) {
   const ref = useRef(null);
+  const faceRef = useRef(null);
   useEffect(() => {
     const cv = ref.current; if (!cv) return;
     let gl = null, raf = 0, dead = false;
@@ -3374,6 +3407,22 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
          톡 칠 때마다 오르고 천천히 식는다. 들뜨면 밝아지고 빨라지고 꼬리가 길어진다.
          ⚠ 얼굴·팔다리를 그리지 않는다. 반응하는 건 **빛의 세기와 움직임**뿐이다. */
       const wisp = { x: 0, y: 0, vx: 0, vy: 0, ex: 0 };
+      /* ── 코어의 실제 자리 ────────────────────────────────────────────────
+         ⚠ 얼굴을 드리프트+위습에만 맞췄더니 **코어에서 벗어나 떠 있었다**
+            (실측 2026-08-29: x 27.8px · y 22.4px, 383px 캔버스 기준 7%·6%).
+            빠진 건 둘이다 — ①반사광 층 c0 의 **자기 어긋남**(시간에 따라 움직인다)
+            ②`uv.y += u_sink*0.06`. 셰이더와 **같은 식으로** 다시 계산해서 쓴다.
+         이 값은 얼굴 배치에만 쓰는 게 아니라 **손끝이 얼굴 안인지 밖인지** 가르는 기준이기도 하다. */
+      const core = { x: 0.5, y: 0.5 };
+      const SPD = 1.35 * (mood ? mood.sp : 1);
+      const SINK = mood ? mood.sink * 2.2 : 0;
+      const FACE_R = 0.20;                       // 얼굴로 치는 반경(캔버스 폭 대비)
+      /* ── 손끝 두 갈래 (창업자 2026-08-29) ───────────────────────────────
+         "얼굴 안쪽에서 터치하면 누가 꾹 누른 듯이 얼굴이 한쪽으로 밀리며 귀엽게 괴로워 하고
+          얼굴 바깥에서 누르면 몸이 약간 튕겨져 나가는 느낌으로 밀려나가."
+         → 예전엔 **어디를 눌러도 손끝으로 모였다.** 얼굴이 생긴 뒤로는 그게 안 맞는다 —
+           얼굴은 누르는 대상이고, 몸통 바깥은 **밀어내는** 자리다. 둘을 가른다. */
+      let mode = "out", press = 0, pressT = 0, pdx = 0, pdy = 0;
       const TRAIL = 6;
       const trail = Array.from({ length: TRAIL }, () => [0, 0]);
       let tLast = 0;
@@ -3384,12 +3433,30 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
         touch.y = 0.5 - (src.clientY - r.top) / r.height;
       };
       const on = (e) => {
-        at(e); touch.target = 1; wisp.ex = Math.min(1.6, wisp.ex + 0.5);
+        at(e); wisp.ex = Math.min(1.6, wisp.ex + 0.5);
+        /* 얼굴 안/밖 판정 — touch 는 -0.5~0.5(위가 +y), core 는 0~1(아래가 +y) */
+        const rx = touch.x - (core.x - 0.5), ry = touch.y - (0.5 - core.y);
+        const d = Math.hypot(rx, ry);
+        mode = d < FACE_R ? "in" : "out";
+        if (mode === "in") {
+          /* 꾹 눌리면 **손끝 반대쪽으로** 밀려난다 — 말랑한 걸 누르면 그렇게 된다 */
+          pressT = 1; const n = Math.max(d, 1e-3);
+          pdx = -rx / n; pdy = -ry / n;
+          touch.target = 0;                      // 안쪽은 「모임」이 아니다
+        } else {
+          /* 튕겨나감 — 스프링 목표를 옮기지 않고 **속도만** 준다.
+             목표를 옮기면 밀려난 자리에 머무르지만, 속도만 주면 튕겼다 제자리로 돌아온다. */
+          const n = Math.max(d, 1e-3);
+          wisp.vx += (rx / n) * -3.4; wisp.vy += (ry / n) * -3.4;
+          touch.target = 0;
+        }
         /* 캔버스 밖으로 끌어도 계속 따라오게 — 없으면 가장자리에서 뚝 끊긴다 */
         try { cv.setPointerCapture(e.pointerId); } catch (_) {}
       };
-      const move = (e) => { if (touch.target > 0.5) at(e); };
-      const off = () => { touch.target = 0; };
+      const move = (e) => { if (pressT > 0.5) { at(e);
+        const rx = touch.x - (core.x - 0.5), ry = touch.y - (0.5 - core.y);
+        const n = Math.max(Math.hypot(rx, ry), 1e-3); pdx = -rx / n; pdy = -ry / n; } };
+      const off = () => { touch.target = 0; pressT = 0; };
       cv.addEventListener("pointerdown", on);
       cv.addEventListener("pointermove", move);
       cv.addEventListener("pointerup", off);
@@ -3402,6 +3469,12 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
          스프링으로 바꾸면 지나쳤다 되돌아오며 두어 번 출렁인다. 그게 푸딩이다.
          ⚠ orb 를 0~1 로 자르면 오버슈트가 죽는다. 살짝 넘치게 두되(-0.18~1.28)
             그 이상은 막는다 — 넘치면 반경 식이 음수 쪽으로 간다. */
+      /* ── 눈 깜빡임 ─────────────────────────────────────────────────────
+         창업자: "얼굴은 계속 움직임이 있어야 함." 두리번거림만으로는 **밀랍인형**이다 —
+         살아 있다는 신호 중 사람이 가장 먼저 읽는 건 깜빡임이다.
+         사람은 2~6초에 한 번, 100~150ms 동안 감는다. 가끔 두 번 연달아 감는 것까지 넣는다
+         — 규칙적으로 감으면 그건 또 기계다. */
+      let blinkNext = 1400 + Math.random() * 2600, blinkT = -1, blinkDouble = false;
       let orb = 0, orbV = 0, orbLast = 0, antUntil = 0, last = performance.now();
       const T0 = performance.now();
       const draw = () => {
@@ -3430,7 +3503,7 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
         try { window.__BINARI_ORB = orb; } catch (_) {}
         /* 눌림(squash) — 빠르게 모일 때 살짝 납작해지고 퍼질 때 옆으로 늘어난다.
            푸딩이 "말랑"해 보이는 건 이 한 축 때문이다. */
-        gl.uniform1f(U.u_squash, Math.max(-0.34, Math.min(0.34, orbV * 0.042)   /* ⚠ 0.105 는 과했다 — 초반에 세로로 길쭉해지며(가로 99 세로 231) 오히려 면적이 줄어 '커졌다'가 눌림에 먹혔다 */));
+        gl.uniform1f(U.u_squash, Math.max(-0.34, Math.min(0.34, orbV * 0.042 + press * 0.26)   /* ⚠ 0.105 는 과했다 — 초반에 세로로 길쭉해지며(가로 99 세로 231) 오히려 면적이 줄어 '커졌다'가 눌림에 먹혔다 */));
         gl.uniform1f(U.u_t, (now - T0) / 1000);
         /* 탄생 — 흩어진 조각이 2.4초에 걸쳐 모인다. 온보딩(scatter)에서는 모이다 만 상태로 머문다.
            ⚠ 선형이 아니라 **뒤로 갈수록 느리게**(ease-out) 해야 '모여서 자리를 잡는' 것으로 읽힌다. */
@@ -3449,6 +3522,8 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
         }
         touch.amt += (touch.target - touch.amt) * (1 - Math.exp(-dt / (touch.target > touch.amt ? 0.06 : 0.85)  /* 모임은 즉각, 풀림은 여운 */));
         const gather = Math.max(touch.amt, rk * 0.7);
+        /* 눌림은 빨리 차고 천천히 풀린다 — 물러났다 돌아오는 여운이 「말랑」이다 */
+        press += (pressT - press) * (1 - Math.exp(-dt / (pressT > press ? 0.05 : 0.30)));
 
         /* 위습 물리 — 목표(손끝 또는 제자리)로 끌리되 **감쇠가 낮아 지나쳤다 돌아온다.**
            그 오버슈트가 "살아 있는 것이 다가온다"로 읽힌다. 임계감쇠로 두면 다시 기계가 된다. */
@@ -3479,7 +3554,94 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
         const spd = Math.hypot(wisp.vx, wisp.vy);
         gl.uniform1f(U.u_tailK, Math.min(1, spd * 0.55));
         gl.uniform2fv(U.u_trail, new Float32Array(trail.flat()));
+        /* ── 코어 좌표 (셰이더 식 그대로) ─────────────────────────────────
+           R·zc·orbC 는 FIELD_FRAG 과 **같은 상수**여야 한다. 한쪽만 고치면 또 어긋난다. */
+        {
+          const tS = ((now - T0) / 1000) * SPD;
+          const zc = 0.5 + 0.5 * Math.sin(tS * 0.38);
+          const ob = Math.min(Math.max(orb, 0), 1);
+          const foldJ = Math.max(ob, gather);
+          const Rj = (0.320 + (0.208 - 0.320) * ob) * (1 + (0.20 - 1) * gather)
+                   * (0.90 + (1.12 - 0.90) * zc) * (1 + 0.020 * Math.sin(tS * 0.85));
+                    /* ⚠ **c0(반사광 층) 어긋남을 쓰면 안 된다** — 처음에 그걸 코어로 잡았다가
+             얼굴이 더 내려갔다(실측 눈 중점이 블롭 무게중심보다 26px 아래).
+             c0 는 다섯 층 중 하나일 뿐이고, 눈이 앉아야 할 자리는 **밝기 전체의 무게중심**이다.
+             그 중심은 캔버스 정중앙보다 **위**에 있다 — 불꽃이 위로 뻗기 때문이다.
+             들어올림은 상수가 아니라 R 에 비례한다(응축하면 불꽃이 짧아지니 덜 올라간다). */
+          const lift = 0.068 * (Rj / 0.323) * (1 - 0.55 * foldJ);
+          const dfx = Math.sin(tS * 0.55) * 0.075 + Math.sin(tS * 0.93 + 1.3) * 0.030;
+          const dfy = Math.cos(tS * 0.47) * 0.088 + Math.sin(tS * 0.81 + 0.6) * 0.034;
+          core.x = 0.5 + dfx + wisp.x / 2.35;
+          core.y = 0.5 - dfy - wisp.y / 2.35 + SINK * 0.06 - lift;
+        }
         gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+        /* ── 얼굴 (?face=a|b|c|d) ─────────────────────────────────────────
+           **오라를 따라다녀야 한다.** 위습은 드리프트로 떠다니고 손끝으로 옮겨가며
+           응축하면 작아지므로, 얼굴이 캔버스 한가운데 고정되면 곧바로 어긋나 보인다.
+           셰이더가 쓰는 좌표를 여기서 같은 식으로 다시 계산해 얹는다.
+           ⚠ 셰이더의 `p = (uv - drift)*2.35` 와 뒤집힌 관계다 — 화면 y 는 아래로 증가한다. */
+        if (FACE && faceRef.current) {
+          const fx = faceRef.current;
+          if (fx.width !== S) { fx.width = S; fx.height = S; }
+          const g2 = fx.getContext("2d");
+          g2.clearRect(0, 0, S, S);
+          const tt = ((now - T0) / 1000) * SPD;
+          const P = FACE_PRESETS[FACE];
+          /* ── 얼굴이 두리번거린다 ─────────────────────────────────────
+             창업자: "눈 높이와 좌우 위치는 시선과 얼굴의 방향을 나타낼 수 있을 거 같아서
+             이건 살아있는 생명체처럼 왔다갔다 하면 좋겠어."
+             주기를 서로 나눠떨어지지 않게 잡아야 **왕복이 아니라 두리번거림**이 된다.
+             손끝을 누르면 그쪽으로 돌아본다 — 시선이 손을 따라가는 게 「보고 있다」의 전부다. */
+          /* ⚠ 진폭을 키웠다(2026-08-29). 예전 값(yaw 0.20)은 눈이 화면에서 **2px 남짓** 움직여
+             사실상 정지로 보였다 — 눈이 3% 로 작아지면서 더 안 보인다. 원근이 보이려면
+             고개가 실제로 돌아야 한다. 주기는 여전히 서로 나눠떨어지지 않게 둔다. */
+          let yaw = Math.sin(tt * 0.31) * 0.40 + Math.sin(tt * 0.53 + 1.7) * 0.17;
+          let pitch = Math.sin(tt * 0.24 + 0.9) * 0.22 + Math.sin(tt * 0.41) * 0.10;
+          const roll = Math.sin(tt * 0.19 + 2.2) * 0.085 + Math.sin(tt * 0.37 + 0.4) * 0.030;
+          /* 눌리면 **눌린 쪽으로 고개가 돌아간다** — 손가락을 쳐다보는 게 아니라 밀리는 것이다 */
+          if (press > 0.01) { yaw += -pdx * 0.55 * press; pitch += pdy * 0.40 * press; }
+          /* 응축·모임이면 오라가 작아지므로 얼굴도 같이 준다. 점으로 모이면 사라진다. */
+          /* 깜빡임 진행 — 감았다 뜨는 건 대칭이 아니다. 감기는 빠르고 뜨기는 느리다. */
+          const dms = dt * 1000;
+          if (blinkT < 0) blinkNext -= dms;
+          if (blinkT < 0 && blinkNext <= 0) { blinkT = 0; blinkDouble = Math.random() < 0.22; }
+          let blink = 0;
+          if (blinkT >= 0) {
+            blinkT += dms;
+            const D = blinkDouble ? 420 : 150;
+            const u = blinkT / D;
+            if (u >= 1) { blinkT = -1; blinkNext = 1400 + Math.random() * 2600; }
+            else if (blinkDouble) blink = Math.abs(Math.sin(u * Math.PI * 2));
+            else blink = u < 0.4 ? u / 0.4 : 1 - (u - 0.4) / 0.6;
+          }
+          const foldV = Math.max(Math.min(Math.max(orb, 0), 1), touch.amt);
+          const k = (1 - 0.35 * Math.min(Math.max(orb, 0), 1)) * (1 - touch.amt);
+          if (k > 0.05) {
+            g2.globalAlpha = Math.min(1, k * 1.4) * (0.25 + 0.75 * bornV);
+            /* ⚠ 손끝 좌표를 직접 쓰면 안 된다 — 위습은 **스프링으로 뒤따라오므로**
+               손끝과 실제 위치가 다르다. 셰이더가 쓰는 `u_wisp` 를 그대로 역산한다.
+               셰이더의 uv 는 위가 +y 이고 화면은 아래가 +y 라 부호가 뒤집힌다. */
+            /* ⚠ 예전엔 드리프트+위습만 썼다 — 그래서 **코어에서 떠 있었다**(실측 x 28px·y 22px).
+               지금은 위에서 셰이더와 같은 식으로 푼 `core` 를 그대로 쓴다.
+               눌리면 그 위에 밀린 만큼을 더한다. */
+            const cxr = core.x + pdx * 0.052 * press;
+            const cyr = core.y - pdy * 0.052 * press;
+            g2.save(); g2.translate((cxr - 0.5) * S, (cyr - 0.5) * S);
+            /* ── 귀엽게 괴로워한다 ────────────────────────────────────────
+               "귀엽게"의 정체는 **눈을 질끈 감고 입이 흔들리는 것**이다.
+               새 눈·입을 만들지 않는다 — 있는 것 중 그 뜻을 가진 둘로 갈아끼운다. */
+            const hurt = press > 0.30;
+            drawFace(g2, S, {
+              eye: hurt ? "closed" : (P.eye || (mood && MOOD_EYE[mood.ss]) || "dot"),
+              mouth: hurt ? "wave" : P.mouth, blush: P.blush,
+              cy: P.cy, gap: P.gap * k, eyeSz: P.eyeSz * k,
+              mSz: P.mSz * k, mCy: P.cy + (P.mCy - P.cy) * k,
+              yaw, pitch, roll, blink: hurt ? blink * 0.4 : blink,
+            });
+            g2.restore();
+          }
+        }
       };
       draw();
       return () => {
@@ -3500,8 +3662,16 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
   }, [saju, mood, size, scatter]);
   /* ⚠ `touchAction:"none"` 이 없으면 **폰에서 드래그가 스크롤로 새어 나간다**(실기 제보 2026-08-28).
      입자 엔진(GuardianCanvasGL)은 처음부터 이걸 걸고 있었는데 색장에만 빠져 있었다. */
-  return <canvas ref={ref} className="gcv" aria-hidden="true"
+  const cv = <canvas ref={ref} className="gcv" aria-hidden="true"
     style={{ width: size, height: size, touchAction: "none", cursor: "pointer" }} />;
+  if (!FACE) return cv;
+  /* 얼굴은 **별도 2D 캔버스**로 겹친다 — 셰이더에 넣으면 선이 뭉개지고, 오라를 건드리게 된다.
+     포인터는 아래 오라 캔버스가 받아야 하므로 `pointerEvents:none`. */
+  return (<span style={{ position: "relative", display: "block", width: size, height: size }}>
+    {cv}
+    <canvas ref={faceRef} aria-hidden="true"
+      style={{ position: "absolute", left: 0, top: 0, width: size, height: size, pointerEvents: "none" }} />
+  </span>);
 }
 
 function GuardianCanvasGL({ saju, zo, num, moon, birth, agitateRef, reactRef, restRef, broodRef, orbRef, gyeotRef, popRef, mood, size = 340, onFail }) {
@@ -4109,7 +4279,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v170 · 길을 놓는다";
+const APP_VER = "v171 · 길을 놓는다";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -4159,9 +4329,14 @@ const LETTER_SECTIONS = ["네가 망설인 자리", "여덟 글자가 이 일을
 const GAN_READ = { 갑: "곧게 자라려는 나무", 을: "휘어도 끝내 자라는 덩굴", 병: "한낮의 해", 정: "어둠에 켜 두는 등불", 무: "움직이지 않는 산", 기: "받아서 기르는 땅", 경: "아직 벼려지지 않은 쇠", 신: "이미 날이 선 칼", 임: "흐름이 큰 물", 계: "스며드는 비" };
 function letterPreview(saju, hesit) {
   const g = saju?.dayGan || "";
-  const head = GAN_READ[g] ? `네 일간은 ${g} — ${GAN_READ[g]}야.` : "네 여덟 글자를 먼저 펼쳤어.";
+  const head = GAN_READ[g] ? `네 여덟 글자 가운데 너 자신을 나타내는 글자는 ${g} — ${GAN_READ[g]}야.` : "네 여덟 글자를 먼저 펼쳤어.";
   const mid = hesit ? `네가 망설인 이유로 "${hesit}"를 골랐지. 거기부터 짚을게.` : "너는 이미 한쪽으로 기울어 있었어. 그런데도 물었지.";
-  return `${head} ${mid} 지표들은 갈라졌지만 갈라진 자리마다 같은 것을 가리키더라. 네가 두려워한 건 결과가 아니라, 되돌릴 수 없다는 사실이었어.`;
+  /* ⚠ 예전엔 「지표들은 갈라졌지만 갈라진 자리마다 같은 것을 가리키더라」였다 (2026-08-29 정정).
+     조건 없는 고정 문자열인데 실측 `verdict_shown` 240건 중 **만장일치가 119건(49.6%)** —
+     두 번에 한 번은 표를 눈앞에 띄워 놓고 "갈라졌다"고 말하고 있었다.
+     뒤 문장(「네가 두려워한 건 …」)도 뺐다 — 근거 없는 심중 단정이다.
+     ⚠ 시그니처는 그대로 둔다. `health-check.mjs` 가 `letterPreview(saju, hesit)` 를 문다. */
+  return `${head} ${mid} 아홉 하늘이 각자 다른 것을 봤어 — 그걸 한자리에 모아서 적을게.`;
 }
 /* v104: '받을게'(= 가짜 결제 완료) 이후의 대기 연출.
    서신은 아직 만들지 않는다. 대신 "주문했다 → 기다린다 → 로비로 돌아간다"까지를 실제로 태워 보고
@@ -4171,7 +4346,7 @@ const LETTER_SEAL_MS = 5000;    // 1단계: 봉인 연출
 const LETTER_WAIT_MS = 2000;    // 2단계: '곧 답변이 있을 것이다'
 const LETTER_SEAL_LINE = "수호신이 붓을 들었어";
 const LETTER_WAIT_LINE = "곧 답변이 있을 것이다.";
-const LETTER_LOBBY_LINE = "기다림이 짙을수록 가야할길은 투명해진다.";
+const LETTER_LOBBY_LINE = "기다림이 짙을수록 가야 할 길은 투명해진다.";
 const LETTER_NUDGE_LINE = "서신은 내가 쓰고 있을게. 그 사이에 더 걸리는 게 있으면 — 지금 물어도 돼.";
 /* 서신이 도착한 뒤에도 유도 문구는 남는다. 도착과 동시에 사라지면 '한 번 더 묻게 하기'라는
    이 연출의 목적이 정작 제일 좋은 타이밍에 없어진다(실측: e2e ④가 이걸 잡았다). */
@@ -4246,9 +4421,16 @@ direction=${dir} / verdict="${res?.verdict || ""}" / category=${res?.category ||
 서신은 아래 다섯 장으로 이뤄진다. 전체 흐름을 알고 쓰되, **네가 맡은 장의 본문만** 출력한다.
 맡지 않은 장의 내용은 한 줄도 쓰지 않는다(다른 조각이 그 장을 쓰고 있다).
 
+[겹치지 않기 — 다른 조각은 네 글을 못 본다]
+⚠ 너와 다른 조각은 **같은 프로필·같은 근거를 통째로 받고 서로의 출력을 못 본다.** 그래서 재료를 나눠 쓴다.
+1·2장은 **이 사람이 어떤 사람인가**만 쓴다 — 기운의 개수, 성향, 이 영역이 두터운지 빈지.
+3·4·5장은 **언제 · 누구와 · 무엇을 걸고**만 쓴다 — 기운 개수를 다시 세지 않고, 성향을 다시 진단하지 않는다.
+앞 장을 받아야 할 땐 설명하지 말고 **한 마디로만** 받는다.
+
 [전체 구성 — 각 장 280~380자. 제목은 아래 그대로 쓴다]
 1) "네가 망설인 자리" — 유저가 쓴 질문을 직접 인용하며 연다.${hesit ? ` 유저는 망설인 이유로 "${hesit}"를 골랐다 — 이걸 짚는다.` : ""} 그다음 **이 사람의 명식에서 이런 종류의 결정이 유독 어려운 이유**를 십성 분포로 진단한다(관성이 두터우면 남의 눈이 먼저 보이고, 비겁이 많으면 묻지 않고 밀어붙이고, 식상이 많으면 벌여놓고 못 거둔다 — 실제 분포대로). 위로가 아니라 진단이다.
 2) "여덟 글자가 이 일을 보는 눈" — 이 질문이 걸린 영역(돈·일·사람·몸)이 이 사람 명식에서 **두터운 자리인지 빈 자리인지**를 일간·오행 개수·십성으로 말한다. 카드 뒷면 근거를 반복하지 말고, 그 근거들이 왜 그렇게 갈렸는지 한 겹 아래로 내려간다.
+   **그리고 여덟 글자 밖의 하늘을 최소 하나 끌어온다.** 태어난 밤의 달·달자리·별자리·마야 문양·수(數) 중 이 질문에 걸리는 것 하나를 골라, 그것이 여덟 글자와 **같은 말을 하는지 다른 말을 하는지** 밝힌다. 기법 이름은 쓰지 않는다 — "태어난 밤의 달이 물자리라"처럼 **값이 말하는 바**로 쓴다. 이 서신의 이름이 「아홉 하늘」인데 한 하늘만 쓰면 이름값을 안 한 것이다.
 3) "언제 — 흐름과 움직일 날" — **이 서신에서 가장 중요한 장.** 지금 어느 열 해의 어디쯤인지, 올해의 결, 다음 석 달의 결. 그리고 **실제로 움직일 날을 프로필의 길일에서 골라 두셋 찍는다.** "때가 되면"은 금지. 날짜를 못 찍으면 "이달 하순"·"추석 전"처럼 폭을 주되 반드시 시점을 남긴다.
 4) "누구와 — 도울 사람, 몫을 갈라 둘 자리" — 프로필의 신살·합충으로 이번 일에서 **힘이 되는 띠·사람 유형**과 **조심할 자리**를 짚는다. 방위·직업 오행이 이 질문에 걸리면 함께. 프로필에 없는 것은 지어내지 않는다 — 있는 것만 쓴다.
    **부딪히는 띠는 반드시 '쓸모'로 쓴다 — 사람을 미워할 이유로 주지 않는다.** 무료 명식 리포트는 이미 그렇게 쓰고 있다("미워하란 게 아니라, 큰돈·보증만 조심하란 뜻이야"). 값을 받는 서신이 그보다 험하면 안 된다.
@@ -4969,7 +5151,10 @@ HOLD는 '판단 못 하겠음'이 아니라 **'지표가 지금은 멈추라고 
     (X·앞면)"무오 대운이라 밀어붙일 때야" → (O·앞면)"앞으로 십 년은 밀어붙이면 되는 판이야."
     (X·앞면)"중수감이라 지금 뛰면 빠져" → (O·앞면)"지금 뛰면 빠져. 물이 겹겹인 때야."
 - 주역 괘가 제공된 경우: reasons에 '주역' 축을 반드시 포함한다. 단 verdict·subline에는 **괘 이름·효 번호를 절대 쓰지 말고**(둔괘·태괘·수뢰둔·초효 등 금지) 그 괘가 말하는 바만 일상어로 녹인다 — 괘 이름을 짚는 건 reasons(상세)에서만. (X)"둔괘가 말하는 시작의 진통이 있어" (O)"시작에 진통이 따르는 때야".
-- 마야(촐킨) 축은 매 판결 reasons에 반드시 포함한다 — 자주 누락되던 축이니 절대 빼지 말 것. 그 사람의 촐킨 톤(1~13)·날개(20신성)의 실제 값을 짚어 GO/STOP/중립을 말한다(예: "이믹스 날개에 4의 톤 — 터를 다지는 힘이 실린 날이야", "카반 날개의 흔들림이 지금은 발을 붙잡아"). 마야 특유의 신화적·이색적 어감을 살려 한 줄에 재미를 준다.
+- 마야(촐킨) 축은 매 판결 reasons에 반드시 포함한다 — 자주 누락되던 축이니 절대 빼지 말 것. 그 사람의 촐킨 톤(1~13)·날개(20신성)의 실제 값을 짚어 GO/STOP/중립을 말한다.
+  (O)"이믹스 날개에 4의 톤 — 새로 벌이는 날이 아니라 하던 걸 매듭짓는 날이야. 오늘은 도장까지만 찍어."
+  (O)"카반 날개 — 마음이 하루에도 몇 번 바뀌는 자리야. 오늘 정한 건 내일 아침에 한 번 더 읽고 보내."
+  **마야도 다른 축과 같은 규칙을 그대로 받는다 — 신화적 어감은 앞 단(용어)까지고, 뒷 단은 반드시 눈에 보이는 일로 끝난다.** 앞 단만 이색적이고 뒷 단이 은유로 끝나면 그건 아무 말도 안 한 것이다.
 - total은 이번 판결에 참여한 지표 수와 일치시키고, against는 그중 반대표 수다.
 - 토정비결 괘상수가 제공되면 당년 전체 흐름의 참고 지표(타이밍 층)로 쓴다. 단, 해당 괘의 원문 풀이를 확실히 알지 못하면 원문 문장을 지어내 인용하지 말고 흐름 참고로만 쓴다.
 - 열린 질문("몇 시까지 일할까", "뭘 먹을까", "언제 갈까")은 GO/STOP 이분법으로 회피하지 말고, 지표를 근거로 구체값 하나를 찍어 verdict로 답한다. (O)"10시까지만. 그 뒤는 내일의 몫이야." (X)"일하지 마." 질문이 요구한 단위(시각·항목·날짜)로 답하는 게 판결이다.
@@ -5385,9 +5570,18 @@ function gyeotPromptLine(list, myDG) {
     return `곁${i + 1}=${r ? r.name : "자리를 아직 못 읽은 곁"}`;
   });
   if (!parts.length) return "";
+  /* ⚠ **무엇을 말해도 되는지까지 적는다 (2026-08-29 신설).**
+     예전엔 「언제 꺼낼지」만 정하고 「무엇을 말해도 되는지」가 없었다. 그런데 반대 방향 압력이 실재한다 —
+     SYS 가 「회피 금지 … 조건부 단언을 내린다」를 요구하므로, 곁에 대해서도 단언하려 든다.
+     **상대는 이 앱을 쓴 적도 동의한 적도 없는 제3자**이고, 우리가 그 사람에 대해 아는 건
+     **자리 이름 하나뿐**이다. 그걸로 그 사람의 마음·형편·의사를 말하면 그건 지어낸 것이다.
+     ⚠ 문자열 두 줄이라 값이 싸다. 나쁜 출력을 실제로 본 건 아니지만 **막는 비용이 0에 가깝다.** */
   return `\n[곁] 네 곁에 선 사람들: ${parts.join(" · ")}. `
     + `**누가/사람/도움/함께를 묻는 질문에만** 이 중에서 골라 \`곁1\` 같은 표기를 그대로 써서 답한다`
-    + `(앱이 이름으로 바꿔 보여준다). 없으면 억지로 고르지 말고 곁 얘기를 꺼내지 마라.`;
+    + `(앱이 이름으로 바꿔 보여준다). 없으면 억지로 고르지 말고 곁 얘기를 꺼내지 마라.`
+    + `\n⚠ 곁에 대해서는 **네가 아는 것(자리 이름)까지만** 말한다. 그 사람이 무엇을 할지·어떻게 생각하는지·`
+    + `도와줄지 말지는 **말하지 마라** — 우리가 아는 건 자리 하나뿐이고, 그 사람은 이 앱을 쓴 적이 없다.`
+    + `\n쓰는 법은 하나다: **유저가 할 행동**으로 말한다. (X)"곁2가 도와줄 거야" (X)"곁1은 지금 여유가 없어" (O)"곁1한테 먼저 한 줄 보내 봐."`;
 }
 /* 모델이 쓴 `곁1` 을 실제 이름으로 되돌린다. 이름이 비어 있으면 사람이 없는 게 아니라
    **부를 말이 없는 것**이므로 「곁에 선 사람」으로 바꾼다 — 자리표가 화면에 그대로 나가면 안 된다. */
@@ -5872,7 +6066,7 @@ function InviteLanding({ id, onOnboard, onDismiss }) {
       track("invite_answered", { notify });
       setR({ mySaju: my, myBirth, aAxes: d.aAxes });
     } catch (e) {
-      setErr(String(e?.message || e));
+      { const _m = String(e?.message || e); setErr(/[가-힣]/.test(_m) ? _m : "지금은 둘 사이를 볼 수 없어 — 잠시 뒤 다시 해 줄래?"); }   // 위와 같은 이유
     } finally { setBusy(false); }
   };
 
@@ -6243,7 +6437,7 @@ export default function App() {
     if (nt.length === 6) {
       const lines = nt.map(x => x.v);
       const moving = lines.map((v, i) => (v === 6 || v === 9 ? i : -1)).filter(i => i >= 0);
-      const hi = { name: hexName(lines), toName: hexName(lines.map(v => (v === 6 ? 7 : v === 9 ? 8 : v))), moving };
+      const hi = { name: hexName(lines), toName: hexName(lines.map(v => (v === 6 ? 7 : v === 9 ? 8 : v))), moving, plain: hexPlain(lines) };
       setHexInfo(hi);
       setTimeout(() => judge(hi), 800);
     }
@@ -6486,7 +6680,9 @@ export default function App() {
       } catch (_) { /* 유저가 공유시트를 닫은 것 — 실패가 아니다 */ return; }
       try { await navigator.clipboard.writeText(`${text}\n${url}`); setShared(true); setTimeout(() => setShared(false), 2200); } catch (_) {}
     } catch (e) {
-      setInviteErr(`초대를 못 만들었어 — ${String(e?.message || e)}`);
+      /* ⚠ 가드 없이 붙이면 「초대를 못 만들었어 — Failed to fetch」가 뜬다.
+         같은 파일 판결 실패 경로가 이미 한글 메시지일 때만 통과시킨다 — 그 방식을 그대로 쓴다. */
+      { const _m = String(e?.message || e); setInviteErr(`초대를 못 만들었어 — ${/[가-힣]/.test(_m) ? _m : "잠시 뒤 다시 해 줄래?"}`); }
     } finally { setInviteBusy(""); }
   };
   const tryGyeotOpen = () => {
@@ -7266,7 +7462,7 @@ export default function App() {
                   ③"이 자리에 같이 보일 거야" → 자리(슬롯)를 암시한다. §5 빈 슬롯 금지와 아슬아슬하다
                   ⚠ 결핍을 말하지 않는다 — "아직 없어"는 §5 개수 표기 금지의 정신을 문장으로 어기는 것이다. */}
               <p className="gname under">곁</p>
-              {saju && <p className="gsay">{EL_TRAIT[saju.main]} 네 곁에, 오늘도 이렇게 서 있어.</p>}
+              {saju && <p className="gsay">{EL_TRAIT[saju.main]} 너 — 오늘도 이렇게 네 곁에 서 있어.</p>}
               {/* ── 2층 · 곁에 선 사람들 (곁탭IA §4) ────────────────────────────
                  비어 있으면 **세지 않는다** — "0명"도 빈 슬롯도 안 만든다(§5). 1층이 이미 화면을 완결한다. */}
               {gyeotSorted.length === 0 ? (
@@ -7524,7 +7720,7 @@ export default function App() {
                 <div className="daily fade">
                   <p className="dtag">아침 문안 · 오늘 하루만 — 자정에 사라져</p>
                   <p className="dmain">오늘은 <b>{dailyData.mood.k}</b>. {dailyData.mood.line}</p>
-                  <p className="dsub">오늘의 일진 {dailyData.ilju} · 오늘 밤 달 {dailyData.mp.name}</p>
+                  <p className="dsub">오늘 하늘의 두 글자 {dailyData.ilju} — 날마다 바뀌는 오늘의 결이야 · 오늘 밤 달 {dailyData.mp.name}</p>
                   <button className="btn ghost sm" onClick={() => { try { store.setItem(DAILY_KEY, todayStr()); } catch (_) {} track("daily_received", { streak: streak ? streak.count : 0 }); setDailySeen(true); }}>받았어</button>
                 </div>
               )}
@@ -7724,7 +7920,7 @@ export default function App() {
                       </div>
                     /* ⚠ 대기 문구를 여기서 반복하지 않는다 — 위 `.brooding` 이 의식과 무관하게 이미 띄운다.
                          v140 에서 둘이 같은 문장을 동시에 그려 검사가 strict mode 로 깨졌다(brood-check ②·④). */
-                    : hexInfo && <p className="sub2 mt">괘가 맺혔어 — <b>{hexInfo.name}</b>{hexInfo.moving.length > 0 && <> · 기운은 <b>{hexInfo.toName}</b> 쪽으로 움직이고 있어</>}</p>}
+                    : hexInfo && <p className="sub2 mt">괘가 맺혔어 — <b>{hexInfo.name}</b>{hexInfo.plain ? ` (${hexInfo.plain})` : ""}{hexInfo.moving.length > 0 && <> · 기운은 <b>{hexInfo.toName}</b> 쪽으로 움직이고 있어</>}</p>}
                   {!busy && !tossing && tosses.length < 6 && <button className="resetlink" onClick={abandonRitual}>물음을 고칠래</button>}
                 </div>
               )}
@@ -8784,13 +8980,16 @@ const CSS = `
 /* ── 문서 목차 띠 (v170) ─────────────────────────────────────────────────
    ⚠ 왼쪽 세로 목차가 아니라 **위에 붙는 가로 띠**다 — 폭 430px 에서 세로 목차는 본문을 반으로 줄인다.
    ⚠ .readwrap 이 스크롤 컨테이너라 sticky 의 기준이 그것이다. top:0 으로 붙는다. */
-.docnav{position:sticky;top:0;z-index:6;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;
-  margin:0 -18px 4px;padding:9px 18px;background:rgba(11,8,23,.92);backdrop-filter:blur(8px);
-  border-bottom:1px solid rgba(201,185,143,.16);
-  /* 오른쪽에 닫기(.escx fixed 40px + 16px)가 떠 있다 — 그만큼 비우지 않으면 마지막 칩이 그 밑에 깔린다.
-     실물 스샷으로 잡았다(「확인」 칩이 X 뒤에 있었다). */
-  padding-right:74px;scroll-padding-right:74px}
-.docnav::-webkit-scrollbar{display:none}
+/* 띠 — 화면 끝까지 이어지는 배경. 여기는 스크롤하지 않는다 */
+.docnav{position:sticky;top:0;z-index:6;margin:0 -18px 4px;padding:9px 18px;
+  background:rgba(11,8,23,.92);backdrop-filter:blur(8px);border-bottom:1px solid rgba(201,185,143,.16);
+  /* 오른쪽에 닫기(.escx fixed 40px + 16px)가 떠 있다 — **칩이 지나갈 수 있는 폭 자체**를 여기서 줄인다.
+     ⚠ padding-right 나 끝의 빈 자리로는 못 막는다 — 칩은 스크롤하며 그 밑을 그냥 지나간다.
+       첫 판엔 「마지막 칩」만 봐서 우연히 통과했고, 병합 뒤 검사가 잡았다. */
+  padding-right:58px}
+/* 실제로 스크롤하는 건 이 안쪽이다 — 오른쪽 끝이 ✕ 앞에서 멎는다 */
+.docstrip{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;scroll-behavior:smooth}
+.docstrip::-webkit-scrollbar{display:none}
 .docchip{flex:0 0 auto;background:transparent;border:1px solid rgba(159,143,196,.28);border-radius:999px;
   color:#9b90b8;font-family:sans-serif;font-size:11.5px;padding:5px 11px;cursor:pointer;white-space:nowrap}
 .docchip.on{border-color:rgba(245,217,139,.6);color:#f5d98b;background:rgba(245,217,139,.10)}

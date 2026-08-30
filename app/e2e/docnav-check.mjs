@@ -49,10 +49,22 @@ ck("② 도착한 자리가 활성 칩이 된다", onTxt.trim() === wantTxt.trim
 ck("③ 목차가 위에 붙어 있다(스크롤해도 남는다)",
    await page.evaluate(() => { const n = document.querySelector(".docnav"); return !!n && n.getBoundingClientRect().top < 80; }));
 /* ⚠ 실물 스샷으로 잡은 것 — 마지막 칩이 닫기(✕) 밑에 깔려 있었다 */
-ck("③ 마지막 칩이 닫기 버튼 밑에 안 깔린다", await page.evaluate(() => {
-  const cs = [...document.querySelectorAll(".docchip")]; if (!cs.length) return true;
-  const c = cs[cs.length - 1].getBoundingClientRect(), x = document.querySelector(".escx").getBoundingClientRect();
-  return c.right < x.left || c.left > x.right;
+/* ⚠ 두 번 고친 검사다.
+   ① 「마지막 칩」만 보면 안 된다 — 칩은 스크롤하며 지나가므로 **어느 칩이든** ✕ 밑에 들어갈 수 있다.
+      첫 판엔 마지막 칩만 봐서 우연히 통과했고, 병합 뒤에 이 검사가 잡았다.
+   ② `getBoundingClientRect()` 는 **잘리기 전 상자**를 준다. 칩이 스크롤 영역 밖으로 넘쳐
+      `overflow` 로 잘려도 좌표는 그대로라, 안 보이는 칩을 「깔렸다」고 잡는다(실물 스샷으로 확인).
+      그래서 **보이는 부분**(스크롤 영역과의 교집합)만 재고 ✕ 와 맞댄다. */
+ck("③ 어떤 칩도 닫기 버튼 밑에 안 보인다", await page.evaluate(() => {
+  const x = document.querySelector(".escx").getBoundingClientRect();
+  const s = document.querySelector(".docstrip").getBoundingClientRect();
+  return [...document.querySelectorAll(".docchip")].every((el) => {
+    const c = el.getBoundingClientRect();
+    const vis = { left: Math.max(c.left, s.left), right: Math.min(c.right, s.right),
+                  top: Math.max(c.top, s.top), bottom: Math.min(c.bottom, s.bottom) };
+    if (vis.right <= vis.left || vis.bottom <= vis.top) return true;   // 통째로 잘림 = 안 보인다
+    return vis.right <= x.left || vis.left >= x.right || vis.bottom <= x.top || vis.top >= x.bottom;
+  });
 }));
 /* 눌러서 간 제목이 띠 밑에 깔리면 "갔는데 안 보인다"가 된다 */
 ck("③ 눌러서 간 제목이 띠 밑에 안 깔린다", await page.evaluate(() => {

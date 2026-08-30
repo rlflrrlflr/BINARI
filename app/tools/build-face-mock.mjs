@@ -19,6 +19,15 @@ const SRC = readFileSync(resolve(APPDIR, "src/App.jsx"), "utf8");
 const { sliceConst } = await import("./lib/extract.mjs");
 const FIELD_FRAG = sliceConst(SRC, "FIELD_FRAG");
 const EL_COLOR = new Function("return " + SRC.match(/const EL_COLOR = (\{[\s\S]*?\});/)[1])();
+/* ⚠ 얼굴 그리기는 **앱과 같은 파일**(src/lib/face.js)을 그대로 읽어 넣는다.
+   보드가 제 함수를 따로 들고 있으면 앱과 갈린다 — 셰이더에서 두 번 겪은 사고다. */
+/* ⚠ 보드에는 캘시퍼 계열(흰자) 그림 함수가 **같은 이름으로 이미 있다.** 그대로 넣으면
+   나중에 정의된 쪽이 이기고 시그니처가 달라 **아무것도 안 그려진다**(실제로 그랬다).
+   두 체계를 다 남기려면 이름을 갈라야 한다 — face.js 쪽에 fx 접두어를 붙인다. */
+const FACE_JS = readFileSync(resolve(APPDIR, "src/lib/face.js"), "utf8")
+  .replace(/^export /gm, "").replace(/^import .*$/gm, "")
+  .replace(/\bdrawEyes\b/g, "fxEyes").replace(/\bdrawMouth\b/g, "fxMouth")
+  .replace(/\bdrawBlush\b/g, "fxBlush");
 
 /* 밝은 판 보정·헤일로 색은 앱과 같은 규칙(HOLO_FIX·HOLO_SAENG·mixHex) */
 const FIX = { 금: ["#5b76b8", "#8fb0e6", "#1d2436"] };
@@ -86,6 +95,12 @@ const HTML = `<!doctype html><meta charset="utf-8">
   .pick .why{font-size:11.5px;color:#6b6252;margin-top:4px}
   .pick .el{font-size:13px;font-weight:600;margin-top:6px}
   code{font-size:11.5px;color:#5d5544}
+  h3.sub{font-size:12.5px;margin:20px 0 8px;color:#5d5544;font-weight:600;letter-spacing:-.01em}
+  table.num{border-collapse:collapse;margin-top:8px;font-size:12.5px}
+  table.num td{border-bottom:1px solid #ccc5b4;padding:6px 16px 6px 0}
+  table.num td:first-child{color:#6b6252;width:150px}
+  table.num i{color:#8a8271;font-style:normal;font-size:11.5px}
+  .cell.on canvas{outline:2px solid #8c4a12;outline-offset:2px}
 </style>
 <div class="wrap">
   <h1>얼굴 시안 — 눈과 입만</h1>
@@ -108,9 +123,46 @@ const HTML = `<!doctype html><meta charset="utf-8">
   얼굴 하나로 말할 수 있다. 아래는 목(木)의 웃는 눈에 오늘 입만 갈아 끼운 것.</p>
   <div class="row" id="moods"></div>
 
+  <h2>눈만으로 표정 — 눈썹 없이</h2>
+  <p class="lead">눈썹을 그리지 않는다. <b>눈 모양 자체를 깎아서</b> 표정을 만든다 —
+  실루엣의 위를 자르면 굳은 눈, 바깥을 내리면 시무룩, 바깥을 올리면 화남이 된다.</p>
+  <div class="row" id="gEyeMood"></div>
+
+  <h2>카툰 원근 — 얼굴이 도는 방향</h2>
+  <p class="lead">2D 그림이지만 구면에 얹어 투영한다. 도는 쪽 눈이 가까워져 커지고, 먼 쪽은 눌린다.</p>
+  <div class="row" id="gYaw"></div>
+
+  <h2>앱 프리셋 A–D</h2>
+  <p class="lead"><code>?skin=holo&amp;face=a</code> 로 실제 앱에서 볼 수 있다. E(흰자)는 제외됐다.</p>
+  <div class="row" id="gPreset"></div>
+
+  <h2>비교자 — 점눈 기준으로 다시</h2>
+  <p class="warn">⚠ <b>앞 판의 비교자는 흰자 눈으로 그려져 있었다</b> — 앱에 실제로 쓰는 그림과 달랐다.
+  흰자는 뺐으므로(<b>E 제외</b>) 아래는 전부 <b>점눈</b>이다. 숫자는 칸 한 변 대비 %.</p>
+  <h3 class="sub">눈 크기 — 점 지름</h3><div class="row" id="gSize"></div>
+  <h3 class="sub">두 눈 간격 — 중심에서 중심</h3><div class="row" id="gGap"></div>
+  <h3 class="sub">눈 높이 — 위에서</h3><div class="row" id="gCy"></div>
+  <h3 class="sub">입 크기와 눈–입 거리</h3><div class="row" id="gMouth"></div>
+  <h3 class="sub">크기 × 간격 — 조합으로 보기</h3>
+  <p class="lead">한 축씩 보면 각각은 괜찮아 보여도 <b>조합에서 무너지는 자리</b>가 있다 —
+  큰 눈에 좁은 간격은 몰려 보이고, 작은 눈에 넓은 간격은 흩어져 보인다. 세로가 크기, 가로가 간격.</p>
+  <div id="gMatrix"></div>
+
+  <h2>지금 값</h2>
+  <table class="num"><tbody>
+    <tr><td>눈 흰자</td><td>가로 15.1% · 세로 16.6%</td></tr>
+    <tr><td>동공</td><td>지름 4.3% <i>(흰자의 29%)</i></td></tr>
+    <tr><td>두 눈 중심 간격</td><td>27.0% <i>(흰자 지름의 1.79배)</i></td></tr>
+    <tr><td>눈 사이 빈틈</td><td>11.9% <i>(흰자 0.79개분)</i></td></tr>
+    <tr><td>눈 높이</td><td>위에서 45.5%</td></tr>
+    <tr><td>입 폭</td><td>8.9% <i>(흰자 지름의 0.59배)</i></td></tr>
+    <tr><td>눈→입 거리</td><td>12.0% <i>(흰자 지름의 0.79배)</i></td></tr>
+  </tbody></table>
+
   <p class="lead" style="margin-top:26px">생성: <code>cd app &amp;&amp; node tools/build-face-mock.mjs</code></p>
 </div>
 <script>
+${FACE_JS}
 const DATA=${JSON.stringify(DATA)};
 const FRAG=${JSON.stringify(FIELD_FRAG)};
 const VERT="attribute vec2 a;void main(){gl_Position=vec4(a,0.,1.);}";
@@ -131,6 +183,14 @@ function drawEyes(x, S, kind, cx, cy, gap, sz, ink){
     if(lid){ x.fillStyle=lid; x.beginPath();
       x.ellipse(ex,ey-rh*0.75,rw*1.06,rh*0.78,0,0,7); x.fill(); }
   };
+  /* ⚠ **다섯 중 넷이 흰자가 없다**(실물 관찰). 까만 점이 인스타툰 주류이고,
+     흰자는 free.hada 하나뿐이었다. 밝은 오라 위에서는 까만 점이 대비도 더 좋다. */
+  if(kind==="dot"||kind==="dotbig"){
+    const r = sz*(kind==="dotbig"?0.62:0.42);
+    x.fillStyle=ink;
+    [cx-gap,cx+gap].forEach(ex=>{ x.beginPath(); x.ellipse(ex,cy,r,r*1.18,0,0,7); x.fill(); });
+    return;
+  }
   const R1=sz*1.05, R2=sz*1.15;                       // 흰자 반지름(가로·세로)
   if(kind==="calci"){ ball(cx-gap,cy,R1,R2,0,0,sz*0.30); ball(cx+gap,cy,R1,R2,0,0,sz*0.30); }
   else if(kind==="wide"){ ball(cx-gap*1.06,cy,R1*1.24,R2*1.24,0,0,sz*0.32); ball(cx+gap*1.06,cy,R1*1.24,R2*1.24,0,0,sz*0.32); }
@@ -144,6 +204,28 @@ function drawEyes(x, S, kind, cx, cy, gap, sz, ink){
     [cx-gap,cx+gap].forEach(ex=>{ x.beginPath(); x.arc(ex,cy+sz*0.42,sz*0.92,Math.PI*1.16,Math.PI*1.84); x.stroke(); }); }
   else if(kind==="three"){ ball(cx-gap*1.12,cy+sz*0.24,R1*0.82,R2*0.82,0,0,sz*0.24); ball(cx+gap*1.12,cy+sz*0.24,R1*0.82,R2*0.82,0,0,sz*0.24);
     ball(cx,cy-sz*0.86,R1*0.66,R2*0.66,0,0,sz*0.20); }
+}
+/* ── 눈썹 — **표정의 절반이 여기 있다**(실물 관찰). 다섯 중 셋이 눈썹으로 감정을 낸다.
+   내 보드엔 아예 없었고, 그래서 눈·입만으로 감정을 짜내려다 눈이 커졌다. */
+function drawBrow(x, kind, cx, cy, gap, sz, ink){
+  if(kind==="none") return;
+  x.strokeStyle=ink; x.lineCap="round"; x.lineWidth=sz*0.19;
+  const w=sz*0.86, y=cy-sz*1.5;
+  [[-1,cx-gap],[1,cx+gap]].forEach(([d,ex])=>{
+    x.beginPath();
+    if(kind==="angry"){ x.moveTo(ex-d*w*0.5, y-sz*0.34); x.lineTo(ex+d*w*0.5, y+sz*0.16); }
+    else if(kind==="sad"){ x.moveTo(ex-d*w*0.5, y+sz*0.18); x.lineTo(ex+d*w*0.5, y-sz*0.30); }
+    else if(kind==="flat"){ x.moveTo(ex-w*0.5, y); x.lineTo(ex+w*0.5, y); }
+    else if(kind==="up"){ x.moveTo(ex-w*0.5, y+sz*0.12); x.quadraticCurveTo(ex, y-sz*0.34, ex+w*0.5, y+sz*0.12); }
+    x.stroke();
+  });
+}
+/* 볼터치 — 다섯 중 둘이 쓴다. 색만으로 "귀엽다"를 얹는 가장 싼 수단이다 */
+function drawBlush(x, on, cx, cy, gap, sz){
+  if(!on) return;
+  x.fillStyle="rgba(240,140,140,.38)";
+  [cx-gap*1.62, cx+gap*1.62].forEach(ex=>{
+    x.beginPath(); x.ellipse(ex, cy+sz*0.62, sz*0.62, sz*0.42, 0, 0, 7); x.fill(); });
 }
 function drawMouth(x, kind, cx, cy, sz, ink){
   /* ⚠ 입은 **눈보다 훨씬 작고 얇다.** 원본의 입은 지그재그가 아니라
@@ -221,6 +303,93 @@ function cellWith(parent, elIdx, eye, mouth, nm, ds, noAura){
   d.insertAdjacentHTML("beforeend",'<p class="nm">'+nm+'</p><p class="ds">'+(ds||"")+'</p>');
   parent.appendChild(d);
 }
+/* ── 비교자 — 한 축씩만 바꾼다. 두 축을 같이 바꾸면 뭐가 원인인지 못 짚는다 ── */
+function tuned(parent, over, label, on){
+  const d=document.createElement("div"); d.className="cell"+(on?" on":"");
+  const box=document.createElement("div"); box.style.position="relative";
+  const fcv=document.createElement("canvas"); const S=CELL*2;
+  fcv.width=fcv.height=S; fcv.style.cssText="width:"+CELL+"px;height:"+CELL+"px;display:block;border-radius:12px;background:#d3cfc4";
+  box.appendChild(fcv); d.appendChild(box);
+  const x=fcv.getContext("2d");
+  x.fillStyle="rgba(255,253,246,.55)"; x.beginPath(); x.arc(S/2,S/2,S*0.34,0,7); x.fill();
+  const P=Object.assign({eye:"calci",mouth:"squig",cy:0.455,gap:0.135,sz:0.072,mcy:0.575,msz:0.085,brow:"none",blush:false},over);
+  drawBlush(x,P.blush, S*0.5, S*P.cy, S*P.gap, S*P.sz);
+  drawEyes(x,S,P.eye, S*0.5, S*P.cy, S*P.gap, S*P.sz, "#191308");
+  drawBrow(x,P.brow, S*0.5, S*P.cy, S*P.gap, S*P.sz, "#191308");
+  drawMouth(x,P.mouth, S*0.5, S*P.mcy, S*P.msz, "#2a2013");
+  d.insertAdjacentHTML("beforeend",'<p class="nm">'+label+'</p>');
+  parent.appendChild(d);
+}
+/* ⚠ 예전엔 tuned()(옛 흰자 함수)로 그렸다 — **앱과 다른 그림**이었다.
+   이제 전부 face.js 의 drawFace 를 쓴다. 값은 점 지름 기준이라 eyeSz 는 그 절반이다. */
+function bar(parent, list, key, fmt, cur){
+  list.forEach(([v,l])=>{
+    const o={eye:"dot",mouth:"squig",eyeSz:0.030,gap:0.100,cy:0.50,mSz:0.070,mCy:0.585};
+    if(key==="eyeSz") o.eyeSz=v/2;
+    else if(key==="gap") o.gap=v/2;
+    else if(key==="cy"){ o.cy=v; o.mCy=v+0.085; }
+    else if(key==="m"){ o.mSz=v[0]; o.mCy=v[1]; }
+    const d=document.createElement("div"); d.className="cell"+(l===cur?" on":"");
+    const c=document.createElement("canvas"); const S=CELL*2;
+    c.width=c.height=S; c.style.cssText="width:"+CELL+"px;height:"+CELL+"px;display:block;border-radius:12px;background:#d3cfc4";
+    d.appendChild(c);
+    const x=c.getContext("2d");
+    x.fillStyle="rgba(255,253,246,.55)"; x.beginPath(); x.arc(S/2,S/2,S*0.30,0,7); x.fill();
+    drawFace(x,S,o);
+    d.insertAdjacentHTML("beforeend",'<p class="nm">'+l+'</p>');
+    parent.appendChild(d);
+  });
+}
+bar(gSize,[[0.030,"3%"],[0.045,"4.5%"],[0.060,"6%"],[0.075,"7.5%"],[0.090,"9%"],[0.110,"11%"]],"eyeSz",0,"6%");
+bar(gGap,[[0.120,"12%"],[0.160,"16%"],[0.200,"20%"],[0.250,"25%"],[0.300,"30%"],[0.350,"35%"]],"gap",0,"20%");
+bar(gCy,[[0.42,"42%"],[0.46,"46%"],[0.50,"50%"],[0.54,"54%"],[0.58,"58%"]],"cy",0,"50%");
+bar(gMouth,[[[0.050,0.560],"작고 가깝게"],[[0.070,0.585],"지금"],[[0.090,0.610],"크고 멀게"],[[0.110,0.640],"더 크게"]],"m",0,"지금");
+
+/* 크기 × 간격 매트릭스 — 조합에서 무너지는 자리를 본다 */
+const SZ=[[0.030,"3%"],[0.050,"5%"],[0.070,"7%"],[0.095,"9.5%"]];
+const GP=[[0.140,"14%"],[0.200,"20%"],[0.260,"26%"],[0.330,"33%"]];
+gMatrix.insertAdjacentHTML("beforeend",
+  '<div style="display:flex;gap:8px;margin-left:64px">'+GP.map(g=>'<div class="hd" style="width:'+CELL+'px">간격 '+g[1]+'</div>').join("")+'</div>');
+SZ.forEach(([sv,sl])=>{
+  const row=document.createElement("div"); row.style.cssText="display:flex;gap:8px;align-items:center;margin-bottom:8px";
+  row.insertAdjacentHTML("beforeend",'<div class="rl" style="width:56px;text-align:right">'+sl+'</div>');
+  GP.forEach(([gv])=>{
+    const c=document.createElement("canvas"); const S=CELL*2;
+    c.width=c.height=S; c.style.cssText="width:"+CELL+"px;height:"+CELL+"px;display:block;border-radius:12px;background:#d3cfc4";
+    row.appendChild(c);
+    const x=c.getContext("2d");
+    x.fillStyle="rgba(255,253,246,.55)"; x.beginPath(); x.arc(S/2,S/2,S*0.30,0,7); x.fill();
+    drawFace(x,S,{eye:"dot",mouth:"squig",eyeSz:sv/2,gap:gv/2,cy:0.50,mSz:0.070,mCy:0.585});
+  });
+  gMatrix.appendChild(row);
+});
+
+
+/* ── 눈만으로 표정 · 앱 프리셋 — **face.js 의 drawFace 를 그대로 쓴다** ── */
+function faceCell(parent, opt, label, note){
+  const d=document.createElement("div"); d.className="cell";
+  const c=document.createElement("canvas"); const S=CELL*2;
+  c.width=c.height=S; c.style.cssText="width:"+CELL+"px;height:"+CELL+"px;display:block;border-radius:12px;background:#d3cfc4";
+  d.appendChild(c);
+  const x=c.getContext("2d");
+  x.fillStyle="rgba(255,253,246,.55)"; x.beginPath(); x.arc(S/2,S/2,S*0.30,0,7); x.fill();
+  drawFace(x,S,Object.assign({cy:0.50,mCy:0.575},opt));
+  d.insertAdjacentHTML("beforeend",'<p class="nm">'+label+'</p>'+(note?'<p class="ds">'+note+'</p>':''));
+  parent.appendChild(d);
+}
+EYE_KINDS.forEach(([k,nm,ds])=>faceCell(gEyeMood,{eye:k,mouth:"smile",eyeSz:0.030,gap:0.100},nm,ds));
+/* ⚠ 앞 판에서 프리셋 칸을 **전부 무표정 점눈**으로 그렸다. 그래서 A~D 가 다 똑같아 보였고
+   "다 틀렸다"는 말을 들었다. 프리셋이 정하는 건 **크기·간격·입·볼터치**이고
+   눈 모양은 **오늘 상태**가 정한다 — 그러니 칸마다 다른 눈을 넣어야 무엇이 다른지 보인다. */
+const PRESET_EYE={a:"dot",b:"stern",c:"angry",d:"shine"};
+Object.entries(FACE_PRESETS).forEach(([k,P])=>
+  faceCell(gPreset,{eye:P.eye||PRESET_EYE[k],mouth:P.mouth,blush:P.blush,eyeSz:P.eyeSz*2.6,gap:P.gap*2.6,
+                    cy:0.50,mSz:P.mSz*2.6,mCy:0.50+(P.mCy-P.cy)*2.6},P.name,"?face="+k));
+/* 원근 — 같은 얼굴을 각도만 바꿔 늘어놓는다 */
+[[-0.42,"왼쪽 −0.42"],[-0.21,"−0.21"],[0,"정면 0"],[0.21,"0.21"],[0.42,"오른쪽 0.42"]]
+  .forEach(([y,l])=>faceCell(gYaw,{eye:"ball",mouth:"squig",blush:false,
+    eyeSz:0.055,gap:0.174,cy:0.50,mSz:0.130,mCy:0.655,yaw:y,pitch:0.06},l,y===0?"E 의 값":""));
+
 DATA.EYES.forEach(([k,nm,ds])=>cellWith(eyes,2,k,"flat",nm,ds,true));
 DATA.MOUTHS.forEach(([k,nm,ds])=>cellWith(mouths,2,"arc",k,nm,ds,true));
 DATA.PICK.forEach(([el,e,m,why],i)=>{

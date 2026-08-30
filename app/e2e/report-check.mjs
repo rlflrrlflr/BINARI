@@ -55,7 +55,9 @@ await onboard(page);
   await ib.click(); await page.waitForTimeout(900);
   ck("각인이 실제로 발행된다(결제 없이)", (await page.locator(".imp").count()) === 1, `.imp=${await page.locator(".imp").count()}`);
   const it = (await page.locator(".imp").textContent()) || "";
-  ck("각인 — 겉과 속을 갈라 말한다", /너는 .{4,}(이야|야)/.test(it) && /네 속은 다르다/.test(it));
+  /* ⚠ v168 에 「네 속은 다르다.」(ImprintDoc 의 유일한 사전체 종결)를 「그런데 네 속은 달라.」로 바꿨다.
+     검사의 의도는 **겉과 속을 가르는가**이지 특정 어미가 아니므로, 문자열이 아니라 그 성질을 문다. */
+  ck("각인 — 겉과 속을 갈라 말한다", /너는 .{4,}(이야|야)/.test(it) && /네 속은 (다르다|달라)/.test(it));
   ck("각인 — 생김새·짝 표가 채워진다", (await page.locator(".imp .impr").count()) >= 5, `${await page.locator(".imp .impr").count()}행`);
   /* v119 아홉 하늘 — 창업자 판정("그냥 사주인데 굳이 쟤네 왜 붙였지")의 답이다.
      투표가 아니라 분업이어야 하고, 결과가 본문을 실제로 바꿔야 한다. */
