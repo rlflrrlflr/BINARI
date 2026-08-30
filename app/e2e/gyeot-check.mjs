@@ -121,7 +121,9 @@ ck("③ 판결 화면 문구 보존 — 판결을 청한다",
   ck("⑥ 명부는 두드리기 전엔 안 열린다", (await p3.locator(".gyeotlist li").count()) === 0);
   await p3.locator("canvas").first().dblclick();
   await p3.waitForTimeout(900);
-  ck("⑥ 궁합을 보면 그 사람이 실제로 곁에 선다", (await p3.locator(".gyeotlist li").count()) === 1);
+  /* ⚠ **사람 행만 센다.** 목록 끝에는 「빈 자리 한 칸」(.gyempty)이 늘 하나 붙는다 —
+     그건 부르는 문이지 곁이 아니다(창업자 지시 2026-08-30). */
+  ck("⑥ 궁합을 보면 그 사람이 실제로 곁에 선다", (await p3.locator(".gyeotlist li:not(.gyempty)").count()) === 1);
   ck("⑥ 곁이 서면 '비었다' 안내는 사라진다", (await p3.getByRole("button", { name: /부르게 돼|곁에 서/ }).count()) === 0);
   /* 창업자 결정 1(절충안) — 궁합만 본 사람은 정식 자리가 아니라 '답 대기'로 흐리게 선다 */
   /* 창업자 결정 1(절충안)의 층 구분은 그대로다. 다만 화면 말은 「부른 곁」이고,
@@ -184,6 +186,102 @@ ck("③ 판결 화면 문구 보존 — 판결을 청한다",
   });
   ck("⑦ 공유 경로가 화면에 존재한다(가림말 검사의 전제)", shareTxt === "있음", shareTxt);
   await p4.close();
+}
+
+/* ── ⑧ 창업자 게이트 — 「첫 곁은 내가 직접 넣어 공짜, 그 다음부터는 그 사람이 직접 넣는다」 ──
+   ⚠ **이 검사가 없어서 게이트가 넉 달 가까이 샜다.** 규칙은 코드 주석 두 곳·변경이력 세 줄에
+   적혀 있었는데 **집행하는 코드가 문 앞 한 곳뿐**이었고, 문 안쪽 「다른 사람과도 봐볼게」가
+   폼을 되돌려 초대 0건으로 다섯 명까지 직접 입력됐다(2026-08-30 실측).
+   그래서 여기서 재는 건 버튼의 유무가 아니라 **성질**이다 — 「직접 입력 폼에 두 번 도달할 수
+   있는가」. 어떤 새 버튼이 생기든 이 질문이 그대로 잡는다. */
+{
+  const p5 = await b.newPage({ viewport: { width: 430, height: 932 } });
+  p5.setDefaultTimeout(9000);
+  await onboard(p5, BASE);
+  const roster = () => p5.evaluate(() => { try { return JSON.parse(localStorage.getItem("binari.gyeot.v1") || "[]").length; } catch { return -1; } });
+  await p5.getByRole("button", { name: "곁", exact: true }).click();
+  await p5.waitForTimeout(900);
+  const cta = p5.getByRole("button", { name: /곁에 서|부르게 돼|둘 사이를 보면/ });
+  ck("⑧ 곁이 비면 직접 입력 문이 하나 있다(첫 한 명은 공짜)", (await cta.count()) === 1);
+  await cta.first().click();
+  await p5.waitForSelector(".impask", { timeout: 15000 });
+  const ins = p5.locator(".impask input.impnum");
+  await ins.nth(0).fill("1997"); await ins.nth(1).fill("4"); await ins.nth(2).fill("22");
+  await p5.locator(".impask input.impname").fill("가상갑");
+  await p5.getByRole("button", { name: "둘을 맞대 볼게" }).click();
+  await p5.waitForTimeout(1400);
+  ck("⑧ 첫 사람이 곁에 선다", (await roster()) === 1, `곁 ${await roster()}`);
+  /* 성질 검사 ①: 결과 화면 어디에도 폼으로 되돌아가는 문이 없다 */
+  ck("⑧ 결과 화면에 직접 입력 폼이 다시 열리는 문이 없다", (await p5.locator(".impask").count()) === 0);
+  const mt5 = await p5.locator(".imp").innerText();
+  ck("⑧ 문이 닫힌 이유를 그 자리에서 말한다", /다음 사람은 그 사람이 직접 넣어야 서/.test(mt5));
+  /* 성질 검사 ②: 문서를 닫고 곁으로 돌아와도 직접 입력 문이 없고, 남는 문은 초대뿐 */
+  await p5.getByRole("button", { name: /닫을게/ }).last().click();
+  await p5.waitForTimeout(1000);
+  await p5.getByRole("button", { name: "곁", exact: true }).click().catch(() => {});
+  await p5.waitForTimeout(900);
+  await p5.locator("canvas").first().dblclick();
+  await p5.waitForTimeout(1300);
+  ck("⑧ 곁이 서면 직접 입력 문이 사라진다",
+     (await p5.getByRole("button", { name: /곁에 서|부르게 돼|둘 사이를 보면/ }).count()) === 0);
+  ck("⑧ 남는 문은 초대뿐이다", (await p5.getByRole("button", { name: "한 사람 더 부를래" }).count()) === 1);
+  /* 빈 자리 한 칸 (창업자 지시 2026-08-30) — **부르는 문이 곧 목록의 빈 칸이다.**
+     ⚠ 세는 건 「칸이 하나뿐인가」다. 여럿을 그리면 "몇 자리 남았다"는 진행바가 되어 §5 를 어긴다. */
+  ck("⑧ 부르는 문이 목록 끝 빈 칸이다", (await p5.locator(".gyeotlist li.gyempty .gyaddbtn").count()) === 1);
+  ck("⑧ 빈 칸은 언제나 하나뿐이다(진행바가 아니다)", (await p5.locator(".gyeotlist li.gyempty").count()) === 1);
+  ck("⑧ 빈 칸에 숫자를 안 쓴다(§5)", !/\d/.test(await p5.locator(".gyempty").innerText()));
+  ck("⑧ 같은 일을 하는 문이 둘이 아니다",
+     (await p5.getByRole("button", { name: /부를래|링크를 보내|링크 보내기/ }).count()) === 1);
+  /* 성질 검사 ③: 왜 초대인지가 버튼 위에 적혀 있다 (창업자 지시 2026-08-30) */
+  const gate = (await p5.locator(".gyegate").allInnerTexts()).join(" ");
+  ck("⑧ 초대 버튼 위에 이유가 적혀 있다", /직접 넣어/.test(gate), gate.replace(/\s+/g, " ").slice(0, 60));
+  ck("⑧ 안내에 개수·값이 안 섞인다(§5)", !/\d\s*(명|개)|원|₩/.test(gate));
+  /* 성질 검사 ④: **곁을 전부 지워도 무료 한 번이 되살아나지 않는다.**
+     예전엔 게이트를 「지금 곁이 몇이냐」로만 재서, 지우고 넣고를 반복하면 상한이 없었다. */
+  await p5.locator(".gyeotlist li .gx").first().click();
+  await p5.waitForTimeout(400);
+  const ask = (await p5.locator(".gask").innerText()).replace(/\s+/g, " ");
+  ck("⑧ 지우기 확인이 되는 일만 말한다(궁합을 새로 보면 된다고 안 한다)",
+     /직접 넣어야 해/.test(ask) && !/둘 사이를 새로 봐야 해/.test(ask), ask.slice(0, 70));
+  await p5.getByRole("button", { name: "지울래" }).click();
+  await p5.waitForTimeout(1200);
+  ck("⑧ 곁을 전부 지웠다", (await roster()) === 0);
+  await p5.reload(); await p5.waitForTimeout(2600);
+  await p5.getByRole("button", { name: "곁", exact: true }).click();
+  await p5.waitForTimeout(900);
+  ck("⑧ 다 지우고 새로고침해도 직접 입력 문이 안 돌아온다",
+     (await p5.getByRole("button", { name: /둘 사이를 보면/ }).count()) === 0);
+  ck("⑧ 대신 초대 문이 선다(막다른 길을 안 만든다)",
+     (await p5.getByRole("button", { name: /링크 보내기/ }).count()) === 1);
+  ck("⑧ 기억이 남아 있다", (await p5.evaluate(() => localStorage.getItem("binari.gyeot.freefirst.v1"))) === "1");
+  await p5.close();
+}
+
+/* ── ⑨ 게이트 — 초대를 먼저 만들어도 무료 한 번은 안 없어진다 ─────────────
+   예전엔 링크를 만들기만 해도(아무에게도 안 보내도) 명부에 자리가 서서 직접 입력 문이 닫혔다.
+   규칙은 「곁이 비어 있을 때만」이 아니라 **「한 사람은 내가 넣어도 된다」**다. */
+{
+  const p6 = await b.newPage({ viewport: { width: 430, height: 932 } });
+  p6.setDefaultTimeout(9000);
+  await onboard(p6, BASE);
+  await p6.getByRole("button", { name: "곁", exact: true }).click();
+  await p6.waitForTimeout(900);
+  /* 곁이 빈 상태에서 무료 문이 서 있다 — 그 문을 안 쓰고 명부를 채운 뒤에도 살아 있어야 한다 */
+  ck("⑨ 아직 안 썼으면 무료 문이 있다", (await p6.getByRole("button", { name: /둘 사이를 보면/ }).count()) === 1);
+  await p6.evaluate(() => {
+    const now = Date.now();
+    localStorage.setItem("binari.gyeot.v1", JSON.stringify([{ key: "inv:testonly", el: null, dg: null, name: "", inv: "testonly", at: now }]));
+  });
+  await p6.reload(); await p6.waitForTimeout(2600);
+  await p6.getByRole("button", { name: "곁", exact: true }).click();
+  await p6.waitForTimeout(900);
+  await p6.locator("canvas").first().dblclick();
+  await p6.waitForTimeout(1300);
+  ck("⑨ 부르던 자리가 있어도 무료 문은 살아 있다",
+     (await p6.getByRole("button", { name: "내가 생일을 넣어 볼래" }).count()) === 1);
+  ck("⑨ 그 문이 한 번뿐임을 말한다",
+     /딱 한 번이야/.test((await p6.locator(".gyegate").allInnerTexts()).join(" ")));
+  await p6.close();
 }
 
 await b.close();

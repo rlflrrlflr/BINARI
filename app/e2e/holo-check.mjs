@@ -95,14 +95,18 @@ const HARM = `(A, W, H) => {
       const x = Math.round(cx + dx * t), y = Math.round(cy + dy * t);
       if (x < 1 || y < 1 || x >= W - 1 || y >= H - 1) break;
       const m = (A(x, y) + A(x - 1, y) + A(x + 1, y) + A(x, y - 1) + A(x, y + 1)) / 5;
-      if (m >= 90) r = t; else if (t > r + 6) break;
+      /* ⚠ 틈 허용을 6 으로 뒀더니 광선이 **코어 경계를 건너뛰어 헤일로까지** 갔다 —
+         방향마다 갔다 안 갔다 하니 반경이 두 값으로 갈리고 3주기 성분이 튄다.
+         같은 코드에서 0.03 과 0.15 가 번갈아 나온 원인이 이것이다(오브 자체는 3주기 0.002 로 둥글다).
+         틈은 2 픽셀까지만 — 그레인은 위의 5픽셀 평균이 이미 누른다. */
+      if (m >= 90) r = t; else if (t > r + 2) break;
     }
     rs.push(r);
   }
   let re = 0, im = 0;
   for (let i = 0; i < 72; i++) { const th = i / 72 * Math.PI * 2 * 3; re += rs[i] * Math.cos(th); im += rs[i] * Math.sin(th); }
   const mean = rs.reduce((s, v) => s + v, 0) / rs.length;
-  return mean > 0 ? 2 * Math.hypot(re, im) / 72 / mean : 0;
+  return { h: mean > 0 ? 2 * Math.hypot(re, im) / 72 / mean : 0, mean: mean, min: Math.min(...rs), max: Math.max(...rs) };
 }`;
 /* ⑩-0 **지표를 먼저 믿을 수 있는지 본다.** 합성 도형으로 눈금을 맞춘다 —
    원은 낮게, 둥근 삼각형은 높게 나와야 이 문턱(0.06)이 뜻을 갖는다.
@@ -119,10 +123,17 @@ const cal = await page.evaluate((src) => {
     g.fill();
     const d = g.getImageData(0, 0, N, N).data;
     return harm((x, y) => d[4 * (y * N + x) + 3], N, N); };
-  return { circle: +mk(false).toFixed(3), tri: +mk(true).toFixed(3) };
+  return { circle: +mk(false).h.toFixed(3), tri: +mk(true).h.toFixed(3) };
 }, HARM);
 ck("⑩-0 지표가 원과 삼각형을 가른다", cal.circle < 0.03 && cal.tri > 0.10,
    `원 ${cal.circle} / 삼각 ${cal.tri}`);
+const one = () => page.evaluate((src) => {
+  const harm = eval(src);
+  const c = document.querySelector("canvas"), g = c.getContext("webgl");
+  const W = c.width, H = c.height, a = new Uint8Array(4 * W * H);
+  g.readPixels(0, 0, W, H, g.RGBA, g.UNSIGNED_BYTE, a);
+  return harm((x, y) => a[4 * (y * W + x) + 3], W, H);
+}, HARM);
 const rad = async () => {
   const v = [];
   for (let i = 0; i < 5; i++) {
@@ -131,17 +142,41 @@ const rad = async () => {
       const c = document.querySelector("canvas"), g = c.getContext("webgl");
       const W = c.width, H = c.height, a = new Uint8Array(4 * W * H);
       g.readPixels(0, 0, W, H, g.RGBA, g.UNSIGNED_BYTE, a);
-      return harm((x, y) => a[4 * (y * W + x) + 3], W, H);
+      const r0 = harm((x, y) => a[4 * (y * W + x) + 3], W, H);
+      return { h: r0.h, mean: r0.mean, min: r0.min, max: r0.max, orb: window.__BINARI_ORB, W: W };
     }, HARM));
     await page.waitForTimeout(130);
   }
-  return +(v.reduce((s, x) => s + x, 0) / v.length).toFixed(3);
+  const avg = (k) => v.reduce((s2, x) => s2 + x[k], 0) / v.length;
+  return { h: +avg("h").toFixed(3), mean: +avg("mean").toFixed(1),
+           min: +avg("min").toFixed(1), max: +avg("max").toFixed(1),
+           orb: v[0].orb, W: v[0].W };
 };
 /* ⚠ 판결과 **비교**하지 않는다 — 판결 오라는 캔버스를 거의 채워서 등고선이 경계에 걸리고
       3주기 성분이 0 으로 나온다(측정이 안 되는 것이지 둥근 게 아니다). 곁의 절대값만 본다. */
+/* ⚠ **깨우고 나서 재야 한다.** 여기서 바로 곁으로 가면 수호신이 아직 「두드려봐」 상태라
+   장이 흐리고 들쭉날쭉하다 — 그 상태를 재면 광선마다 임계 교차가 딴 데서 나서 3주기 성분이
+   0.14 로 나온다(같은 오브를 깨운 뒤 재면 0.002 다. 두 측정을 맞대어 확인했다).
+   창업자가 「곁 탭 안 둥그런데」라고 한 건 **깨운 뒤의 화면**이다. 그 상태를 재야 한다. */
+await page.locator("canvas").first().dblclick();
+await page.waitForSelector("textarea.qbox", { timeout: 12000 }); await page.waitForTimeout(900);
 await page.getByRole("button", { name: "곁" }).click(); await page.waitForTimeout(2400);
 const gyeot3 = await rad();
-ck("⑩ 곁이 둥글다 — 삼각(3주기) 성분", gyeot3 < 0.06, `${gyeot3} (0.06 미만이어야)`);
+/* ⚠ **전이 중에도 둥글어야 한다** — 이 검사는 「다 도착한 뒤」만 쟀다.
+   그런데 확대 폭을 키우자 **부푸는 동안 삼각 불꽃으로 되돌아갔다**(필름으로 확인).
+   원인은 형태 접힘이 `clamp(u_orb,0,1)` 이라, 예비동작에서 orb 가 음수로 내려가면
+   clamp 가 0 이 되어 형태가 통째로 펴진 것이다. **정착 상태만 재면 이 종류는 영영 못 잡는다.** */
+await page.getByRole("button", { name: "판결" }).click(); await page.waitForTimeout(1400);
+const mid = [];
+await page.getByRole("button", { name: "곁" }).click();
+for (let i = 0; i < 4; i++) { await page.waitForTimeout(70); mid.push(await one()); }
+const midMax = Math.max(...mid.map((x) => x.h));
+ck("⑩-b 곁으로 가는 **도중에도** 둥글다", midMax < 0.09,
+   `전이 중 최대 ${midMax.toFixed(3)} (0.09 미만이어야) · ${mid.map((x) => x.h.toFixed(3)).join(", ")}`);
+await page.waitForTimeout(1600);
+
+ck("⑩ 곁이 둥글다 — 삼각(3주기) 성분", gyeot3.h < 0.06,
+   `${gyeot3.h} (0.06 미만이어야) · 반경 평균 ${gyeot3.mean} 최소 ${gyeot3.min} 최대 ${gyeot3.max} · orb ${gyeot3.orb} · 캔버스 ${gyeot3.W}`);
 
 /* ── ⑪ xyz 로 **눈에 보이게** 떠다니는가 ─────────────────────────────────
    ⚠ 창업자가 "xyz 축으로 움직이고 있는 건 맞아?" 라고 물었다. 실제로 움직이고는
@@ -181,6 +216,11 @@ await tp.goto(BASE + "/?skin=holo"); await tp.waitForTimeout(1000);
 const store = await page.evaluate(() => JSON.stringify(localStorage));
 await tp.evaluate((j) => { const o = JSON.parse(j); for (const k in o) localStorage.setItem(k, o[k]); }, store);
 await tp.goto(BASE + "/?skin=holo"); await tp.waitForTimeout(2600);
+/* ⚠ **여기도 깨우고 재야 한다.** 깨우기 전에는 장이 흐려 알파 170 을 넘는 픽셀이 거의 없고,
+   그러면 무게중심이 null 이라 이동이 **0.000 으로 찍힌다** — 안 움직인 게 아니라 못 잰 것이다.
+   ⑩ 이 같은 이유로 틀렸던 것과 한 종류다(2026-08-30). */
+await tp.locator("canvas").first().dblclick();
+await tp.waitForSelector("textarea.qbox", { timeout: 12000 }); await tp.waitForTimeout(800);
 const ta = await tp.evaluate(() => getComputedStyle(document.querySelector("canvas")).touchAction);
 ck("⑫-a 캔버스가 제스처를 브라우저에 안 넘긴다", ta === "none", `touch-action: ${ta}`);
 const tbox = await tp.evaluate(() => { const r = document.querySelector("canvas").getBoundingClientRect();
@@ -189,25 +229,68 @@ const wy = () => tp.evaluate(() => {
   const c = document.querySelector("canvas"), g = c.getContext("webgl");
   const W = c.width, H = c.height, a = new Uint8Array(4 * W * H);
   g.readPixels(0, 0, W, H, g.RGBA, g.UNSIGNED_BYTE, a);
-  let sy = 0, sw = 0;
+  /* ⚠ **가로도 재야 한다.** 밀어내기는 손끝 반대 방향이라 **주로 가로로** 간다 —
+     세로만 재면 크게 밀렸는데도 0.000 이 나온다(실제로 그래서 오검출이 났다). */
+  let sx = 0, sy = 0, sw = 0;
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const v = a[4 * (y * W + x) + 3];
-    if (v > 170) { sy += y * v; sw += v; } }
-  return sw ? sy / sw / H : null;
+    if (v > 170) { sx += x * v; sy += y * v; sw += v; } }
+  return sw ? { x: sx / sw / W, y: sy / sw / H } : null;
 });
 const cdp = await tctx.newCDPSession(tp);
 const before = await wy();
-const cx = tbox.l + tbox.w * 0.5, y0 = tbox.t + tbox.h * 0.30, y1 = tbox.t + tbox.h * 0.78;
+/* ⚠ 손끝 x 를 가운데(0.5)로 두면 시작점이 **얼굴 반경 경계(0.20)에 정확히 걸린다** —
+   안이면 「눌림」이라 몸통이 안 움직여 이 검사가 0.000 으로 떨어진다(실제로 그랬다).
+   이 검사가 묻는 건 「제스처를 브라우저에 뺏기지 않는가」지 안/밖 판정이 아니므로
+   **명백한 바깥**을 잡는다. */
+const cx = tbox.l + tbox.w * 0.12, y0 = tbox.t + tbox.h * 0.30, y1 = tbox.t + tbox.h * 0.78;
 await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: cx, y: y0 }] });
 let peak = 0;
 for (let i = 1; i <= 8; i++) {
-  await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: cx, y: y0 + (y1 - y0) * i / 8 }] });
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: cx + tbox.w * 0.055 * i, y: y0 + (y1 - y0) * i / 8 }] });
   await tp.waitForTimeout(50);
-  const v = await wy(); if (v !== null && before !== null) peak = Math.max(peak, Math.abs(v - before));
+  const v = await wy(); if (v !== null && before !== null)
+    peak = Math.max(peak, Math.abs(v.x - before.x), Math.abs(v.y - before.y));
 }
 await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
 await tctx.close();
 /* 드리프트만으로 이 짧은 사이에 움직이는 폭은 0.02 미만이다(무입력 실측). 그 두 배를 문턱으로. */
 ck("⑫-b 드래그가 장을 실제로 움직인다", peak > 0.04, `이동 ${peak.toFixed(3)} (0.04 초과여야)`);
+/* ── ⑬ **공유 카드가 수호신을 찾을 수 있는가** ──────────────────────────
+   공유 카드(부적·각인·궁합)는 살아 있는 수호신 캔버스를 한 장 떠서 얹는다
+   (`grabGuardianFrame()` → `canvas[data-renderer]`). 그런데 색장 렌더러를 새로 만들면서
+   그 표식을 안 붙였다 — **홀로에서는 카드의 수호신 초상이 통째로 비어 있었다**(2026-08-30 발견).
+   화면에서는 멀쩡히 보이니 눈으로는 절대 안 잡힌다. 그리고 얼굴은 **별도 캔버스**라
+   표식만 붙여서는 얼굴 없는 수호신이 나간다. 둘 다 여기서 문다. */
+/* ⚠ 얼굴은 `?face=` 로만 뜬다. 그냥 두면 ⑬-b 는 **한 번도 실행되지 않는 공허한 검사**다 —
+   온보딩을 마친 이 페이지 그대로 얼굴을 켜고 다시 들어간다. */
+await page.goto(BASE + "/?skin=holo&face=a"); await page.waitForTimeout(2600);
+const frame = await page.evaluate(() => {
+  /* ⚠ 로직을 **베끼지 않는다.** 앱의 `grabGuardianFrame` 을 그대로 부른다 —
+     베껴서 재면 합성이 앱에서 빠져도 검사가 통과한다(실제로 그랬다). */
+  const grab = window.__BINARI_GRAB;
+  if (typeof grab !== "function") return { found: false, why: "__BINARI_GRAB 미노출" };
+  const out = grab();
+  if (!out || !out.width) return { found: false, why: "프레임을 못 떴다" };
+  const face = document.querySelector("canvas[data-face-overlay]");
+  const g = out.getContext ? out.getContext("2d") : null;
+  /* WebGL 캔버스가 그대로 오면 2d 컨텍스트를 못 얻는다 — 그건 합성을 안 했다는 뜻이다 */
+  if (!g) return { found: true, face: !!face, aura: -1, ink: 0, raw: true };
+  const d = g.getImageData(0, 0, out.width, out.height).data;
+  let aura = 0, ink = 0;
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] > 30) aura++;
+    if (d[i + 3] > 90 && d[i] < 120) ink++;
+  }
+  return { found: true, face: !!face, aura, ink, w: out.width };
+});
+ck("⑬-a 공유 카드가 수호신 프레임을 뜬다", frame.found && frame.aura > 500,
+   frame.found ? `오라 픽셀 ${frame.aura} (500 초과여야)` : frame.why || "못 떴다");
+/* 얼굴은 `?face=` 를 켰을 때만 뜬다 — 이 걸음은 안 켰으므로 층이 없는 게 정상이다.
+   층이 있는데 잉크가 0 이면 합성이 빠진 것이다. */
+ck("⑬-b 얼굴 층이 있으면 같이 떠진다", !frame.face || (!frame.raw && frame.ink > 20),
+   !frame.face ? "얼굴 층 없음(?face= 미사용 — 정상)"
+   : frame.raw ? "합성을 안 하고 원본 캔버스를 그대로 돌려줬다" : `잉크 픽셀 ${frame.ink}`);
+
 await b.close();
 
 const pass = R.filter(Boolean).length;

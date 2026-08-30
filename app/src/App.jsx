@@ -1721,6 +1721,17 @@ function DocNav({ scopeRef, deps }) {
   );
 }
 
+/* ⚠ **2026-08-30 — 「다른 사람과도 봐볼게」를 없앴다. 그게 게이트 구멍이었다.**
+   창업자 게이트: 「첫 곁은 내가 직접 넣어 공짜, 그 다음부터는 그 사람이 직접 넣는다」.
+   그 규칙이 **문 앞에서 한 번만** 검사됐다 — 곁이 비었을 때만 `setMatchOpen(true)` 가 렌더되니
+   문은 잠긴 것처럼 보였는데, **문 안쪽 버튼**이 `setDone(false)` 로 폼을 되돌려 둘째·셋째를 계속
+   직접 입력하게 했다. 실측: **초대 0건에 다섯 명**(곁 상한 24까지 된다).
+   ⚠ 조건부로 살려 두려다 **어떤 조건에서도 참이 될 수 없다**는 걸 실기로 확인하고 지웠다 —
+   결과 화면이 뜨는 유일한 경로가 제출이고 제출은 `onMet` 으로 곁을 채우므로, 버튼이 그려질 때
+   곁은 이미 비어 있지 않다. 참이 못 되는 가지를 남기는 게 없애는 것보다 나쁘다.
+   ⚠ 없애니 `pre` 경로의 결함 둘도 같이 닫혔다 — 그쪽에서 폼을 되돌리면 아래 memo 가 `pre.ax` 를
+   먼저 보고 폼 값 `f` 를 통째로 무시해 **제3자를 넣어도 원래 사람 문서가 다시 떴고**(조용한 오답),
+   그 제출이 `MATCH_LAST_KEY` 에 **제3자 생년월일을 기기에 저장**했다. */
 function MatchDoc({ saju, birth, onClose, onMet, pre = null }) {
   const [notesOn, setNotesOn] = useState(false);
   const [f, setF] = useState(() => { try { return JSON.parse(localStorage.getItem(MATCH_LAST_KEY) || "{}"); } catch { return {}; } });
@@ -1957,7 +1968,13 @@ function MatchDoc({ saju, birth, onClose, onMet, pre = null }) {
         }}>글로 저장하기 — 문서 전체를 파일로</button>
         <p className="fine">파일은 <b>네 기기에만 만들어져.</b> 다만 이 문서는 <b>상대 이야기</b>야 —
           상대는 이 앱을 쓴 적도 동의한 적도 없어. <b>네가 읽으려고 갖는 것까지</b>로 두는 게 좋아.</p>
-        <button className="btn ghost mt" onClick={() => { track("match_again", {}); setF((p) => ({ ...p, nm: "" })); setDone(false); }}>다른 사람과도 봐볼게</button>
+        {/* 방금 첫 곁이 선 자리(위 주석). **버튼만 조용히 빼면 유저는 자기가 뭘 잃었는지 모른 채
+            막힌다** — 직전 화면에 있던 문이 사라지는 것이므로 사라진 이유를 그 자리에서 말한다.
+            `pre` 경로(곁 목록에서 다시 펼쳐 보는 것·초대 회신)는 애초에 넣는 화면이 아니라 안 뜬다. */}
+        {!pre && (
+          <p className="fine">한 사람은 네가 넣어 봤으니 이제 알 거야 —
+            <b> 다음 사람은 그 사람이 직접 넣어야 서.</b> 곁에서 링크를 보내면 돼.</p>
+        )}
         <button className="btn ghost mt" onClick={onClose}>닫을게</button>
       </div>
     </div>
@@ -3075,6 +3092,8 @@ precision highp float;
 uniform vec2  u_res, u_off;
 uniform float u_t, u_form, u_orb, u_warm, u_speed, u_lum, u_sink, u_grain;
 uniform float u_born, u_touchAmt, u_ex, u_squash, u_tailK;
+uniform vec3  u_look;   // (yaw, pitch, roll) — 얼굴이 보는 방향. 몸도 이 값을 쓴다
+uniform float u_fold;   // 형태 접힘(0 불꽃 ↔ 1 구슬). 크기(u_orb)와 달리 오버슈트가 없다
 uniform vec2  u_touch, u_wisp;
 uniform vec2  u_trail[6];
 uniform vec3  u_c1, u_c2, u_c3, u_bg;
@@ -3127,7 +3146,12 @@ void main(){
      손끝은 더 나아가 **하나의 점**까지 간다.
      ⚠ 접는 계수를 하나로 묶는다 — 접을 곳이 일곱 군데라 따로 두면 또 하나를 빠뜨린다
         (곁이 둥근 삼각형이던 게 정확히 그 사고였다). */
-  float fold = max(clamp(u_orb, 0.0, 1.0), tk);
+  /* ⚠ **크기와 형태를 갈랐다**(2026-08-30). 예전엔 clamp(u_orb,0,1) 로 형태를 접었는데,
+     예비동작에서 orb 가 **음수로 크게 내려가면 clamp 가 0** 이 되어 형태가 통째로 펴진다 —
+     곁으로 가는 도중에 **삼각 불꽃으로 되돌아갔다**(필름으로 확인. 확대를 키울수록 더 오래 보인다).
+     크기는 스프링(u_orb)이 흔들어도 되지만 **형태는 목표를 따라야 한다.** 그래서 접힘은
+     별도 값(u_fold)으로 받는다 — 오버슈트 없이 0↔1 만 오간다. */
+  float fold = max(clamp(u_fold, 0.0, 1.0), tk);
 
   /* ── 형태 — 오행마다 세로/가로 비율. 레퍼런스는 정원이 아니라 **부드러운 타원·물방울**이다 */
   /* 불꽃은 **세로로 길다**. x 를 키우면 가로가 좁아져 세로로 선다(정규화 반경이라 반대다). */
@@ -3169,7 +3193,20 @@ void main(){
   /* 물방울 — 위로 갈수록 좁아진다. 상하대칭 타원은 눈알이나 세포로 읽힌다.
      ⚠ **이 변형만 u_orb 에 안 물려 있어** 곁에서도 위가 좁아졌다(실측 세로/가로 0.93).
         비율·일렁임·혀는 다 껐는데 물방울 하나가 남아 "둥근 디자인"이 안 됐다. */
-  vec2 w = e;
+  /* ── 고개가 도는 쪽으로 **몸이 따라간다** ────────────────────────────────
+     창업자 2026-08-30: "얼굴과 몸이 동떨어진 느낌이 나. 특히 얼굴을 돌렸을 때.
+     살아있는 생명체라면 어떻게 생겼을지 생각해봐."
+     맞다 — 얼굴은 구 위에서 도는데 몸은 **시간 사인파로만** 흔들렸다. 둘이 같은 시계를
+     안 보니 두 물체로 읽힌다. 살아 있는 것은 고개를 돌리면 **몸이 먼저 기울고 뒤따라 돈다.**
+     같은 값(u_look)으로 셋을 건다 — ①무게가 그쪽으로 쏠리고 ②기울인 쪽으로 몸이 기울고
+     ③아래에서 도는 쪽이 밝아지고 반대쪽이 그늘로 들어간다.
+     ⚠ 얼굴·팔다리를 그리는 게 아니다. 움직이는 건 **덩어리와 빛**뿐이다(헌장). */
+  vec2 lk = vec2(u_look.x, -u_look.y);
+  /* ⚠ **곁에서는 접는다.** 기울임(전단)은 원을 찌그러뜨려 「둥근 구슬」을 깬다 —
+     실측 3주기 성분이 0.001 → 0.128 로 튀었다. 형태 변조를 곁에서 접는 다른 항들과 같은 처리다.
+     쏠림은 절반만 남긴다(위치 이동이라 둥근 정도는 안 건드리지만, 구슬이 흔들려 보이면 안 된다). */
+  vec2 w = e - lk * R * 0.22 * (1.0 - fold);      // 무게가 고개 쪽으로 쏠린다(중심이 그쪽으로 간다)
+  w.x += w.y * u_look.z * 0.55 * (1.0 - fold);    // 고개를 기울이면 몸이 같이 기운다
   w.y *= 1.0 + 0.20*smoothstep(-0.3, 1.3, e.y/max(R,1e-3)) * (1.0 - fold);
   /* ── 불꽃의 일렁임 (창업자 2026-08-28: "세포보다는 불꽃의 일렁임 느낌이여") ──────
      세포와 불꽃을 가르는 건 **방향**이다. 세포는 사방이 같고, 불꽃은 아래가 뭉치고
@@ -3322,7 +3359,18 @@ void main(){
   float live  = mix(1.0, mix(1.0, fl, flW), u_wt.z * (1.0 - fold*0.85));
   float bornK = 0.20 + 0.80*u_born;               // 흩어져 있을 땐 옅지만 **보이기는 해야 한다**
   float touchK = (1.0 + tk*0.62) * (1.0 + u_ex*0.28);   // 모이면 진해지고, 들뜨면 더 환해진다
-  gl_FragColor = vec4(outc, clamp(sum*u_lum*live*vig*bornK*touchK, 0.0, 1.0));
+  /* 도는 쪽이 밝고 반대쪽은 그늘 — **구가 돌고 있다는 신호는 형태가 아니라 빛이 낸다.**
+     이게 얼굴과 몸을 한 물체로 묶는 가장 센 단서다. 1주기(한쪽↔반대쪽) 변조라
+     곁의 둥근 실루엣(3주기로 재는 검사 ⑩)은 건드리지 않는다. */
+  /* ⚠ 두 번 틀렸다.
+     ①0.46 은 과했다 — 음영이 밝기 무게중심을 기하 이동보다 더 끌고 가서 얼굴이 밝은 앞면이
+       아니라 **그늘 쪽에** 놓였다.
+     ②e/R 을 그대로 쓰고 clamp 로 잘랐더니 **알파에 직선 경계**가 생겨 곁 구슬이
+       안 둥글어졌다(3주기 성분 0.001 → 0.128). clamp 는 형태를 만든다.
+     정규화하면 값이 ±|lk| 안에 갇혀 자를 필요가 없고, 경계도 안 생긴다. */
+  float turn = dot(normalize(e + 1e-4), lk);
+  float shade = 1.0 + turn * 0.30 * (1.0 - fold);
+  gl_FragColor = vec4(outc, clamp(sum*u_lum*live*vig*bornK*touchK*shade, 0.0, 1.0));
 }`;
 /* 밝은 바탕용 보정 — **원색(EL_COLOR)은 안 건드린다.** 금의 c2(#e8f2ff)는 거의 흰색이라
    밝은 바탕에서 통째로 사라진다(시제품 첫 판에서 금 줄이 안 보였다). 이 렌더러에서만 한 칸 낮춘다. */
@@ -3370,7 +3418,7 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
       const la = gl.getAttribLocation(pg, "a"); gl.enableVertexAttribArray(la);
       gl.vertexAttribPointer(la, 2, gl.FLOAT, false, 0, 0);
-      const U = {}; ["u_res","u_off","u_t","u_form","u_orb","u_warm","u_speed","u_lum","u_sink","u_grain","u_c1","u_c2","u_c3","u_bg","u_wt","u_bite","u_rayP","u_puffP","u_flkP","u_baseP","u_born","u_touch","u_touchAmt","u_wisp","u_ex","u_trail","u_squash","u_tailK"]
+      const U = {}; ["u_res","u_off","u_t","u_form","u_orb","u_warm","u_speed","u_lum","u_sink","u_grain","u_c1","u_c2","u_c3","u_bg","u_wt","u_bite","u_rayP","u_puffP","u_flkP","u_baseP","u_born","u_touch","u_touchAmt","u_wisp","u_ex","u_trail","u_squash","u_tailK","u_look","u_fold"]
         .forEach((k) => { U[k] = gl.getUniformLocation(pg, k); });
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const S = Math.round(size * dpr); cv.width = S; cv.height = S;
@@ -3430,6 +3478,8 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
             **고개는 몸이 가는 쪽을 향한다.** 그러면 축이 하나가 된다 —
             생물이 움직이는 방향을 보는 것과 같은 이치고, 사인파를 아무리 맞춰도 이건 못 흉내낸다. */
       const look = { x: 0, y: 0, px: 0.5, py: 0.5, had: false };
+      const gaze = { yaw: 0, pitch: 0, roll: 0 };   // 얼굴과 몸이 **같이** 쓰는 값
+      let coreR = 0.32;
       const SPD = 1.35 * (mood ? mood.sp : 1);
       const SINK = mood ? mood.sink * 2.2 : 0;
       const FACE_R = 0.20;                       // 얼굴로 치는 반경(캔버스 폭 대비)
@@ -3495,7 +3545,7 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
          사람은 2~6초에 한 번, 100~150ms 동안 감는다. 가끔 두 번 연달아 감는 것까지 넣는다
          — 규칙적으로 감으면 그건 또 기계다. */
       let blinkNext = 1400 + Math.random() * 2600, blinkT = -1, blinkDouble = false;
-      let orb = 0, orbV = 0, orbLast = 0, antUntil = 0, last = performance.now();
+      let orb = 0, orbV = 0, orbLast = 0, antUntil = 0, foldV = 0, last = performance.now();
       const T0 = performance.now();
       const draw = () => {
         raf = requestAnimationFrame(draw);
@@ -3513,11 +3563,27 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
            스프링 하나로는 시작점만 바뀔 뿐 머무는 시간이 없다.
            그래서 0.17초 동안 **목표 자체를 반대편에 둔다** — 그동안 확실히 커지고,
            만료되면 실제 목표로 당겨지며 지나쳤다 돌아온다. 그게 "커졌다 → 작아지며 뽀잉". */
-        if (orbT !== orbLast) { antUntil = now + 170; orbLast = orbT; }
-        const goal = now < antUntil ? (orbT > 0.5 ? -0.35 : 1.25) : orbT;
-        orbV += ((goal - orb) * 190 - orbV * 10.0) * dt;     // K 크고 D 낮게 = 빠르고 말랑
-        orb = Math.max(-0.45, Math.min(1.30, orb + orbV * dt));   // 아래로 넓힌 만큼 '먼저 커지는' 폭이 산다
+        /* ⚠ **확대 폭을 키웠다**(창업자 2026-08-30: "확대 모션을 좀더 크게, 좀 더 뽀잉").
+           예전 -0.35 는 반경이 4% 커지는 데 그쳤다 — "커졌다"가 안 읽힌다.
+           키울 곳이 둘이다: ①예비동작 목표 ②**아래 clamp**. clamp 가 -0.45 라
+           목표를 아무리 낮춰도 거기서 잘렸다 — 목표만 고치면 아무 일도 안 일어난다. */
+        if (orbT !== orbLast) { antUntil = now + 210; orbLast = orbT; }
+        const anti = now < antUntil;
+        const goal = anti ? (orbT > 0.5 ? -1.25 : 1.65) : orbT;
+        /* ⚠ **부는 것과 꺼지는 것의 속도를 가른다**(창업자 2026-08-30: "확대는 빠르게,
+           축소는 비교적 느리게"). 스프링 하나로는 양쪽이 같은 속도라 「뽀잉」이 아니라
+           그냥 튕김이다. 숨을 들이쉬는 건 빠르고 내쉬는 건 길다 — 그게 살아 있는 리듬이다.
+           예비동작(부풀 때) K 를 크게, 돌아올 때 K 를 낮추고 감쇠를 올린다.
+           ⚠ 감쇠까지 올려야 한다 — K 만 낮추면 느려지는 게 아니라 **더 오래 출렁인다.** */
+        const oK = anti ? 220 : 95, oD = anti ? 9.0 : 13.5;
+        orbV += ((goal - orb) * oK - orbV * oD) * dt;
+        /* ⚠ clamp 를 같이 안 넓히면 목표를 낮춰도 **여기서 잘린다**(전에 그 실수를 했다) */
+        orb = Math.max(-1.05, Math.min(1.40, orb + orbV * dt));
         gl.uniform1f(U.u_orb, Math.abs(orb) < 0.0004 ? 0 : orb);
+        /* 접힘은 목표(orbT)를 향해 곧게 간다 — 스프링이 아니라 지수 감쇠라 넘치지 않는다.
+           크기보다 **조금 빨리** 접혀야 부푸는 동안 이미 둥글다. */
+        foldV += (orbT - foldV) * (1 - Math.exp(-dt / 0.075));
+        gl.uniform1f(U.u_fold, foldV);
         /* 응축값을 밖에 노출한다 — 화면을 읽어(readPixels) 재면 프레임당 100ms 넘게 걸려
            **300ms 짜리 전환을 못 본다**(실측). 검사는 이 값을 본다. */
         try { window.__BINARI_ORB = orb; } catch (_) {}
@@ -3589,7 +3655,7 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
           const tS = ((now - T0) / 1000) * SPD;
           const zc = 0.5 + 0.5 * Math.sin(tS * 0.38);
           const ob = Math.min(Math.max(orb, 0), 1);
-          const foldJ = Math.max(ob, gather);
+          const foldJ = Math.max(Math.min(Math.max(foldV,0),1), gather);   // 셰이더의 u_fold 와 같은 값
           const Rj = (0.320 + (0.208 - 0.320) * ob) * (1 + (0.20 - 1) * gather)
                    * (0.90 + (1.12 - 0.90) * zc) * (1 + 0.020 * Math.sin(tS * 0.85));
                     /* ⚠ **c0(반사광 층) 어긋남을 쓰면 안 된다** — 처음에 그걸 코어로 잡았다가
@@ -3598,18 +3664,45 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
              그 중심은 캔버스 정중앙보다 **위**에 있다 — 불꽃이 위로 뻗기 때문이다.
              들어올림은 상수가 아니라 R 에 비례한다(응축하면 불꽃이 짧아지니 덜 올라간다). */
           const lift = 0.068 * (Rj / 0.323) * (1 - 0.55 * foldJ);
+          coreR = Rj;
           const dfx = Math.sin(tS * 0.55) * 0.075 + Math.sin(tS * 0.93 + 1.3) * 0.030;
           const dfy = Math.cos(tS * 0.47) * 0.088 + Math.sin(tS * 0.81 + 0.6) * 0.034;
           core.x = 0.5 + dfx + wisp.x / 2.35;
           core.y = 0.5 - dfy - wisp.y / 2.35 + SINK * 0.06 - lift;
           /* 속도는 저역통과로 매끈하게 — 날것으로 쓰면 고개가 떤다 */
+          /* ⚠ **속도 추정은 폭발한다.** dt 가 한 프레임만 작게 튀어도 (Δ/dt) 가 치솟고,
+             저역통과로도 다 안 눌린다 — 실측에서 고개가 **138° 까지 돌았다**(yaw 2.41rad).
+             원인은 물리가 아니라 나눗셈이다. 순간값부터 잘라 넣는다. */
           if (look.had && dt > 1e-4) {
             const k = 1 - Math.exp(-dt / 0.22);
-            look.x += ((core.x - look.px) / dt - look.x) * k;
-            look.y += ((core.y - look.py) / dt - look.y) * k;
+            const cl = (v) => Math.max(-0.16, Math.min(0.16, v));
+            look.x += (cl((core.x - look.px) / dt) - look.x) * k;
+            look.y += (cl((core.y - look.py) / dt) - look.y) * k;
           }
           look.px = core.x; look.py = core.y; look.had = true;
         }
+        /* ── 시선을 **여기서** 정한다 ─────────────────────────────────────
+           ⚠ 예전엔 얼굴 블록 안에서 계산했다 — 그러면 셰이더는 이미 그려진 뒤라
+           **몸이 그 값을 못 쓴다.** 얼굴과 몸이 따로 논 구조적 원인이 이것이다.
+           한 곳에서 풀어 둘 다에게 준다. */
+        {
+          const tt2 = ((now - T0) / 1000) * SPD;
+          const lim = (v, m) => Math.max(-m, Math.min(m, v));
+          gaze.yaw = lim(look.x * 5.2, 0.40) + Math.sin(tt2 * 0.31) * 0.075;
+          gaze.pitch = lim(look.y * 4.0, 0.26) + Math.sin(tt2 * 0.24 + 0.9) * 0.045;
+          gaze.roll = lim(-look.x * 1.6, 0.17) + Math.sin(tt2 * 0.19 + 2.2) * 0.022;
+          if (press > 0.01) { gaze.yaw += -pdx * 0.26 * press; gaze.pitch += pdy * 0.18 * press; }
+          /* ⚠ **몸만 옮기면 얼굴이 뒤에 남는다.** 셰이더가 `w = e - lk*R*0.30` 으로
+             덩어리를 고개 쪽으로 보냈으니, 얼굴도 **같은 만큼** 가야 얼굴이 몸의 앞면에 붙어 있다.
+             실기에서 이걸 빼먹었더니 몸은 돌았는데 얼굴만 제자리라 아까보다 더 따로 놀았다.
+             ⚠ 이 이동은 `look`(속도 추정) 이후에 더한다 — 앞에 두면 자기 이동이 속도로 되먹임된다. */
+          core.x += gaze.yaw * coreR * 0.22 / 2.35;
+          core.y += gaze.pitch * coreR * 0.22 / 2.35;
+        }
+        gl.uniform3f(U.u_look, gaze.yaw, gaze.pitch, gaze.roll);
+        /* 검사용으로 내놓는다 — 「몸이 고개를 따라가는가」는 이 값과 몸의 무게중심을
+           맞대야 잴 수 있다(선례: __BINARI_ORB·__BINARI_GRAB). */
+        try { window.__BINARI_GAZE = gaze.yaw; } catch (_) {}
         gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLES, 0, 3);
 
         /* ── 얼굴 (?face=a|b|c|d) ─────────────────────────────────────────
@@ -3629,15 +3722,8 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
              이건 살아있는 생명체처럼 왔다갔다 하면 좋겠어."
              주기를 서로 나눠떨어지지 않게 잡아야 **왕복이 아니라 두리번거림**이 된다.
              손끝을 누르면 그쪽으로 돌아본다 — 시선이 손을 따라가는 게 「보고 있다」의 전부다. */
-          /* 고개는 **몸이 가는 쪽**을 본다. 자기 사인파로 돌면 축이 둘이 된다.
-             residual 사인파는 아주 작게만 남긴다 — 완전히 빼면 몸이 멈췄을 때 얼굴도 굳는다. */
-          let yaw = look.x * 5.2 + Math.sin(tt * 0.31) * 0.075;
-          let pitch = look.y * 4.0 + Math.sin(tt * 0.24 + 0.9) * 0.045;
-          /* 도는 쪽으로 **기울어진다** — 몸이 왼쪽으로 가면 고개가 그쪽으로 넘어간다 */
-          const roll = -look.x * 1.6 + Math.sin(tt * 0.19 + 2.2) * 0.022;
-          /* 눌리면 **눌린 쪽으로 고개가 돌아간다** — 손가락을 쳐다보는 게 아니라 밀리는 것이다 */
-          /* ⚠ 0.55/0.40 은 과했다 — 눌리는 순간 고개가 30° 넘게 돌아 **표정이 안 읽혔다.** */
-          if (press > 0.01) { yaw += -pdx * 0.26 * press; pitch += pdy * 0.18 * press; }
+          /* 위에서 푼 값을 그대로 쓴다 — 몸에 넘긴 것과 **같은 값**이어야 한 물체로 읽힌다 */
+          const yaw = gaze.yaw, pitch = gaze.pitch, roll = gaze.roll;
           /* 응축·모임이면 오라가 작아지므로 얼굴도 같이 준다. 점으로 모이면 사라진다. */
           /* 깜빡임 진행 — 감았다 뜨는 건 대칭이 아니다. 감기는 빠르고 뜨기는 느리다. */
           const dms = dt * 1000;
@@ -3678,8 +3764,14 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
                  6px 안에 획 셋이 겹쳐 **X 자국**이 됐다(실기 확인). 표정은 크기를 요구한다. */
               /* ⚠ eyeSz 를 키우면 **홍조까지 같이 커진다**(홍조가 눈 크기를 쓴다).
                  눈만 키우는 배율을 따로 넘긴다. */
-              cy: P.cy, gap: P.gap * k, eyeSz: P.eyeSz * k, eyeScale: hurt ? 1.9 : 1,
-              mSz: P.mSz * k * (hurt ? 1.35 : 1), mCy: P.cy + (P.mCy - P.cy) * k,
+              /* ⚠ **살이 가운데로 몰려야 한다**(창업자 2026-08-30: "실제 사람 얼굴을 누르면
+                 살이 가운데에 몰리는 느낌이 드는데 이건 그런 게 없어서 타격감이 덜하다").
+                 축으로 눌리기만 하면 「미끄러진」 것이고, **이목구비가 서로 가까워져야** 「눌린」 것이다.
+                 눈 간격과 눈–입 거리를 같이 줄인다 — 살이 모이면 그 위에 얹힌 것도 모인다. */
+              cy: P.cy, gap: P.gap * k * (1 - 0.42 * press), eyeSz: P.eyeSz * k,
+              eyeScale: hurt ? 1.9 : 1,
+              mSz: P.mSz * k * (hurt ? 1.35 : 1),
+              mCy: P.cy + (P.mCy - P.cy) * k * (1 - 0.45 * press),
               yaw, pitch, roll, blink: hurt ? 0 : blink,
               /* 누른 축으로 찌그러진다 — 방향은 손끝→얼굴 벡터의 **반대**(=밀린 쪽) */
               squish: press, sqx: pdx, sqy: -pdy,
@@ -3711,7 +3803,11 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
      (창업자 실기 제보 2026-08-29: "파란색 전체 블럭이 잡히네..?").
      touch-action 은 **스크롤**을 막을 뿐 **선택**을 막지 않는다. 둘은 다른 채널이다.
      누르는 대상에 선택·길게눌러 메뉴·탭 하이라이트가 붙을 이유가 없으므로 전부 끈다. */
-  const cv = <canvas ref={ref} className="gcv" aria-hidden="true"
+  /* ⚠ `data-renderer` 가 **빠져 있었다.** 공유 카드는 살아 있는 수호신 캔버스를 한 장 떠서
+     얹는데(`grabGuardianFrame`), 그 검색이 `canvas[data-renderer]` 다. 다른 렌더러 셋에는
+     붙어 있고 색장에만 없었다 — 그래서 홀로에서는 **카드의 수호신 초상이 통째로 빈다.**
+     렌더러를 새로 만들면서 이 약속을 안 지킨 것이다. */
+  const cv = <canvas ref={ref} className="gcv" aria-hidden="true" data-renderer="field"
     style={{ width: size, height: size, touchAction: "none", cursor: "pointer",
              userSelect: "none", WebkitUserSelect: "none",
              WebkitTouchCallout: "none", WebkitTapHighlightColor: "transparent" }} />;
@@ -3720,7 +3816,7 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
      포인터는 아래 오라 캔버스가 받아야 하므로 `pointerEvents:none`. */
   return (<span style={{ position: "relative", display: "block", width: size, height: size }}>
     {cv}
-    <canvas ref={faceRef} aria-hidden="true"
+    <canvas ref={faceRef} aria-hidden="true" data-face-overlay="1"
       style={{ position: "absolute", left: 0, top: 0, width: size, height: size, pointerEvents: "none" }} />
   </span>);
 }
@@ -4330,7 +4426,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v172 · 수호신이 말한다";
+const APP_VER = "v177 · 수호신이 말한다";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -4712,9 +4808,24 @@ function grabGuardianFrame() {
     const list = document.querySelectorAll("canvas[data-renderer]");
     let best = null;
     list.forEach((c) => { if (c.width && (!best || c.width > best.width)) best = c; });
-    return best;
+    if (!best) return null;
+    /* ⚠ 얼굴은 **별도 캔버스**다. 오라만 뜨면 카드에서 수호신이 **얼굴 없이** 나온다 —
+       화면에서는 둘이 겹쳐 보이지만 그건 CSS 가 겹쳐 준 것이지 한 장이 아니다.
+       같은 크기의 얼굴 층이 있으면 여기서 합쳐 **한 장으로** 돌려준다. */
+    const face = document.querySelector("canvas[data-face-overlay]");
+    if (!face || !face.width || face.width !== best.width) return best;
+    const out = document.createElement("canvas");
+    out.width = best.width; out.height = best.height;
+    const g = out.getContext("2d");
+    g.drawImage(best, 0, 0);
+    g.drawImage(face, 0, 0, out.width, out.height);
+    return out;
   } catch (_) { return null; }
 }
+/* 검사에서 **이 함수 자체**를 부르라고 내놓는다(선례: `__BINARI_ORB`·`__BINARI_R`).
+   ⚠ e2e 가 같은 로직을 베껴서 재면 **검사의 복사본을 검사하는 것**이 된다 —
+   실제로 그렇게 짰다가 합성을 빼도 통과하는 걸 확인했다(2026-08-30). */
+if (typeof window !== "undefined") window.__BINARI_GRAB = grabGuardianFrame;
 function buildBujeokPoster({ saju, direction, seed, tosses, hexInfo, category, against, total, verdict, guardian }) {
   const W = 1080, H = 1920;
   const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
@@ -5395,6 +5506,24 @@ const MATCH_LAST_KEY = "binari.match_last.v1";
    ⚠ 두 층 (창업자 결정 2026-08-15 #1): 회신이 온 사람은 `곁`, 내가 궁합만 본 사람은 `대기` — 흐리게 선다.
       지금은 회신 레그가 없으므로 새로 드는 사람은 전부 `대기`다. 스키마만 먼저 깔아 둔다. */
 const GYEOT_KEY = "binari.gyeot.v1";
+/* ── 게이트 기억 (2026-08-30 창업자 지시 「다 반영」) ────────────────────────
+   창업자 게이트는 「첫 곁은 내가 직접 넣어 공짜, 그 다음부터는 그 사람이 직접 넣는다」인데,
+   그 조건을 **「지금 곁이 몇이냐」로만** 재고 있었다. 그래서 명부를 전부 지우면 빈 상태로 돌아가
+   무료 직접 입력이 되살아났다 — 지우고 넣고를 반복하면 상한이 없다(2026-08-30 실측).
+   그래서 「곁이 비었나」가 아니라 **「그 한 번을 이미 썼나」** 를 따로 기억한다.
+
+   ⚠ **초대 자리를 지우는 것과 구별된다.** 이 값은 직접 입력이 실제로 성사됐을 때만 서므로,
+     초대만 만들었다가 지운 사람은 무료 한 번을 **안 쓴 것**이고 문이 그대로 열려 있다.
+     (예전엔 초대를 만들기만 해도 명부가 차서 문이 닫혔다 — 자물쇠가 자기에게 걸렸다.)
+
+   ⚠ **홈의 「처음부터 다시」로는 지워진다. 이건 구멍이 아니라 결정이다.**
+     그 버튼은 곁만이 아니라 이름·생년월일까지 **나를 통째로** 지운다("다른 사람이야?").
+     여기서까지 값을 남기면 **폰을 물려받은 진짜 새 사람**이 첫 한 명을 영영 못 쓴다.
+     경계선: **곁만 지우는 건 우회, 나를 통째로 지우는 건 새 사람.** 그리고 온보딩을 다시
+     밟아야 하므로 초대 링크를 보내는 것보다 품이 더 든다 — 허들로서 이미 성립한다. */
+const GYEOT_FREE_KEY = "binari.gyeot.freefirst.v1";
+const usedFreeFirst = () => { try { return store.getItem(GYEOT_FREE_KEY) === "1"; } catch (_) { return false; } };
+const markFreeFirst = () => { try { store.setItem(GYEOT_FREE_KEY, "1"); } catch (_) {} };
 /* ── 곁의 두 층 — 어휘 정본은 곁탭IA 「어휘 확장」(2026-08-16) ────────────────
    창업자 결정은 "회신 온 사람 / 궁합만 본 사람"의 **층 구분**이었고 그건 그대로 채택했다.
    다만 「답 대기」라는 **말**은 디자인 레인이 기각했다 — ①행정 용어라 세계관이 관공서가 되고
@@ -6371,6 +6500,8 @@ export default function App() {
   /* v134.2 곁 명부 — 이제 **실제 데이터가 붙는다**(작업지시_역할과초대 §D).
      명부의 유일한 입구는 궁합을 돌리는 순간이다(MatchDoc onMet). 저장·정렬·파생은 전부 위 모듈 함수에 있다. */
   const [gyeot, setGyeot] = useState(() => readGyeot());
+  /* 게이트 기억(§GYEOT_FREE_KEY). 곁 길이가 아니라 **무료 한 번을 썼나**가 문의 조건이다. */
+  const [freeUsed, setFreeUsed] = useState(() => usedFreeFirst());
   const gyeotSorted = useMemo(() => (saju ? gyeotOrder(gyeot) : []), [gyeot, saju]);
   /* 써머리를 **한 번만** 계산해 표와 목록이 같은 색인을 쓰게 한다. 각자 계산하면 정렬이 어긋나는 날
      같은 자리에 다른 번호가 붙고, 그때 색인은 짝을 이어 주는 게 아니라 **틀린 짝을 이어 준다.** */
@@ -7607,10 +7738,22 @@ export default function App() {
                 {/* ⚠ **탭을 옮기지 않는다**(v165). 예전엔 판결 탭으로 보내고 문서를 열었는데,
                     궁합이 판결 탭에서 빠진 뒤로는 **없는 자리로 보내는 셈**이 된다. 문서는 화면을 덮으므로
                     탭을 바꿀 이유가 애초에 없었다 — 닫으면 곁 탭으로 그대로 돌아온다. */}
-                <button className="btn ghost mt" onClick={() => {
-                  track("gyeot_empty_cta", { from: "gyeot" });
-                  setMatchOpen(true);
-                }}>둘 사이를 보면 그 사람이 곁에 서</button></>
+                {/* 게이트(§GYEOT_FREE_KEY). 무료 한 번을 아직 안 썼을 때만 직접 입력 문이 선다.
+                    ⚠ **쓴 뒤에도 이 자리를 비워 두면 안 된다** — 곁을 다 지운 사람이 「부르면 나와 같이
+                      돌아」라는 문장만 보고 **부르는 방법이 없는 화면**에 서게 된다. 그건 안내가 아니라
+                      핀잔이다(바로 위 B-2 주석이 같은 실패를 이미 이름 붙여 놨다). 문을 초대로 바꾼다. */}
+                {!freeUsed ? (
+                  <button className="btn ghost mt" onClick={() => {
+                    track("gyeot_empty_cta", { from: "gyeot" });
+                    setMatchOpen(true);
+                  }}>둘 사이를 보면 그 사람이 곁에 서</button>
+                ) : (<>
+                  <p className="fine gyegate">생일을 대신 넣어 보는 건 한 번이었어 —
+                    <b> 이제 그 사람이 직접 넣어야 서</b></p>
+                  {inviteErr && <p className="err gyerr">{inviteErr}</p>}
+                  <button className="btn ghost mt" disabled={inviteBusy === "new"}
+                    onClick={() => inviteNew()}>{inviteBusy === "new" ? "만드는 중…" : "부를 사람에게 링크 보내기"}</button>
+                </>)}</>
               ) : !gyeotOpen ? (<>
                 {/* 닫힌 상태 — 목록 대신 **곁이 돌고 있다는 사실**만. 판결 탭의 "두드려봐"와 같은 자리다.
                     ⚠ 여기에 인원수를 안 쓴다. 세는 건 열고 나서 **자리(역할)** 를 세는 것뿐이다(§5). */}
@@ -7720,7 +7863,30 @@ export default function App() {
                       )}
                     </li>);
                   })}
+                  {/* ── 빈 자리 한 칸 (창업자 지시 2026-08-30) ──────────────────────────
+                      *"저렇게 자리를 비워놓고 누르면 초대되게 해야 채우고 싶은 충동이 들 거 같아."*
+                      ⚠ **곁탭IA §5 「빈 슬롯 금지」와 부딪히는 것처럼 보이므로 경계를 적어 둔다.**
+                        그 금지는 **1층**(곁이 0일 때 수호신 화면) 조항이다 — 「곁이 0이어도 이 층이
+                        화면을 완결시킨다. 빈 슬롯·진행바·"0명" 표기 금지」. 아무도 없는 사람에게
+                        **못 채운 자리를 세어 보이는 것**을 막은 규칙이고 그건 그대로 유지된다.
+                        여기는 **2층**이고 이미 곁이 선 사람만 본다. 창업자가 그 자리에서는 충동이
+                        **의도**라고 정했다.
+                      ⚠ **그래서 조건 둘을 지킨다** — ①칸은 **언제나 하나뿐**이다. 여럿을 그리면
+                        "몇 자리 남았다"는 진행바가 되어 §5 개수 금지를 정면으로 어긴다 ②숫자를 안 쓴다.
+                      ⚠ 상한(24)에 닿으면 칸을 안 그린다 — 누를 수 없는 자리는 충동이 아니라 벽이다. */}
+                  {gyeotSorted.length < GYEOT_MAX && (
+                    <li className="gyempty">
+                      <button className="gyaddbtn" disabled={inviteBusy === "new"}
+                        onClick={() => inviteNew()}>
+                        <i className="gyplus" aria-hidden="true">+</i>
+                        <span>{inviteBusy === "new" ? "만드는 중…" : "한 사람 더 부를래"}</span>
+                      </button>
+                    </li>
+                  )}
                 </ul>
+                {/* 빈 칸 바로 아래 — 누르면 무슨 일이 나는지. 칸이 문이라 라벨만으로는 부족하다. */}
+                <p className="fine gyegate">눌러서 링크를 보내면 그 자리에 서 —
+                  <b> 생일은 그 사람이 직접 넣어</b></p>
                 {/* 지우기 확인 — ✕ 는 작고 이름 옆이라 잘못 누르기 쉽다. 지우면 되돌릴 수 없다. */}
                 {gyeotAsk && (() => {
                   const g = gyeotSorted.find((x) => x.key === gyeotAsk);
@@ -7728,7 +7894,13 @@ export default function App() {
                   return (
                     <div className="gask">
                       <p>{nm ? <><b>{nm}</b>{josa(nm, "을", "를")} 곁에서 지울까?</> : <>이 곁을 지울까?</>}</p>
-                      <p className="fine">지우면 되돌릴 수 없어. 다시 보려면 궁합을 새로 봐야 해.</p>
+                      {/* ⚠ **이 줄이 거짓이 됐다 (2026-08-30).** 「궁합을 새로 보면 된다」는 곁을 다 지우면
+    직접 입력이 되살아나던 시절의 말이다. 이제 무료 한 번은 기억되므로, 지운 사람에게
+    남는 길은 **그 사람에게 링크를 보내는 것뿐**이다. 화면이 실제로 되는 일만 말해야 한다. */}
+                      <p className="fine">지우면 되돌릴 수 없어.{" "}
+                        {g?.inv ? <>부르던 건 여기서 끊겨 — 다시 부르려면 링크를 새로 보내야 해.</>
+                          : freeUsed ? <><b>다시 세우려면 그 사람이 직접 넣어야 해</b> — 링크를 보내는 길만 남아.</>
+                          : <>다시 보려면 둘 사이를 새로 봐야 해.</>}</p>
                       <div className="gaskrow">
                         <button className="btn ghost sm" onClick={() => setGyeotAsk("")}>아니, 둘래</button>
                         <button className="btn ghost sm del" onClick={() => {
@@ -7761,8 +7933,22 @@ export default function App() {
                 {/* 첫 곁이 생기면 부르는 문이 사라져 있었다 — 목록이 곧 막다른 길이 됐다는 뜻이다. */}
                 {/* 게이트: **첫 곁은 내가 직접 넣어 공짜, 그 다음부터는 그 사람이 직접 넣는다**(창업자).
                     그래서 이 문은 궁합 폼이 아니라 **초대**로 간다 — 부르는 일이 여기 하나로 모인다. */}
-                <button className="btn ghost mt" disabled={inviteBusy === "new"}
-                  onClick={() => inviteNew()}>{inviteBusy === "new" ? "만드는 중…" : "한 사람 더 부를래"}</button>
+                {/* ⚠ **부르는 문이 여기 또 있으면 안 된다 (2026-08-30).** 목록 끝 빈 칸이 그 일을
+                    맡았다. 같은 일을 하는 문이 한 화면에 둘이면 유저는 둘이 다른 일을 한다고 읽는다.
+                    (예전엔 여기 「한 사람 더 부를래」 버튼과 안내 문장이 따로 있었다.)
+                    ⚠ **초대를 먼저 만든 사람이 무료 한 번을 잃고 있었다 (2026-08-30).**
+                    게이트를 「곁이 비었나」로 재던 시절에는, 링크를 만들기만 해도 명부에 자리가 서서
+                    직접 입력 문이 닫혔다 — **아무에게도 안 보내도** 그랬다. 자물쇠가 자기에게 걸린 것이다.
+                    규칙은 원래 「곁이 비어 있을 때만」이 아니라 **「한 사람은 내가 넣어도 된다」**였다.
+                    그래서 조건을 명부 길이가 아니라 §GYEOT_FREE_KEY 로 옮기고, 아직 안 쓴 사람에게는
+                    여기서도 그 문을 그대로 연다. 순서가 어떻든 무료는 정확히 한 번이다. */}
+                {!freeUsed && (<>
+                  <p className="fine gyegate">한 사람은 네가 생일을 넣어 봐도 돼 — <b>딱 한 번이야</b></p>
+                  <button className="btn ghost mt" onClick={() => {
+                    track("gyeot_empty_cta", { from: "gyeot_roster" });
+                    setMatchOpen(true);
+                  }}>내가 생일을 넣어 볼래</button>
+                </>)}
                 <button className="btn ghost mt" onClick={() => { setGyeotOpen(false); track("gyeot_roster_closed", {}); }}>접어둘게</button>
               </>)}
             </div>
@@ -8270,6 +8456,9 @@ export default function App() {
                 /* ⚠ **새로 든 사람만** 연출한다. 같은 사람을 다시 보면 명부는 시각만 갱신되므로
                    위성이 늘지 않는데, 그때도 터뜨리면 "뽑았다"가 거짓말이 된다. */
                 const had = gyeot.some((x) => x.key === e.key);
+                /* 게이트(§GYEOT_FREE_KEY) — **여기가 무료 한 번이 소진되는 유일한 자리다.**
+                   `onMet` 은 직접 입력 폼의 제출에서만 온다(초대 회신은 `pre` 라 `onMet` 이 없다). */
+                markFreeFirst(); setFreeUsed(true);
                 setGyeot((p) => gyeotAdd(p, e));
                 if (!had) setGyeotJoined({ name: (e.name || "").trim(), at: Date.now() });
               }} />
@@ -8503,7 +8692,7 @@ const CSS = `
    글자도 뜬다. 반 톤 내리면 빛도 글자도 같이 산다. */
 .stage.holo{background:radial-gradient(120% 90% at 50% 12%,#e4e0d6,#d9d5ca 55%,#cfcbc0);color:#262218}
 .stage.holo .gsay,.stage.holo .gintro,.stage.holo .forming{color:#3c3527}
-.stage.holo .gname,.stage.holo .imptitle{color:#262218}
+.stage.holo .gname{color:#262218}
 /* ── 밝은 판 전용 타이포 ────────────────────────────────────────────────
    ⚠ **검은 판 글자를 그대로 쓰면 안 된다.** 어두운 배경용 글자는 뒤에 빛번짐(text-shadow)과
       어두운 알약 배경을 깔아 뜨게 만든 것인데, 밝은 바탕에선 그게 **얼룩**으로 보인다.
@@ -8544,6 +8733,13 @@ const CSS = `
 .stage.holo .btn.ghost{background:rgba(255,253,246,.74);border-color:#c2bcaa;color:#4d4535;box-shadow:0 1px 2px rgba(48,40,20,.07)}
 .stage.holo .btn.ghost b{color:#2a2419}
 .stage.holo .in.box{background:rgba(255,253,246,.82);border-color:#c2bcaa;color:#2a2419;box-shadow:none}
+/* 빈 자리 한 칸 — 밝은 판용. ⚠ 명부 행(.gyeotlist li) 자체는 아직 어두운 판 값이라
+   홀로에서 회색으로 뜬다(홀로 가독성 감사 §② 「반투명 판」 항목). 그건 감사가 잡은 별건이고,
+   **새로 넣는 칸까지 그 더미에 얹지는 않는다.** 감사대로 행을 뒤집으면 이 두 줄은 그대로 맞는다. */
+.stage.holo .gyeotlist li.gyempty{border-color:#b3ac9a}
+.stage.holo .gyaddbtn{color:#5d5544}
+.stage.holo .gyaddbtn:hover,.stage.holo .gyaddbtn:focus-visible{color:#241f14}
+.stage.holo .gyplus{border-color:#b3ac9a}
 .stage.holo .resetlink{color:#6b6252}
 /* 탭 스크림이 밝은 판에서도 아래 글자를 먹는다 — 여기선 더 얕게 깐다 */
 .stage.holo{--tabscrim:22px}
@@ -8561,7 +8757,7 @@ const CSS = `
 .stage.holo .galias::placeholder{color:#b0a894;font-weight:400}
 .stage.holo .line{color:#241f14}
 .stage.holo .sub2{color:#5d5544}
-.stage.holo .ainote{color:#7f7663}
+.stage.holo .ainote{color:#5d5544}
 .stage.holo .unit{color:#8a8271}
 .stage.holo .in{color:#262218}
 /* ⚠ 온보딩 중반(회상·기억) 화면이 통째로 빠져 있었다 — 어두운 판용 노랑·보라 글자가
@@ -8570,7 +8766,6 @@ const CSS = `
 .stage.holo .bar b{color:#8c4a12}
 .stage.holo .chk{color:#6b6252}
 .stage.holo .chk em{color:#8a8271}
-.stage.holo .gathering{color:#6b6252}
 .stage.holo .mtag{color:#8a8271}
 .stage.holo .coins{color:#6b6252}
 .stage.holo .rvbig span{color:#8a8271}
@@ -8582,7 +8777,6 @@ const CSS = `
 .stage.holo .formsteps li.done{color:#6b6252}
 .stage.holo .formsteps li.now{color:#8c4a12}
 .stage.holo .dimq{color:#3c3527}
-.stage.holo .msrh{color:#8a8271 !important}
 .stage.holo .btn.ghost{color:#4d4535;border-color:#bab392}
 .stage.holo .tabbar::before{background:linear-gradient(to top,#cfcbc0 0%,#cfcbc0 55%,rgba(207,203,192,.72) 80%,rgba(207,203,192,0) 100%)}
 .stage.holo .tabbtn{background:rgba(255,253,246,.70);color:#6b6252;border-color:rgba(120,96,40,.26)}
@@ -8599,6 +8793,77 @@ const CSS = `
 .stage.holo .halo.wide.lobbyscale{transform:translateY(7vh) scale(0.98)}
 .stage.holo .halo.wide.gyeotscale{transform:translateY(6vh) scale(0.90)}
 .stage.holo .gcv{mix-blend-mode:normal}
+
+/* ═══ 홀로 가독성 정리 (2026-08-30) ═══════════════════════════════════════
+   근거: 03_비주얼프로토타입/비나리_비주얼프로토타입_홀로가독성감사_v01.md
+   그리고 이 리포에서 다시 실측했다(e2e/contrast-check.mjs) — 감사의 값이 소수점까지 재현됐다.
+   ⚠ 홀로가 **본선이 아닌 상태에서** 하는 정리다(창업자 2026-08-30: "아직은 본선 아냐.
+      하지만 본선 아니더라도 최적화는 되어야지"). 기존 화면은 한 줄도 안 바뀐다.
+
+   근본 원인 — **「흐림」의 번역이 뒤집혀 있었다.** 어두운 판에서 보조 텍스트를 흐리게 만드는
+   방법은 「더 어둡게」였는데, 홀로가 그 자리를 **중간 회색**으로 옮겼다. 밝은 판에서 중간 회색은
+   흐린 게 아니라 **안 보이는 것**이다. 그래서 두 곳은 오버라이드를 건 쪽이 안 건 쪽보다 나빴다.
+   밝은 판의 흐림은 **글자 쪽으로 어둡게 하되 채도를 빼는 것**이다.
+   쓰는 값 넷(전부 이미 파일 안에 있던 색): 본문 #241f14 · 준본문 #3c3527 · 메타 #5d5544 · 강조 #7a4a12 */
+
+/* ① 어두운 문서 안으로 샌 것 되돌리기 — 홀로 규칙이 후손 선택자라 문서 안까지 내려간다 */
+.stage.holo .readwrap .ainote{color:#8a8271}
+.stage.holo .readwrap .fine{color:#a89f8c}
+.stage.holo .readwrap .btn.ghost{background:rgba(245,217,139,.05);border-color:rgba(245,217,139,.32);color:#d6c493}
+.stage.holo .readwrap .btn.ghost b{color:#f0e2b8}
+.stage.holo .vface .bar b{color:#c9b98f}
+
+/* ② 밝은 판 — 칩. ⚠ 여기가 최우선이었다: 고른 칩(1.22)이 안 고른 칩(2.04)보다 안 보여
+   **화면이 거꾸로 말하고 있었다.** 게다가 온보딩 필수 입력이라 여기서 막히면 그 뒤가 전부 없다.
+   값은 이미 있는 .tabbtn 홀로 규칙과 같은 알약이라 그대로 옮긴다. */
+.stage.holo .calbtn{background:rgba(255,253,246,.70);border-color:rgba(120,96,40,.26);color:#5d5544}
+.stage.holo .calbtn.on{background:#fff;color:#7a4a12;border-color:rgba(122,74,18,.42);box-shadow:none}
+
+/* ③ 밝은 판 — 막히거나 동의를 받는 자리부터 */
+.stage.holo .err,.stage.holo .gyerr{color:#9c2f2f}          /* 진행이 왜 막혔는지 적은 유일한 문장 */
+.stage.holo .plink{color:#7a4a12}                            /* 동의 화면의 처리방침 링크 */
+.stage.holo .knock{color:#5d5544;border-color:#8c6a1e}       /* 로비 주 입구 — 글자·테두리 둘 다 안 보였다 */
+.stage.holo .knocklink{color:#5d5544}
+.stage.holo .btn{color:#4d4535;border-color:#bab392}         /* 수식어 없는 기본형(궁합 폼 확인 등) */
+
+/* ④ 밝은 판 — 메타·잔글씨. 4.11~2.1 구간을 한 값으로 모은다.
+   ⚠ #6b6252 는 판 가운데에서 4.10, **화면 아래에서 3.71** 이다(판이 그라데이션이라).
+      아래에 고정되는 것들이 있으므로 #5d5544 로 내린다 — 아래에서도 4.55. */
+.stage.holo .fine,.stage.holo .dim2,.stage.holo .whosub,
+.stage.holo .chk,.stage.holo .coins,.stage.holo .resetlink{color:#5d5544}
+.stage.holo .chk em,.stage.holo .unit,.stage.holo .mtag,
+.stage.holo .rvbig span,.stage.holo .rvlunar{color:#5d5544}
+.stage.holo .wakehint{color:#5d5544}
+.stage.holo .brand-mark{color:#5d5544}
+.stage.holo .verbadge{color:#5d5544}                         /* 9px 라 판 아래에서도 4.5 를 넘겨야 한다 */
+.stage.holo .streak{color:#7a4a12}
+.stage.holo .mailbox .dtag{color:#5d5544}                    /* ⚠ 같은 클래스가 어두운 서신 안에도 산다 */
+.stage.holo .ratelab,.stage.holo .ratedone{color:#5d5544}
+.stage.holo .qquote{color:#241f14}
+.stage.holo .adhook{color:#3c3527;background:rgba(255,253,246,.74);border-color:#c2bcaa}
+.stage.holo .adhook b{color:#7a4a12}
+
+/* ⑤ 밝은 판 — 곁 탭. 역할 이름과 뒷면 손잡이가 곁의 알맹이다 */
+.stage.holo .gsumh{color:#5d5544}
+.stage.holo .gsumtable li{color:#5d5544;border-top-color:rgba(140,110,40,.22)}
+.stage.holo .gsumtable li b{color:#2a2419}
+.stage.holo .gsumtable li i{color:#6b6252}
+.stage.holo .gsumix{color:#5d5544;border-color:rgba(140,110,40,.42)}
+.stage.holo .gjoin{color:#2a2419}
+.stage.holo .gjoin b{color:#8c4a12}
+.stage.holo .gx{color:#6b6252;border-color:rgba(140,110,40,.30)}
+.stage.holo .gsum text{fill:#5d5544}                          /* 인라인 fill 은 presentation attribute 라 CSS 가 이긴다 */
+
+/* ⑥ 밝은 판 — 의식(주역). 던진 결과가 안 보이면 의식이 성립하지 않는다 */
+.stage.holo .hline .yang,.stage.holo .hline .yin,.stage.holo .coin{background:linear-gradient(90deg,#a8813a,#6f5210);box-shadow:none}
+.stage.holo .hline .mv{color:#a8321e}
+.stage.holo .hline .hempty{border-color:rgba(90,80,55,.45)}
+.stage.holo .coins .cface{color:#7a4a12}
+.stage.holo .coins .cback{color:#5d5544}
+
+/* ⑦ 「흐림」이 뒤집혀 **원본보다 나빠진** 둘 — 값만 바로잡는다 */
+.stage.holo .formsteps li{color:#5d5544}
+
 .moodline{font-family:sans-serif;font-size:13px;letter-spacing:.06em;color:#cfc4e2;margin:0 0 2px;text-align:center;line-height:1.7}
 .moodline b{color:#f5d98b;font-weight:600;font-size:15px}
 .moodline span{display:block;font-size:10.5px;color:#8a7f95;letter-spacing:.02em;margin-top:2px}
@@ -8700,6 +8965,18 @@ const CSS = `
 .gyeotlist{list-style:none;margin:0;padding:0;width:100%;max-width:340px;display:flex;flex-direction:column;gap:6px;max-height:44vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .gyeotlist li{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid rgba(159,143,196,.22);border-radius:11px;background:rgba(20,15,38,.55);text-align:left}
 .gyeotlist li.called{opacity:.55}   /* 층은 밝기로만 말한다 — 라벨을 안 붙인다(곁탭IA 어휘확장) */
+/* ── 빈 자리 한 칸 (창업자 지시 2026-08-30) ────────────────────────────────────
+   ⚠ **사람 행과 같은 크기·같은 자리에 두되, 채워지지 않았다는 것만 다르게 말한다** —
+     점선 테두리와 배경 없음. 색이나 크기로 다르게 만들면 목록이 두 종류가 되고, 그러면
+     바로 위 「행은 전부 같은 높이·같은 굵기」 규칙이 깨진다.
+   ⚠ 여기에 숫자를 쓰지 마라. 칸은 언제나 하나뿐이고 "몇 자리 남았다"를 말하지 않는다(§5). */
+.gyeotlist li.gyempty{padding:0;border:1px dashed rgba(159,143,196,.34);background:none}
+.gyaddbtn{width:100%;display:flex;align-items:center;gap:10px;padding:11px;background:none;border:0;
+  color:#9d92b8;font-size:13px;font-family:inherit;text-align:left;cursor:pointer;transition:color .2s}
+.gyaddbtn:hover,.gyaddbtn:focus-visible{color:#e6dff2}
+.gyaddbtn:disabled{opacity:.55;cursor:default}
+.gyplus{flex:0 0 auto;width:19px;height:19px;border-radius:50%;border:1px solid rgba(159,143,196,.42);
+  display:grid;place-items:center;font-style:normal;font-size:13px;line-height:1}
 .gdot{flex:0 0 auto;width:9px;height:9px;border-radius:50%;box-shadow:0 0 9px currentColor}
 .gbody{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px}
 .galias{background:none;border:none;border-bottom:1px dashed rgba(159,143,196,.3);color:#efe6ff;font-family:inherit;font-size:14px;padding:1px 0;width:100%;max-width:150px}
@@ -9146,9 +9423,6 @@ const CSS = `
 .docchip{flex:0 0 auto;background:transparent;border:1px solid rgba(159,143,196,.28);border-radius:999px;
   color:#9b90b8;font-family:sans-serif;font-size:11.5px;padding:5px 11px;cursor:pointer;white-space:nowrap}
 .docchip.on{border-color:rgba(245,217,139,.6);color:#f5d98b;background:rgba(245,217,139,.10)}
-.stage.holo .docnav{background:rgba(217,213,202,.94);border-bottom-color:rgba(80,72,55,.18)}
-.stage.holo .docchip{border-color:rgba(80,72,55,.28);color:#6b6252}
-.stage.holo .docchip.on{border-color:#a8823f;color:#8c4a12;background:rgba(168,130,63,.12)}
 @media (prefers-reduced-motion:reduce){.docnav{scroll-behavior:auto}}
 .impdcl{font-size:19px;line-height:1.62;color:#f0e2b8;margin:4px 0 0}
 .impdcl b{color:#f5d98b}
