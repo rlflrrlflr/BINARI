@@ -8510,7 +8510,7 @@ const CSS = `
    글자도 뜬다. 반 톤 내리면 빛도 글자도 같이 산다. */
 .stage.holo{background:radial-gradient(120% 90% at 50% 12%,#e4e0d6,#d9d5ca 55%,#cfcbc0);color:#262218}
 .stage.holo .gsay,.stage.holo .gintro,.stage.holo .forming{color:#3c3527}
-.stage.holo .gname,.stage.holo .imptitle{color:#262218}
+.stage.holo .gname{color:#262218}
 /* ── 밝은 판 전용 타이포 ────────────────────────────────────────────────
    ⚠ **검은 판 글자를 그대로 쓰면 안 된다.** 어두운 배경용 글자는 뒤에 빛번짐(text-shadow)과
       어두운 알약 배경을 깔아 뜨게 만든 것인데, 밝은 바탕에선 그게 **얼룩**으로 보인다.
@@ -8563,7 +8563,7 @@ const CSS = `
 .stage.holo .galias::placeholder{color:#b0a894;font-weight:400}
 .stage.holo .line{color:#241f14}
 .stage.holo .sub2{color:#5d5544}
-.stage.holo .ainote{color:#7f7663}
+.stage.holo .ainote{color:#5d5544}
 .stage.holo .unit{color:#8a8271}
 .stage.holo .in{color:#262218}
 /* ⚠ 온보딩 중반(회상·기억) 화면이 통째로 빠져 있었다 — 어두운 판용 노랑·보라 글자가
@@ -8572,7 +8572,6 @@ const CSS = `
 .stage.holo .bar b{color:#8c4a12}
 .stage.holo .chk{color:#6b6252}
 .stage.holo .chk em{color:#8a8271}
-.stage.holo .gathering{color:#6b6252}
 .stage.holo .mtag{color:#8a8271}
 .stage.holo .coins{color:#6b6252}
 .stage.holo .rvbig span{color:#8a8271}
@@ -8584,7 +8583,6 @@ const CSS = `
 .stage.holo .formsteps li.done{color:#6b6252}
 .stage.holo .formsteps li.now{color:#8c4a12}
 .stage.holo .dimq{color:#3c3527}
-.stage.holo .msrh{color:#8a8271 !important}
 .stage.holo .btn.ghost{color:#4d4535;border-color:#bab392}
 .stage.holo .tabbar::before{background:linear-gradient(to top,#cfcbc0 0%,#cfcbc0 55%,rgba(207,203,192,.72) 80%,rgba(207,203,192,0) 100%)}
 .stage.holo .tabbtn{background:rgba(255,253,246,.70);color:#6b6252;border-color:rgba(120,96,40,.26)}
@@ -8601,6 +8599,77 @@ const CSS = `
 .stage.holo .halo.wide.lobbyscale{transform:translateY(7vh) scale(0.98)}
 .stage.holo .halo.wide.gyeotscale{transform:translateY(6vh) scale(0.90)}
 .stage.holo .gcv{mix-blend-mode:normal}
+
+/* ═══ 홀로 가독성 정리 (2026-08-30) ═══════════════════════════════════════
+   근거: 03_비주얼프로토타입/비나리_비주얼프로토타입_홀로가독성감사_v01.md
+   그리고 이 리포에서 다시 실측했다(e2e/contrast-check.mjs) — 감사의 값이 소수점까지 재현됐다.
+   ⚠ 홀로가 **본선이 아닌 상태에서** 하는 정리다(창업자 2026-08-30: "아직은 본선 아냐.
+      하지만 본선 아니더라도 최적화는 되어야지"). 기존 화면은 한 줄도 안 바뀐다.
+
+   근본 원인 — **「흐림」의 번역이 뒤집혀 있었다.** 어두운 판에서 보조 텍스트를 흐리게 만드는
+   방법은 「더 어둡게」였는데, 홀로가 그 자리를 **중간 회색**으로 옮겼다. 밝은 판에서 중간 회색은
+   흐린 게 아니라 **안 보이는 것**이다. 그래서 두 곳은 오버라이드를 건 쪽이 안 건 쪽보다 나빴다.
+   밝은 판의 흐림은 **글자 쪽으로 어둡게 하되 채도를 빼는 것**이다.
+   쓰는 값 넷(전부 이미 파일 안에 있던 색): 본문 #241f14 · 준본문 #3c3527 · 메타 #5d5544 · 강조 #7a4a12 */
+
+/* ① 어두운 문서 안으로 샌 것 되돌리기 — 홀로 규칙이 후손 선택자라 문서 안까지 내려간다 */
+.stage.holo .readwrap .ainote{color:#8a8271}
+.stage.holo .readwrap .fine{color:#a89f8c}
+.stage.holo .readwrap .btn.ghost{background:rgba(245,217,139,.05);border-color:rgba(245,217,139,.32);color:#d6c493}
+.stage.holo .readwrap .btn.ghost b{color:#f0e2b8}
+.stage.holo .vface .bar b{color:#c9b98f}
+
+/* ② 밝은 판 — 칩. ⚠ 여기가 최우선이었다: 고른 칩(1.22)이 안 고른 칩(2.04)보다 안 보여
+   **화면이 거꾸로 말하고 있었다.** 게다가 온보딩 필수 입력이라 여기서 막히면 그 뒤가 전부 없다.
+   값은 이미 있는 .tabbtn 홀로 규칙과 같은 알약이라 그대로 옮긴다. */
+.stage.holo .calbtn{background:rgba(255,253,246,.70);border-color:rgba(120,96,40,.26);color:#5d5544}
+.stage.holo .calbtn.on{background:#fff;color:#7a4a12;border-color:rgba(122,74,18,.42);box-shadow:none}
+
+/* ③ 밝은 판 — 막히거나 동의를 받는 자리부터 */
+.stage.holo .err,.stage.holo .gyerr{color:#9c2f2f}          /* 진행이 왜 막혔는지 적은 유일한 문장 */
+.stage.holo .plink{color:#7a4a12}                            /* 동의 화면의 처리방침 링크 */
+.stage.holo .knock{color:#5d5544;border-color:#8c6a1e}       /* 로비 주 입구 — 글자·테두리 둘 다 안 보였다 */
+.stage.holo .knocklink{color:#5d5544}
+.stage.holo .btn{color:#4d4535;border-color:#bab392}         /* 수식어 없는 기본형(궁합 폼 확인 등) */
+
+/* ④ 밝은 판 — 메타·잔글씨. 4.11~2.1 구간을 한 값으로 모은다.
+   ⚠ #6b6252 는 판 가운데에서 4.10, **화면 아래에서 3.71** 이다(판이 그라데이션이라).
+      아래에 고정되는 것들이 있으므로 #5d5544 로 내린다 — 아래에서도 4.55. */
+.stage.holo .fine,.stage.holo .dim2,.stage.holo .whosub,
+.stage.holo .chk,.stage.holo .coins,.stage.holo .resetlink{color:#5d5544}
+.stage.holo .chk em,.stage.holo .unit,.stage.holo .mtag,
+.stage.holo .rvbig span,.stage.holo .rvlunar{color:#5d5544}
+.stage.holo .wakehint{color:#5d5544}
+.stage.holo .brand-mark{color:#5d5544}
+.stage.holo .verbadge{color:#5d5544}                         /* 9px 라 판 아래에서도 4.5 를 넘겨야 한다 */
+.stage.holo .streak{color:#7a4a12}
+.stage.holo .mailbox .dtag{color:#5d5544}                    /* ⚠ 같은 클래스가 어두운 서신 안에도 산다 */
+.stage.holo .ratelab,.stage.holo .ratedone{color:#5d5544}
+.stage.holo .qquote{color:#241f14}
+.stage.holo .adhook{color:#3c3527;background:rgba(255,253,246,.74);border-color:#c2bcaa}
+.stage.holo .adhook b{color:#7a4a12}
+
+/* ⑤ 밝은 판 — 곁 탭. 역할 이름과 뒷면 손잡이가 곁의 알맹이다 */
+.stage.holo .gsumh{color:#5d5544}
+.stage.holo .gsumtable li{color:#5d5544;border-top-color:rgba(140,110,40,.22)}
+.stage.holo .gsumtable li b{color:#2a2419}
+.stage.holo .gsumtable li i{color:#6b6252}
+.stage.holo .gsumix{color:#5d5544;border-color:rgba(140,110,40,.42)}
+.stage.holo .gjoin{color:#2a2419}
+.stage.holo .gjoin b{color:#8c4a12}
+.stage.holo .gx{color:#6b6252;border-color:rgba(140,110,40,.30)}
+.stage.holo .gsum text{fill:#5d5544}                          /* 인라인 fill 은 presentation attribute 라 CSS 가 이긴다 */
+
+/* ⑥ 밝은 판 — 의식(주역). 던진 결과가 안 보이면 의식이 성립하지 않는다 */
+.stage.holo .hline .yang,.stage.holo .hline .yin,.stage.holo .coin{background:linear-gradient(90deg,#a8813a,#6f5210);box-shadow:none}
+.stage.holo .hline .mv{color:#a8321e}
+.stage.holo .hline .hempty{border-color:rgba(90,80,55,.45)}
+.stage.holo .coins .cface{color:#7a4a12}
+.stage.holo .coins .cback{color:#5d5544}
+
+/* ⑦ 「흐림」이 뒤집혀 **원본보다 나빠진** 둘 — 값만 바로잡는다 */
+.stage.holo .formsteps li{color:#5d5544}
+
 .moodline{font-family:sans-serif;font-size:13px;letter-spacing:.06em;color:#cfc4e2;margin:0 0 2px;text-align:center;line-height:1.7}
 .moodline b{color:#f5d98b;font-weight:600;font-size:15px}
 .moodline span{display:block;font-size:10.5px;color:#8a7f95;letter-spacing:.02em;margin-top:2px}
@@ -9148,9 +9217,6 @@ const CSS = `
 .docchip{flex:0 0 auto;background:transparent;border:1px solid rgba(159,143,196,.28);border-radius:999px;
   color:#9b90b8;font-family:sans-serif;font-size:11.5px;padding:5px 11px;cursor:pointer;white-space:nowrap}
 .docchip.on{border-color:rgba(245,217,139,.6);color:#f5d98b;background:rgba(245,217,139,.10)}
-.stage.holo .docnav{background:rgba(217,213,202,.94);border-bottom-color:rgba(80,72,55,.18)}
-.stage.holo .docchip{border-color:rgba(80,72,55,.28);color:#6b6252}
-.stage.holo .docchip.on{border-color:#a8823f;color:#8c4a12;background:rgba(168,130,63,.12)}
 @media (prefers-reduced-motion:reduce){.docnav{scroll-behavior:auto}}
 .impdcl{font-size:19px;line-height:1.62;color:#f0e2b8;margin:4px 0 0}
 .impdcl b{color:#f5d98b}
