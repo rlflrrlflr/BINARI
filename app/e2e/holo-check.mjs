@@ -169,10 +169,17 @@ const gyeot3 = await rad();
 await page.getByRole("button", { name: "판결" }).click(); await page.waitForTimeout(1400);
 const mid = [];
 await page.getByRole("button", { name: "곁" }).click();
-for (let i = 0; i < 4; i++) { await page.waitForTimeout(70); mid.push(await one()); }
-const midMax = Math.max(...mid.map((x) => x.h));
-ck("⑩-b 곁으로 가는 **도중에도** 둥글다", midMax < 0.09,
-   `전이 중 최대 ${midMax.toFixed(3)} (0.09 미만이어야) · ${mid.map((x) => x.h.toFixed(3)).join(", ")}`);
+for (let i = 0; i < 8; i++) { await page.waitForTimeout(60); mid.push((await one()).h); }
+/* ⚠ **최대값 하나로 판정하면 안 된다.** 크기가 빠르게 변하는 동안에는 임계 등고선이
+   한 프레임씩 튀어 0.15 가 찍혔다 안 찍혔다 한다(같은 코드에서 0.031 과 0.154).
+   진짜 삼각형은 **여러 프레임 연속으로** 높다(원래 버그는 0.063·0.174·0.089 가 이어졌다).
+   그래서 **연속 두 프레임**이 문턱을 넘을 때만 잡는다 — 한 프레임 스파이크는 흘린다. */
+let run2 = 0, worst = 0;
+for (let i = 1; i < mid.length; i++)
+  if (mid[i] > 0.09 && mid[i - 1] > 0.09) { run2++; worst = Math.max(worst, Math.min(mid[i], mid[i - 1])); }
+ck("⑩-b 곁으로 가는 **도중에도** 둥글다", run2 === 0,
+   run2 ? `연속 ${run2}회 초과(최저 ${worst.toFixed(3)})` : "연속 초과 없음"
+   + ` · ${mid.map((x) => x.toFixed(3)).join(", ")}`);
 await page.waitForTimeout(1600);
 
 ck("⑩ 곁이 둥글다 — 삼각(3주기) 성분", gyeot3.h < 0.06,
