@@ -4408,7 +4408,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v171 · 길을 놓는다";
+const APP_VER = "v172 · 자리를 비워 둔다";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -7765,7 +7765,30 @@ export default function App() {
                       )}
                     </li>);
                   })}
+                  {/* ── 빈 자리 한 칸 (창업자 지시 2026-08-30) ──────────────────────────
+                      *"저렇게 자리를 비워놓고 누르면 초대되게 해야 채우고 싶은 충동이 들 거 같아."*
+                      ⚠ **곁탭IA §5 「빈 슬롯 금지」와 부딪히는 것처럼 보이므로 경계를 적어 둔다.**
+                        그 금지는 **1층**(곁이 0일 때 수호신 화면) 조항이다 — 「곁이 0이어도 이 층이
+                        화면을 완결시킨다. 빈 슬롯·진행바·"0명" 표기 금지」. 아무도 없는 사람에게
+                        **못 채운 자리를 세어 보이는 것**을 막은 규칙이고 그건 그대로 유지된다.
+                        여기는 **2층**이고 이미 곁이 선 사람만 본다. 창업자가 그 자리에서는 충동이
+                        **의도**라고 정했다.
+                      ⚠ **그래서 조건 둘을 지킨다** — ①칸은 **언제나 하나뿐**이다. 여럿을 그리면
+                        "몇 자리 남았다"는 진행바가 되어 §5 개수 금지를 정면으로 어긴다 ②숫자를 안 쓴다.
+                      ⚠ 상한(24)에 닿으면 칸을 안 그린다 — 누를 수 없는 자리는 충동이 아니라 벽이다. */}
+                  {gyeotSorted.length < GYEOT_MAX && (
+                    <li className="gyempty">
+                      <button className="gyaddbtn" disabled={inviteBusy === "new"}
+                        onClick={() => inviteNew()}>
+                        <i className="gyplus" aria-hidden="true">+</i>
+                        <span>{inviteBusy === "new" ? "만드는 중…" : "한 사람 더 부를래"}</span>
+                      </button>
+                    </li>
+                  )}
                 </ul>
+                {/* 빈 칸 바로 아래 — 누르면 무슨 일이 나는지. 칸이 문이라 라벨만으로는 부족하다. */}
+                <p className="fine gyegate">눌러서 링크를 보내면 그 자리에 서 —
+                  <b> 생일은 그 사람이 직접 넣어</b></p>
                 {/* 지우기 확인 — ✕ 는 작고 이름 옆이라 잘못 누르기 쉽다. 지우면 되돌릴 수 없다. */}
                 {gyeotAsk && (() => {
                   const g = gyeotSorted.find((x) => x.key === gyeotAsk);
@@ -7812,23 +7835,10 @@ export default function App() {
                 {/* 첫 곁이 생기면 부르는 문이 사라져 있었다 — 목록이 곧 막다른 길이 됐다는 뜻이다. */}
                 {/* 게이트: **첫 곁은 내가 직접 넣어 공짜, 그 다음부터는 그 사람이 직접 넣는다**(창업자).
                     그래서 이 문은 궁합 폼이 아니라 **초대**로 간다 — 부르는 일이 여기 하나로 모인다. */}
-                {/* §곁 게이트 안내 (창업자 지시 2026-08-30) — *"추가하기를 누르면 「추가하고 싶은
-                    사람이 있다면 초대해봐」는 식의 멘션이 뜨면 되는데 톤앤매너는 우리 컨셉에 맞춰서."*
-                    ⚠ **버튼만 있고 이유가 없던 자리다.** 첫 사람을 손으로 넣어 본 유저가 같은 걸 또
-                    하려다 막히는데, 화면은 다른 버튼을 내밀 뿐 **왜 이번엔 다른지**를 말하지 않았다.
-                    낱말 셋을 골라 쓴 이유:
-                      ①「곁에 부른다」 — 곁탭IA §3 확정 어휘. 「초대하기·친구 추가」는 금지어다
-                      ②「넣어」 — 이 앱에서 생년월일에 붙는 동사는 넣다·채우다다(「생일만 넣으면
-                        둘 사이가 보여」). 적다는 이름 쪽에 배정돼 있다(「이름을 적어 둘래」)
-                      ③「이제」 — 유저가 막히는 물음이 「어? 아까는 생일 넣어서 봤는데」라, 답해야 할 건
-                        규칙의 정당성이 아니라 **이번엔 손이 바뀐다**는 사실 하나다
-                    ⚠ 마침표를 안 찍는다 — 이 앱의 줄표 문장은 전부 마침표가 없다(「부르는 중 — 아직
-                    답이 없어」·「두 번 두드려봐 — 누가 있는지 보여줄게」). */}
-                <p className="fine gyegate">곁에 더 부를 사람이 있으면 링크를 보내봐 —
-                  <b> 생일은 이제 그 사람이 직접 넣어</b></p>
-                <button className="btn ghost mt" disabled={inviteBusy === "new"}
-                  onClick={() => inviteNew()}>{inviteBusy === "new" ? "만드는 중…" : "한 사람 더 부를래"}</button>
-                {/* ⚠ **초대를 먼저 만든 사람이 무료 한 번을 잃고 있었다 (2026-08-30).**
+                {/* ⚠ **부르는 문이 여기 또 있으면 안 된다 (2026-08-30).** 목록 끝 빈 칸이 그 일을
+                    맡았다. 같은 일을 하는 문이 한 화면에 둘이면 유저는 둘이 다른 일을 한다고 읽는다.
+                    (예전엔 여기 「한 사람 더 부를래」 버튼과 안내 문장이 따로 있었다.)
+                    ⚠ **초대를 먼저 만든 사람이 무료 한 번을 잃고 있었다 (2026-08-30).**
                     게이트를 「곁이 비었나」로 재던 시절에는, 링크를 만들기만 해도 명부에 자리가 서서
                     직접 입력 문이 닫혔다 — **아무에게도 안 보내도** 그랬다. 자물쇠가 자기에게 걸린 것이다.
                     규칙은 원래 「곁이 비어 있을 때만」이 아니라 **「한 사람은 내가 넣어도 된다」**였다.
@@ -8603,6 +8613,13 @@ const CSS = `
 .stage.holo .btn.ghost{background:rgba(255,253,246,.74);border-color:#c2bcaa;color:#4d4535;box-shadow:0 1px 2px rgba(48,40,20,.07)}
 .stage.holo .btn.ghost b{color:#2a2419}
 .stage.holo .in.box{background:rgba(255,253,246,.82);border-color:#c2bcaa;color:#2a2419;box-shadow:none}
+/* 빈 자리 한 칸 — 밝은 판용. ⚠ 명부 행(.gyeotlist li) 자체는 아직 어두운 판 값이라
+   홀로에서 회색으로 뜬다(홀로 가독성 감사 §② 「반투명 판」 항목). 그건 감사가 잡은 별건이고,
+   **새로 넣는 칸까지 그 더미에 얹지는 않는다.** 감사대로 행을 뒤집으면 이 두 줄은 그대로 맞는다. */
+.stage.holo .gyeotlist li.gyempty{border-color:#b3ac9a}
+.stage.holo .gyaddbtn{color:#5d5544}
+.stage.holo .gyaddbtn:hover,.stage.holo .gyaddbtn:focus-visible{color:#241f14}
+.stage.holo .gyplus{border-color:#b3ac9a}
 .stage.holo .resetlink{color:#6b6252}
 /* 탭 스크림이 밝은 판에서도 아래 글자를 먹는다 — 여기선 더 얕게 깐다 */
 .stage.holo{--tabscrim:22px}
@@ -8828,6 +8845,18 @@ const CSS = `
 .gyeotlist{list-style:none;margin:0;padding:0;width:100%;max-width:340px;display:flex;flex-direction:column;gap:6px;max-height:44vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .gyeotlist li{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid rgba(159,143,196,.22);border-radius:11px;background:rgba(20,15,38,.55);text-align:left}
 .gyeotlist li.called{opacity:.55}   /* 층은 밝기로만 말한다 — 라벨을 안 붙인다(곁탭IA 어휘확장) */
+/* ── 빈 자리 한 칸 (창업자 지시 2026-08-30) ────────────────────────────────────
+   ⚠ **사람 행과 같은 크기·같은 자리에 두되, 채워지지 않았다는 것만 다르게 말한다** —
+     점선 테두리와 배경 없음. 색이나 크기로 다르게 만들면 목록이 두 종류가 되고, 그러면
+     바로 위 「행은 전부 같은 높이·같은 굵기」 규칙이 깨진다.
+   ⚠ 여기에 숫자를 쓰지 마라. 칸은 언제나 하나뿐이고 "몇 자리 남았다"를 말하지 않는다(§5). */
+.gyeotlist li.gyempty{padding:0;border:1px dashed rgba(159,143,196,.34);background:none}
+.gyaddbtn{width:100%;display:flex;align-items:center;gap:10px;padding:11px;background:none;border:0;
+  color:#9d92b8;font-size:13px;font-family:inherit;text-align:left;cursor:pointer;transition:color .2s}
+.gyaddbtn:hover,.gyaddbtn:focus-visible{color:#e6dff2}
+.gyaddbtn:disabled{opacity:.55;cursor:default}
+.gyplus{flex:0 0 auto;width:19px;height:19px;border-radius:50%;border:1px solid rgba(159,143,196,.42);
+  display:grid;place-items:center;font-style:normal;font-size:13px;line-height:1}
 .gdot{flex:0 0 auto;width:9px;height:9px;border-radius:50%;box-shadow:0 0 9px currentColor}
 .gbody{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px}
 .galias{background:none;border:none;border-bottom:1px dashed rgba(159,143,196,.3);color:#efe6ff;font-family:inherit;font-size:14px;padding:1px 0;width:100%;max-width:150px}

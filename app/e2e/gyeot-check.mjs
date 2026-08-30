@@ -121,7 +121,9 @@ ck("③ 판결 화면 문구 보존 — 판결을 청한다",
   ck("⑥ 명부는 두드리기 전엔 안 열린다", (await p3.locator(".gyeotlist li").count()) === 0);
   await p3.locator("canvas").first().dblclick();
   await p3.waitForTimeout(900);
-  ck("⑥ 궁합을 보면 그 사람이 실제로 곁에 선다", (await p3.locator(".gyeotlist li").count()) === 1);
+  /* ⚠ **사람 행만 센다.** 목록 끝에는 「빈 자리 한 칸」(.gyempty)이 늘 하나 붙는다 —
+     그건 부르는 문이지 곁이 아니다(창업자 지시 2026-08-30). */
+  ck("⑥ 궁합을 보면 그 사람이 실제로 곁에 선다", (await p3.locator(".gyeotlist li:not(.gyempty)").count()) === 1);
   ck("⑥ 곁이 서면 '비었다' 안내는 사라진다", (await p3.getByRole("button", { name: /부르게 돼|곁에 서/ }).count()) === 0);
   /* 창업자 결정 1(절충안) — 궁합만 본 사람은 정식 자리가 아니라 '답 대기'로 흐리게 선다 */
   /* 창업자 결정 1(절충안)의 층 구분은 그대로다. 다만 화면 말은 「부른 곁」이고,
@@ -223,6 +225,13 @@ ck("③ 판결 화면 문구 보존 — 판결을 청한다",
   ck("⑧ 곁이 서면 직접 입력 문이 사라진다",
      (await p5.getByRole("button", { name: /곁에 서|부르게 돼|둘 사이를 보면/ }).count()) === 0);
   ck("⑧ 남는 문은 초대뿐이다", (await p5.getByRole("button", { name: "한 사람 더 부를래" }).count()) === 1);
+  /* 빈 자리 한 칸 (창업자 지시 2026-08-30) — **부르는 문이 곧 목록의 빈 칸이다.**
+     ⚠ 세는 건 「칸이 하나뿐인가」다. 여럿을 그리면 "몇 자리 남았다"는 진행바가 되어 §5 를 어긴다. */
+  ck("⑧ 부르는 문이 목록 끝 빈 칸이다", (await p5.locator(".gyeotlist li.gyempty .gyaddbtn").count()) === 1);
+  ck("⑧ 빈 칸은 언제나 하나뿐이다(진행바가 아니다)", (await p5.locator(".gyeotlist li.gyempty").count()) === 1);
+  ck("⑧ 빈 칸에 숫자를 안 쓴다(§5)", !/\d/.test(await p5.locator(".gyempty").innerText()));
+  ck("⑧ 같은 일을 하는 문이 둘이 아니다",
+     (await p5.getByRole("button", { name: /부를래|링크를 보내|링크 보내기/ }).count()) === 1);
   /* 성질 검사 ③: 왜 초대인지가 버튼 위에 적혀 있다 (창업자 지시 2026-08-30) */
   const gate = (await p5.locator(".gyegate").allInnerTexts()).join(" ");
   ck("⑧ 초대 버튼 위에 이유가 적혀 있다", /직접 넣어/.test(gate), gate.replace(/\s+/g, " ").slice(0, 60));
