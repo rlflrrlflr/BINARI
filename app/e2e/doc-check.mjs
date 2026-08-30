@@ -79,8 +79,13 @@ await page.getByRole("button", { name: /근거 보기/ }).click(); await page.wa
 const mn = await one(page, "match_notes_toggled");
 ck("근거 펼침이 match_notes_toggled 로 남는다", !!mn && mn.props.on === true);
 
-await page.getByRole("button", { name: "다른 사람과도 봐볼게" }).click(); await page.waitForTimeout(300);
-ck("재사용 클릭이 match_again 으로 남는다(궁합의 재구매 논리)", !!(await one(page, "match_again")));
+/* ⚠ **2026-08-30 뜻을 뒤집었다.** 예전엔 이 버튼을 눌러 `match_again` 이 남는지 봤다(궁합이
+   유료·무게이트였던 v130 의 재구매 논리). 창업자 게이트가 선 지금 **버튼이 있으면 그게 결함**이다 —
+   `setDone(false)` 로 폼이 되돌아와 초대 없이 둘째·셋째를 계속 직접 입력할 수 있었다(실측 5명). */
+ck("게이트 — 첫 곁이 선 뒤 직접 입력 문이 사라진다",
+   (await page.getByRole("button", { name: "다른 사람과도 봐볼게" }).count()) === 0);
+ck("게이트 — 사라진 이유를 그 자리에서 말한다",
+   /다음 사람은 그 사람이 직접 넣어야 서/.test(await page.locator(".imp").innerText()));
 
 await page.locator(".escx").click(); await page.waitForTimeout(400);
 const mr = await one(page, "match_read");

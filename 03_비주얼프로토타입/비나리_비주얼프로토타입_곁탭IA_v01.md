@@ -22,7 +22,7 @@
 |---|---|
 | 탭 | **없다.** 판결 로비 하나 + 모달들 |
 | 각인 진입 | 로비 버튼 `setImprintOpen(true)` (App.jsx §4821) |
-| 궁합 진입 | 로비 버튼 `setMatchOpen(true)` (§4824) — **각인 모달 안이 아니다** |
+| 궁합 진입 | **곁 탭 빈 화면 CTA** `setMatchOpen(true)` — ⚠ **곁이 하나라도 서면 사라진다**(창업자 게이트: 첫 한 명만 직접 입력, 그 뒤는 초대 `inviteNew()`). ~~로비 버튼~~ 은 v165 가 제거했다 (2026-08-30 갱신) |
 | 노출 조건 | 둘 다 `!ritual && !res && saju` — 판결 전 로비에서만 |
 | 상태 | `imprintOpen` / `matchOpen` 두 boolean, 형제 관계 |
 

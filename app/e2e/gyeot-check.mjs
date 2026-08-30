@@ -186,6 +186,50 @@ ck("③ 판결 화면 문구 보존 — 판결을 청한다",
   await p4.close();
 }
 
+/* ── ⑧ 창업자 게이트 — 「첫 곁은 내가 직접 넣어 공짜, 그 다음부터는 그 사람이 직접 넣는다」 ──
+   ⚠ **이 검사가 없어서 게이트가 넉 달 가까이 샜다.** 규칙은 코드 주석 두 곳·변경이력 세 줄에
+   적혀 있었는데 **집행하는 코드가 문 앞 한 곳뿐**이었고, 문 안쪽 「다른 사람과도 봐볼게」가
+   폼을 되돌려 초대 0건으로 다섯 명까지 직접 입력됐다(2026-08-30 실측).
+   그래서 여기서 재는 건 버튼의 유무가 아니라 **성질**이다 — 「직접 입력 폼에 두 번 도달할 수
+   있는가」. 어떤 새 버튼이 생기든 이 질문이 그대로 잡는다. */
+{
+  const p5 = await b.newPage({ viewport: { width: 430, height: 932 } });
+  p5.setDefaultTimeout(9000);
+  await onboard(p5, BASE);
+  const roster = () => p5.evaluate(() => { try { return JSON.parse(localStorage.getItem("binari.gyeot.v1") || "[]").length; } catch { return -1; } });
+  await p5.getByRole("button", { name: "곁", exact: true }).click();
+  await p5.waitForTimeout(900);
+  const cta = p5.getByRole("button", { name: /곁에 서|부르게 돼|둘 사이를 보면/ });
+  ck("⑧ 곁이 비면 직접 입력 문이 하나 있다(첫 한 명은 공짜)", (await cta.count()) === 1);
+  await cta.first().click();
+  await p5.waitForSelector(".impask", { timeout: 15000 });
+  const ins = p5.locator(".impask input.impnum");
+  await ins.nth(0).fill("1997"); await ins.nth(1).fill("4"); await ins.nth(2).fill("22");
+  await p5.locator(".impask input.impname").fill("가상갑");
+  await p5.getByRole("button", { name: "둘을 맞대 볼게" }).click();
+  await p5.waitForTimeout(1400);
+  ck("⑧ 첫 사람이 곁에 선다", (await roster()) === 1, `곁 ${await roster()}`);
+  /* 성질 검사 ①: 결과 화면 어디에도 폼으로 되돌아가는 문이 없다 */
+  ck("⑧ 결과 화면에 직접 입력 폼이 다시 열리는 문이 없다", (await p5.locator(".impask").count()) === 0);
+  const mt5 = await p5.locator(".imp").innerText();
+  ck("⑧ 문이 닫힌 이유를 그 자리에서 말한다", /다음 사람은 그 사람이 직접 넣어야 서/.test(mt5));
+  /* 성질 검사 ②: 문서를 닫고 곁으로 돌아와도 직접 입력 문이 없고, 남는 문은 초대뿐 */
+  await p5.getByRole("button", { name: /닫을게/ }).last().click();
+  await p5.waitForTimeout(1000);
+  await p5.getByRole("button", { name: "곁", exact: true }).click().catch(() => {});
+  await p5.waitForTimeout(900);
+  await p5.locator("canvas").first().dblclick();
+  await p5.waitForTimeout(1300);
+  ck("⑧ 곁이 서면 직접 입력 문이 사라진다",
+     (await p5.getByRole("button", { name: /곁에 서|부르게 돼|둘 사이를 보면/ }).count()) === 0);
+  ck("⑧ 남는 문은 초대뿐이다", (await p5.getByRole("button", { name: "한 사람 더 부를래" }).count()) === 1);
+  /* 성질 검사 ③: 왜 초대인지가 버튼 위에 적혀 있다 (창업자 지시 2026-08-30) */
+  const gate = await p5.locator(".gyegate").innerText().catch(() => "");
+  ck("⑧ 초대 버튼 위에 이유가 적혀 있다", /직접 넣어/.test(gate), gate.replace(/\s+/g, " ").slice(0, 60));
+  ck("⑧ 안내에 개수·값이 안 섞인다(§5)", !/\d\s*(명|개)|원|₩/.test(gate));
+  await p5.close();
+}
+
 await b.close();
 const f = R.filter((x) => !x).length;
 console.log(`\n=== 곁 탭: ${R.length - f}/${R.length} PASS ===`);
