@@ -3092,6 +3092,7 @@ precision highp float;
 uniform vec2  u_res, u_off;
 uniform float u_t, u_form, u_orb, u_warm, u_speed, u_lum, u_sink, u_grain;
 uniform float u_born, u_touchAmt, u_ex, u_squash, u_tailK;
+uniform vec3  u_press;   // (밀린 방향 x, y, 세기) — 심지도 이만큼 밀린다
 uniform vec3  u_look;   // (yaw, pitch, roll) — 얼굴이 보는 방향. 몸도 이 값을 쓴다
 uniform float u_fold;   // 형태 접힘(0 불꽃 ↔ 1 구슬). 크기(u_orb)와 달리 오버슈트가 없다
 uniform vec2  u_touch, u_wisp;
@@ -3279,6 +3280,11 @@ void main(){
      (실측 3주기 0.061, 반경 42~66px). 형태 변조를 곁에서 접는 다른 항들과 같은 처리다 —
      곁의 회전 단서는 약해지지만, 곁의 수호신은 「돌아보는 머리」가 아니라 「응축된 구슬」이다. */
   vec2 fwd = lk * Rs * 0.34 * (1.0 - fold*0.45);
+  /* ⚠ **누르면 심지도 같이 밀려야 한다**(창업자 2026-08-30: "몸의 심지(코어)가 얼굴의
+     중심으로 느껴지는데 인터랙션할 때 이 부분은 변동 없이 가운데를 유지하니 더 따로 논다").
+     맞다 — 얼굴은 밀리는데 심지가 제자리면 **얼굴이 몸에서 떨어져 나간 것**으로 보인다.
+     얼굴이 가는 만큼(App 의 0.052) 같은 방향으로 보낸다. */
+  fwd += vec2(u_press.x, -u_press.y) * u_press.z * 0.052 * 2.35;
   vec2 c0 = vec2( 0.07*sin(t*0.23),        -0.12 + 0.04*cos(t*0.19)) * R * orbC + fwd;   // 반사광은 한쪽으로 치우친다
   vec2 c1 = vec2( 0.05*sin(t*0.19+0.7),    -0.01 + 0.035*cos(t*0.15)) * R * orbC + fwd*0.72;
   vec2 c2 = vec2(-0.09*sin(t*0.15+1.1),     0.065*cos(t*0.13+0.4))    * R * orbC;
@@ -3359,6 +3365,31 @@ void main(){
   vec3  outc = L.rgb;
   float sum  = L.a;
 
+  /* ── 입체감 ─────────────────────────────────────────────────────────────
+     창업자 2026-08-30: "몸이 애초에 3d 느낌, 입체적인 느낌이 없어서 그런 듯."
+     맞다 — 지금까지 몸은 **평평한 발광**이었다. 평면 위에서 얼굴만 돌면 당연히 붙여 놓은 표가 난다.
+     반구로 보고 램버트 음영을 넣는다. 빛은 왼위앞에서 오고, **고개가 도는 쪽으로 같이 돈다** —
+     그래서 고개를 돌리면 **명암 경계가 움직인다.** 이게 「몸이 돌았다」의 가장 센 단서다.
+     ⚠ 알파(실루엣)는 **안 건드린다.** 색만 어둡게 한다 — 실루엣을 건드리면 곁 구슬이
+        안 둥글어지고(검사 ⑩), 그건 이 세션에서 이미 여러 번 겪었다. */
+  float volA = 1.0;
+  {
+    /* ⚠ 반구의 크기를 **코어(R)** 로 잡으면 헤일로 전체가 q=1 로 포화돼 음영이
+       테두리 한 줄로만 나온다(실기 확인). 눈에 보이는 덩어리 전체를 반구로 잡는다. */
+    vec2  sp = e / max(R * 2.05, 1e-3);
+    float q  = clamp(length(sp), 0.0, 1.0);
+    vec3  nrm = normalize(vec3(sp, sqrt(max(0.0, 1.0 - q*q)) + 0.35));
+    vec3  lit = normalize(vec3(-0.40 + lk.x*1.15, 0.56 + lk.y*1.15, 0.78));
+    float lam = dot(nrm, lit) * 0.5 + 0.5;
+    /* ⚠ **알파는 안 건드린다.** 그늘 쪽 덮임을 올려 봤더니 그림자가 진해지는 대신
+       **밝기 무게중심이 그쪽으로 밀려 얼굴이 또 몸에서 벗어났다**(실기 확인).
+       이 세션에서 같은 함정에 두 번 빠졌다 — 실루엣을 건드리면 얼굴이 따라 어긋난다.
+       색만 쓰되 그늘을 **깊게**(0.26) 잡아 알파가 낮아도 읽히게 한다. */
+    float vol = mix(0.26, 1.10, smoothstep(0.10, 0.94, lam));
+    outc *= vol;
+    volA = mix(1.0, 1.0, smoothstep(0.10, 0.94, lam));
+  }
+
   /* 그레인 — 레퍼런스는 필름 입자가 꽤 굵다. 이게 없으면 벡터 그라데이션처럼 매끈해서 인공적이다 */
   outc += (hash(gl_FragCoord.xy+fract(u_t)*0.01)-0.5)*u_grain;
 
@@ -3384,7 +3415,7 @@ void main(){
      정규화하면 값이 ±|lk| 안에 갇혀 자를 필요가 없고, 경계도 안 생긴다. */
   float turn = dot(normalize(e + 1e-4), lk);
   float shade = 1.0 + turn * 0.30 * (1.0 - fold);
-  gl_FragColor = vec4(outc, clamp(sum*u_lum*live*vig*bornK*touchK*shade, 0.0, 1.0));
+  gl_FragColor = vec4(outc, clamp(sum*u_lum*live*vig*bornK*touchK*shade*volA, 0.0, 1.0));
 }`;
 /* 밝은 바탕용 보정 — **원색(EL_COLOR)은 안 건드린다.** 금의 c2(#e8f2ff)는 거의 흰색이라
    밝은 바탕에서 통째로 사라진다(시제품 첫 판에서 금 줄이 안 보였다). 이 렌더러에서만 한 칸 낮춘다. */
@@ -3432,7 +3463,7 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
       const la = gl.getAttribLocation(pg, "a"); gl.enableVertexAttribArray(la);
       gl.vertexAttribPointer(la, 2, gl.FLOAT, false, 0, 0);
-      const U = {}; ["u_res","u_off","u_t","u_form","u_orb","u_warm","u_speed","u_lum","u_sink","u_grain","u_c1","u_c2","u_c3","u_bg","u_wt","u_bite","u_rayP","u_puffP","u_flkP","u_baseP","u_born","u_touch","u_touchAmt","u_wisp","u_ex","u_trail","u_squash","u_tailK","u_look","u_fold"]
+      const U = {}; ["u_res","u_off","u_t","u_form","u_orb","u_warm","u_speed","u_lum","u_sink","u_grain","u_c1","u_c2","u_c3","u_bg","u_wt","u_bite","u_rayP","u_puffP","u_flkP","u_baseP","u_born","u_touch","u_touchAmt","u_wisp","u_ex","u_trail","u_squash","u_tailK","u_look","u_fold","u_press"]
         .forEach((k) => { U[k] = gl.getUniformLocation(pg, k); });
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const S = Math.round(size * dpr); cv.width = S; cv.height = S;
@@ -3493,7 +3524,7 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
             생물이 움직이는 방향을 보는 것과 같은 이치고, 사인파를 아무리 맞춰도 이건 못 흉내낸다. */
       const look = { x: 0, y: 0, px: 0.5, py: 0.5, had: false };
       const gaze = { yaw: 0, pitch: 0, roll: 0 };   // 얼굴과 몸이 **같이** 쓰는 값
-      let coreR = 0.32;
+      let coreR = 0.32, fvFace = 0;
       const SPD = 1.35 * (mood ? mood.sp : 1);
       const SINK = mood ? mood.sink * 2.2 : 0;
       const FACE_R = 0.20;                       // 얼굴로 치는 반경(캔버스 폭 대비)
@@ -3598,6 +3629,7 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
            크기보다 **조금 빨리** 접혀야 부푸는 동안 이미 둥글다. */
         foldV += (orbT - foldV) * (1 - Math.exp(-dt / 0.075));
         gl.uniform1f(U.u_fold, foldV);
+        gl.uniform3f(U.u_press, pdx, pdy, press);
         /* 응축값을 밖에 노출한다 — 화면을 읽어(readPixels) 재면 프레임당 100ms 넘게 걸려
            **300ms 짜리 전환을 못 본다**(실측). 검사는 이 값을 본다. */
         try { window.__BINARI_ORB = orb; } catch (_) {}
@@ -3683,6 +3715,12 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
           const dfy = Math.cos(tS * 0.47) * 0.088 + Math.sin(tS * 0.81 + 0.6) * 0.034;
           core.x = 0.5 + dfx + wisp.x / 2.35;
           core.y = 0.5 - dfy - wisp.y / 2.35 + SINK * 0.06 - lift;
+          /* ⚠ **시선은 「떠다님」만 봐야 한다.** core 에는 탭 전환으로 몸이 줄어드는 몫(lift)이
+             섞여 있어서, 곁으로 갈 때 그 변화가 **속도로 잡히고 → 고개가 홱 돌고 → 앞면이 던져져
+             전이 중 실루엣이 찌그러졌다**(검사 ⑩-b 가 물었다). 크기 변화는 고개 방향이 아니다.
+             드리프트와 위습만으로 속도를 잰다. */
+          const baseX = 0.5 + dfx + wisp.x / 2.35;
+          const baseY = 0.5 - dfy - wisp.y / 2.35;
           /* 속도는 저역통과로 매끈하게 — 날것으로 쓰면 고개가 떤다 */
           /* ⚠ **속도 추정은 폭발한다.** dt 가 한 프레임만 작게 튀어도 (Δ/dt) 가 치솟고,
              저역통과로도 다 안 눌린다 — 실측에서 고개가 **138° 까지 돌았다**(yaw 2.41rad).
@@ -3690,10 +3728,10 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
           if (look.had && dt > 1e-4) {
             const k = 1 - Math.exp(-dt / 0.22);
             const cl = (v) => Math.max(-0.16, Math.min(0.16, v));
-            look.x += (cl((core.x - look.px) / dt) - look.x) * k;
-            look.y += (cl((core.y - look.py) / dt) - look.y) * k;
+            look.x += (cl((baseX - look.px) / dt) - look.x) * k;
+            look.y += (cl((baseY - look.py) / dt) - look.y) * k;
           }
-          look.px = core.x; look.py = core.y; look.had = true;
+          look.px = baseX; look.py = baseY; look.had = true;
         }
         /* ── 시선을 **여기서** 정한다 ─────────────────────────────────────
            ⚠ 예전엔 얼굴 블록 안에서 계산했다 — 그러면 셰이더는 이미 그려진 뒤라
@@ -3712,6 +3750,7 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
              ⚠ 이 이동은 `look`(속도 추정) 이후에 더한다 — 앞에 두면 자기 이동이 속도로 되먹임된다. */
           /* 얼굴은 **앞면(c0)** 을 따라간다 — 셰이더의 `fwd` 와 같은 식이어야 한다 */
           const fv = Math.min(Math.max(foldV, 0), 1);
+          fvFace = fv;
           const fwd = (0.320 + (0.208 - 0.320) * fv) * (1 + (0.20 - 1) * gather) * 0.34 * (1 - fv * 0.45) / 2.35;   // 셰이더의 fwd 와 같은 식   // foldJ 는 위 블록 지역변수라 여기선 안 보인다
           core.x += gaze.yaw * fwd;
           core.y += gaze.pitch * fwd;
@@ -3787,7 +3826,10 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
                  눈 간격과 눈–입 거리를 같이 줄인다 — 살이 모이면 그 위에 얹힌 것도 모인다. */
               /* ⚠ 치수를 **구 기준**으로 넘긴다(캔버스 기준이 아니다). 구는 몸의 코어를
                  그대로 쓰므로 탭이 바뀌어 몸이 줄면 얼굴도 같이 준다 — 둘이 한 입체다. */
-              radFrac: coreR / 2.35,
+              /* ⚠ 곁에서는 **예전 크기(0.24)로 되돌린다**(창업자 2026-08-30 "곁 얼굴 크기 원복").
+                 곁의 몸은 응축돼 R 이 작아지므로 코어를 그대로 따르면 얼굴이 너무 작아진다.
+                 판결에서는 몸의 코어를 그대로 쓰고, 곁로 갈수록 예전 값으로 섞는다. */
+              radFrac: (coreR / 2.35) * (1 - fvFace) + 0.24 * fvFace,
               gapR: 0.56 * k * (1 - 0.42 * press),      // 눈은 구의 0.56 자리 (전엔 0.93 — 몸 가장자리였다)
               mouthR: 0.36 * k * (1 - 0.45 * press),
               cy: P.cy, gap: 0.56, eyeSz: 0.088 * k, eyeScale: hurt ? 1.9 : 1,
