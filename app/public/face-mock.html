@@ -65,7 +65,7 @@
   <p class="warn">⚠ 예전 비교자는 <b>보드 전용 경로</b>로 그려서 앱과 다른 그림이었다.
   여기는 앱이 실제로 넘기는 값(<code>radFrac·gapR·eyeSz</code> — 전부 <b>구 기준</b>)을 그대로 쓴다.
   점선 둘은 <b>실측한 몸</b>이다 — 안쪽이 코어(구의 0.72배), 바깥이 눈에 보이는 끝(1.30배). 눈이 그 안에 있는지 같이 본다.</p>
-  <p class="lead">지금 값: 눈 <b>0.155</b> · 간격 <b>0.64</b>(오행 폭으로 나눈 뒤) · 입 0.30 / 0.36</p>
+  <p class="lead">지금 값: 눈 <b>0.155</b> · 간격 <b>0.56</b>(오행 폭으로 나눈 뒤) · 입 0.30 / 0.36</p>
   <h3 class="sub">눈 크기 — 구 반지름 대비</h3><div class="row" id="vSize"></div>
   <h3 class="sub">두 눈 간격 — 구의 몇 할 자리</h3><div class="row" id="vGap"></div>
   <h3 class="sub">크기 × 간격</h3>
@@ -82,7 +82,7 @@
   <table class="num"><tbody>
     <tr><td>구 반지름 <i>(radFrac)</i></td><td>판결 <b>몸의 코어 그대로</b>(R/2.35 ≈ 0.136) · 곁 <b>0.216</b></td></tr>
     <tr><td>눈 크기 <i>(eyeSz)</i></td><td>구 반지름의 <b>0.155</b></td></tr>
-    <tr><td>두 눈 간격 <i>(gapR)</i></td><td>구의 <b>0.691 자리</b> ÷ 오행 가로폭 <i>(금에서 0.64)</i> <i>(화 1.26 · 목 1.18 · 금 1.08 · 토 0.98 · 수 0.94)</i></td></tr>
+    <tr><td>두 눈 간격 <i>(gapR)</i></td><td>구의 <b>0.605 자리</b> ÷ 오행 가로폭 <i>(금에서 0.56)</i> <i>(화 1.26 · 목 1.18 · 금 1.08 · 토 0.98 · 수 0.94)</i></td></tr>
     <tr><td>입 크기 <i>(mSz)</i></td><td>구 반지름의 <b>0.30</b></td></tr>
     <tr><td>눈→입 <i>(mouthR)</i></td><td>구의 <b>0.36 자리</b></td></tr>
     <tr><td>누를 때</td><td>간격 ×<b>0.58</b> · 눈→입 ×<b>0.55</b> · 얼굴 이동 <b>0.032</b> · 눈 <b>1.9배</b>(질끈)</td></tr>
@@ -551,7 +551,7 @@ function tuned(parent, over, label, on){
 /* ═══ 앱과 같은 경로로 그리는 칸 ═══════════════════════════════════════════
    ⚠ 앱은 얼굴을 **구 기준**으로 넘긴다(radFrac·gapR·mouthR). 보드가 캔버스 기준으로
    그리면 같은 숫자가 다른 그림이 된다 — 예전 비교자가 정확히 그 사고였다. */
-const APP = { radFrac: 0.136, gapR: 0.64, eyeSz: 0.155, mSz: 0.30, mouthR: 0.36, cy: 0.50 };
+const APP = { radFrac: 0.136, gapR: 0.56, eyeSz: 0.155, mSz: 0.30, mouthR: 0.36, cy: 0.50 };
 function appCell(parent, over, label, on){
   const d=document.createElement("div"); d.className="cell"+(on?" on":"");
   const c=document.createElement("canvas"); const S=CELL*2;
@@ -582,8 +582,8 @@ function appCell(parent, over, label, on){
 }
 [[0.070,"0.070"],[0.100,"0.100"],[0.130,"0.130"],[0.155,"지금 0.155"],[0.185,"0.185"],[0.215,"0.215"]]
   .forEach(([v,l])=>appCell(vSize,{eyeSz:v},l,v===0.155));
-[[0.36,"0.36"],[0.46,"0.46"],[0.56,"0.56"],[0.64,"지금 0.64"],[0.74,"0.74"],[0.84,"0.84"]]
-  .forEach(([v,l])=>appCell(vGap,{gapR:v},l,Math.abs(v-0.64)<1e-6));
+[[0.36,"0.36"],[0.46,"0.46"],[0.56,"지금 0.56"],[0.64,"0.64"],[0.74,"0.74"],[0.84,"0.84"]]
+  .forEach(([v,l])=>appCell(vGap,{gapR:v},l,Math.abs(v-0.56)<1e-6));
 const VS=[[0.060,"0.060"],[0.088,"0.088"],[0.120,"0.120"],[0.155,"0.155"]];
 const VG=[[0.26,"0.26"],[0.39,"0.39"],[0.50,"0.50"],[0.64,"0.64"]];
 vMatrix.insertAdjacentHTML("beforeend",
