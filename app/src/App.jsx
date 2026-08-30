@@ -3093,6 +3093,7 @@ uniform vec2  u_res, u_off;
 uniform float u_t, u_form, u_orb, u_warm, u_speed, u_lum, u_sink, u_grain;
 uniform float u_born, u_touchAmt, u_ex, u_squash, u_tailK;
 uniform vec3  u_look;   // (yaw, pitch, roll) — 얼굴이 보는 방향. 몸도 이 값을 쓴다
+uniform float u_fold;   // 형태 접힘(0 불꽃 ↔ 1 구슬). 크기(u_orb)와 달리 오버슈트가 없다
 uniform vec2  u_touch, u_wisp;
 uniform vec2  u_trail[6];
 uniform vec3  u_c1, u_c2, u_c3, u_bg;
@@ -3145,7 +3146,12 @@ void main(){
      손끝은 더 나아가 **하나의 점**까지 간다.
      ⚠ 접는 계수를 하나로 묶는다 — 접을 곳이 일곱 군데라 따로 두면 또 하나를 빠뜨린다
         (곁이 둥근 삼각형이던 게 정확히 그 사고였다). */
-  float fold = max(clamp(u_orb, 0.0, 1.0), tk);
+  /* ⚠ **크기와 형태를 갈랐다**(2026-08-30). 예전엔 clamp(u_orb,0,1) 로 형태를 접었는데,
+     예비동작에서 orb 가 **음수로 크게 내려가면 clamp 가 0** 이 되어 형태가 통째로 펴진다 —
+     곁으로 가는 도중에 **삼각 불꽃으로 되돌아갔다**(필름으로 확인. 확대를 키울수록 더 오래 보인다).
+     크기는 스프링(u_orb)이 흔들어도 되지만 **형태는 목표를 따라야 한다.** 그래서 접힘은
+     별도 값(u_fold)으로 받는다 — 오버슈트 없이 0↔1 만 오간다. */
+  float fold = max(clamp(u_fold, 0.0, 1.0), tk);
 
   /* ── 형태 — 오행마다 세로/가로 비율. 레퍼런스는 정원이 아니라 **부드러운 타원·물방울**이다 */
   /* 불꽃은 **세로로 길다**. x 를 키우면 가로가 좁아져 세로로 선다(정규화 반경이라 반대다). */
@@ -3412,7 +3418,7 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
       const la = gl.getAttribLocation(pg, "a"); gl.enableVertexAttribArray(la);
       gl.vertexAttribPointer(la, 2, gl.FLOAT, false, 0, 0);
-      const U = {}; ["u_res","u_off","u_t","u_form","u_orb","u_warm","u_speed","u_lum","u_sink","u_grain","u_c1","u_c2","u_c3","u_bg","u_wt","u_bite","u_rayP","u_puffP","u_flkP","u_baseP","u_born","u_touch","u_touchAmt","u_wisp","u_ex","u_trail","u_squash","u_tailK","u_look"]
+      const U = {}; ["u_res","u_off","u_t","u_form","u_orb","u_warm","u_speed","u_lum","u_sink","u_grain","u_c1","u_c2","u_c3","u_bg","u_wt","u_bite","u_rayP","u_puffP","u_flkP","u_baseP","u_born","u_touch","u_touchAmt","u_wisp","u_ex","u_trail","u_squash","u_tailK","u_look","u_fold"]
         .forEach((k) => { U[k] = gl.getUniformLocation(pg, k); });
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const S = Math.round(size * dpr); cv.width = S; cv.height = S;
@@ -3539,7 +3545,7 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
          사람은 2~6초에 한 번, 100~150ms 동안 감는다. 가끔 두 번 연달아 감는 것까지 넣는다
          — 규칙적으로 감으면 그건 또 기계다. */
       let blinkNext = 1400 + Math.random() * 2600, blinkT = -1, blinkDouble = false;
-      let orb = 0, orbV = 0, orbLast = 0, antUntil = 0, last = performance.now();
+      let orb = 0, orbV = 0, orbLast = 0, antUntil = 0, foldV = 0, last = performance.now();
       const T0 = performance.now();
       const draw = () => {
         raf = requestAnimationFrame(draw);
@@ -3561,11 +3567,23 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
            예전 -0.35 는 반경이 4% 커지는 데 그쳤다 — "커졌다"가 안 읽힌다.
            키울 곳이 둘이다: ①예비동작 목표 ②**아래 clamp**. clamp 가 -0.45 라
            목표를 아무리 낮춰도 거기서 잘렸다 — 목표만 고치면 아무 일도 안 일어난다. */
-        if (orbT !== orbLast) { antUntil = now + 190; orbLast = orbT; }
-        const goal = now < antUntil ? (orbT > 0.5 ? -0.85 : 1.45) : orbT;
-        orbV += ((goal - orb) * 190 - orbV * 10.0) * dt;     // K 크고 D 낮게 = 빠르고 말랑
-        orb = Math.max(-0.72, Math.min(1.34, orb + orbV * dt));   // 아래로 넓힌 만큼 '먼저 커지는' 폭이 산다
+        if (orbT !== orbLast) { antUntil = now + 210; orbLast = orbT; }
+        const anti = now < antUntil;
+        const goal = anti ? (orbT > 0.5 ? -1.25 : 1.65) : orbT;
+        /* ⚠ **부는 것과 꺼지는 것의 속도를 가른다**(창업자 2026-08-30: "확대는 빠르게,
+           축소는 비교적 느리게"). 스프링 하나로는 양쪽이 같은 속도라 「뽀잉」이 아니라
+           그냥 튕김이다. 숨을 들이쉬는 건 빠르고 내쉬는 건 길다 — 그게 살아 있는 리듬이다.
+           예비동작(부풀 때) K 를 크게, 돌아올 때 K 를 낮추고 감쇠를 올린다.
+           ⚠ 감쇠까지 올려야 한다 — K 만 낮추면 느려지는 게 아니라 **더 오래 출렁인다.** */
+        const oK = anti ? 220 : 95, oD = anti ? 9.0 : 13.5;
+        orbV += ((goal - orb) * oK - orbV * oD) * dt;
+        /* ⚠ clamp 를 같이 안 넓히면 목표를 낮춰도 **여기서 잘린다**(전에 그 실수를 했다) */
+        orb = Math.max(-1.05, Math.min(1.40, orb + orbV * dt));
         gl.uniform1f(U.u_orb, Math.abs(orb) < 0.0004 ? 0 : orb);
+        /* 접힘은 목표(orbT)를 향해 곧게 간다 — 스프링이 아니라 지수 감쇠라 넘치지 않는다.
+           크기보다 **조금 빨리** 접혀야 부푸는 동안 이미 둥글다. */
+        foldV += (orbT - foldV) * (1 - Math.exp(-dt / 0.075));
+        gl.uniform1f(U.u_fold, foldV);
         /* 응축값을 밖에 노출한다 — 화면을 읽어(readPixels) 재면 프레임당 100ms 넘게 걸려
            **300ms 짜리 전환을 못 본다**(실측). 검사는 이 값을 본다. */
         try { window.__BINARI_ORB = orb; } catch (_) {}
@@ -3637,7 +3655,7 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
           const tS = ((now - T0) / 1000) * SPD;
           const zc = 0.5 + 0.5 * Math.sin(tS * 0.38);
           const ob = Math.min(Math.max(orb, 0), 1);
-          const foldJ = Math.max(ob, gather);
+          const foldJ = Math.max(Math.min(Math.max(foldV,0),1), gather);   // 셰이더의 u_fold 와 같은 값
           const Rj = (0.320 + (0.208 - 0.320) * ob) * (1 + (0.20 - 1) * gather)
                    * (0.90 + (1.12 - 0.90) * zc) * (1 + 0.020 * Math.sin(tS * 0.85));
                     /* ⚠ **c0(반사광 층) 어긋남을 쓰면 안 된다** — 처음에 그걸 코어로 잡았다가

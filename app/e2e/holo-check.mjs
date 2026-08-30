@@ -127,6 +127,13 @@ const cal = await page.evaluate((src) => {
 }, HARM);
 ck("⑩-0 지표가 원과 삼각형을 가른다", cal.circle < 0.03 && cal.tri > 0.10,
    `원 ${cal.circle} / 삼각 ${cal.tri}`);
+const one = () => page.evaluate((src) => {
+  const harm = eval(src);
+  const c = document.querySelector("canvas"), g = c.getContext("webgl");
+  const W = c.width, H = c.height, a = new Uint8Array(4 * W * H);
+  g.readPixels(0, 0, W, H, g.RGBA, g.UNSIGNED_BYTE, a);
+  return harm((x, y) => a[4 * (y * W + x) + 3], W, H);
+}, HARM);
 const rad = async () => {
   const v = [];
   for (let i = 0; i < 5; i++) {
@@ -155,6 +162,19 @@ await page.locator("canvas").first().dblclick();
 await page.waitForSelector("textarea.qbox", { timeout: 12000 }); await page.waitForTimeout(900);
 await page.getByRole("button", { name: "곁" }).click(); await page.waitForTimeout(2400);
 const gyeot3 = await rad();
+/* ⚠ **전이 중에도 둥글어야 한다** — 이 검사는 「다 도착한 뒤」만 쟀다.
+   그런데 확대 폭을 키우자 **부푸는 동안 삼각 불꽃으로 되돌아갔다**(필름으로 확인).
+   원인은 형태 접힘이 `clamp(u_orb,0,1)` 이라, 예비동작에서 orb 가 음수로 내려가면
+   clamp 가 0 이 되어 형태가 통째로 펴진 것이다. **정착 상태만 재면 이 종류는 영영 못 잡는다.** */
+await page.getByRole("button", { name: "판결" }).click(); await page.waitForTimeout(1400);
+const mid = [];
+await page.getByRole("button", { name: "곁" }).click();
+for (let i = 0; i < 4; i++) { await page.waitForTimeout(70); mid.push(await one()); }
+const midMax = Math.max(...mid.map((x) => x.h));
+ck("⑩-b 곁으로 가는 **도중에도** 둥글다", midMax < 0.09,
+   `전이 중 최대 ${midMax.toFixed(3)} (0.09 미만이어야) · ${mid.map((x) => x.h.toFixed(3)).join(", ")}`);
+await page.waitForTimeout(1600);
+
 ck("⑩ 곁이 둥글다 — 삼각(3주기) 성분", gyeot3.h < 0.06,
    `${gyeot3.h} (0.06 미만이어야) · 반경 평균 ${gyeot3.mean} 최소 ${gyeot3.min} 최대 ${gyeot3.max} · orb ${gyeot3.orb} · 캔버스 ${gyeot3.W}`);
 
@@ -196,6 +216,11 @@ await tp.goto(BASE + "/?skin=holo"); await tp.waitForTimeout(1000);
 const store = await page.evaluate(() => JSON.stringify(localStorage));
 await tp.evaluate((j) => { const o = JSON.parse(j); for (const k in o) localStorage.setItem(k, o[k]); }, store);
 await tp.goto(BASE + "/?skin=holo"); await tp.waitForTimeout(2600);
+/* ⚠ **여기도 깨우고 재야 한다.** 깨우기 전에는 장이 흐려 알파 170 을 넘는 픽셀이 거의 없고,
+   그러면 무게중심이 null 이라 이동이 **0.000 으로 찍힌다** — 안 움직인 게 아니라 못 잰 것이다.
+   ⑩ 이 같은 이유로 틀렸던 것과 한 종류다(2026-08-30). */
+await tp.locator("canvas").first().dblclick();
+await tp.waitForSelector("textarea.qbox", { timeout: 12000 }); await tp.waitForTimeout(800);
 const ta = await tp.evaluate(() => getComputedStyle(document.querySelector("canvas")).touchAction);
 ck("⑫-a 캔버스가 제스처를 브라우저에 안 넘긴다", ta === "none", `touch-action: ${ta}`);
 const tbox = await tp.evaluate(() => { const r = document.querySelector("canvas").getBoundingClientRect();
