@@ -218,7 +218,7 @@ export function readMatch({ a, b, lat = 37.5665, lon = 126.978 } = {}) {
     put("자바 · 두 날의 무게", "둘을 합치면 얼마나 무거운가", `${wA.neptu} + ${wB.neptu} = ${sum}`,
       sum >= 28 ? "<b>둘 다 무거운 날에 왔어.</b> 짐이 서로에게 얹혀. 같이 있으면 든든한데 <b>둘 다 지쳤을 때 기댈 데가 없어</b>"
         : sum <= 20 ? "<b>둘 다 가벼운 날에 왔어.</b> 잘 움직이고 잘 웃어. 대신 <b>뿌리내리는 데 남들보다 오래 걸려</b>"
-          : gap >= 5 ? "<b>한쪽이 무겁고 한쪽이 가벼워.</b> 무거운 쪽이 붙잡고 가벼운 쪽이 끌어 — 자바에서는 이 조합을 <b>오래 가는 짝</b>으로 봐"
+          : gap >= 5 ? "<b>한쪽이 무겁고 한쪽이 가벼워.</b> 무거운 쪽이 붙잡고 가벼운 쪽이 끌어 — 역할이 갈려 있어서 잘 굴러가는데, <b>끄는 쪽만 계속 끌면 지쳐.</b> 먼저 움직일 일을 무거운 쪽에 하나 정해 둬"
             : "<b>둘의 무게가 비슷해.</b> 한쪽으로 기울지 않아 — 끌고 가는 사람이 정해져 있지 않다는 뜻이라, <b>누가 결정할지를 그때그때 정해 둬야 해</b>",
       sum >= 28 || sum <= 20 ? 0 : 1,
       `웨톤 신붕 ${wA.day}·${wA.pasaran}(${wA.neptu}) + ${wB.day}·${wB.pasaran}(${wB.neptu}) = ${sum}. 자바가 택일·궁합에 실제로 쓰는 수치라 <b>변환이 없다</b>. 다만 합의 해석은 <b>해석이 섞인다</b>.`);
@@ -228,8 +228,14 @@ export function readMatch({ a, b, lat = 37.5665, lon = 126.978 } = {}) {
     const tA = { tone: A.tone, sign: A.tsign }, tB = { tone: B.tone, sign: B.tsign };
     const same = tA.sign === tB.sign;
     put("마야 · 두 날개", "맡은 일이 같은가", `${tA.sign} ↔ ${tB.sign}`,
-      same ? "<b>같은 날개야.</b> 세상에 온 이유가 같아 — 같은 것에 흥분하고 같은 것에 실망해"
-        : `<b>다른 날개야.</b> 마야는 이걸 나쁘게 안 봐 — <b>둘이 합쳐야 한 벌이 되는</b> 구조로 읽어. 다만 <b>서로가 뭘 하러 왔는지 자꾸 물어야 해</b>`,
+      /* ⚠ **주어가 우리 체계면 빈 말이다 (창업자 지적 2026-08-31).**
+         *"「마야는 이걸 나쁘게 안 봐」 이런 류의 말이 궁합에도 써 있는데, 의미 없는 말이야."*
+         맞다. 그건 **우리 도구의 태도**지 그 두 사람 이야기가 아니다. 유저는 마야의 입장을
+         궁금해하지 않는다. 같은 병이 자바 축의 「자바에서는 오래 가는 짝으로 봐」에도 있었다.
+         고치는 법: **주어를 그 사람들로 바꾸고, 뒤에 할 일을 붙인다.** 기준은 이미 이 파일 안에
+         있다 — 아래 `care` 항목들이 그 수준이다(「크게 싸운 날 그날 안에 말을 붙여」). */
+      same ? "<b>맡은 일이 같아.</b> 같은 것에 신나고 같은 것에 실망해 — 편한 대신 <b>둘 다 같은 걸 놓쳐.</b> 큰 결정은 한 사람이 일부러 반대편에 서서 한 번 따져 봐"
+        : `<b>맡은 일이 서로 달라.</b> 같은 자리를 노리지 않으니 부딪힐 일은 적어 — 대신 <b>상대가 왜 그러는지 짐작하면 자주 틀려.</b> 답답해도 물어보는 쪽이 빨라`,
       same ? 1 : 0, `촐킨 ${tA.tone}·${tA.sign} vs ${tB.tone}·${tB.sign}. 날개 이름은 그대로이고 관계 해석에는 <b>해석이 섞인다</b>.`);
   }
   /* ⑧ 동아시아 소리(납음) — 사주 안의 다른 층 */
@@ -380,6 +386,20 @@ export function readMatch({ a, b, lat = 37.5665, lon = 126.978 } = {}) {
        한 문명 안에서도 축이 갈리면 그것도 볼거리다 — 묶지 말고 그대로 아홉을 편다. */
   const _civ = (x) => x.from.split(" · ")[0];
   const _what = (x) => x.from.split(" · ")[1] || x.from;
+  /* 축이 **무엇을 재는지** 한 낱말로. 머리글의 주어가 되는 값이다.
+     ⚠ **머리글의 주어가 문명 이름이면 그건 우리 사정이다 (창업자 지적 2026-08-31).**
+       *"9개의 하늘이 다른 말을 하고 있어 이게 핵심이야 — 이런 것도 별로 의미 없는 말인 거 같아."*
+       맞다. 「동아시아는 맞는다 하고 인도는 갈린다고 해」는 **우리 도구 아홉 개의 사정**을 말한 것이고,
+       유저가 알고 싶은 건 자기와 그 사람 이야기다. 그래서 **주어를 영역으로 바꾼다** —
+       「성향은 맞는데 감정은 갈려」. 문명 이름은 지우지 않고 **뒤에 붙인다**(칸에도 그대로 남는다).
+       아홉 문명이 각각 다른 걸 본다는 그림은 이 절의 존재 이유라 버리지 않되, **먼저 말할 것이 아니다.**
+     ⚠ 축 이름이 바뀌면 여기도 바꿔야 한다 — 못 찾으면 `_what` 로 물러난다(빈칸을 만들지 않는다). */
+  const DOM = {
+    "여덟 글자": "주고받는 결", "자리의 글자": "같이 사는 결", "여덟 항목": "몸과 살림의 결",
+    "해의 자리": "성향", "달의 자리": "감정", "두 날의 무게": "무게",
+    "두 날개": "맡은 일", "소리": "태어난 해", "두 개의 길": "배우는 것",
+  };
+  const _dom = (x) => DOM[_what(x)] || _what(x);
   const chorus = (() => {
     const cells = rows.map((x) => ({ civ: _civ(x), what: _what(x), ask: x.ask, v: x.v,
       say: x.v >= 1 ? "맞는다" : x.v <= -1 ? "갈린다" : "그 사이" }));
@@ -395,20 +415,32 @@ export function readMatch({ a, b, lat = 37.5665, lon = 126.978 } = {}) {
          · `inner` = 있으면 덧붙이는 한 줄("동아시아는 안에서도 갈려"). 70%라 이게 머리글이 되면 단조로워진다
        문명이 다른 짝이 아예 없으면(측정 0%지만 이론상 가능) up·dn 이 전부 한 문명이라는 뜻이므로
        `inner` 가 반드시 있다 — 그때는 그걸 머리글로 올린다. 폴백이 **도달 가능한 경로를 탄다.** */
-    const splitCiv = up.map(_civ).find((cv) => dn.some((d) => _civ(d) === cv));
-    const innerPair = splitCiv
-      ? [up.find((u) => _civ(u) === splitCiv), dn.find((d) => _civ(d) === splitCiv)]
-      : null;
+    /* 머리글 짝을 **먼저** 고른다 — 덧줄은 그걸 피해서 골라야 같은 말을 두 번 안 한다. */
+    const headPair = up.flatMap((u) => dn.map((d) => [u, d])).find(([u, d]) => _civ(u) !== _civ(d));
+    /* ⚠ **덧줄이 머리글과 같은 영역을 되풀이하고 있었다 — 실측 80.3% (2026-08-31).**
+       예전엔 덧줄이 머리글과 무관하게 「그 문명 안의 첫 up · 첫 dn」을 집었다. 문명 이름이 주어일
+       때는 안 겹쳐 보였는데(문명이 다르니까), 주어를 **영역**으로 바꾸니 「주고받는 결은 맞는데
+       감정은 갈려 / 같은 동아시아 안에서도 주고받는 결은 맞고 같이 사는 결은 갈려」처럼
+       **같은 영역이 두 줄에 다 나왔다.** 같은 말을 두 번 하면 두 번째 줄은 정보가 0이다.
+       그래서 머리글에 쓴 영역을 뺀 짝을 고르고, **없으면 덧줄을 안 붙인다**(억지로 채우지 않는다). */
+    const headDom = headPair ? [_dom(headPair[0]), _dom(headPair[1])] : [];
+    let innerPair = null, splitCiv = null;
+    for (const cv of [...new Set(up.map(_civ))]) {
+      if (!dn.some((d) => _civ(d) === cv)) continue;
+      const u = up.find((x) => _civ(x) === cv && !headDom.includes(_dom(x)));
+      const d = dn.find((x) => _civ(x) === cv && !headDom.includes(_dom(x)));
+      if (u && d) { splitCiv = cv; innerPair = [u, d]; break; }
+    }
     const inner = innerPair
-      ? `<b>${splitCiv}</b>${jong(splitCiv) ? "은" : "는"} 안에서도 갈려 — ${_what(innerPair[0])}${jong(_what(innerPair[0])) ? "은" : "는"} 맞는다 하고 ${_what(innerPair[1])}${jong(_what(innerPair[1])) ? "은" : "는"} 갈린다고 해.`
+      ? `같은 <b>${splitCiv}</b> 안에서도 답이 둘이야 — ${_dom(innerPair[0])}${jong(_dom(innerPair[0])) ? "은" : "는"} 맞고 ${_dom(innerPair[1])}${jong(_dom(innerPair[1])) ? "은" : "는"} 갈려.`
       : null;
     let head;
-    if (!dn.length) head = "아홉이 <b>같은 쪽</b>을 봐. 이런 건 드물어.";
-    else if (!up.length) head = "아홉이 <b>다 어렵다</b>고 해. 이것도 드물어.";
+    /* 세 갈래 전부 **주어가 둘 사이의 영역**이고, 뒤에 할 일이 붙는다. */
+    if (!dn.length) head = "<b>어긋나는 데가 한 군데도 없어.</b> 드문 경우고, 그만큼 <b>서로 다른 의견이 안 나와</b> — 중요한 결정엔 밖의 사람 하나를 껴.";
+    else if (!up.length) head = "<b>맞는 데가 한 군데도 안 나와.</b> 못 지낸다는 뜻이 아니라, <b>맞춰서 되는 게 아니라 정해서 되는 사이</b>라는 뜻이야 — 아래 「조심할 것」이 그 규칙이야.";
     else {
-      const pair = up.flatMap((u) => dn.map((d) => [u, d])).find(([u, d]) => _civ(u) !== _civ(d));
-      head = pair
-        ? `<b>${_civ(pair[0])}</b>${jong(_civ(pair[0])) ? "은" : "는"} 맞는다고 하고, <b>${_civ(pair[1])}</b>${jong(_civ(pair[1])) ? "은" : "는"} 갈린다고 해.`
+      head = headPair
+        ? `<b>${_dom(headPair[0])}</b>${jong(_dom(headPair[0])) ? "은" : "는"} 맞는데 <b>${_dom(headPair[1])}</b>${jong(_dom(headPair[1])) ? "은" : "는"} 갈려 — 재는 자리가 달라서야(${_civ(headPair[0])} ↔ ${_civ(headPair[1])}).`
         : inner;
     }
     return { cells, agree: up.length, differ: dn.length, head, inner: head === inner ? null : inner,
