@@ -1632,6 +1632,11 @@ function TzBeast({ sign, flip = false }) {
   );
 }
 /* 둘이 만나는 장면. 같은 날개면 겹쳐 서고(드묾), 다르면 다가갔다 물러난다. */
+/* 「추엔(원숭이)」에서 **소리 내어 읽는 마지막 낱말**을 꺼낸다 — 조사는 그것에 맞춰야 한다.
+   ⚠ 괄호를 되살렸더니 `josa()` 가 마지막 글자로 `)` 를 보고 「치칸(뱀)는」을 냈다.
+     그리고 괄호 밖으로 맞추면 「마니크(사슴)는」이 되는데, 읽을 때 마지막에 오는 건 사슴이라
+     「사슴은」이 맞다. 그래서 **괄호 안**을 기준으로 삼는다. */
+const tzRead = (s) => { const m = String(s).match(/\(([^)]+)\)/); return m ? m[1] : String(s); };
 function TzMeet({ mine, theirs }) {
   const same = mine === theirs;
   const a = TZ_FACE[mine] || TZ_DEFAULT, b = TZ_FACE[theirs] || TZ_DEFAULT;
@@ -1642,10 +1647,23 @@ function TzMeet({ mine, theirs }) {
         <g className="tzR"><TzBeast sign={theirs} flip /></g>
         <g className="tzspark"><circle cx="0" cy="-2" r="2.2" /><circle cx="-6" cy="-8" r="1.4" /><circle cx="6" cy="-7" r="1.4" /></g>
       </svg>
+      {/* ⚠ **이름에서 괄호를 떼지 마라 (2026-08-31 창업자 제보).**
+          *"마야를 기준으로 동물이 뜨잖아. 추엔이 먼지 마니크가 먼지 모르겠어.
+            그리고 그게 뭘 뜻하는지 모르겠어."*
+          `TZ_SIGNS` 는 「추엔(원숭이)」처럼 **우리말 뜻을 달고** 온다. 그런데 여기만
+          괄호 지우기(replace) 로 그 괄호를 잘라 내서, **한국어 독자가 알아볼 수 있는
+          유일한 부분을 화면에서 지우고 있었다.** 그림은 원숭이·사슴을 그려 놓고 글자는
+          「추엔」·「마니크」만 남으니 둘이 이어지지도 않는다. 궁합 전문은 안 자르고 그대로 쓴다
+          (`match.js` 「마야 · 두 날개」 축의 `${tA.sign} ↔ ${tB.sign}`) — **뒷면만 갈려 있었다.**
+          ⚠ 그리고 제보의 뒷부분이 더 무겁다 — 「그게 뭘 뜻하는지 모르겠어」.
+          기질 두 개를 나란히 놓고 끝내면 **알맹이가 없다**(WHY·SO WHAT·HOW 중 SO WHAT 부재).
+          전문에 이미 결론이 있으므로 **같은 말을 가져다 쓴다** — 두 벌로 갈리면 안 된다. */}
+      <p className="tzhead">마야 · 두 날개 — 맡은 일이 같은가</p>
       <p className="tzsay">
         {same
-          ? <>둘 다 <b>{mine.replace(/\(.*/, "")}</b> — 같은 날개야. 같은 것에 신나.</>
-          : <><b>{mine.replace(/\(.*/, "")}</b>{josa(mine.replace(/\(.*/, ""), "은", "는")} {a.say}, <b>{theirs.replace(/\(.*/, "")}</b>{josa(theirs.replace(/\(.*/, ""), "은", "는")} {b.say}.</>}
+          ? <>둘 다 <b>{mine}</b> — <b>같은 날개</b>야. 세상에 온 이유가 같아, 같은 것에 신나.</>
+          : <><b>{mine}</b>{josa(tzRead(mine), "은", "는")} {a.say}, <b>{theirs}</b>{josa(tzRead(theirs), "은", "는")} {b.say}.{" "}
+              <b>다른 날개</b>야 — 마야는 이걸 나쁘게 안 봐. <b>둘이 합쳐야 한 벌</b>이 돼.</>}
       </p>
     </div>
   );
@@ -8939,7 +8957,25 @@ const CSS = `
 /* 빈 자리 한 칸 — 밝은 판용. ⚠ 명부 행(.gyeotlist li) 자체는 아직 어두운 판 값이라
    홀로에서 회색으로 뜬다(홀로 가독성 감사 §② 「반투명 판」 항목). 그건 감사가 잡은 별건이고,
    **새로 넣는 칸까지 그 더미에 얹지는 않는다.** 감사대로 행을 뒤집으면 이 두 줄은 그대로 맞는다. */
-.stage.holo .gyeotlist li.gyempty{border-color:#b3ac9a}
+/* ── 곁 명부 행 — 밝은 판 (2026-08-31) ─────────────────────────────────────
+   홀로 가독성 감사 §④ 3단 「반투명 판 뒤집기」의 곁 항목. 감사가 처방한 값 그대로다.
+   ⚠ **먼저 하나를 잘못 고쳤다가 되돌린 자리다.** 뒷면 꼬리표(.tzhead)에만 밝은 판용
+     글자색을 줬는데, 판이 아직 어두운 반투명이라 **오버라이드를 건 쪽이 안 건 쪽보다
+     나빠졌다**(2.70). 감사가 이미 같은 사고를 둘 기록해 놨다(.formsteps li 4.86→1.96 ·
+     .verbadge 5.14→2.16). **글자만 밝은 판용으로 바꾸면 안 되고 판을 같이 뒤집어야 한다.**
+   ⚠ li.called 의 opacity .55 는 밝은 판에서 더 옅어져 층 구분이 약해진다 — .62 로 올린다.
+     (층은 밝기로만 말한다는 규칙은 그대로다. 값만 판에 맞춘다.) */
+.stage.holo .gyeotlist li{background:rgba(255,253,246,.78);border-color:#c2bcaa}
+.stage.holo .gyeotlist li.called{opacity:.62}
+.stage.holo .galias{color:#241f14}
+.stage.holo .grel{color:#5d5544}
+.stage.holo .gflip,.stage.holo .gsee{color:#5d5544;border-color:#b3ac9a}
+.stage.holo .gx{color:#7a5a52;border-color:#c2a8a2}
+.stage.holo .gback{border-top-color:#c2bcaa}
+.stage.holo .tzhead{color:#5d5544}
+.stage.holo .tzsay{color:#3c3527}
+.stage.holo .tzsay b{color:#7a4a12}          /* 강조 금색은 미색 판에서 안 읽힌다 — 진한 금으로 */
+.stage.holo .gyeotlist li.gyempty{border-color:#b3ac9a;background:none}
 .stage.holo .gyaddbtn{color:#5d5544}
 .stage.holo .gyaddbtn:hover,.stage.holo .gyaddbtn:focus-visible{color:#241f14}
 .stage.holo .gyplus{border-color:#b3ac9a}
@@ -9037,6 +9073,7 @@ const CSS = `
 .stage.holo .chk em,.stage.holo .unit,.stage.holo .mtag,
 .stage.holo .rvbig span,.stage.holo .rvlunar{color:#5d5544}
 .stage.holo .wakehint{color:#5d5544}
+
 .stage.holo .brand-mark{color:#5d5544}
 .stage.holo .verbadge{color:#5d5544}                         /* 9px 라 판 아래에서도 4.5 를 넘겨야 한다 */
 .stage.holo .streak{color:#7a4a12}
@@ -9245,6 +9282,8 @@ const CSS = `
 .tzmeet.same .tzR{animation-name:tzRsame}
 @keyframes tzLsame{0%,8%{transform:translateX(-40px)}46%,74%{transform:translateX(-7px)}92%,100%{transform:translateX(-40px)}}
 @keyframes tzRsame{0%,8%{transform:translateX(40px)}46%,74%{transform:translateX(7px)}92%,100%{transform:translateX(40px)}}
+/* 무슨 축인지 먼저 말한다 — 그림만 보고는 이게 마야인지 알 길이 없었다(창업자 제보 2026-08-31) */
+.tzhead{font-family:sans-serif;font-size:10.5px;letter-spacing:.06em;color:#8f84a8;margin:2px 0 0}
 .tzsay{font-family:sans-serif;font-size:12px;color:#cfc4e2;line-height:1.7;margin:4px 0 0;word-break:keep-all}
 .tzsay b{color:#ffe9ad}
 @media (prefers-reduced-motion:reduce){
