@@ -3279,7 +3279,9 @@ void main(){
   /* ⚠ 곁에서는 접는다. 응축된 구슬에서 앞면을 반경의 1/4 씩 밀면 **구슬이 안 둥글어진다**
      (실측 3주기 0.061, 반경 42~66px). 형태 변조를 곁에서 접는 다른 항들과 같은 처리다 —
      곁의 회전 단서는 약해지지만, 곁의 수호신은 「돌아보는 머리」가 아니라 「응축된 구슬」이다. */
-  vec2 fwd = lk * Rs * 0.34 * (1.0 - fold*0.45);
+  /* ⚠ 곁에서 **더 접는다.** 곁의 구슬은 작아서 앞면을 조금만 밀어도 임계 등고선이
+     한쪽으로 무너진다 — 느린 기기(실측 10fps)에서 특히 그렇다. 판결은 몸이 커서 여유가 있다. */
+  vec2 fwd = lk * Rs * 0.34 * (1.0 - fold*0.82);
   /* ⚠ **누르면 심지도 같이 밀려야 한다**(창업자 2026-08-30: "몸의 심지(코어)가 얼굴의
      중심으로 느껴지는데 인터랙션할 때 이 부분은 변동 없이 가운데를 유지하니 더 따로 논다").
      맞다 — 얼굴은 밀리는데 심지가 제자리면 **얼굴이 몸에서 떨어져 나간 것**으로 보인다.
@@ -3419,7 +3421,7 @@ void main(){
        안 둥글어졌다(3주기 성분 0.001 → 0.128). clamp 는 형태를 만든다.
      정규화하면 값이 ±|lk| 안에 갇혀 자를 필요가 없고, 경계도 안 생긴다. */
   float turn = dot(normalize(e + 1e-4), lk);
-  float shade = 1.0 + turn * 0.30 * (1.0 - fold);
+  float shade = 1.0;
   gl_FragColor = vec4(outc, clamp(sum*u_lum*live*vig*bornK*touchK*shade*volA, 0.0, 1.0));
 }`;
 /* 밝은 바탕용 보정 — **원색(EL_COLOR)은 안 건드린다.** 금의 c2(#e8f2ff)는 거의 흰색이라
@@ -3447,7 +3449,7 @@ const HOLO_BG = [0.851, 0.835, 0.792];   // 미색 회색 #d9d5ca
    달빛 은청으로 둔다 — 임의의 색이 아니라 이 앱이 이미 쓰는 말에서 온 색이다. */
 const HOLO_MOON = ["#46557f", "#93a6d0", "#b7a9d6"];
 
-function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFail }) {
+function GuardianField({ saju, mood, orbRef, reactRef, scatter, gyeotRef, popRef, size = 340, onFail }) {
   const ref = useRef(null);
   const faceRef = useRef(null);
   useEffect(() => {
@@ -3604,7 +3606,8 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
       const T0 = performance.now();
       const draw = () => {
         raf = requestAnimationFrame(draw);
-        const now = performance.now(), dt = Math.min(0.05, (now - last) / 1000); last = now;
+        const now = performance.now(), dtRaw = (now - last) / 1000;
+        const dt = Math.min(0.05, dtRaw); last = now;
         const orbT = orbRef && orbRef.current ? 1 : 0;
         /* ── 예비동작 (창업자 2026-08-28: "작아지면서 뽀잉이 아니고 **커졌다가** 작아지면서
            뽀잉으로 해야 아 변했구나!라는 게 확실히 느껴질 거 같아") ──────────────────
@@ -3631,9 +3634,17 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
            예비동작(부풀 때) K 를 크게, 돌아올 때 K 를 낮추고 감쇠를 올린다.
            ⚠ 감쇠까지 올려야 한다 — K 만 낮추면 느려지는 게 아니라 **더 오래 출렁인다.** */
         const oK = anti ? 220 : 95, oD = anti ? 9.0 : 13.5;
-        orbV += ((goal - orb) * oK - orbV * oD) * dt;
+        /* ⚠ **스프링을 프레임 통째로 적분하면 느린 기기에서 터진다.** K=220 에 dt=0.05 를
+           곱하면 이득이 11 이라 발산한다 — 컨테이너가 느려진 뒤 실제로 그랬다(오라가 찌그러져
+           검사 ⑩ 이 0.002 → 0.11). 느린 폰에서도 같은 일이 난다.
+           **작은 걸음으로 나눠 적분한다** — 프레임이 몇 fps 든 결과가 같다. */
+        for (let rem = dt; rem > 1e-6; ) {
+          const h = Math.min(1 / 120, rem); rem -= h;
+          orbV += ((goal - orb) * oK - orbV * oD) * h;
+          orb = Math.max(-1.05, Math.min(1.40, orb + orbV * h));
+        }
         /* ⚠ clamp 를 같이 안 넓히면 목표를 낮춰도 **여기서 잘린다**(전에 그 실수를 했다) */
-        orb = Math.max(-1.05, Math.min(1.40, orb + orbV * dt));
+
         gl.uniform1f(U.u_orb, Math.abs(orb) < 0.0004 ? 0 : orb);
         /* 접힘은 목표(orbT)를 향해 곧게 간다 — 스프링이 아니라 지수 감쇠라 넘치지 않는다.
            크기보다 **조금 빨리** 접혀야 부푸는 동안 이미 둥글다. */
@@ -3674,8 +3685,13 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
         /* ⚠ K=34·D=4.6 은 **굼떴다**(창업자 재확인). 손끝은 즉각 반응해야 하고,
            말랑함은 감쇠를 낮춰서 얻는다 — 세기를 낮춰서가 아니다. */
         const K = held ? 170 : 30, D = held ? 11.5 : 5.8;
-        wisp.vx += ((tx - wisp.x) * K - wisp.vx * D) * dt;
-        wisp.vy += ((ty - wisp.y) * K - wisp.vy * D) * dt;
+        /* 위습도 같은 이유로 나눠 적분한다(K 가 170 까지 간다) */
+        for (let rem = dt; rem > 1e-6; ) {
+          const h = Math.min(1 / 120, rem); rem -= h;
+          wisp.vx += ((tx - wisp.x) * K - wisp.vx * D) * h;
+          wisp.vy += ((ty - wisp.y) * K - wisp.vy * D) * h;
+          wisp.x += wisp.vx * h; wisp.y += wisp.vy * h;
+        }
         /* ── 밀어내기 (바깥을 누르고 있는 동안) ──────────────────────────
            손끝에서 **멀어지는 방향**으로 계속 민다. 가까울수록 세게 — 그래야
            손가락이 몸통을 밀고 지나가는 것으로 읽힌다(먼 데서도 같은 힘이면 순간이동이다). */
@@ -3691,7 +3707,6 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
      맴돌기는 "붙은 뒤의 애교"지 접근을 막는 힘이 아니다. 0.28 안쪽에서만, 약하게. */
         if (held && dd < 0.28) { const s2 = (1 - dd / 0.28) * 3.0 * (1 + wisp.ex * 0.5);
           wisp.vx += -ddy * s2 * dt; wisp.vy += ddx * s2 * dt; }
-        wisp.x += wisp.vx * dt; wisp.y += wisp.vy * dt;
         wisp.ex *= Math.exp(-dt / 2.6);                      // 들뜸은 천천히 식는다
 
         /* 꼬리 — 70ms 마다 지금 자리를 기록한다. 위습이 지나간 길이 남는다. */
@@ -3739,11 +3754,15 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
           /* ⚠ **속도 추정은 폭발한다.** dt 가 한 프레임만 작게 튀어도 (Δ/dt) 가 치솟고,
              저역통과로도 다 안 눌린다 — 실측에서 고개가 **138° 까지 돌았다**(yaw 2.41rad).
              원인은 물리가 아니라 나눗셈이다. 순간값부터 잘라 넣는다. */
-          if (look.had && dt > 1e-4) {
-            const k = 1 - Math.exp(-dt / 0.22);
+          /* ⚠ **`dt` 로 나누면 안 된다.** dt 는 0.05 로 잘린 값인데 실제 프레임이 0.10 이면
+             떠다닌 거리는 0.10 어치인데 0.05 로 나누게 돼 **속도가 두 배로 뻥튀기된다.**
+             그 부푼 속도가 고개를 홱 돌리고, 고개가 안쪽 층을 던져 **오라가 찌그러진다**
+             (느린 기기에서 검사 ⑩ 이 0.002 → 0.07). 속도는 **실제 경과 시간**으로 잰다. */
+          if (look.had && dtRaw > 1e-4) {
+            const k = 1 - Math.exp(-dtRaw / 0.22);
             const cl = (v) => Math.max(-0.16, Math.min(0.16, v));
-            look.x += (cl((baseX - look.px) / dt) - look.x) * k;
-            look.y += (cl((baseY - look.py) / dt) - look.y) * k;
+            look.x += (cl((baseX - look.px) / dtRaw) - look.x) * k;
+            look.y += (cl((baseY - look.py) / dtRaw) - look.y) * k;
           }
           look.px = baseX; look.py = baseY; look.had = true;
         }
@@ -3765,7 +3784,7 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
           /* 얼굴은 **앞면(c0)** 을 따라간다 — 셰이더의 `fwd` 와 같은 식이어야 한다 */
           const fv = Math.min(Math.max(foldV, 0), 1);
           fvFace = fv;
-          const fwd = (0.320 + (0.208 - 0.320) * fv) * (1 + (0.20 - 1) * gather) * 0.34 * (1 - fv * 0.45) / 2.35;   // 셰이더의 fwd 와 같은 식   // foldJ 는 위 블록 지역변수라 여기선 안 보인다
+          const fwd = (0.320 + (0.208 - 0.320) * fv) * (1 + (0.20 - 1) * gather) * 0.34 * (1 - fv * 0.82) / 2.35;   // 셰이더의 fwd 와 같은 식   // foldJ 는 위 블록 지역변수라 여기선 안 보인다
           core.x += gaze.yaw * fwd;
           core.y += gaze.pitch * fwd;
         }
@@ -3775,17 +3794,77 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
         try { window.__BINARI_GAZE = gaze.yaw; } catch (_) {}
         gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLES, 0, 3);
 
+        /* 위성 — 얼굴보다 먼저 그려 뒤에 깔린다 */
+        const drawSats = (g2, S2) => {
+          const gy = (gyeotRef && gyeotRef.current) || [];
+          try { window.__BINARI_SAT = gy.length; } catch (_) {}
+          const ob = Math.min(Math.max(orb, 0), 1);
+          if (!gy.length || ob < 0.02) return;
+          const tS = ((now - T0) / 1000) * SPD;
+          const cxp = core.x * S2, cyp = core.y * S2;
+          const R1 = S2 * (coreR / 2.35);
+          g2.save();
+          gy.slice(0, 8).forEach((g) => {
+            const opp = g.rel < -0.5;                 // 극 — 반대로 돌고 궤도면이 선다
+            const dir = opp ? -1 : 1;
+            const ang = (g.ang || 0) + dir * tS * 0.23;
+            const rad = R1 * (g.tier ? 2.05 : 2.48);  // 앞줄이 안쪽, 부른 곁은 바깥
+            const ex = opp ? 0.60 : 1.0, ey = opp ? 1.0 : 0.60;
+            /* 깊이 — 아래쪽(sin>0)이 앞이다. 뒤로 갈수록 흐리고 작아져 **몸 뒤로 지나간다** */
+            const dep = 0.5 + 0.5 * Math.sin(ang) * (opp ? 0.35 : 1);
+            const c = g.col || [0.8, 0.78, 0.86];
+            /* 색장은 미색이다. 오행색을 그대로 찍으면 튄다 — 따뜻한 흰쪽으로 섞어 재질을 맞춘다 */
+            /* ⚠ **위성 색이 어두운 판용 밝은 변종이다**(오행색의 [1] — 목이면 `#a8f0c0` 파스텔).
+               입자 렌더러는 검은 판에 **가산 합성**이라 그게 빛나지만, 홀로는 미색 판이라
+               밝은 색은 배경과 못 싸운다 — 그려지고도 안 보였다(실기 확인).
+               밝은 판에서 「보인다」는 밝은 게 아니라 **짙은 것**이다. 파란 심지가 잘 보이는 이유가 그것이다.
+               그래서 색을 **깊은 쪽으로 뒤집는다**. 가장자리 없는 빛덩이라 재질은 그대로다. */
+            const deep = (v) => Math.round(255 * Math.max(0, Math.min(1, v * 0.42 + 0.05)));
+            const col = deep(c[0]) + "," + deep(c[1]) + "," + deep(c[2]);
+            const base = (g.tier ? 1.0 : 0.62) * ob * (0.42 + 0.58 * dep);
+            /* 꼬리 — 지나온 자리에 점점 옅고 작은 덩이를 남긴다. 색장의 번짐과 같은 결. */
+            for (let t = 4; t >= 0; t--) {
+              const a2 = ang - dir * t * (g.tier ? 0.052 : 0.085);
+              const px = cxp + Math.cos(a2) * rad * ex;
+              const py = cyp + Math.sin(a2) * rad * ey;
+              const k = (1 - t / 5.2);
+              const rr = R1 * (0.19 + 0.08 * dep) * k * (g.tier ? 1 : 0.84);
+              const al = base * k * k * (t === 0 ? 1 : 0.55);
+              if (al < 0.004 || rr < 0.4) continue;
+              const grd = g2.createRadialGradient(px, py, 0, px, py, rr);
+              grd.addColorStop(0, "rgba(" + col + "," + al.toFixed(3) + ")");
+              grd.addColorStop(0.45, "rgba(" + col + "," + (al * 0.42).toFixed(3) + ")");
+              grd.addColorStop(1, "rgba(" + col + ",0)");
+              g2.fillStyle = grd; g2.beginPath(); g2.arc(px, py, rr, 0, 7); g2.fill();
+            }
+          });
+          g2.restore();
+        };
+
         /* ── 얼굴 (?face=a|b|c|d) ─────────────────────────────────────────
            **오라를 따라다녀야 한다.** 위습은 드리프트로 떠다니고 손끝으로 옮겨가며
            응축하면 작아지므로, 얼굴이 캔버스 한가운데 고정되면 곧바로 어긋나 보인다.
            셰이더가 쓰는 좌표를 여기서 같은 식으로 다시 계산해 얹는다.
            ⚠ 셰이더의 `p = (uv - drift)*2.35` 와 뒤집힌 관계다 — 화면 y 는 아래로 증가한다. */
-        if (FACE && faceRef.current) {
+        /* ⚠ **할 일이 없으면 2D 층을 아예 건드리지 않는다.** 얼굴도 위성도 없는데 매 프레임
+           590² 캔버스를 지우면 프레임이 늘어지고, 그 늘어진 dt 가 스프링·시선 추정으로 되먹임돼
+           **오라가 찌그러진다**(검사 ⑩ 이 0.002 → 0.11 로 튀었다). */
+        const wantOverlay = FACE || ((gyeotRef && gyeotRef.current && gyeotRef.current.length) > 0);
+        if (wantOverlay && faceRef.current) {
           const fx = faceRef.current;
           if (fx.width !== S) { fx.width = S; fx.height = S; }
           const g2 = fx.getContext("2d");
           g2.clearRect(0, 0, S, S);
           const tt = ((now - T0) / 1000) * SPD;
+          /* ── 위성 (곁) ────────────────────────────────────────────────────
+             입자 렌더러는 점 수천 개 중 일부를 궤도로 떼어 위성을 만든다. 색장에는
+             **뗄 입자가 없어서** 옮겨오지 못했고, 그래서 홀로에서는 곁에 사람을 넣어도
+             아무것도 안 돌았다 — 화면은 「같이 돌고 있어」라고 말하는데(창업자 제보 2026-08-31).
+             여기서 2D 층으로 그린다. ⚠ **또렷한 점으로 찍으면 색장 위에서 이물질로 보인다.**
+             재질을 맞춘다 — 가장자리 없는 빛덩이 + 꼬리, 궤도 뒤쪽은 흐려져 몸 뒤로 지나간다.
+             자리·방향·층은 입자판과 **같은 규칙**이다(각도 seat · 극이면 반대로 · 앞줄이 안쪽). */
+          drawSats(g2, S);
+          if (!FACE) return;                 // 얼굴은 ?face= 일 때만. 위성은 항상.
           const P = FACE_PRESETS[FACE];
           /* ── 얼굴이 두리번거린다 ─────────────────────────────────────
              창업자: "눈 높이와 좌우 위치는 시선과 얼굴의 방향을 나타낼 수 있을 거 같아서
@@ -3907,8 +3986,9 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
     style={{ width: size, height: size, touchAction: "none", cursor: "pointer",
              userSelect: "none", WebkitUserSelect: "none",
              WebkitTouchCallout: "none", WebkitTapHighlightColor: "transparent" }} />;
-  if (!FACE) return cv;
-  /* 얼굴은 **별도 2D 캔버스**로 겹친다 — 셰이더에 넣으면 선이 뭉개지고, 오라를 건드리게 된다.
+  /* ⚠ 이 2D 층은 **얼굴이 없어도 붙인다** — 곁 위성이 여기 그려지기 때문이다.
+     예전엔 `?face=` 일 때만 붙여서, 얼굴을 안 켜면 위성도 같이 사라졌다.
+     얼굴은 **별도 2D 캔버스**로 겹친다 — 셰이더에 넣으면 선이 뭉개지고, 오라를 건드리게 된다.
      포인터는 아래 오라 캔버스가 받아야 하므로 `pointerEvents:none`. */
   return (<span style={{ position: "relative", display: "block", width: size, height: size }}>
     {cv}
@@ -4505,7 +4585,8 @@ function Guardian(props) {
   if (SKIN === "holo" && !holoDead) {
     if (typeof window !== "undefined") window.__BINARI_R = "field";
     return <GuardianField saju={props.saju} mood={props.mood} orbRef={props.orbRef}
-      reactRef={props.reactRef} scatter={props.scatter} size={props.size} onFail={() => setHoloDead(true)} />;
+      reactRef={props.reactRef} scatter={props.scatter} size={props.size}
+      gyeotRef={props.gyeotRef} popRef={props.popRef} onFail={() => setHoloDead(true)} />;
   }
   if (typeof window !== "undefined") window.__BINARI_R = mode;   // 버전 배지용 — 실제 렌더러(sim/gl/2d) 노출
   if (mode === "sim") return <GuardianCanvasSim {...props} onFail={() => setMode("gl")} />;
