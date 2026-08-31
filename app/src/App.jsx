@@ -2989,10 +2989,28 @@ const guardianSize = (vp) => (SKIN === "holo"
    ⚠ `?msr=1` 로 열린다. 검사(report-check 122항)가 그 문으로 들어가므로
      **숨긴 동안에도 회귀가 계속 잡힌다.** 안 그러면 122항이 통째로 잠든다. */
 const MSR_FREE = (() => { try { return /[?&]msr=1(&|$)/.test(window.location.search); } catch (_) { return false; } })();
-const SKIN = (() => { try { return /[?&]skin=holo(&|$)/.test(window.location.search) ? "holo" : ""; } catch (_) { return ""; } })();
-/* 얼굴 A/B — `?face=a|b|c|d`. 없으면 얼굴을 안 그린다(지금까지의 화면 그대로).
-   창업자가 "상위 4개를 앱에 얹어서 평가하겠다"고 해서 **끼웠다 뺐다 되게** 둔다. */
-const FACE = (() => { try { const m = /[?&]face=([abcd])(&|$)/.exec(window.location.search); return m ? m[1] : ""; } catch (_) { return ""; } })();
+/* ── 어느 수호신을 쓸 것인가 (2026-08-31 창업자 결정) ───────────────────────
+   *"얼굴 있는 버전에 대한 내부 평이 좋아 다른 버전은 폐기하고 나중에 언제든지 되살릴 수
+   있도록 저장해놔 (이전에 까만 버전 살려놔 하면 살릴수있도록)"*
+   → **얼굴 달린 홀로가 기본**이 된다. 까만 입자 판은 지우지 않고 **깃발로 되살린다.**
+   ⚠ 코드를 지우지 않는 이유: 되살릴 수 있어야 한다는 게 지시의 핵심이다.
+      입자 렌더러(GuardianCanvasGL/Sim/2d)와 그 셰이더는 **그대로 둔다** —
+      홀로가 WebGL 에 실패했을 때의 폴백이기도 하다(onFail → holoDead).
+   되살리는 법:
+     `?skin=dark`  — 까만 입자 판(예전 기본)
+     `?face=off`   — 홀로는 쓰되 얼굴만 끈다
+     `?face=b|c|d` — 다른 얼굴 프리셋 */
+const SKIN = (() => { try {
+  const q = window.location.search;
+  if (/[?&]skin=dark(&|$)/.test(q)) return "";        // 까만 판을 되살린다
+  return "holo";                                      // 기본 = 홀로
+} catch (_) { return "holo"; } })();
+const FACE = (() => { try {
+  const q = window.location.search;
+  if (/[?&]face=off(&|$)/.test(q)) return "";         // 얼굴만 끈다
+  const m = /[?&]face=([abcd])(&|$)/.exec(q);
+  return m ? m[1] : (SKIN === "holo" ? "a" : "");     // 기본 = A
+} catch (_) { return SKIN === "holo" ? "a" : ""; } })();
 
 /* ── 오늘의 상태 — **두 체계를 섞는다** (2026-08-28 창업자 결정) ──────────────
    **왜 섞나.** 전엔 사주 하나(일진 십성)만 썼는데, 십성은 **일간 10개**만 보므로
@@ -3830,34 +3848,53 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, gyeotRef, popRef
             const opp = g.rel < -0.5;                 // 극 — 반대로 돌고 궤도면이 선다
             const dir = opp ? -1 : 1;
             const ang = (g.ang || 0) + dir * tS * 0.23;
-            const rad = R1 * (g.tier ? 2.05 : 2.48);  // 앞줄이 안쪽, 부른 곁은 바깥
+            /* ⚠ 2.05 는 **오라 바깥 맨바탕**이라 외톨이 점으로 보였다(실기 확인).
+               빛의 가장자리를 타게 안으로 당긴다 — 몸을 도는 것으로 읽힌다. */
+            const rad = R1 * (g.tier ? 1.58 : 1.88);
             const ex = opp ? 0.60 : 1.0, ey = opp ? 1.0 : 0.60;
             /* 깊이 — 아래쪽(sin>0)이 앞이다. 뒤로 갈수록 흐리고 작아져 **몸 뒤로 지나간다** */
             const dep = 0.5 + 0.5 * Math.sin(ang) * (opp ? 0.35 : 1);
             const c = g.col || [0.8, 0.78, 0.86];
             /* 색장은 미색이다. 오행색을 그대로 찍으면 튄다 — 따뜻한 흰쪽으로 섞어 재질을 맞춘다 */
-            /* ⚠ **위성 색이 어두운 판용 밝은 변종이다**(오행색의 [1] — 목이면 `#a8f0c0` 파스텔).
-               입자 렌더러는 검은 판에 **가산 합성**이라 그게 빛나지만, 홀로는 미색 판이라
-               밝은 색은 배경과 못 싸운다 — 그려지고도 안 보였다(실기 확인).
-               밝은 판에서 「보인다」는 밝은 게 아니라 **짙은 것**이다. 파란 심지가 잘 보이는 이유가 그것이다.
-               그래서 색을 **깊은 쪽으로 뒤집는다**. 가장자리 없는 빛덩이라 재질은 그대로다. */
-            const deep = (v) => Math.round(255 * Math.max(0, Math.min(1, v * 0.42 + 0.05)));
-            const col = deep(c[0]) + "," + deep(c[1]) + "," + deep(c[2]);
-            const base = (g.tier ? 1.0 : 0.62) * ob * (0.42 + 0.58 * dep);
+            /* ⚠ **「짙게 하면 보인다」는 시각적으로 틀렸다**(창업자 2026-08-31: "곰팡이가
+               떠다니는 거 같아 색상이 이상해 안이뻐"). 맞다 — 밝은 판 위의 **어두운 점**은
+               빛이 아니라 **얼룩**으로 읽힌다. 보이긴 하는데 더러워 보인다.
+               빛으로 읽히려면 **가운데가 희어야** 한다 — 반딧불이가 그렇다.
+               그래서 두 겹으로 그린다: 바깥은 오행색 후광, 안은 흰 심. 색은 정체성만 맡고
+               「빛이다」는 흰 심이 말한다. 어둡게 만들지 않는다. */
+            /* ⚠ 어두우면 얼룩, 너무 밝으면 오라의 반짝임과 구분이 안 된다(둘 다 실기에서 겪었다).
+               가운데는 희게(빛이다) 두되 **후광은 오행색을 진하게** — 색으로 구분되고
+               밝기로는 빛으로 읽힌다. 채도를 올리되 명도는 안 낮춘다. */
+            const mx = Math.max(c[0], c[1], c[2]) || 1;
+            const sat = (v) => Math.round(255 * Math.max(0, Math.min(1, 0.18 + 0.82 * (v / mx) * 0.92)));
+            const col = sat(c[0]) + "," + sat(c[1]) + "," + sat(c[2]);
+            const base = (g.tier ? 1.0 : 0.66) * ob * (0.50 + 0.50 * dep);
             /* 꼬리 — 지나온 자리에 점점 옅고 작은 덩이를 남긴다. 색장의 번짐과 같은 결. */
-            for (let t = 4; t >= 0; t--) {
-              const a2 = ang - dir * t * (g.tier ? 0.052 : 0.085);
+            /* ⚠ 꼬리를 길게 끌면 그것도 얼룩이 된다 — 셋으로 줄이고 아주 옅게만 남긴다 */
+            for (let t = 2; t >= 0; t--) {
+              const a2 = ang - dir * t * (g.tier ? 0.055 : 0.085);
               const px = cxp + Math.cos(a2) * rad * ex;
               const py = cyp + Math.sin(a2) * rad * ey;
-              const k = (1 - t / 5.2);
-              const rr = R1 * (0.19 + 0.08 * dep) * k * (g.tier ? 1 : 0.84);
-              const al = base * k * k * (t === 0 ? 1 : 0.55);
+              const k = (1 - t / 3.4);
+              const rr = R1 * (0.34 + 0.14 * dep) * k * (g.tier ? 1 : 0.86);
+              const al = base * k * k * (t === 0 ? 1 : 0.34);
               if (al < 0.004 || rr < 0.4) continue;
+              /* 바깥 — 오행색 후광 */
               const grd = g2.createRadialGradient(px, py, 0, px, py, rr);
-              grd.addColorStop(0, "rgba(" + col + "," + al.toFixed(3) + ")");
-              grd.addColorStop(0.45, "rgba(" + col + "," + (al * 0.42).toFixed(3) + ")");
+              grd.addColorStop(0, "rgba(" + col + "," + (al * 0.85).toFixed(3) + ")");
+              grd.addColorStop(0.40, "rgba(" + col + "," + (al * 0.40).toFixed(3) + ")");
               grd.addColorStop(1, "rgba(" + col + ",0)");
               g2.fillStyle = grd; g2.beginPath(); g2.arc(px, py, rr, 0, 7); g2.fill();
+              /* 안 — 흰 심. **이게 「빛이다」를 말한다.** 앞쪽(dep)일수록 또렷하다 */
+              if (t === 0) {
+                const cr = rr * 0.30;
+                const gw = g2.createRadialGradient(px, py, 0, px, py, cr);
+                const wa = Math.min(0.95, base * (0.55 + 0.60 * dep));
+                gw.addColorStop(0, "rgba(255,253,246," + wa.toFixed(3) + ")");
+                gw.addColorStop(0.55, "rgba(255,252,240," + (wa * 0.45).toFixed(3) + ")");
+                gw.addColorStop(1, "rgba(255,252,240,0)");
+                g2.fillStyle = gw; g2.beginPath(); g2.arc(px, py, cr, 0, 7); g2.fill();
+              }
             }
           });
           g2.restore();
@@ -3965,8 +4002,11 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, gyeotRef, popRef
                  여기 상수는 오행 폭으로 나누기 **전** 값이므로 기본 오행(금 1.08) 기준으로
                  되돌려 잡는다 — 0.56 × 1.08 = 0.605. 금에서 정확히 0.56 이 되고,
                  좁은 오행은 그만큼 더 좁아진다(화 0.48 · 목 0.51). */
-              gapR: (0.605 / AGX) * k * (1 - 0.42 * press),
-              mouthR: 0.36 * k * (1 - 0.45 * press),
+              /* ⚠ 몰림이 **너무 심했다**(창업자 2026-08-31). 0.42/0.45 는 눌리는 순간
+                 이목구비가 한 점으로 모여 얼굴이 뭉개졌다. 절반 아래로 내린다 —
+                 「눌렸다」는 남기고 「뭉개졌다」는 없앤다. */
+              gapR: (0.605 / AGX) * k * (1 - 0.17 * press),
+              mouthR: 0.36 * k * (1 - 0.18 * press),
               cy: P.cy, gap: 0.56, eyeSz: 0.155 * k, eyeScale: hurt ? 1.9 : 1,   // 보드에서 고른 값
               mSz: 0.30 * k * (hurt ? 1.35 : 1), mCy: P.mCy,
               yaw, pitch, roll, blink: hurt ? 0 : blink,
