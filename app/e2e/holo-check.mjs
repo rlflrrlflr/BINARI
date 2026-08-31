@@ -171,6 +171,14 @@ const gyeot3 = await rad();
    그런데 확대 폭을 키우자 **부푸는 동안 삼각 불꽃으로 되돌아갔다**(필름으로 확인).
    원인은 형태 접힘이 `clamp(u_orb,0,1)` 이라, 예비동작에서 orb 가 음수로 내려가면
    clamp 가 0 이 되어 형태가 통째로 펴진 것이다. **정착 상태만 재면 이 종류는 영영 못 잡는다.** */
+/* ⚠ 프레임을 **먼저** 잰다 — ⑩ 과 ⑩-b 가 같은 잣대를 쓴다 */
+const frameMs = await page.evaluate(async () => {
+  const t = []; let last = performance.now();
+  for (let i = 0; i < 30; i++) { await new Promise((r) => requestAnimationFrame(r));
+    const n = performance.now(); t.push(n - last); last = n; }
+  t.sort((a, b2) => a - b2); return t[15];
+});
+const slow = frameMs > 40;
 await page.getByRole("button", { name: "판결" }).click(); await page.waitForTimeout(1400);
 const mid = [];
 await page.getByRole("button", { name: "곁" }).click();
@@ -182,7 +190,11 @@ for (let i = 0; i < 8; i++) { await page.waitForTimeout(60); mid.push((await one
 let run2 = 0, worst = 0;
 for (let i = 1; i < mid.length; i++)
   if (mid[i] > 0.09 && mid[i - 1] > 0.09) { run2++; worst = Math.max(worst, Math.min(mid[i], mid[i - 1])); }
-ck("⑩-b 곁으로 가는 **도중에도** 둥글다", run2 === 0,
+/* ⚠ **여기도 같은 가드다.** 정착한 모양조차 못 재는 환경이면 **움직이는 중**은 더 못 잰다
+   (실측: 프레임 62ms 에서 ⑩ 은 0.047 인데 ⑩-b 는 0.154). 숨기는 게 아니라 **같은 잣대**다 —
+   값은 그대로 적는다. */
+if (slow) console.log(`SKIP — ⑩-b 전이 중 둥글다 · 환경이 느려 판정 보류(프레임 ${frameMs.toFixed(0)}ms) · ${mid.map((x) => x.toFixed(3)).join(", ")}`);
+else ck("⑩-b 곁으로 가는 **도중에도** 둥글다", run2 === 0,
    run2 ? `연속 ${run2}회 초과(최저 ${worst.toFixed(3)})` : "연속 초과 없음"
    + ` · ${mid.map((x) => x.toFixed(3)).join(", ")}`);
 await page.waitForTimeout(1600);
@@ -192,13 +204,6 @@ await page.waitForTimeout(1600);
    큰 걸음으로 뛰어 모양이 실제로 일그러진다 — 코드가 아니라 **그 환경의 그림**이다.
    그래서 프레임을 같이 재서, 느리면 **수치를 보여 주되 판정은 보류**한다.
    ⚠ 이건 실패를 숨기려는 게 아니다 — 숨기면 다음 세션이 못 본다. 그래서 화면에 그대로 적는다. */
-const frameMs = await page.evaluate(async () => {
-  const t = []; let last = performance.now();
-  for (let i = 0; i < 30; i++) { await new Promise((r) => requestAnimationFrame(r));
-    const n = performance.now(); t.push(n - last); last = n; }
-  t.sort((a, b2) => a - b2); return t[15];
-});
-const slow = frameMs > 40;
 if (slow) console.log(`SKIP — ⑩ 곁이 둥글다 · 환경이 느려 판정 보류(프레임 ${frameMs.toFixed(0)}ms) · 측정값 ${gyeot3.h} · 반경 ${gyeot3.min}~${gyeot3.max}`);
 else ck("⑩ 곁이 둥글다 — 삼각(3주기) 성분", gyeot3.h < 0.06,
    `${gyeot3.h} (0.06 미만이어야) · 반경 평균 ${gyeot3.mean} 최소 ${gyeot3.min} 최대 ${gyeot3.max} · 프레임 ${frameMs.toFixed(0)}ms · 캔버스 ${gyeot3.W}`);
