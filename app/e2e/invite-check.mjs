@@ -74,12 +74,23 @@ let id;
      !Object.keys(after.body?.[0]?.axes || {}).some((k) => /^(y|m|d|h|min|birth)$/i.test(k)));
 }
 
-/* ── ③ 응답 1회 — 재공유 방어 (지시서 §3) ────────────────────────────────── */
+/* ── ③ 한 링크에 여럿이 답한다 (2026-08-30 창업자 결정) ─────────────────────
+   ⚠ **이 절이 뒤집혔다.** 원래는 「응답 1회 = 재공유 방어」였다(지시서 §3).
+     그 방어가 지키던 건 **A의 좌표를 받는 사람 수를 하나로 묶는 것**이었다 —
+     좌표는 되짚을 수 있으니까(처리방침 §5-2 정직한 고지 1).
+     창업자 지시로 뒤집혔다: *"단톡방에 가면 여러 사람이 참여할 텐데 지금은 한 명만 가능한 것 같다."*
+   **지운 게 아니라 자리를 옮겼다.** 이제 무는 건 셋이다 —
+     ①여럿이 답할 수 있는가 ②앞사람 답이 안 덮이는가 ③상한이 있는가(무제한이면 명부를 넘어선다). */
 {
-  const again = await call("POST", { seg: ["answer"], body: { id, bAxes: AXES, notify: true, label: "다른사람" } });
-  ck("③ 두 번째 응답은 410 으로 거절된다", again.code === 410, `${again.code}`);
+  const again = await call("POST", { seg: ["answer"], body: { id, bAxes: { ...AXES, dG: 5 }, notify: true, label: "다른사람" } });
+  ck("③ 두 번째 사람도 답할 수 있다", again.code === 200, `${again.code}`);
   const st = await call("GET", { seg: ["check"], query: { ids: id } });
-  ck("③ 거절돼도 첫 응답이 안 덮인다", st.body?.[0]?.label === "지은");
+  ck("③ 앞사람 답이 안 덮인다", (st.body?.[0]?.answers || []).length === 2,
+     `${(st.body?.[0]?.answers || []).length}명`);
+  ck("③ 답한 순서대로 자리 번호가 붙는다(같은 사람이 두 번 안 서게)",
+     (st.body?.[0]?.answers || []).map((a) => a.i).join(",") === "0,1",
+     (st.body?.[0]?.answers || []).map((a) => a.i).join(","));
+  ck("③ 각자의 좌표가 따로 온다", (st.body?.[0]?.answers || [])[1]?.axes?.dG === 5);
 }
 
 /* ── ④ 동의를 끄면 A에게 아무것도 안 간다 (처리방침 §5-2) ─────────────────── */
@@ -96,7 +107,13 @@ let id;
   /* ⚠ 지시서 두 줄이 부딪힌 자리 — 동의를 껐어도 **링크는 소비된다.**
      안 그러면 동의를 끈 사람의 링크만 계속 열려 있어 재공유 방어가 거기서만 뚫린다. */
   const again = await call("POST", { seg: ["answer"], body: { id: nid, bAxes: AXES, notify: true, label: "재사용" } });
-  ck("④ 동의를 껐어도 링크는 소비된다(재공유 방어가 안 뚫린다)", again.code === 410, `${again.code}`);
+  /* ⚠ 예전엔 「소비된다」였다 — 동의를 껐어도 링크가 닫혔다(재공유 방어).
+     이제 링크는 여럿을 받으므로 **동의를 끈 사람 뒤에도 다음 사람이 답할 수 있다.**
+     지켜야 할 뜻은 그대로다: **동의를 끈 사람의 것은 A에게 하나도 안 간다.** 그걸 아래에서 문다. */
+  ck("④ 동의를 껐어도 다음 사람은 답할 수 있다", again.code === 200, `${again.code}`);
+  const st2 = await call("GET", { seg: ["check"], query: { ids: nid } });
+  ck("④ 동의를 끈 사람은 목록에 아예 없다", (st2.body?.[0]?.answers || []).length === 1,
+     `${(st2.body?.[0]?.answers || []).length}명(동의한 사람만)`);
 }
 
 /* ── ⑤ 생년월일 원값은 서버가 막는다 (처리방침 §5-2 「저장하지 않는 것」) ──── */
@@ -189,9 +206,19 @@ const f = R.filter((x) => !x).length;
   const iid = c.body.id;
   await call("POST", { seg: ["answer"], body: { id: iid, notify: false } });
   const closed = await call("GET", { seg: [iid] });
-  /* 답이 온 초대는 **열리는 척부터 안 한다.** 여기서 200 을 주면 두 번째 사람이 생일을 다 넣고
-     제출 단계에서야 410 을 만난다 — 값을 받아 놓고 거절하는 건 제일 나쁜 순서다. */
-  ck("⑦ 이미 답이 온 초대는 엿보기도 410", closed.code === 410, `${closed.code}`);
+  /* ⚠ 예전엔 「답이 온 초대는 엿보기도 410」이었다. 이제 여럿이 답하므로 **계속 열린다.**
+     대신 **자리가 다 차면** 열리는 척부터 안 한다 — 200 을 주면 마지막 사람이 생일을 다 넣고
+     제출 단계에서야 거절당한다. **값을 받아 놓고 거절하는 건 제일 나쁜 순서다.** */
+  ck("⑦ 답이 와도 다음 사람에게 계속 열린다", closed.code === 200, `${closed.code}`);
+  {
+    /* 상한까지 채우고 나면 그때부터 닫힌다 */
+    const cf = await call("POST", { seg: ["new"], body: { axes: AXES, name: "가득" } });
+    const fid = cf.body.id;
+    let last = null;
+    for (let k = 0; k < 25; k++) last = await call("POST", { seg: ["answer"], body: { id: fid, notify: false } });
+    ck("⑦ 상한(24)을 넘기면 거절한다", last.code === 410, `${last.code}`);
+    ck("⑦ 자리가 다 차면 엿보기도 닫힌다", (await call("GET", { seg: [fid] })).code === 410);
+  }
 
   const c2 = await call("POST", { seg: ["new"], body: { axes: AXES, name: "주영" } });
   const other = await call("GET", { seg: [c2.body.id], origin: "https://evil.example" });

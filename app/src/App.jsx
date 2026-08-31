@@ -4426,7 +4426,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v177 · 수호신이 말한다";
+const APP_VER = "v178 · 한 링크에 여럿";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -6537,15 +6537,28 @@ export default function App() {
         if (!q.ok) return;
         const arr = await q.json().catch(() => null);
         if (!alive || !Array.isArray(arr)) return;
-        const answered = arr.filter((x) => x && x.answered && x.id);
+        /* ⚠ **한 링크에 여럿이 답한다**(2026-08-30). 그래서 초대 하나가 자리 하나가 아니다 —
+           답한 사람 수만큼 자리가 선다.
+           ⚠ **자리 열쇠를 답 번호로 정한다**(`inv:<id>` · `inv:<id>#2` …). 그래야 앱을 여러 번 열어도
+             `gyeotAdd` 가 같은 열쇠를 알아보고 **같은 사람이 두 번 안 선다**. 번호를 안 쓰고
+             「빈 자리를 찾아 채우기」로 하면 열 때마다 순서가 달라져 사람이 섞인다. */
+        const answered = arr.flatMap((x) => (x && x.id && Array.isArray(x.answers) ? x.answers.map((a) => ({ ...a, id: x.id })) : []));
         answered.forEach((x, k) => {
           timers.push(setTimeout(() => {
             if (!alive) return;
             setGyeot((prev) => {
-              const seat = prev.find((y) => y.inv === x.id && y.tier !== GY_STANDING);
-              if (!seat) return prev;
+              /* 첫 사람은 부를 때 세워 둔 자리에 들어가고, 둘째부터는 자리를 새로 만든다 */
+              const key = x.i ? `inv:${x.id}#${x.i + 1}` : `inv:${x.id}`;
+              const seat = prev.find((y) => y.key === key);
+              if (seat && seat.tier === GY_STANDING) return prev;      // 이미 선 사람 — 다시 안 세운다
+              if (!seat) {
+                const el = x.axes && (x.axes.el || (Number.isInteger(x.axes.dG) ? GAN_EL[x.axes.dG] : null));
+                track("gyeot_promoted", { wait_h: x.at ? Math.round((Date.now() - x.at) / 3600000) : null,
+                  filled: !!x.axes, nth: (x.i || 0) + 1 });
+                return gyeotFill(gyeotAdd(prev, { key, el: null, dg: null, name: "", inv: x.id }), key, x.axes, x.label);
+              }
               track("gyeot_promoted", { wait_h: x.at ? Math.round((Date.now() - x.at) / 3600000) : null,
-                filled: !!x.axes });
+                filled: !!x.axes, nth: (x.i || 0) + 1 });
               /* ⚠ **자리를 채운다**(2026-08-28 창업자: "내가 초대했는데 내꺼에도 자동 반영이 되어야지").
                  그 전엔 밝기만 바뀌고 오행도 일간도 안 와서, A는 초대를 보내고도 그 사람과의
                  사이를 영영 못 봤다 — 게이트를 세워 놓고 대가가 없었다.
@@ -7930,6 +7943,19 @@ export default function App() {
                 <p className="fine">곁에 적어 둔 <b>이름도 생년월일도 이 기기에만</b> 있어 — 서버로도, 통계로도 안 나가.
                   단 <b>초대를 보내면 네 이름은</b> 상대 화면에 「○○가」로 뜨려고 서버를 거쳐 —
                   30일 뒤 사라지고, 그 사람 말고 다른 데론 안 가.</p>
+                {/* ⚠ **이 줄이 없으면 단톡방에 뿌리는 사람이 뭘 뿌리는지 모른다.**
+                    한 링크에 여럿이 답할 수 있게 된 순간(2026-08-30) 링크의 성질이 바뀌었다 —
+                    받은 사람 **전원**이 부른 사람의 좌표를 받고, 그 값으로 생일을 되짚을 수 있다.
+                    처리방침 §5-2 에도 적혀 있지만 그건 열어 보는 사람만 읽는다.
+                    **뿌리기 직전 화면에 적는 게 그 고지가 실제로 닿는 유일한 자리다.** */}
+                {/* ⚠ **상한 숫자를 화면에 안 쓴다.** 「최대 24명」이라고 적었다가 검사에 걸렸는데,
+                    그 규칙(곁탭IA §5 개수 표기 금지)이 지키는 건 **명부가 카운터가 되지 않는 것**이다.
+                    「링크 상한」은 명부 개수가 아니라 성격이 다르긴 하지만, **규칙에 예외를 파는 대신
+                    문구에서 숫자를 뺐다** — 전할 내용(누구나 답할 수 있다)은 숫자 없이도 다 전해지고,
+                    정확한 상한은 처리방침 §5-2 가 적는다. 규칙을 깎아 문장을 통과시키지 않는다. */}
+                <p className="fine">부르는 링크는 <b>받은 사람 누구나 답할 수 있어</b> — 한 사람만이 아니야.
+                  답한 사람은 <b>네 명식 값을 보게 돼</b>. 그 값으로 네 생일을 되짚을 수도 있어.
+                  단톡방에 올릴 거면 알고 올려. 언제든 ✕ 로 끊을 수 있어.</p>
                 {/* 첫 곁이 생기면 부르는 문이 사라져 있었다 — 목록이 곧 막다른 길이 됐다는 뜻이다. */}
                 {/* 게이트: **첫 곁은 내가 직접 넣어 공짜, 그 다음부터는 그 사람이 직접 넣는다**(창업자).
                     그래서 이 문은 궁합 폼이 아니라 **초대**로 간다 — 부르는 일이 여기 하나로 모인다. */}

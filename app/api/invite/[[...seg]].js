@@ -59,6 +59,16 @@ import { isAllowedOrigin } from "../judge.js";   // 출처 판정은 한 곳에�
 const TTL_SEC = 30 * 24 * 60 * 60;    // 30일 — 처리방침 §5-2 가 약속한 그 값이다. 바꾸면 방침도 바꿔라
 const MAX_BODY = 8 * 1024;
 const MAX_IDS = 24;                    // 곁 상한과 맞춘다(명부가 24를 넘지 않는다)
+/* ⚠ **한 링크에 여럿이 답한다**(2026-08-30 창업자: *"단톡방에 가면 여러 사람이 참여할 텐데
+     지금은 한 명만 가능한 것 같다 — 다들 참여할 수 있게"*).
+   그 전엔 **응답 1회**였고 그게 재공유 방어였다. 그 방어가 지키던 건 하나다 —
+   **A의 좌표는 되짚을 수 있으므로**(처리방침 §5-2 정직한 고지 1) 그걸 받는 사람 수를 하나로 묶는 것.
+   여럿이 답하면 **그 단톡방 전원이 A의 값을 받는다.** 그건 막을 방법이 없다 —
+   계산은 받는 사람 기기에서 하고(서버에 로직 복제 금지) 계산에는 A의 좌표가 필요하다.
+   그래서 막는 대신 **셋으로 감싼다**: ①상한(곁 상한과 같은 24) ②A 화면에서 미리 고지
+   ③A가 언제든 취소(이미 있음). 처리방침 §5-2 의 「한 번만 응답」 두 줄도 같이 고쳤다 —
+   **문구를 안 고치고 동작만 바꾸면 그건 거짓말이다.** */
+const MAX_ANSWERS = 24;
 const MAX_LABEL = 12;                  // 곁 이름 칸과 같은 상한
 const ID_BYTES = 9;                    // base64url 12자 — "answer" 와 길이·문자셋이 겹치지 않는다
 
@@ -107,6 +117,9 @@ async function delInvite(id) {
 }
 
 const clean = (s, n) => String(s == null ? "" : s).slice(0, n);
+/* 답 목록 — **옛 판이 저장한 한 칸(`answered`)도 읽는다.** 이미 살아 있는 초대가 30일 남아 있어서
+   여기서 안 받아 주면 그 사람들 답이 조용히 사라진다. 새로 쓸 때는 `answers` 로만 쓴다. */
+const answersOf = (inv) => (Array.isArray(inv?.answers) ? inv.answers : inv?.answered ? [inv.answered] : []);
 /* 생년월일 원값이 섞여 오는 것을 서버가 막는다 — **양쪽 좌표에 다 건다**(A의 axes · B의 bAxes) */
 const BANNED = ["y", "m", "d", "h", "min", "birth", "birthday", "ymd"];
 
@@ -164,9 +177,10 @@ export default async function handler(req, res) {
       if (!id) return res.status(400).json({ error: { message: "초대가 없어" } });
       const inv = await getInvite(id);
       if (!inv) return res.status(404).json({ error: { message: "만료됐거나 없는 초대야" } });
-      /* ⚠ **응답 1회.** 이미 답한 초대는 거절한다 — 이게 재공유 방어다(지시서 §3).
-         누가 링크를 다시 퍼뜨려도 두 번째 사람은 열지 못한다. 처리방침 §5-2 가 약속한 문장이다. */
-      if (inv.answered) return res.status(410).json({ error: { message: "이미 답이 온 초대야" } });
+      /* ⚠ **여럿이 답할 수 있다**(위 MAX_ANSWERS 주석). 상한에 닿으면 거절한다 —
+         무제한이면 링크 하나가 명부를 넘어서고, A가 감당 못 하는 자리가 쌓인다. */
+      const prev = answersOf(inv);
+      if (prev.length >= MAX_ANSWERS) return res.status(410).json({ error: { message: "이 초대는 자리가 다 찼어" } });
 
       const notify = body?.notify === true;
       /* ⚠ **지시서 두 줄이 부딪혀서 이렇게 갈랐다.**
@@ -185,9 +199,10 @@ export default async function handler(req, res) {
         const hit = Object.keys(bAxes).find((k) => BANNED.includes(k.toLowerCase()));
         if (hit) return res.status(400).json({ error: { message: `생년월일 원값은 안 받아 — '${hit}'` } });
       }
-      inv.answered = { at: Date.now(), notify,
+      inv.answers = [...prev, { at: Date.now(), notify,
         label: notify ? clean(body?.label, MAX_LABEL) : "",
-        axes: bAxes };
+        axes: bAxes }];
+      delete inv.answered;                                   // 옛 한 칸 표현은 여기서 정리된다
       await putInvite(id, inv);
       // B가 계산할 재료만 돌려준다. 계산은 B 기기의 match.js 가 한다(서버에 로직 복제 금지)
       return res.status(200).json({ aAxes: inv.axes, name: clean(inv.name, MAX_LABEL) });
@@ -211,7 +226,7 @@ export default async function handler(req, res) {
     if (req.method === "GET" && seg[0] && seg[0] !== "check") {
       const inv = await getInvite(clean(seg[0], 64));
       if (!inv) return res.status(404).json({ error: { message: "만료됐거나 없는 초대야" } });
-      if (inv.answered) return res.status(410).json({ error: { message: "이미 답이 온 초대야" } });
+      if (answersOf(inv).length >= MAX_ANSWERS) return res.status(410).json({ error: { message: "이 초대는 자리가 다 찼어" } });
       return res.status(200).json({ ok: true, name: clean(inv.name, MAX_LABEL) });
     }
 
@@ -226,11 +241,15 @@ export default async function handler(req, res) {
         /* ⚠ **동의를 안 한 응답은 A에게 answered 로 보이지 않는다.**
            처리방침 §5-2: "동의하지 않으면 … 보낸 이에게는 아무것도 전달되지 않습니다."
            서버는 소비 사실을 알지만 A에게는 안 알린다 — 그 한 비트가 곧 제3자 제공이다. */
-        const shown = !!(inv.answered && inv.answered.notify);
-        /* 동의한 경우에만 B의 좌표가 함께 간다. **계산은 A 기기의 match.js 가 한다** —
-           서버는 여기서도 재료만 넘긴다(B 쪽과 같은 규칙). */
-        out.push({ id, answered: shown, label: shown ? inv.answered.label : "",
-          axes: shown ? inv.answered.axes || null : null, at: inv.at });
+        /* 동의한 사람만 A에게 보인다. **계산은 A 기기의 match.js 가 한다** —
+           서버는 여기서도 재료만 넘긴다(B 쪽과 같은 규칙).
+           ⚠ **자리 번호(i)를 함께 준다.** A가 이걸로 명부의 자리를 만들어서, 앱을 여러 번 열어도
+             같은 사람이 두 번 서지 않는다(자리 열쇠가 id+번호로 정해진다). */
+        const list = answersOf(inv).map((a, i) => ({ i, notify: !!a.notify, label: a.notify ? a.label : "",
+          axes: a.notify ? a.axes || null : null, at: a.at })).filter((a) => a.notify);
+        out.push({ id, answered: list.length > 0, answers: list, at: inv.at,
+          /* 옛 화면이 아직 읽을 수 있게 첫 사람만 그대로 남긴다(한 판 지나면 지운다) */
+          label: list.length ? list[0].label : "", axes: list.length ? list[0].axes : null });
       }
       return res.status(200).json(out);
     }

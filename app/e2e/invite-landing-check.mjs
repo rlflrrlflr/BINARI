@@ -131,10 +131,13 @@ const p2 = await b.newPage({ viewport: { width: 430, height: 932 } });
 await p2.route("**/api/invite**", (route) => relay(route));
 await p2.goto(`${BASE}/?inv=${ID}`, { waitUntil: "domcontentloaded" });
 await p2.waitForTimeout(500);
+/* ⚠ **이 절이 2026-08-30 에 뒤집혔다.** 예전엔 「두 번째 사람은 열지 못한다」(응답 1회 = 재공유 방어)였다.
+   창업자 지시로 **한 링크에 여럿이 답한다**(단톡방). 지우지 않고 자리를 옮긴다 —
+   이제 무는 건 「두 번째 사람도 제 화면을 받는가」이고, **닫히는 건 상한에 닿았을 때뿐**이다(⑦). */
 const dead = await p2.locator("section").innerText().catch(() => "");
-ck("④ 두 번째 사람은 열지 못한다", /열 수 없어/.test(dead), dead.replace(/\n/g, " ").slice(0, 50));
-ck("④ 막다른 길로 두지 않는다(자기 수호신으로 가는 문)",
-   await p2.getByRole("button", { name: /내 수호신/ }).isVisible().catch(() => false));
+ck("④ 두 번째 사람도 같은 링크를 연다", /궁금해했어/.test(dead), dead.replace(/\n/g, " ").slice(0, 40));
+ck("④ 두 번째 사람도 제 생일을 넣을 수 있다",
+   (await p2.locator("section.invask input.in").count()) >= 3);
 await p2.close();
 
 /* ── ⑤ 온보딩 축약 — 생년월일 **다음** 단계에 떨어진다 ─────────────────── */
@@ -212,7 +215,11 @@ ck("⑤ 넣었던 생년월일이 실제로 실려 있다", ys === "1987", ys);
     return c.innerText;
   });
   ck("⑥ 써머리 표 밖에는 개수·배지가 없다", !/\d\s*(명|개)/.test(outside), (outside.match(/\d+\s*[명개]/) || ["없음"])[0]);
-  ck("⑥ 답한 수를 세는 말이 없다", !/답한 사람|답이 온 곁|\d+\s*명이 답/.test(await pa.locator("section.gyeot").innerText()));
+  /* ⚠ **낱말이 아니라 「세는 것」을 막는 규칙이다**(곁탭IA §5 — 명부가 카운터가 되면 안 된다).
+     처음엔 「답한」이라는 낱말까지 막아 뒀는데, 그러면 *"답한 사람은 네 명식 값을 보게 돼"* 같은
+     **설명 문장**까지 걸린다(실제로 걸렸다). 막을 건 **수**다. */
+  ck("⑥ 답한 수를 세는 말이 없다",
+     !/\d+\s*명이 답|답한 사람 \d|\d+\s*명이 왔|답이 온 곁 \d/.test(await pa.locator("section.gyeot").innerText()));
 
   /* ── ⑦ B가 답한다 → A가 앱을 열면 그 자리가 사람이 된다 ─────────────── */
     const invId = await pa.evaluate(() => JSON.parse(localStorage.getItem("binari.invites.v1") || "[]")[0]);
@@ -239,7 +246,7 @@ ck("⑤ 넣었던 생년월일이 실제로 실려 있다", ys === "1987", ys);
     c.querySelectorAll(".gsumtable, .gsum").forEach((x) => x.remove());
     return c.innerText;
   });
-  ck("⑦ 승격을 숫자로 말하지 않는다", !/\d\s*명|답이 왔어요|N명|답한/.test(out3), (out3.match(/\d+\s*명/) || ["없음"])[0]);
+  ck("⑦ 승격을 숫자로 말하지 않는다", !/\d\s*명|답이 왔어요|N명/.test(out3), (out3.match(/\d+\s*명/) || ["없음"])[0]);
   /* 한 번 승격되면 그냥 밝은 상태다 — 다시 열어도 '못 본 승격'이 쌓이지 않는다(§5) */
   ck("⑦ 저장분도 승격돼 있다(다음에 열어도 다시 안 밝아진다)",
      (await pa.evaluate(() => JSON.parse(localStorage.getItem("binari.gyeot.v1") || "[]")[0]?.tier)) === "standing");
@@ -270,6 +277,54 @@ ck("⑤ 넣었던 생년월일이 실제로 실려 있다", ys === "1987", ys);
      doc.replace(/\n/g, " ").slice(0, 60));
   ck("⑧ 아홉 축이 실제로 서 있다", /여덟 글자|아홉/.test(doc));
   await pa.close();
+}
+
+/* ── ⑨ 한 링크에 여럿 (2026-08-30 창업자: "단톡방에 가면 여러 사람이 참여할 텐데") ─────
+   ⚠ 예전엔 **응답 1회**였고 그게 재공유 방어였다. 그 방어가 지키던 건
+     「A의 좌표를 받는 사람 수를 하나로 묶는 것」이다 — 좌표는 되짚을 수 있으니까.
+     이제 여럿이 받는다. 막을 수 없으므로 **상한·고지·취소** 셋으로 감쌌고,
+     여기서는 **여럿이 실제로 각자 자리를 얻는가**를 본다. */
+{
+  _resetMem();
+  const made2 = await api("POST", { seg: ["new"], body: { axes: A_AXES, name: "강석우" }, headers: HDR });
+  const ID2 = made2.body.id;
+  const THREE = [
+    { dG: 1, dJ: 2, el: "목", nayin: "대림목", sun: "양자리", moon: "천칭자리", nak: 3, rashi: 6, wday: "금요일", pasa: "레기", neptu: 9, tone: 2, tsign: "칸(씨앗)", lp: 5 },
+    { dG: 4, dJ: 7, el: "토", nayin: "성두토", sun: "처녀자리", moon: "물병자리", nak: 20, rashi: 10, wday: "토요일", pasa: "폰", neptu: 14, tone: 11, tsign: "멘(독수리)", lp: 2 },
+    { dG: 8, dJ: 11, el: "수", nayin: "천하수", sun: "물고기자리", moon: "쌍둥이자리", nak: 25, rashi: 2, wday: "일요일", pasa: "와게", neptu: 12, tone: 6, tsign: "오크(개)", lp: 9 },
+  ];
+  const NAMES = ["연지", "정민", "주영"];
+  for (let k = 0; k < 3; k++) {
+    const r = await api("POST", { seg: ["answer"], body: { id: ID2, notify: true, bAxes: THREE[k], label: NAMES[k] }, headers: HDR });
+    ck(`⑨ ${k + 1}번째 사람이 같은 링크로 답한다`, r.code === 200 && !!r.body?.aAxes, `${r.code}`);
+  }
+  const chk = await api("GET", { seg: ["check"], query: { ids: ID2 }, headers: HDR });
+  ck("⑨ 셋이 다 A에게 온다", (chk.body?.[0]?.answers || []).length === 3,
+     `${(chk.body?.[0]?.answers || []).length}명`);
+  ck("⑨ 각자의 좌표가 섞이지 않는다",
+     (chk.body?.[0]?.answers || []).map((a) => a.axes?.el).join(",") === "목,토,수",
+     (chk.body?.[0]?.answers || []).map((a) => a.axes?.el).join(","));
+
+  /* A 기기에서 — 셋이 각자 자리를 얻고, 앱을 다시 열어도 안 늘어난다 */
+  const pz = await b.newPage({ viewport: { width: 430, height: 932 } });
+  await pz.route("**/api/invite**", (route) => relay(route));
+  const { onboard: ob } = await import("./onboard.mjs");
+  await ob(pz, BASE);
+  await pz.evaluate((id) => localStorage.setItem("binari.invites.v1", JSON.stringify([id])), ID2);
+  await pz.reload({ waitUntil: "domcontentloaded" });
+  await pz.waitForTimeout(3200);
+  const seats = () => pz.evaluate(() => JSON.parse(localStorage.getItem("binari.gyeot.v1") || "[]").filter((x) => String(x.key).startsWith("inv:")));
+  const s1 = await seats();
+  ck("⑨ 답한 사람 수만큼 자리가 선다", s1.length === 3, `${s1.length}자리`);
+  ck("⑨ 각자 제 하늘로 선다", s1.map((x) => x.el).sort().join(",") === "목,수,토", s1.map((x) => x.el).join(","));
+  ck("⑨ 각자 제 이름으로 선다", s1.map((x) => x.name).sort().join(",") === "연지,정민,주영", s1.map((x) => x.name).join(","));
+  /* ⚠ **앱을 다시 열어도 안 늘어난다** — 자리 열쇠를 답 번호로 정한 이유가 이것이다.
+     「빈 자리를 찾아 채우기」로 했으면 열 때마다 사람이 늘거나 섞인다. */
+  await pz.reload({ waitUntil: "domcontentloaded" });
+  await pz.waitForTimeout(3200);
+  const s2 = await seats();
+  ck("⑨ 다시 열어도 같은 사람이 두 번 안 선다", s2.length === 3, `${s2.length}자리`);
+  await pz.close();
 }
 
 await b.close();
