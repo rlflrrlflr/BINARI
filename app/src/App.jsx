@@ -3461,7 +3461,10 @@ void main(){
        안 둥글어졌다(3주기 성분 0.001 → 0.128). clamp 는 형태를 만든다.
      정규화하면 값이 ±|lk| 안에 갇혀 자를 필요가 없고, 경계도 안 생긴다. */
   float turn = dot(normalize(e + 1e-4), lk);
-  float shade = 1.0;
+  /* ⚠ **한때 이 줄이 1.0 으로 죽어 있었다**(2026-08-31). 원인을 찾으려고 항을 하나씩 끄던
+     실험이 타임아웃으로 중간에 끊겼고, 복구가 안 된 채 다음 작업이 그 위에 쌓였다.
+     끄는 실험은 반드시 **복구까지 한 호흡**에 묶는다 — 끊기면 그게 코드가 된다. */
+  float shade = 1.0 + turn * 0.30 * (1.0 - fold);
   gl_FragColor = vec4(outc, clamp(sum*u_lum*live*vig*bornK*touchK*shade*volA, 0.0, 1.0));
 }`;
 /* 밝은 바탕용 보정 — **원색(EL_COLOR)은 안 건드린다.** 금의 c2(#e8f2ff)는 거의 흰색이라
