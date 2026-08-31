@@ -97,8 +97,16 @@ await page.locator("section.scene").dblclick({ position: { x: 215, y: 300 } });
 await page.waitForTimeout(800);
 ck("③ 깨우면 한 마디 한다", (await page.locator(".gtalk").count()) === 1 && (await line()) !== back, await line());
 ck("③ 질문 칸이 같이 열린다", (await page.locator("textarea.qbox").count()) === 1);
-await page.waitForTimeout(2600);
-ck("③ 한 마디만 하고 물러난다(질문 칸만 남는다)", (await page.locator(".gtalk").count()) === 0);
+/* ⚠ **물러나는 신호가 바뀌었다(2026-08-31).** 처음엔 2.6초 뒤 스스로 지웠는데,
+   창업자 실기에서 **「대사가 안 뜬다」** 가 됐다 — 2.6초는 화면을 보기 전에 끝난다.
+   써 놓고 아무도 못 읽는 대사였다. 이제 **시계가 아니라 유저의 차례**가 신호다:
+   질문 칸에 손이 닿으면 그때 물러난다. **원래 뜻에 더 맞는다** —
+   물러나는 건 「시간이 지나서」가 아니라 「네가 말할 차례라서」다(v55). */
+await page.waitForTimeout(3000);
+ck("③ 시계로는 안 사라진다(읽을 시간을 준다)", (await page.locator(".gtalk").count()) === 1);
+await page.locator("textarea.qbox").click();
+await page.waitForTimeout(500);
+ck("③ 질문 칸에 손이 닿으면 물러난다(질문 칸만 남는다)", (await page.locator(".gtalk").count()) === 0);
 
 /* ── ④ 기존 화면은 한 줄도 안 바뀐다 ─────────────────────────────────────── */
 {

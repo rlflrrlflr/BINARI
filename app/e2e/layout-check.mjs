@@ -31,8 +31,13 @@ for (const [name, w, h] of DEVICES) {
   const page = await b.newPage({ viewport: { width: w, height: h } });
   page.setDefaultTimeout(9000);
   await onboard(page, BASE);
-  await page.reload(); await page.waitForTimeout(1600);
-
+  /* ⚠ **재방문 상태로 만들어야 한다.** 첫 방문 화면에는 아침 문안·오늘의 상태가 없어서
+     세로가 짧다 — 그 상태만 재면 **실제로 쓰는 화면을 안 재는 것**이다.
+     실기에서 「판결을 청한다」가 탭바 뒤로 숨은 것도 재방문 화면이었다(2026-08-31). */
+  await page.evaluate(() => { const d = String(Date.now() - 4 * 864e5);
+    for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i);
+      if (/lastvisit|visit|seen/i.test(k)) localStorage.setItem(k, d); } });
+  await page.reload(); await page.waitForTimeout(1800);
   /* 본문 맨 아랫줄이 "탭이 차지하는 높이"(알약 + 그 위 페이드) 위에 있어야 한다 */
   const probe = (sel) => page.evaluate((s) => {
     const el = document.querySelector(s), tb = document.querySelector("nav.tabbar");
@@ -43,6 +48,28 @@ for (const [name, w, h] of DEVICES) {
   }, sel);
 
   const j = await probe(".lobbypanel");
+
+  /* ⚠ 위 패널 검사는 **깨우기 전** 화면을 잰다(원래 그랬다). 깨우면 질문 칸·버튼이 붙어
+     패널이 길어지고 페이지가 스크롤되므로 「패널 끝이 탭 위」라는 기준 자체가 안 맞는다.
+     그래서 **깨운 뒤에는 버튼 하나만** 본다 — 그게 진짜 물어야 할 것이다. */
+  await page.locator("canvas").first().dblclick().catch(() => {});
+  await page.waitForTimeout(1500);
+
+  /* ── 질문을 **보낼 수** 있는가 ────────────────────────────────────────────
+     ⚠ 이 검사는 「본문이 탭에 안 가리는가」만 보고 있었고, **버튼은 안 봤다.**
+     그래서 「판결을 청한다」가 화면 밖(y751, 화면 760)으로 밀려도 12/12 로 통과했다.
+     질문을 못 보내면 앱이 아니다 — 그 버튼을 직접 문다. */
+  const send = await page.evaluate(() => {
+    const btn = [...document.querySelectorAll("button")].find((x) => /판결을 청한다|묻는다|보낸다/.test(x.textContent));
+    const tb = document.querySelector("nav.tabbar");
+    if (!btn || !tb) return null;
+    const b2 = btn.getBoundingClientRect(), t2 = tb.getBoundingClientRect();
+    return { bot: Math.round(b2.bottom), tab: Math.round(t2.top), vh: innerHeight, txt: btn.textContent.trim().slice(0, 12) };
+  });
+  ck(`${name} — 판결 보내기 버튼이 탭바 뒤에 안 숨는다`,
+     !!send && send.bot <= send.tab - 8,
+     send ? `버튼 끝 ${send.bot} ≤ 탭 ${send.tab} - 8 (화면 ${send.vh})` : "버튼을 못 찾음");
+
   await page.getByRole("button", { name: "곁" }).click(); await page.waitForTimeout(700);
   /* ⚠ 재는 대상을 **패널 전체**로 바꿨다(v144). 처음엔 두 탭의 마지막 줄(`.wakehint` ↔ `.fine`)을
      맞댔는데, 그 뒤 곁 탭에 안내 문구와 버튼이 붙어 `.fine` 이 더는 마지막 줄이 아니게 됐다 —

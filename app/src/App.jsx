@@ -2961,8 +2961,12 @@ function useViewport() {
    실측: 수호신 자체는 홀로가 더 크다(261x285 vs 검은 판 163x259). 작은 건 **캔버스**였다 —
    370 vs 800 이라 오라가 캔버스의 70% 를 차지해 **떠다니고 손끝을 따라갈 여백이 없었다.**
    캔버스를 검은 판 수준으로 넓히고 `R` 을 그만큼 줄인다 — 오라는 그대로, 여백만 는다. */
+/* ⚠ **0.70 은 화면의 57% 를 먹었다** — 재방문 화면(아침 문안·오늘의 상태가 더 붙는다)에서
+   「판결을 청한다」가 **탭바 뒤 y751 로 밀려 안 보였다**(창업자 실기 2026-08-31 · 화면 760).
+   수호신이 크면 좋지만 **질문을 못 하면 앱이 아니다.** 0.52 로 내리면 버튼이 y599 에 선다.
+   가로도 1.50 → 1.34 — 폭이 좁은 기기에서 세로가 아니라 가로가 먼저 걸린다. */
 const guardianSize = (vp) => (SKIN === "holo"
-  ? Math.min(vp.w * 1.50, vp.h * 0.70, 660)
+  ? Math.min(vp.w * 1.34, vp.h * (vp.h < 700 ? 0.44 : 0.52), 660)   /* ⚠ 짧은 화면일수록 더 줄인다 — SE(667)에서는 0.52 도 버튼이 탭바에 14px 겹쳤다 */
   : Math.min(vp.w * 1.1, vp.h * 0.57, 640));
 
 /* ── v140 A/B 스킨 — `?skin=holo` (2026-08-27 창업자 지시) ────────────────────
@@ -7124,9 +7128,13 @@ export default function App() {
       wakeTapRef.current = 0;
       if (!awake) {
         setAwake(true); trackVisitOnce("guardian_wake", {}); say("wake");
-        /* 한 마디만 하고 물러난다 — 위 주석 참조(v55 의 「순수 질문입력 구간」을 안 깬다) */
+        /* ⚠ **2.6초 뒤 스스로 지웠더니 「대사가 안 뜬다」가 됐다**(창업자 실기 2026-08-31).
+           2.6초는 화면을 보기 전에 끝난다 — 써 놓고 아무도 못 읽는 대사였다.
+           v55 의 「수호신이 물러난 순수 질문입력 구간」은 **깨지 않는다.** 다만
+           물러나는 신호를 **시계가 아니라 유저의 차례**로 바꾼다 —
+           질문 칸에 손이 닿으면 그때 물러난다(아래 `qbox` 의 onFocus/onInput).
+           그게 원래 뜻에 더 맞는다: 물러나는 건 「시간이 지나서」가 아니라 「네가 말할 차례라서」다. */
         clearTimeout(sayClearRef.current);
-        sayClearRef.current = setTimeout(() => setGSay(null), 2600);
       }
     } else {
       wakeTapRef.current = now;
@@ -8461,7 +8469,10 @@ export default function App() {
                 </div>
               )}
               {!ritual && <p className="gintro dim2">{isNight ? "밤이 깊었네. 이 시간의 물음은 마음이 먼저 기울어 있기 마련이야." : "그래서, 요즘 뭘 망설이고 있어?"}</p>}
-              {!ritual && <textarea className="qbox" rows={2} maxLength={100} value={q} placeholder={`"${QHINTS[qhintI]}"`} onChange={e => setQ(e.target.value)} />}
+              {!ritual && <textarea className="qbox" rows={2} maxLength={100} value={q} placeholder={`"${QHINTS[qhintI]}"`}
+                /* 수호신은 **네가 말할 차례가 되면** 물러난다 — 시계가 아니라 이 손짓이 신호다 */
+                onFocus={() => setGSay(null)}
+                onChange={e => { setQ(e.target.value); if (gSay) setGSay(null); }} />}
               {!ritual && !res && q.trim().length > 0 && isDecisionQ(q) && (
                 <div className="leanrow fade">
                   <span className="leanlab">왜 망설여? <em className="dim">(안 골라도 돼)</em></span>
