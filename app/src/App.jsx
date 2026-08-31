@@ -3529,6 +3529,13 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, gyeotRef, popRef
          (실기 영상 2026-08-30: 초록 불꽃형에서 오른눈이 배경 위에 떠 있었다).
          셰이더와 **같은 표**를 여기서도 읽어 얼굴 가로를 그만큼 좁힌다. */
       const AGX = ({ 화: 1.26, 수: 0.94, 목: 1.18, 금: 1.08, 토: 0.98 })[el] ?? 1.08;
+      /* ⚠ **간격만 나누고 눈 크기는 그대로 뒀던 게 사고였다**(팀 실기 2026-08-31:
+         "눈이 더 크고 몰려서 징그럽다"). 몸이 좁은 오행에서 간격만 좁히면
+         **눈은 그대로인데 사이만 붙어** 얼굴이 뭉친다. 실측 간격/눈 비가
+         화 3.10 ~ 수 4.15 로 **34% 흔들렸다** — 화·목인 사람만 몰려 보인다.
+         비율은 사람마다 같아야 한다. 좁은 몸에서는 **얼굴 전체가 같이 작아진다** —
+         눈·간격·입을 한 계수로 줄인다. 기준은 금(1.08) 이고 거기서 창업자가 고른 값이 나온다. */
+      const NAR = 1.08 / AGX;
       gl.uniform1f(U.u_grain, AURA.base.grain);
       gl.uniform1f(U.u_warm, mood ? mood.warm : 0);
       /* ⚠ 창업자 지적 "움직임이 없잖아" — 워핑이 느리면 정지화로 보인다. 기본 배속을 올린다. */
@@ -3816,8 +3823,8 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, gyeotRef, popRef
         {
           const tt2 = ((now - T0) / 1000) * SPD;
           const lim = (v, m) => Math.max(-m, Math.min(m, v));
-          gaze.yaw = lim(look.x * 5.2, 0.40) + Math.sin(tt2 * 0.31) * 0.075;
-          gaze.pitch = lim(look.y * 4.0, 0.26) + Math.sin(tt2 * 0.24 + 0.9) * 0.045;
+          gaze.yaw = lim(look.x * 5.2, 0.30) + Math.sin(tt2 * 0.31) * 0.075;
+          gaze.pitch = lim(look.y * 4.0, 0.19) + Math.sin(tt2 * 0.24 + 0.9) * 0.045;
           gaze.roll = lim(-look.x * 1.6, 0.17) + Math.sin(tt2 * 0.19 + 2.2) * 0.022;
           if (press > 0.01) { gaze.yaw += -pdx * 0.26 * press; gaze.pitch += pdy * 0.18 * press; }
           /* ⚠ **몸만 옮기면 얼굴이 뒤에 남는다.** 셰이더가 `w = e - lk*R*0.30` 으로
@@ -4008,10 +4015,10 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, gyeotRef, popRef
               /* ⚠ 몰림이 **너무 심했다**(창업자 2026-08-31). 0.42/0.45 는 눌리는 순간
                  이목구비가 한 점으로 모여 얼굴이 뭉개졌다. 절반 아래로 내린다 —
                  「눌렸다」는 남기고 「뭉개졌다」는 없앤다. */
-              gapR: (0.605 / AGX) * k * (1 - 0.17 * press),
-              mouthR: 0.36 * k * (1 - 0.18 * press),
-              cy: P.cy, gap: 0.56, eyeSz: 0.155 * k, eyeScale: hurt ? 1.9 : 1,   // 보드에서 고른 값
-              mSz: 0.30 * k * (hurt ? 1.35 : 1), mCy: P.mCy,
+              gapR: 0.56 * NAR * k * (1 - 0.17 * press),
+              mouthR: 0.36 * NAR * k * (1 - 0.18 * press),
+              cy: P.cy, gap: 0.56, eyeSz: 0.155 * NAR * k, eyeScale: hurt ? 1.9 : 1,   // 보드에서 고른 값
+              mSz: 0.30 * NAR * k * (hurt ? 1.35 : 1), mCy: P.mCy,
               yaw, pitch, roll, blink: hurt ? 0 : blink,
               /* 누른 축으로 찌그러진다 — 방향은 손끝→얼굴 벡터의 **반대**(=밀린 쪽) */
               squish: press, sqx: pdx, sqy: -pdy,
