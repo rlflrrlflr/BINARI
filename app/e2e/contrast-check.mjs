@@ -14,7 +14,7 @@ const BASE = process.env.BASE || "http://localhost:4173";
 const AA = 4.5, AA_BIG = 3.0;
 /* SKIN=base 로 돌리면 **기존(홀로 아님) 화면**을 잰다 — 실패가 홀로 탓인지
    원래 그런지 가르는 데 쓴다. 원래 그런 것은 이 작업의 범위가 아니다(본선 화면을 바꾸는 일이다). */
-const QS = process.env.SKIN === "base" ? "/" : "/?skin=holo";
+const QS = process.env.SKIN === "base" ? "/?skin=dark" : "/?skin=holo";   // ⚠ 2026-08-31 홀로가 기본이 됐다 — 옛 화면은 ?skin=dark 로만 나온다
 
 /* 명시적으로 봐주는 것 — 사유 없이 추가하지 마라 */
 const SKIP = new Set([

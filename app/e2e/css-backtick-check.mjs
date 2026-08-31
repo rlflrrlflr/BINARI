@@ -1,53 +1,56 @@
-/* 템플릿 리터럴 안의 백틱 금지 — 실행: node e2e/css-backtick-check.mjs (앱 기동 불필요)
- *
- * 왜 있나: App.jsx 의 스타일은 **템플릿 리터럴 한 덩어리**다. 주석에 백틱을 하나 쓰면
- *   문자열이 거기서 끊기고 뒤가 JS 로 해석된다. 2026-08-27 하루에 **같은 실수를 두 번** 했다 —
- *   첫 번째는 `.stage.holo` 를 멤버 접근으로 읽어 앱이 통째로 죽었고(런타임 TypeError),
- *   두 번째는 더 나빴다: **문법 오류 없이 조용히 규칙 몇 줄이 사라졌다.**
- *   화면은 멀쩡히 뜨는데 스타일만 안 먹으니 원인을 찾는 데 오래 걸린다.
- *   사람이 조심해서 될 일이 아니라 검사로 막는다.
- *
- * ⚠ **2026-08-28 확장.** CSS 만 보고 있었는데 같은 사고가 **셰이더에서** 났다 —
- *   FIELD_FRAG 도 템플릿 리터럴이고, 주석에 백틱을 넣어 빌드가 깨졌다.
- *   위험한 건 "CSS"가 아니라 **여러 줄 템플릿 상수 전부**다. 대상을 그렇게 넓힌다. */
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { execSync } from "node:child_process";
-const HERE = dirname(fileURLToPath(import.meta.url));
-const SRC = readFileSync(resolve(HERE, "../src/App.jsx"), "utf8");
-const GEN = resolve(HERE, "../tools/build-face-mock.mjs");
+/* CSS 블록 안 백틱 감시 — 2026-08-31 신설.
+   `App.jsx` 의 스타일은 **템플릿 리터럴** 안에 산다. 그래서 주석에 백틱을 하나 쓰면
+   문자열이 그 자리에서 끊기고 빌드가 죽는다. 같은 실수를 **세 번** 했다(작업로그 참조).
+   빌드가 잡아 주긴 하지만 메시지가 「Expected ";" but found "li"」처럼 원인과 멀어서
+   매번 다시 추적하게 된다. 여기서 **자리와 이유를 바로 말해 준다.**
+   ⚠ 값을 안 세고 **성질**을 문다 — 「템플릿 안에 백틱이 있는가」.
 
-/* 검사 대상 — **한 덩어리로 쓰는** 템플릿 상수. 새 셰이더가 생기면 여기 이름을 더한다.
-   ⚠ sim 엔진 셰이더(SIM_FRAG·RND_FRAG 등)는 뺀다 — 그쪽은 `\` + SHAPE_UNI + \`` 처럼
-      **일부러 문자열을 결합**하므로 백틱이 정상이고, 넣으면 늘 FAIL 이 난다(실제로 그랬다).
-      "백틱 금지"가 아니라 "한 덩어리 템플릿 안의 백틱 금지"가 규칙이다. */
-const NAMES = ["CSS", "FIELD_FRAG", "FIELD_VERT"];
-const marks = NAMES.flatMap((n) => [...SRC.matchAll(new RegExp("const " + n + " = `", "g"))]);
+   ⚠ **2026-08-31 범위 복구.** 이 파일이 한 번 덮어써지며 **CSS 만 보는 판**으로 좁혀졌다.
+      그런데 이 세션에서 난 백틱 사고 여섯 건 중 **넷이 CSS 밖**이었다 —
+      셰이더(FIELD_FRAG) 셋, 보드 생성기 하나. 좁은 그물은 그 넷을 다 놓친다.
+      위험한 건 「CSS」가 아니라 **여러 줄 템플릿 전부**다. 셋을 다 본다:
+        ①CSS ②셰이더 상수 ③보드 생성기가 **문법적으로 파싱되는가**(이름을 안 외워도 된다). */
+import { readFileSync } from "node:fs";
+import { execSync } from "node:child_process";
+const src = readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
 const R = [];
 const ck = (n, p, note = "") => { R.push(p); console.log(`${p ? "PASS" : "FAIL"} — ${n}${note ? " · " + note : ""}`); };
-ck("템플릿 상수를 찾았다", marks.length >= 2, `${marks.length}개 (CSS·셰이더)`);
+
+/* 스타일 블록을 찾는다 — const CSS = `...` 꼴 */
+const blocks = [...src.matchAll(/const CSS = `([\s\S]*?)`;?\s*\n(?=const |function |\/\* |export )/g)];
+ck("스타일 블록을 찾았다", blocks.length >= 1, `${blocks.length}개`);
 
 let bad = [];
-for (const m of marks) {
-  const start = m.index + m[0].length;
-  const end = SRC.indexOf("`;", start);   // 닫는 백틱은 검사 대상이 아니다 — 그 앞까지만 본다
-  const body = SRC.slice(start, end < 0 ? SRC.length : end);
-  body.split("\n").forEach((line, i) => {
-    if (line.includes("`")) bad.push(`${SRC.slice(0, start).split("\n").length + i}행: ${line.trim().slice(0, 70)}`);
-  });
+for (const m of blocks) {
+  const start = src.slice(0, m.index).split("\n").length;
+  m[1].split("\n").forEach((ln, i) => { if (ln.includes("`")) bad.push(`${start + i}행: ${ln.trim().slice(0, 70)}`); });
 }
-ck("템플릿 안에 백틱이 없다", bad.length === 0, bad.join(" | ") || "깨끗");
+ck("CSS 블록 안에 백틱이 없다", bad.length === 0, bad.join(" | "));
+if (bad.length) console.log("  → 백틱은 템플릿 리터럴을 끊는다. 주석에서 코드 이름을 감쌀 땐 그냥 맨 글자로 써라.");
 
-/* ⚠ 2026-08-29 추가 — **세 번째 백틱 사고는 App.jsx 가 아니라 보드 생성기에서 났다.**
-   `tools/build-face-mock.mjs` 는 HTML 을 템플릿 리터럴로 조립하는데, 주석에 백틱을 넣어
-   생성기가 파싱 단계에서 죽었다. 여기서 상수 이름을 하나 더 외우는 것보다
-   **문법이 통과하는지 직접 묻는 게** 낫다 — 어느 상수든, 앞으로 새로 생기는 것까지 잡힌다. */
+/* ── 셰이더 상수 — 한 덩어리로 쓰는 템플릿. 새 셰이더가 생기면 이름을 더한다.
+   ⚠ sim 엔진 셰이더(SIM_FRAG 등)는 뺀다 — 거기는 **일부러 문자열을 결합**해서
+      백틱이 정상이다(넣었더니 늘 FAIL 이 났다). */
+const SH = ["FIELD_FRAG", "FIELD_VERT"];
+let shBad = [];
+for (const n of SH) {
+  for (const m of src.matchAll(new RegExp("const " + n + " = `", "g"))) {
+    const st = m.index + m[0].length;
+    const en = src.indexOf("`;", st);
+    src.slice(st, en < 0 ? src.length : en).split("\n").forEach((ln, i) => {
+      if (ln.includes("`")) shBad.push(`${src.slice(0, st).split("\n").length + i}행: ${ln.trim().slice(0, 60)}`);
+    });
+  }
+}
+ck("셰이더 상수 안에 백틱이 없다", shBad.length === 0, shBad.join(" | ") || "깨끗");
+
+/* ── 보드 생성기 — 이름을 외우는 대신 **파싱되는지 직접 묻는다** */
+const GEN = new URL("../tools/build-face-mock.mjs", import.meta.url).pathname;
 let genErr = "";
 try { execSync(`node --check ${JSON.stringify(GEN)}`, { stdio: "pipe" }); }
 catch (e) { genErr = String(e.stderr || e).split("\n").find((l) => l.includes("Error")) || "파싱 실패"; }
 ck("보드 생성기가 파싱된다", !genErr, genErr || "build-face-mock.mjs 문법 정상");
 
-const pass = R.filter(Boolean).length;
-console.log(`\n=== 템플릿 백틱: ${pass}/${R.length} ${pass === R.length ? "PASS" : "FAIL"} ===`);
-process.exit(pass === R.length ? 0 : 1);
+const f = R.filter((x) => !x).length;
+console.log(`\n=== 템플릿 백틱: ${R.length - f}/${R.length} PASS ===`);
+if (f) process.exit(1);

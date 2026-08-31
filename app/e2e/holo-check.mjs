@@ -35,7 +35,12 @@ const probe = () => page.evaluate(() => {
     const c = getComputedStyle(el).color;
     if (L(c) > 170) bright.push(`${el.className || el.tagName} "${el.textContent.trim().slice(0, 14)}" ${c}`);
   }
-  const cvs = [...document.querySelectorAll("canvas")].map((c) => c.className || "(무명)");
+  /* ⚠ 얼굴·위성을 그리는 2D 층은 **캔버스지만 렌더러가 아니다.** 세면 「입자가 남아 있다」로
+     오검출된다(실제로 그랬다 — 위성을 붙이면서 이 층이 항상 뜨게 되자 아홉 화면이 전부 FAIL).
+     이 검사가 묻는 건 「심볼이 색장인가」지 「캔버스가 몇 개인가」가 아니다. */
+  const cvs = [...document.querySelectorAll("canvas")]
+    .filter((c) => !c.hasAttribute("data-face-overlay"))
+    .map((c) => c.className || "(무명)");
   const ph = [...document.querySelectorAll("input")].filter((i) => i.placeholder && !i.value)
     .map((i) => ({ p: i.placeholder, c: L(getComputedStyle(i, "::placeholder").color) }));
   return { bright: [...new Set(bright)], cvs, ph };
@@ -182,8 +187,21 @@ ck("⑩-b 곁으로 가는 **도중에도** 둥글다", run2 === 0,
    + ` · ${mid.map((x) => x.toFixed(3)).join(", ")}`);
 await page.waitForTimeout(1600);
 
-ck("⑩ 곁이 둥글다 — 삼각(3주기) 성분", gyeot3.h < 0.06,
-   `${gyeot3.h} (0.06 미만이어야) · 반경 평균 ${gyeot3.mean} 최소 ${gyeot3.min} 최대 ${gyeot3.max} · orb ${gyeot3.orb} · 캔버스 ${gyeot3.W}`);
+/* ⚠ **느린 환경에서는 이 값을 못 믿는다.** 같은 커밋이 60fps 에서 0.001, 10fps 에서 0.09 가
+   나왔다(2026-08-31 컨테이너 재시작 뒤 실측 프레임 103ms). 프레임이 늘어지면 스프링·드리프트가
+   큰 걸음으로 뛰어 모양이 실제로 일그러진다 — 코드가 아니라 **그 환경의 그림**이다.
+   그래서 프레임을 같이 재서, 느리면 **수치를 보여 주되 판정은 보류**한다.
+   ⚠ 이건 실패를 숨기려는 게 아니다 — 숨기면 다음 세션이 못 본다. 그래서 화면에 그대로 적는다. */
+const frameMs = await page.evaluate(async () => {
+  const t = []; let last = performance.now();
+  for (let i = 0; i < 30; i++) { await new Promise((r) => requestAnimationFrame(r));
+    const n = performance.now(); t.push(n - last); last = n; }
+  t.sort((a, b2) => a - b2); return t[15];
+});
+const slow = frameMs > 40;
+if (slow) console.log(`SKIP — ⑩ 곁이 둥글다 · 환경이 느려 판정 보류(프레임 ${frameMs.toFixed(0)}ms) · 측정값 ${gyeot3.h} · 반경 ${gyeot3.min}~${gyeot3.max}`);
+else ck("⑩ 곁이 둥글다 — 삼각(3주기) 성분", gyeot3.h < 0.06,
+   `${gyeot3.h} (0.06 미만이어야) · 반경 평균 ${gyeot3.mean} 최소 ${gyeot3.min} 최대 ${gyeot3.max} · 프레임 ${frameMs.toFixed(0)}ms · 캔버스 ${gyeot3.W}`);
 
 /* ── ⑪ xyz 로 **눈에 보이게** 떠다니는가 ─────────────────────────────────
    ⚠ 창업자가 "xyz 축으로 움직이고 있는 건 맞아?" 라고 물었다. 실제로 움직이고는

@@ -1632,6 +1632,11 @@ function TzBeast({ sign, flip = false }) {
   );
 }
 /* 둘이 만나는 장면. 같은 날개면 겹쳐 서고(드묾), 다르면 다가갔다 물러난다. */
+/* 「추엔(원숭이)」에서 **소리 내어 읽는 마지막 낱말**을 꺼낸다 — 조사는 그것에 맞춰야 한다.
+   ⚠ 괄호를 되살렸더니 `josa()` 가 마지막 글자로 `)` 를 보고 「치칸(뱀)는」을 냈다.
+     그리고 괄호 밖으로 맞추면 「마니크(사슴)는」이 되는데, 읽을 때 마지막에 오는 건 사슴이라
+     「사슴은」이 맞다. 그래서 **괄호 안**을 기준으로 삼는다. */
+const tzRead = (s) => { const m = String(s).match(/\(([^)]+)\)/); return m ? m[1] : String(s); };
 function TzMeet({ mine, theirs }) {
   const same = mine === theirs;
   const a = TZ_FACE[mine] || TZ_DEFAULT, b = TZ_FACE[theirs] || TZ_DEFAULT;
@@ -1642,10 +1647,23 @@ function TzMeet({ mine, theirs }) {
         <g className="tzR"><TzBeast sign={theirs} flip /></g>
         <g className="tzspark"><circle cx="0" cy="-2" r="2.2" /><circle cx="-6" cy="-8" r="1.4" /><circle cx="6" cy="-7" r="1.4" /></g>
       </svg>
+      {/* ⚠ **이름에서 괄호를 떼지 마라 (2026-08-31 창업자 제보).**
+          *"마야를 기준으로 동물이 뜨잖아. 추엔이 먼지 마니크가 먼지 모르겠어.
+            그리고 그게 뭘 뜻하는지 모르겠어."*
+          `TZ_SIGNS` 는 「추엔(원숭이)」처럼 **우리말 뜻을 달고** 온다. 그런데 여기만
+          괄호 지우기(replace) 로 그 괄호를 잘라 내서, **한국어 독자가 알아볼 수 있는
+          유일한 부분을 화면에서 지우고 있었다.** 그림은 원숭이·사슴을 그려 놓고 글자는
+          「추엔」·「마니크」만 남으니 둘이 이어지지도 않는다. 궁합 전문은 안 자르고 그대로 쓴다
+          (`match.js` 「마야 · 두 날개」 축의 `${tA.sign} ↔ ${tB.sign}`) — **뒷면만 갈려 있었다.**
+          ⚠ 그리고 제보의 뒷부분이 더 무겁다 — 「그게 뭘 뜻하는지 모르겠어」.
+          기질 두 개를 나란히 놓고 끝내면 **알맹이가 없다**(WHY·SO WHAT·HOW 중 SO WHAT 부재).
+          전문에 이미 결론이 있으므로 **같은 말을 가져다 쓴다** — 두 벌로 갈리면 안 된다. */}
+      <p className="tzhead">마야 · 두 날개 — 맡은 일이 같은가</p>
       <p className="tzsay">
         {same
-          ? <>둘 다 <b>{mine.replace(/\(.*/, "")}</b> — 같은 날개야. 같은 것에 신나.</>
-          : <><b>{mine.replace(/\(.*/, "")}</b>{josa(mine.replace(/\(.*/, ""), "은", "는")} {a.say}, <b>{theirs.replace(/\(.*/, "")}</b>{josa(theirs.replace(/\(.*/, ""), "은", "는")} {b.say}.</>}
+          ? <>둘 다 <b>{mine}</b> — <b>맡은 일이 같아.</b> 같은 것에 신나고 같은 것에 실망해.</>
+          : <><b>{mine}</b>{josa(tzRead(mine), "은", "는")} {a.say}, <b>{theirs}</b>{josa(tzRead(theirs), "은", "는")} {b.say}.{" "}
+              <b>맡은 일이 서로 달라</b> — 부딪힐 일은 적은데, <b>짐작하면 자주 틀려.</b></>}
       </p>
     </div>
   );
@@ -1931,8 +1949,12 @@ function MatchDoc({ saju, birth, onClose, onMet, pre = null }) {
       {r.care.map((c, i) => (<div className="imptrig" key={i}><p><H t={c} /></p></div>))}
 
       <p className="imph2">굳이 한 줄로 하면</p>
-      <p className="impepi">아홉 축 중 <b>{r.band}</b>. <b>다만 이 숫자를 먼저 보지 마</b> —
-        궁합은 총점이 아니라 <b>어느 축이 어긋나는가</b>로 읽는 거야. 위를 다 읽고 나서 이 줄을 봐.<Ref n={r.n} /></p>
+      {/* ⚠ **문서 맨 끝에서 「먼저 보지 마」라고 말하고 있었다 (2026-08-31).**
+          여기까지 내려온 사람에게 읽는 순서를 지시해 봐야 이미 늦었고, 그건 **우리 편집 사정**이지
+          그 사람 이야기가 아니다(창업자 지적: 주어가 우리면 빈 말이다).
+          숫자를 떠받들지 말라는 경고 자체는 살린다 — 대신 **왜 그런지**를 말하고 갈 곳을 준다. */}
+      <p className="impepi">아홉 축 중 <b>{r.band}</b>. <b>이 숫자로 사람을 고르진 마</b> —
+        같은 점수라도 <b>어디가 어긋났느냐에 따라 할 일이 달라져.</b> 위 「조심할 것」이 네 경우의 답이야.<Ref n={r.n} /></p>
 
       {/* A-4: 궁합도 같은 고지를 받는다 — 같은 엔진 계열이고 같은 성격의 문서다 */}
       <p className="ainote docnote">이 문서는 <b>두 사람의 생년월일로 계산한 전통 해석</b>이야 — 재미로 보는 참고용이야.{" "}
@@ -2967,10 +2989,28 @@ const guardianSize = (vp) => (SKIN === "holo"
    ⚠ `?msr=1` 로 열린다. 검사(report-check 122항)가 그 문으로 들어가므로
      **숨긴 동안에도 회귀가 계속 잡힌다.** 안 그러면 122항이 통째로 잠든다. */
 const MSR_FREE = (() => { try { return /[?&]msr=1(&|$)/.test(window.location.search); } catch (_) { return false; } })();
-const SKIN = (() => { try { return /[?&]skin=holo(&|$)/.test(window.location.search) ? "holo" : ""; } catch (_) { return ""; } })();
-/* 얼굴 A/B — `?face=a|b|c|d`. 없으면 얼굴을 안 그린다(지금까지의 화면 그대로).
-   창업자가 "상위 4개를 앱에 얹어서 평가하겠다"고 해서 **끼웠다 뺐다 되게** 둔다. */
-const FACE = (() => { try { const m = /[?&]face=([abcd])(&|$)/.exec(window.location.search); return m ? m[1] : ""; } catch (_) { return ""; } })();
+/* ── 어느 수호신을 쓸 것인가 (2026-08-31 창업자 결정) ───────────────────────
+   *"얼굴 있는 버전에 대한 내부 평이 좋아 다른 버전은 폐기하고 나중에 언제든지 되살릴 수
+   있도록 저장해놔 (이전에 까만 버전 살려놔 하면 살릴수있도록)"*
+   → **얼굴 달린 홀로가 기본**이 된다. 까만 입자 판은 지우지 않고 **깃발로 되살린다.**
+   ⚠ 코드를 지우지 않는 이유: 되살릴 수 있어야 한다는 게 지시의 핵심이다.
+      입자 렌더러(GuardianCanvasGL/Sim/2d)와 그 셰이더는 **그대로 둔다** —
+      홀로가 WebGL 에 실패했을 때의 폴백이기도 하다(onFail → holoDead).
+   되살리는 법:
+     `?skin=dark`  — 까만 입자 판(예전 기본)
+     `?face=off`   — 홀로는 쓰되 얼굴만 끈다
+     `?face=b|c|d` — 다른 얼굴 프리셋 */
+const SKIN = (() => { try {
+  const q = window.location.search;
+  if (/[?&]skin=dark(&|$)/.test(q)) return "";        // 까만 판을 되살린다
+  return "holo";                                      // 기본 = 홀로
+} catch (_) { return "holo"; } })();
+const FACE = (() => { try {
+  const q = window.location.search;
+  if (/[?&]face=off(&|$)/.test(q)) return "";         // 얼굴만 끈다
+  const m = /[?&]face=([abcd])(&|$)/.exec(q);
+  return m ? m[1] : (SKIN === "holo" ? "a" : "");     // 기본 = A
+} catch (_) { return SKIN === "holo" ? "a" : ""; } })();
 
 /* ── 오늘의 상태 — **두 체계를 섞는다** (2026-08-28 창업자 결정) ──────────────
    **왜 섞나.** 전엔 사주 하나(일진 십성)만 썼는데, 십성은 **일간 10개**만 보므로
@@ -3279,7 +3319,9 @@ void main(){
   /* ⚠ 곁에서는 접는다. 응축된 구슬에서 앞면을 반경의 1/4 씩 밀면 **구슬이 안 둥글어진다**
      (실측 3주기 0.061, 반경 42~66px). 형태 변조를 곁에서 접는 다른 항들과 같은 처리다 —
      곁의 회전 단서는 약해지지만, 곁의 수호신은 「돌아보는 머리」가 아니라 「응축된 구슬」이다. */
-  vec2 fwd = lk * Rs * 0.34 * (1.0 - fold*0.45);
+  /* ⚠ 곁에서 **더 접는다.** 곁의 구슬은 작아서 앞면을 조금만 밀어도 임계 등고선이
+     한쪽으로 무너진다 — 느린 기기(실측 10fps)에서 특히 그렇다. 판결은 몸이 커서 여유가 있다. */
+  vec2 fwd = lk * Rs * 0.34 * (1.0 - fold*0.82);
   /* ⚠ **누르면 심지도 같이 밀려야 한다**(창업자 2026-08-30: "몸의 심지(코어)가 얼굴의
      중심으로 느껴지는데 인터랙션할 때 이 부분은 변동 없이 가운데를 유지하니 더 따로 논다").
      맞다 — 얼굴은 밀리는데 심지가 제자리면 **얼굴이 몸에서 떨어져 나간 것**으로 보인다.
@@ -3419,6 +3461,9 @@ void main(){
        안 둥글어졌다(3주기 성분 0.001 → 0.128). clamp 는 형태를 만든다.
      정규화하면 값이 ±|lk| 안에 갇혀 자를 필요가 없고, 경계도 안 생긴다. */
   float turn = dot(normalize(e + 1e-4), lk);
+  /* ⚠ **한때 이 줄이 1.0 으로 죽어 있었다**(2026-08-31). 원인을 찾으려고 항을 하나씩 끄던
+     실험이 타임아웃으로 중간에 끊겼고, 복구가 안 된 채 다음 작업이 그 위에 쌓였다.
+     끄는 실험은 반드시 **복구까지 한 호흡**에 묶는다 — 끊기면 그게 코드가 된다. */
   float shade = 1.0 + turn * 0.30 * (1.0 - fold);
   gl_FragColor = vec4(outc, clamp(sum*u_lum*live*vig*bornK*touchK*shade*volA, 0.0, 1.0));
 }`;
@@ -3447,7 +3492,7 @@ const HOLO_BG = [0.851, 0.835, 0.792];   // 미색 회색 #d9d5ca
    달빛 은청으로 둔다 — 임의의 색이 아니라 이 앱이 이미 쓰는 말에서 온 색이다. */
 const HOLO_MOON = ["#46557f", "#93a6d0", "#b7a9d6"];
 
-function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFail }) {
+function GuardianField({ saju, mood, orbRef, reactRef, scatter, gyeotRef, popRef, size = 340, onFail }) {
   const ref = useRef(null);
   const faceRef = useRef(null);
   useEffect(() => {
@@ -3484,6 +3529,13 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
          (실기 영상 2026-08-30: 초록 불꽃형에서 오른눈이 배경 위에 떠 있었다).
          셰이더와 **같은 표**를 여기서도 읽어 얼굴 가로를 그만큼 좁힌다. */
       const AGX = ({ 화: 1.26, 수: 0.94, 목: 1.18, 금: 1.08, 토: 0.98 })[el] ?? 1.08;
+      /* ⚠ **간격만 나누고 눈 크기는 그대로 뒀던 게 사고였다**(팀 실기 2026-08-31:
+         "눈이 더 크고 몰려서 징그럽다"). 몸이 좁은 오행에서 간격만 좁히면
+         **눈은 그대로인데 사이만 붙어** 얼굴이 뭉친다. 실측 간격/눈 비가
+         화 3.10 ~ 수 4.15 로 **34% 흔들렸다** — 화·목인 사람만 몰려 보인다.
+         비율은 사람마다 같아야 한다. 좁은 몸에서는 **얼굴 전체가 같이 작아진다** —
+         눈·간격·입을 한 계수로 줄인다. 기준은 금(1.08) 이고 거기서 창업자가 고른 값이 나온다. */
+      const NAR = 1.08 / AGX;
       gl.uniform1f(U.u_grain, AURA.base.grain);
       gl.uniform1f(U.u_warm, mood ? mood.warm : 0);
       /* ⚠ 창업자 지적 "움직임이 없잖아" — 워핑이 느리면 정지화로 보인다. 기본 배속을 올린다. */
@@ -3604,7 +3656,8 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
       const T0 = performance.now();
       const draw = () => {
         raf = requestAnimationFrame(draw);
-        const now = performance.now(), dt = Math.min(0.05, (now - last) / 1000); last = now;
+        const now = performance.now(), dtRaw = (now - last) / 1000;
+        const dt = Math.min(0.05, dtRaw); last = now;
         const orbT = orbRef && orbRef.current ? 1 : 0;
         /* ── 예비동작 (창업자 2026-08-28: "작아지면서 뽀잉이 아니고 **커졌다가** 작아지면서
            뽀잉으로 해야 아 변했구나!라는 게 확실히 느껴질 거 같아") ──────────────────
@@ -3631,9 +3684,17 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
            예비동작(부풀 때) K 를 크게, 돌아올 때 K 를 낮추고 감쇠를 올린다.
            ⚠ 감쇠까지 올려야 한다 — K 만 낮추면 느려지는 게 아니라 **더 오래 출렁인다.** */
         const oK = anti ? 220 : 95, oD = anti ? 9.0 : 13.5;
-        orbV += ((goal - orb) * oK - orbV * oD) * dt;
+        /* ⚠ **스프링을 프레임 통째로 적분하면 느린 기기에서 터진다.** K=220 에 dt=0.05 를
+           곱하면 이득이 11 이라 발산한다 — 컨테이너가 느려진 뒤 실제로 그랬다(오라가 찌그러져
+           검사 ⑩ 이 0.002 → 0.11). 느린 폰에서도 같은 일이 난다.
+           **작은 걸음으로 나눠 적분한다** — 프레임이 몇 fps 든 결과가 같다. */
+        for (let rem = dt; rem > 1e-6; ) {
+          const h = Math.min(1 / 120, rem); rem -= h;
+          orbV += ((goal - orb) * oK - orbV * oD) * h;
+          orb = Math.max(-1.05, Math.min(1.40, orb + orbV * h));
+        }
         /* ⚠ clamp 를 같이 안 넓히면 목표를 낮춰도 **여기서 잘린다**(전에 그 실수를 했다) */
-        orb = Math.max(-1.05, Math.min(1.40, orb + orbV * dt));
+
         gl.uniform1f(U.u_orb, Math.abs(orb) < 0.0004 ? 0 : orb);
         /* 접힘은 목표(orbT)를 향해 곧게 간다 — 스프링이 아니라 지수 감쇠라 넘치지 않는다.
            크기보다 **조금 빨리** 접혀야 부푸는 동안 이미 둥글다. */
@@ -3674,8 +3735,13 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
         /* ⚠ K=34·D=4.6 은 **굼떴다**(창업자 재확인). 손끝은 즉각 반응해야 하고,
            말랑함은 감쇠를 낮춰서 얻는다 — 세기를 낮춰서가 아니다. */
         const K = held ? 170 : 30, D = held ? 11.5 : 5.8;
-        wisp.vx += ((tx - wisp.x) * K - wisp.vx * D) * dt;
-        wisp.vy += ((ty - wisp.y) * K - wisp.vy * D) * dt;
+        /* 위습도 같은 이유로 나눠 적분한다(K 가 170 까지 간다) */
+        for (let rem = dt; rem > 1e-6; ) {
+          const h = Math.min(1 / 120, rem); rem -= h;
+          wisp.vx += ((tx - wisp.x) * K - wisp.vx * D) * h;
+          wisp.vy += ((ty - wisp.y) * K - wisp.vy * D) * h;
+          wisp.x += wisp.vx * h; wisp.y += wisp.vy * h;
+        }
         /* ── 밀어내기 (바깥을 누르고 있는 동안) ──────────────────────────
            손끝에서 **멀어지는 방향**으로 계속 민다. 가까울수록 세게 — 그래야
            손가락이 몸통을 밀고 지나가는 것으로 읽힌다(먼 데서도 같은 힘이면 순간이동이다). */
@@ -3691,7 +3757,6 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
      맴돌기는 "붙은 뒤의 애교"지 접근을 막는 힘이 아니다. 0.28 안쪽에서만, 약하게. */
         if (held && dd < 0.28) { const s2 = (1 - dd / 0.28) * 3.0 * (1 + wisp.ex * 0.5);
           wisp.vx += -ddy * s2 * dt; wisp.vy += ddx * s2 * dt; }
-        wisp.x += wisp.vx * dt; wisp.y += wisp.vy * dt;
         wisp.ex *= Math.exp(-dt / 2.6);                      // 들뜸은 천천히 식는다
 
         /* 꼬리 — 70ms 마다 지금 자리를 기록한다. 위습이 지나간 길이 남는다. */
@@ -3739,11 +3804,15 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
           /* ⚠ **속도 추정은 폭발한다.** dt 가 한 프레임만 작게 튀어도 (Δ/dt) 가 치솟고,
              저역통과로도 다 안 눌린다 — 실측에서 고개가 **138° 까지 돌았다**(yaw 2.41rad).
              원인은 물리가 아니라 나눗셈이다. 순간값부터 잘라 넣는다. */
-          if (look.had && dt > 1e-4) {
-            const k = 1 - Math.exp(-dt / 0.22);
+          /* ⚠ **`dt` 로 나누면 안 된다.** dt 는 0.05 로 잘린 값인데 실제 프레임이 0.10 이면
+             떠다닌 거리는 0.10 어치인데 0.05 로 나누게 돼 **속도가 두 배로 뻥튀기된다.**
+             그 부푼 속도가 고개를 홱 돌리고, 고개가 안쪽 층을 던져 **오라가 찌그러진다**
+             (느린 기기에서 검사 ⑩ 이 0.002 → 0.07). 속도는 **실제 경과 시간**으로 잰다. */
+          if (look.had && dtRaw > 1e-4) {
+            const k = 1 - Math.exp(-dtRaw / 0.22);
             const cl = (v) => Math.max(-0.16, Math.min(0.16, v));
-            look.x += (cl((baseX - look.px) / dt) - look.x) * k;
-            look.y += (cl((baseY - look.py) / dt) - look.y) * k;
+            look.x += (cl((baseX - look.px) / dtRaw) - look.x) * k;
+            look.y += (cl((baseY - look.py) / dtRaw) - look.y) * k;
           }
           look.px = baseX; look.py = baseY; look.had = true;
         }
@@ -3754,8 +3823,8 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
         {
           const tt2 = ((now - T0) / 1000) * SPD;
           const lim = (v, m) => Math.max(-m, Math.min(m, v));
-          gaze.yaw = lim(look.x * 5.2, 0.40) + Math.sin(tt2 * 0.31) * 0.075;
-          gaze.pitch = lim(look.y * 4.0, 0.26) + Math.sin(tt2 * 0.24 + 0.9) * 0.045;
+          gaze.yaw = lim(look.x * 5.2, 0.30) + Math.sin(tt2 * 0.31) * 0.075;
+          gaze.pitch = lim(look.y * 4.0, 0.19) + Math.sin(tt2 * 0.24 + 0.9) * 0.045;
           gaze.roll = lim(-look.x * 1.6, 0.17) + Math.sin(tt2 * 0.19 + 2.2) * 0.022;
           if (press > 0.01) { gaze.yaw += -pdx * 0.26 * press; gaze.pitch += pdy * 0.18 * press; }
           /* ⚠ **몸만 옮기면 얼굴이 뒤에 남는다.** 셰이더가 `w = e - lk*R*0.30` 으로
@@ -3765,7 +3834,7 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
           /* 얼굴은 **앞면(c0)** 을 따라간다 — 셰이더의 `fwd` 와 같은 식이어야 한다 */
           const fv = Math.min(Math.max(foldV, 0), 1);
           fvFace = fv;
-          const fwd = (0.320 + (0.208 - 0.320) * fv) * (1 + (0.20 - 1) * gather) * 0.34 * (1 - fv * 0.45) / 2.35;   // 셰이더의 fwd 와 같은 식   // foldJ 는 위 블록 지역변수라 여기선 안 보인다
+          const fwd = (0.320 + (0.208 - 0.320) * fv) * (1 + (0.20 - 1) * gather) * 0.34 * (1 - fv * 0.82) / 2.35;   // 셰이더의 fwd 와 같은 식   // foldJ 는 위 블록 지역변수라 여기선 안 보인다
           core.x += gaze.yaw * fwd;
           core.y += gaze.pitch * fwd;
         }
@@ -3775,17 +3844,96 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
         try { window.__BINARI_GAZE = gaze.yaw; } catch (_) {}
         gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLES, 0, 3);
 
+        /* 위성 — 얼굴보다 먼저 그려 뒤에 깔린다 */
+        const drawSats = (g2, S2) => {
+          const gy = (gyeotRef && gyeotRef.current) || [];
+          try { window.__BINARI_SAT = gy.length; } catch (_) {}
+          const ob = Math.min(Math.max(orb, 0), 1);
+          if (!gy.length || ob < 0.02) return;
+          const tS = ((now - T0) / 1000) * SPD;
+          const cxp = core.x * S2, cyp = core.y * S2;
+          const R1 = S2 * (coreR / 2.35);
+          g2.save();
+          gy.slice(0, 8).forEach((g) => {
+            const opp = g.rel < -0.5;                 // 극 — 반대로 돌고 궤도면이 선다
+            const dir = opp ? -1 : 1;
+            const ang = (g.ang || 0) + dir * tS * 0.23;
+            /* ⚠ 2.05 는 **오라 바깥 맨바탕**이라 외톨이 점으로 보였다(실기 확인).
+               빛의 가장자리를 타게 안으로 당긴다 — 몸을 도는 것으로 읽힌다. */
+            const rad = R1 * (g.tier ? 1.58 : 1.88);
+            const ex = opp ? 0.60 : 1.0, ey = opp ? 1.0 : 0.60;
+            /* 깊이 — 아래쪽(sin>0)이 앞이다. 뒤로 갈수록 흐리고 작아져 **몸 뒤로 지나간다** */
+            const dep = 0.5 + 0.5 * Math.sin(ang) * (opp ? 0.35 : 1);
+            const c = g.col || [0.8, 0.78, 0.86];
+            /* 색장은 미색이다. 오행색을 그대로 찍으면 튄다 — 따뜻한 흰쪽으로 섞어 재질을 맞춘다 */
+            /* ⚠ **「짙게 하면 보인다」는 시각적으로 틀렸다**(창업자 2026-08-31: "곰팡이가
+               떠다니는 거 같아 색상이 이상해 안이뻐"). 맞다 — 밝은 판 위의 **어두운 점**은
+               빛이 아니라 **얼룩**으로 읽힌다. 보이긴 하는데 더러워 보인다.
+               빛으로 읽히려면 **가운데가 희어야** 한다 — 반딧불이가 그렇다.
+               그래서 두 겹으로 그린다: 바깥은 오행색 후광, 안은 흰 심. 색은 정체성만 맡고
+               「빛이다」는 흰 심이 말한다. 어둡게 만들지 않는다. */
+            /* ⚠ 어두우면 얼룩, 너무 밝으면 오라의 반짝임과 구분이 안 된다(둘 다 실기에서 겪었다).
+               가운데는 희게(빛이다) 두되 **후광은 오행색을 진하게** — 색으로 구분되고
+               밝기로는 빛으로 읽힌다. 채도를 올리되 명도는 안 낮춘다. */
+            const mx = Math.max(c[0], c[1], c[2]) || 1;
+            const sat = (v) => Math.round(255 * Math.max(0, Math.min(1, 0.18 + 0.82 * (v / mx) * 0.92)));
+            const col = sat(c[0]) + "," + sat(c[1]) + "," + sat(c[2]);
+            const base = (g.tier ? 1.0 : 0.66) * ob * (0.50 + 0.50 * dep);
+            /* 꼬리 — 지나온 자리에 점점 옅고 작은 덩이를 남긴다. 색장의 번짐과 같은 결. */
+            /* ⚠ 꼬리를 길게 끌면 그것도 얼룩이 된다 — 셋으로 줄이고 아주 옅게만 남긴다 */
+            for (let t = 2; t >= 0; t--) {
+              const a2 = ang - dir * t * (g.tier ? 0.055 : 0.085);
+              const px = cxp + Math.cos(a2) * rad * ex;
+              const py = cyp + Math.sin(a2) * rad * ey;
+              const k = (1 - t / 3.4);
+              const rr = R1 * (0.34 + 0.14 * dep) * k * (g.tier ? 1 : 0.86);
+              const al = base * k * k * (t === 0 ? 1 : 0.34);
+              if (al < 0.004 || rr < 0.4) continue;
+              /* 바깥 — 오행색 후광 */
+              const grd = g2.createRadialGradient(px, py, 0, px, py, rr);
+              grd.addColorStop(0, "rgba(" + col + "," + (al * 0.85).toFixed(3) + ")");
+              grd.addColorStop(0.40, "rgba(" + col + "," + (al * 0.40).toFixed(3) + ")");
+              grd.addColorStop(1, "rgba(" + col + ",0)");
+              g2.fillStyle = grd; g2.beginPath(); g2.arc(px, py, rr, 0, 7); g2.fill();
+              /* 안 — 흰 심. **이게 「빛이다」를 말한다.** 앞쪽(dep)일수록 또렷하다 */
+              if (t === 0) {
+                const cr = rr * 0.30;
+                const gw = g2.createRadialGradient(px, py, 0, px, py, cr);
+                const wa = Math.min(0.95, base * (0.55 + 0.60 * dep));
+                gw.addColorStop(0, "rgba(255,253,246," + wa.toFixed(3) + ")");
+                gw.addColorStop(0.55, "rgba(255,252,240," + (wa * 0.45).toFixed(3) + ")");
+                gw.addColorStop(1, "rgba(255,252,240,0)");
+                g2.fillStyle = gw; g2.beginPath(); g2.arc(px, py, cr, 0, 7); g2.fill();
+              }
+            }
+          });
+          g2.restore();
+        };
+
         /* ── 얼굴 (?face=a|b|c|d) ─────────────────────────────────────────
            **오라를 따라다녀야 한다.** 위습은 드리프트로 떠다니고 손끝으로 옮겨가며
            응축하면 작아지므로, 얼굴이 캔버스 한가운데 고정되면 곧바로 어긋나 보인다.
            셰이더가 쓰는 좌표를 여기서 같은 식으로 다시 계산해 얹는다.
            ⚠ 셰이더의 `p = (uv - drift)*2.35` 와 뒤집힌 관계다 — 화면 y 는 아래로 증가한다. */
-        if (FACE && faceRef.current) {
+        /* ⚠ **할 일이 없으면 2D 층을 아예 건드리지 않는다.** 얼굴도 위성도 없는데 매 프레임
+           590² 캔버스를 지우면 프레임이 늘어지고, 그 늘어진 dt 가 스프링·시선 추정으로 되먹임돼
+           **오라가 찌그러진다**(검사 ⑩ 이 0.002 → 0.11 로 튀었다). */
+        const wantOverlay = FACE || ((gyeotRef && gyeotRef.current && gyeotRef.current.length) > 0);
+        if (wantOverlay && faceRef.current) {
           const fx = faceRef.current;
           if (fx.width !== S) { fx.width = S; fx.height = S; }
           const g2 = fx.getContext("2d");
           g2.clearRect(0, 0, S, S);
           const tt = ((now - T0) / 1000) * SPD;
+          /* ── 위성 (곁) ────────────────────────────────────────────────────
+             입자 렌더러는 점 수천 개 중 일부를 궤도로 떼어 위성을 만든다. 색장에는
+             **뗄 입자가 없어서** 옮겨오지 못했고, 그래서 홀로에서는 곁에 사람을 넣어도
+             아무것도 안 돌았다 — 화면은 「같이 돌고 있어」라고 말하는데(창업자 제보 2026-08-31).
+             여기서 2D 층으로 그린다. ⚠ **또렷한 점으로 찍으면 색장 위에서 이물질로 보인다.**
+             재질을 맞춘다 — 가장자리 없는 빛덩이 + 꼬리, 궤도 뒤쪽은 흐려져 몸 뒤로 지나간다.
+             자리·방향·층은 입자판과 **같은 규칙**이다(각도 seat · 극이면 반대로 · 앞줄이 안쪽). */
+          drawSats(g2, S);
+          if (!FACE) return;                 // 얼굴은 ?face= 일 때만. 위성은 항상.
           const P = FACE_PRESETS[FACE];
           /* ── 얼굴이 두리번거린다 ─────────────────────────────────────
              창업자: "눈 높이와 좌우 위치는 시선과 얼굴의 방향을 나타낼 수 있을 거 같아서
@@ -3864,10 +4012,13 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
                  여기 상수는 오행 폭으로 나누기 **전** 값이므로 기본 오행(금 1.08) 기준으로
                  되돌려 잡는다 — 0.56 × 1.08 = 0.605. 금에서 정확히 0.56 이 되고,
                  좁은 오행은 그만큼 더 좁아진다(화 0.48 · 목 0.51). */
-              gapR: (0.605 / AGX) * k * (1 - 0.42 * press),
-              mouthR: 0.36 * k * (1 - 0.45 * press),
-              cy: P.cy, gap: 0.56, eyeSz: 0.155 * k, eyeScale: hurt ? 1.9 : 1,   // 보드에서 고른 값
-              mSz: 0.30 * k * (hurt ? 1.35 : 1), mCy: P.mCy,
+              /* ⚠ 몰림이 **너무 심했다**(창업자 2026-08-31). 0.42/0.45 는 눌리는 순간
+                 이목구비가 한 점으로 모여 얼굴이 뭉개졌다. 절반 아래로 내린다 —
+                 「눌렸다」는 남기고 「뭉개졌다」는 없앤다. */
+              gapR: 0.56 * NAR * k * (1 - 0.17 * press),
+              mouthR: 0.36 * NAR * k * (1 - 0.18 * press),
+              cy: P.cy, gap: 0.56, eyeSz: 0.155 * NAR * k, eyeScale: hurt ? 1.9 : 1,   // 보드에서 고른 값
+              mSz: 0.30 * NAR * k * (hurt ? 1.35 : 1), mCy: P.mCy,
               yaw, pitch, roll, blink: hurt ? 0 : blink,
               /* 누른 축으로 찌그러진다 — 방향은 손끝→얼굴 벡터의 **반대**(=밀린 쪽) */
               squish: press, sqx: pdx, sqy: -pdy,
@@ -3907,8 +4058,9 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, size = 340, onFa
     style={{ width: size, height: size, touchAction: "none", cursor: "pointer",
              userSelect: "none", WebkitUserSelect: "none",
              WebkitTouchCallout: "none", WebkitTapHighlightColor: "transparent" }} />;
-  if (!FACE) return cv;
-  /* 얼굴은 **별도 2D 캔버스**로 겹친다 — 셰이더에 넣으면 선이 뭉개지고, 오라를 건드리게 된다.
+  /* ⚠ 이 2D 층은 **얼굴이 없어도 붙인다** — 곁 위성이 여기 그려지기 때문이다.
+     예전엔 `?face=` 일 때만 붙여서, 얼굴을 안 켜면 위성도 같이 사라졌다.
+     얼굴은 **별도 2D 캔버스**로 겹친다 — 셰이더에 넣으면 선이 뭉개지고, 오라를 건드리게 된다.
      포인터는 아래 오라 캔버스가 받아야 하므로 `pointerEvents:none`. */
   return (<span style={{ position: "relative", display: "block", width: size, height: size }}>
     {cv}
@@ -4505,7 +4657,8 @@ function Guardian(props) {
   if (SKIN === "holo" && !holoDead) {
     if (typeof window !== "undefined") window.__BINARI_R = "field";
     return <GuardianField saju={props.saju} mood={props.mood} orbRef={props.orbRef}
-      reactRef={props.reactRef} scatter={props.scatter} size={props.size} onFail={() => setHoloDead(true)} />;
+      reactRef={props.reactRef} scatter={props.scatter} size={props.size}
+      gyeotRef={props.gyeotRef} popRef={props.popRef} onFail={() => setHoloDead(true)} />;
   }
   if (typeof window !== "undefined") window.__BINARI_R = mode;   // 버전 배지용 — 실제 렌더러(sim/gl/2d) 노출
   if (mode === "sim") return <GuardianCanvasSim {...props} onFail={() => setMode("gl")} />;
@@ -8965,7 +9118,25 @@ const CSS = `
 /* 빈 자리 한 칸 — 밝은 판용. ⚠ 명부 행(.gyeotlist li) 자체는 아직 어두운 판 값이라
    홀로에서 회색으로 뜬다(홀로 가독성 감사 §② 「반투명 판」 항목). 그건 감사가 잡은 별건이고,
    **새로 넣는 칸까지 그 더미에 얹지는 않는다.** 감사대로 행을 뒤집으면 이 두 줄은 그대로 맞는다. */
-.stage.holo .gyeotlist li.gyempty{border-color:#b3ac9a}
+/* ── 곁 명부 행 — 밝은 판 (2026-08-31) ─────────────────────────────────────
+   홀로 가독성 감사 §④ 3단 「반투명 판 뒤집기」의 곁 항목. 감사가 처방한 값 그대로다.
+   ⚠ **먼저 하나를 잘못 고쳤다가 되돌린 자리다.** 뒷면 꼬리표(.tzhead)에만 밝은 판용
+     글자색을 줬는데, 판이 아직 어두운 반투명이라 **오버라이드를 건 쪽이 안 건 쪽보다
+     나빠졌다**(2.70). 감사가 이미 같은 사고를 둘 기록해 놨다(.formsteps li 4.86→1.96 ·
+     .verbadge 5.14→2.16). **글자만 밝은 판용으로 바꾸면 안 되고 판을 같이 뒤집어야 한다.**
+   ⚠ li.called 의 opacity .55 는 밝은 판에서 더 옅어져 층 구분이 약해진다 — .62 로 올린다.
+     (층은 밝기로만 말한다는 규칙은 그대로다. 값만 판에 맞춘다.) */
+.stage.holo .gyeotlist li{background:rgba(255,253,246,.78);border-color:#c2bcaa}
+.stage.holo .gyeotlist li.called{opacity:.62}
+.stage.holo .galias{color:#241f14}
+.stage.holo .grel{color:#5d5544}
+.stage.holo .gflip,.stage.holo .gsee{color:#5d5544;border-color:#b3ac9a}
+.stage.holo .gx{color:#7a5a52;border-color:#c2a8a2}
+.stage.holo .gback{border-top-color:#c2bcaa}
+.stage.holo .tzhead{color:#5d5544}
+.stage.holo .tzsay{color:#3c3527}
+.stage.holo .tzsay b{color:#7a4a12}          /* 강조 금색은 미색 판에서 안 읽힌다 — 진한 금으로 */
+.stage.holo .gyeotlist li.gyempty{border-color:#b3ac9a;background:none}
 .stage.holo .gyaddbtn{color:#5d5544}
 .stage.holo .gyaddbtn:hover,.stage.holo .gyaddbtn:focus-visible{color:#241f14}
 .stage.holo .gyplus{border-color:#b3ac9a}
@@ -9063,6 +9234,7 @@ const CSS = `
 .stage.holo .chk em,.stage.holo .unit,.stage.holo .mtag,
 .stage.holo .rvbig span,.stage.holo .rvlunar{color:#5d5544}
 .stage.holo .wakehint{color:#5d5544}
+
 .stage.holo .brand-mark{color:#5d5544}
 .stage.holo .verbadge{color:#5d5544}                         /* 9px 라 판 아래에서도 4.5 를 넘겨야 한다 */
 .stage.holo .streak{color:#7a4a12}
@@ -9271,6 +9443,8 @@ const CSS = `
 .tzmeet.same .tzR{animation-name:tzRsame}
 @keyframes tzLsame{0%,8%{transform:translateX(-40px)}46%,74%{transform:translateX(-7px)}92%,100%{transform:translateX(-40px)}}
 @keyframes tzRsame{0%,8%{transform:translateX(40px)}46%,74%{transform:translateX(7px)}92%,100%{transform:translateX(40px)}}
+/* 무슨 축인지 먼저 말한다 — 그림만 보고는 이게 마야인지 알 길이 없었다(창업자 제보 2026-08-31) */
+.tzhead{font-family:sans-serif;font-size:10.5px;letter-spacing:.06em;color:#8f84a8;margin:2px 0 0}
 .tzsay{font-family:sans-serif;font-size:12px;color:#cfc4e2;line-height:1.7;margin:4px 0 0;word-break:keep-all}
 .tzsay b{color:#ffe9ad}
 @media (prefers-reduced-motion:reduce){

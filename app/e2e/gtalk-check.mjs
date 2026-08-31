@@ -102,14 +102,18 @@ ck("③ 한 마디만 하고 물러난다(질문 칸만 남는다)", (await page
 
 /* ── ④ 기존 화면은 한 줄도 안 바뀐다 ─────────────────────────────────────── */
 {
+  /* ⚠ **가는 길이 바뀌었다.** 이 검사를 쓸 때는 홀로가 `?skin=holo` 였는데, 그 뒤 다른 세션이
+     **홀로를 기본으로** 바꿨다(`?skin=dark` 가 옛 화면). 그래서 인자 없이 열면 이제 홀로가 뜨고,
+     검사가 「기존 화면인데 말이 바뀐다」고 울었다 — **정확한 검출이고, 틀린 건 검사의 전제였다.**
+     지키려는 뜻은 그대로다: **옛 화면은 한 줄도 안 바뀐다.** 가는 길만 고친다. */
   const p2 = await b.newPage({ viewport: { width: 430, height: 932 } });
-  await onboard(p2, BASE);
-  await p2.goto(BASE, { waitUntil: "domcontentloaded" });
+  await onboard(p2, BASE, "?skin=dark");
+  await p2.goto(BASE + "/?skin=dark", { waitUntil: "domcontentloaded" });
   await p2.waitForTimeout(5000);
   const before = (await p2.locator(".gsay").first().innerText().catch(() => "")).replace(/\n/g, " ").trim();
   await p2.locator("section.scene").click({ position: { x: 215, y: 300 } });
   await p2.waitForTimeout(700);
-  ck("④ 홀로가 아니면 말이 안 바뀐다(기존 화면 불변)",
+  ck("④ 옛 화면(?skin=dark)에서는 말이 안 바뀐다",
      (await p2.locator(".gsay").first().innerText().catch(() => "")).replace(/\n/g, " ").trim() === before, before);
   await p2.close();
 }

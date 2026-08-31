@@ -64,9 +64,11 @@ export function drawEyes(x, kind, cx, cy, gap, sz, ink, gaze, only) {
     };
     if (kind === "dot") { x.beginPath(); x.ellipse(ex, cy, sz, sz * 1.16, 0, 0, 7); x.fill(); }
     else if (kind === "wide") { x.beginPath(); x.ellipse(ex, cy - sz * 0.22, sz * 1.5, sz * 1.62, 0, 0, 7); x.fill(); }
-    else if (kind === "smile") { x.lineWidth = sz * 0.78; x.beginPath();
+    /* ⚠ 획 두께가 **눈 크기에 비례**한다. 눈이 0.088 → 0.155 로 커지면서 이 호가
+       시커먼 애벌레가 됐다(팀 실기 2026-08-31 "징그럽다"). 두께는 크기를 덜 따라간다. */
+    else if (kind === "smile") { x.lineWidth = sz * 0.42; x.beginPath();
       x.arc(ex, cy + sz * 0.62, sz * 1.22, Math.PI * 1.18, Math.PI * 1.82); x.stroke(); }
-    else if (kind === "closed") { x.lineWidth = sz * 0.72; x.beginPath();
+    else if (kind === "closed") { x.lineWidth = sz * 0.40; x.beginPath();
       x.arc(ex, cy - sz * 0.55, sz * 1.15, Math.PI * 0.24, Math.PI * 0.76); x.stroke(); }
     /* 시무룩 — **바깥쪽이 처진 눈.** 타원을 바깥 아래로 기울이고 위를 살짝 자른다 */
     else if (kind === "droop") { cut(0.20, sz * 1.16, sz * 1.30, 0.62, 0.26); }   // 바깥이 처진다
@@ -269,14 +271,17 @@ export function drawFace(x, S, opt) {
   [[-eu, -1], [eu, 1]].forEach(([u, side]) => {
     const e = put(u, 0);
     if (e.z < -0.15) return;                       // 완전히 뒤로 넘어간 눈은 안 그린다
-    const near = 0.55 + 0.45 * Math.max(0, e.z);   // 가까울수록 크다
+    /* ⚠ 0.55+0.45 는 **두 눈 크기 차이를 너무 크게** 만들었다 — 한쪽은 점, 한쪽은 큰 덩어리라
+       원근이 아니라 결함으로 읽힌다(눈이 커진 뒤 특히). 원근은 남기고 폭만 좁힌다. */
+    const near = 0.84 + 0.16 * Math.max(0, e.z);   // 가까울수록 크다
     x.save();
     x.translate(e.px, e.py);
     /* 가로로 눌린다 — 구 표면이 기울어질수록 정면 투영이 좁아진다 */
     /* 세로는 **깜빡임**이 먹는다 — 감으면 점이 납작한 선이 된다.
        눈 종류를 갈아끼우지 않고 눌러서 감기므로 어떤 모양에도 그대로 붙는다. */
-    /* ⚠ 바닥이 0.28 이면 옆으로 돌았을 때 표정 획이 **세로 지그재그**로 뭉친다. 0.48 로 올린다. */
-    x.scale(Math.max(0.48, Math.abs(e.z)), Math.max(0.06, 1 - P.blink));
+    /* ⚠ 바닥이 0.28 이면 옆으로 돌았을 때 표정 획이 **세로 지그재그**로 뭉친다.
+       그리고 0.48 도 여전히 한쪽 눈만 심하게 눌러 좌우가 딴판이 됐다 — 0.72 로 올린다. */
+    x.scale(Math.max(0.72, Math.abs(e.z)), Math.max(0.06, 1 - P.blink));
     x.translate(-e.px, -e.py);
     drawEyes(x, P.eye, e.px, e.py, 0, U * P.eyeSz * near * P.eyeScale, P.ink,
       { x: yaw * 1.6, y: pitch * 1.6 }, side);
