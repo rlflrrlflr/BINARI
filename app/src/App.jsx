@@ -4522,7 +4522,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v178 · 한 링크에 여럿";
+const APP_VER = "v179 · 곁에게 묻는다";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -7056,6 +7056,63 @@ export default function App() {
       { const _m = String(e?.message || e); setInviteErr(`초대를 못 만들었어 — ${/[가-힣]/.test(_m) ? _m : "잠시 뒤 다시 해 줄래?"}`); }
     } finally { setInviteBusy(""); }
   };
+  /* ── 곁에게 묻기 (v179 · 창업자 "곁 탭에 질문 채팅칸을 넣으면 어때? 팀원들이 엄청 궁금해해서") ──
+     **탭을 안 나눴다.** 곁탭IA 가 「판결/곁 두 탭」으로 가른 문서이고 뒤집을 근거가 아직 없다
+     (분모 21명). 그리고 곁 탭은 이미 **사람이 서는 자리**다 — 사람을 묻는 자리가 거기 아니면 어디인가.
+     토글도 **명부가 이미 화면에 있는 곳**에 있어야 한다. 다른 탭에 두면 명부를 두 번 그린다.
+
+     ⚠ **판결 포맷을 여기 씌우지 않는다.** GO/STOP/HOLD 는 「할까 말까」의 답이지 「누구와」의 답이 아니다.
+       여기서 필요한 건 판정이 아니라 **비교**다. 헌장 §판결문 형식 보존도 축·카드를 안 늘리라고 한다.
+     ⚠ **원가.** 같은 날 창업자가 원가를 물었다. 그래서 **시스템 프롬프트를 새로 만들지 않는다** —
+       판결과 **같은 SYS** 를 쓰면 캐시 프리픽스가 같아 read(0.1배)로 걸린다. 새로 만들면 write 가
+       한 벌 더 생겨 원가가 뛴다. 콜2·콜3 도 같은 SYS 를 쓰는 그 방식이다.
+     ⚠ **이름을 모델에 안 보낸다.** `gyeotPromptLine` 이 이미 자리표(곁1·곁2)로 보내고 앱이 이름으로
+       되돌린다(gyeotFillNames). 여기서도 같은 규칙을 탄다 — 상대는 이 앱을 쓴 적 없는 제3자다. */
+  const [gqPick, setGqPick] = useState(null);      // null = 전체 · Set = 고른 사람들
+  const [gq, setGq] = useState("");
+  const [gqBusy, setGqBusy] = useState(false);
+  const [gqRes, setGqRes] = useState(null);
+  const [gqErr, setGqErr] = useState("");
+  const gqTargets = useMemo(() => {
+    const pool = gyeotSorted.filter((x) => Number.isInteger(x.dg));   // 자리를 못 읽은 곁은 비교 대상이 못 된다
+    return gqPick ? pool.filter((x) => gqPick.has(x.key)) : pool;
+  }, [gyeotSorted, gqPick]);
+  const askGyeot = async () => {
+    if (!gq.trim() || gqBusy || !saju?.idx) return;
+    const tg = gqTargets.slice(0, 8);              // 프롬프트를 재료로 채우지 않는다(gyeotPromptLine 과 같은 상한)
+    if (!tg.length) { setGqErr("아직 자리를 읽은 곁이 없어. 궁합을 보거나 초대에 답이 오면 물어볼 수 있어."); return; }
+    setGqBusy(true); setGqErr(""); setGqRes(null);
+    try {
+      const system = makeSystem();
+      /* 재료는 **기기가 만든다** — 자리 이름은 `roleOf` 가 이미 답했다. 모델은 그걸 **말로 옮기기만** 한다.
+         이 리포의 반복 원칙과 같은 모양이다: 모델에 못 맡길 건 코드가 하고 모델엔 재료만 준다. */
+      const lines = tg.map((x, i) => {
+        const r = roleOf(saju.idx.dG, x.dg);
+        return `곁${i + 1} = ${r ? r.name : "결이 잘 안 잡히는 자리"}`;
+      }).join("\n");
+      const msg = { role: "user", content:
+        `[곁에게 묻기] 아래는 **판결이 아니다.** GO/STOP/HOLD 를 내지 마라 — 이건 「할까 말까」가 아니라 `
+        + `「누구와」를 묻는 물음이고, 답은 판정이 아니라 **비교**다.\n`
+        + `물음: ${gq.trim()}\n[고른 곁]\n${lines}\n`
+        + `⚠ 아는 건 **자리 이름 하나뿐**이다. 그 사람의 마음·형편·의사는 지어내지 마라 — `
+        + `상대는 이 앱을 쓴 적도 동의한 적도 없다. **유저가 할 행동**으로만 말한다.\n`
+        + `⚠ 이름을 쓰지 마라. \`곁1\` 표기를 그대로 쓴다(앱이 이름으로 바꾼다).\n`
+        + `⚠ 순위를 매기지 마라(1등·2등·점수 금지). 자리가 다르다는 걸 말하는 것이지 누가 낫다는 게 아니다.\n`
+        + `JSON 만: {"rows":[{"who":"곁1","line":"이 사람과는 이렇게 하라는 한 줄(45자 이내)"}...],`
+        + `"close":"고른 사람 전체를 두고 마지막 한 줄(45자 이내)"}` };
+      const { json } = await callClaude(system, [msg], 700);
+      if (!json?.rows?.length) throw new Error("답을 읽지 못했어");
+      /* ⚠ **번호를 매긴 목록을 답과 함께 들고 간다.** 프롬프트는 `곁1..N` 을 **고른 사람들** 위에서
+         세는데, 화면에서 `gyeotSorted`(전체 명부)로 되돌리면 **사람이 뒤바뀐다** —
+         팀장님·엄마만 골랐는데 답이 민수 이름으로 나갔다(실물 스샷으로 잡았다).
+         이름은 **번호를 매긴 바로 그 목록**으로만 되돌린다. */
+      setGqRes({ ...json, who: tg });
+      track("gyeot_asked", { n: tg.length, all: !gqPick, qlen: gq.trim().length });
+    } catch (e) {
+      setGqErr(`지금은 답을 못 받았어 — ${String(e?.message || e)}`);
+      track("gyeot_ask_failed", {});
+    } finally { setGqBusy(false); }
+  };
   const tryGyeotOpen = () => {
     const now = performance.now();
     if (now - gyeotTapRef.current < 350) { gyeotTapRef.current = 0; if (!gyeotOpen) { setGyeotOpen(true); track("gyeot_roster_opened", { n: gyeot.length }); } }
@@ -8029,6 +8086,56 @@ export default function App() {
                     </div>
                   );
                 })()}
+                {/* ── 곁에게 묻기 (v179) ─────────────────────────────────────────
+                    ⚠ **명부가 열렸을 때만** 뜬다 — 닫힌 곁 탭은 지금처럼 조용하다.
+                      「복잡하면 탭을 나눌까」에 대한 답이 이것이다: 탭을 늘리는 대신
+                      **이미 두 번 두드려 연 사람에게만** 보인다.
+                    ⚠ 칩 순서는 **명부와 같은 최근순**이다(§C-3 방어 ①). 다른 순서를 쓰면
+                      그 줄이 순위가 된다. 개수·배지도 안 붙인다(곁탭IA §5). */}
+                {gyeotSorted.some((x) => Number.isInteger(x.dg)) && (
+                  <div className="gask2">
+                    <p className="gaskh">이 사람들에 대해 물어봐</p>
+                    <div className="gpick">
+                      <button className={"gpchip" + (!gqPick ? " on" : "")}
+                        onClick={() => setGqPick(null)}>전체</button>
+                      {gyeotSorted.filter((x) => Number.isInteger(x.dg)).map((g) => {
+                        const on = !gqPick || gqPick.has(g.key);
+                        return (
+                          <button key={g.key} className={"gpchip" + (on ? " on" : "")}
+                            onClick={() => setGqPick((prev) => {
+                              /* 「전체」에서 하나를 끄면 나머지만 고른 것이 된다 —
+                                 전체를 끄고 다시 고르게 하면 손이 두 번 간다. */
+                              const base = prev || new Set(gyeotSorted.filter((x) => Number.isInteger(x.dg)).map((x) => x.key));
+                              const next = new Set(base);
+                              if (next.has(g.key)) next.delete(g.key); else next.add(g.key);
+                              return next.size ? next : null;   // 다 끄면 전체로 되돌린다(빈 물음을 막는다)
+                            })}>{(g.name || "").trim() || "이름 없는 곁"}</button>
+                        );
+                      })}
+                    </div>
+                    <textarea className="qbox gqbox" rows={2} maxLength={200} value={gq}
+                      placeholder="이번 일은 누구랑 하면 좋을까?"
+                      onChange={(e) => setGq(e.target.value)} />
+                    <button className="btn gold sm" disabled={!gq.trim() || gqBusy} onClick={askGyeot}>
+                      {gqBusy ? "곁을 살펴보는 중…" : "물어볼게"}
+                    </button>
+                    {gqErr && <p className="err gyerr">{gqErr}</p>}
+                    {gqRes && (
+                      <div className="gqres fade">
+                        {/* ⚠ 되돌릴 때 쓰는 목록은 **물을 때 번호를 매긴 그 목록**이다(gqRes.who) —
+                            전체 명부로 되돌리면 고른 사람과 답이 어긋난다(위 주석). */}
+                        {gqRes.rows.map((r, i) => (
+                          <p key={i} className="gqrow">
+                            <b>{gyeotFillNames(String(r.who || ""), gqRes.who || [])}</b>
+                            <span>{gyeotFillNames(String(r.line || ""), gqRes.who || [])}</span>
+                          </p>
+                        ))}
+                        {gqRes.close && <p className="gqclose">{gyeotFillNames(String(gqRes.close), gqRes.who || [])}</p>}
+                        <p className="ainote">이 답은 AI가 만들어요 · 재미로 보는 참고예요</p>
+                      </div>
+                    )}
+                  </div>
+                )}
                 {inviteErr && <p className="err gyerr">{inviteErr}</p>}
                 {/* ⚠ **여기서 「서버로도 안 나가」로 끝내면 거짓이 된다 (2026-08-29 정정).**
                     바로 아래 「한 사람 더 부를래」가 `inviteNew()` 를 부르고, 그게 **네 이름**을
@@ -9172,6 +9279,28 @@ const CSS = `
 }
 .gsee:hover{border-color:rgba(245,217,139,.5);color:#ffe9ad}
 /* ── 부를 사람 이름 받기 (v147) ── */
+/* ── 곁에게 묻기 (v179) ── */
+.gask2{width:100%;max-width:340px;margin:14px auto 0;padding-top:14px;border-top:1px solid rgba(159,143,196,.18)}
+.gaskh{font-family:sans-serif;font-size:11px;color:#8a7f95;letter-spacing:.06em;margin:0 0 8px;text-align:center}
+/* 한 줄 · 가로 스와이프 · 다중 선택. 순서는 명부와 같은 최근순이라 순위가 아니다 */
+.gpick{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px;margin-bottom:9px}
+.gpick::-webkit-scrollbar{display:none}
+.gpchip{flex:0 0 auto;background:transparent;border:1px solid rgba(159,143,196,.28);border-radius:999px;
+  color:#8a7f95;font-family:sans-serif;font-size:11.5px;padding:5px 11px;cursor:pointer;white-space:nowrap;max-width:9em;overflow:hidden;text-overflow:ellipsis}
+.gpchip.on{border-color:rgba(245,217,139,.55);color:#f5d98b;background:rgba(245,217,139,.10)}
+.gqbox{min-height:56px}
+.gask2 .btn.sm{margin:8px auto 0;display:block}
+.gqres{margin-top:12px;text-align:left}
+.gqrow{margin:0 0 9px;font-size:13px;line-height:1.7;color:#cfc4e2;word-break:keep-all}
+.gqrow b{display:block;color:#ffe9ad;font-size:12px;margin-bottom:2px}
+.gqclose{margin:10px 0 0;padding-top:9px;border-top:1px solid rgba(159,143,196,.18);
+  font-size:13px;line-height:1.7;color:#efe6ff;text-align:center;word-break:keep-all}
+.stage.holo .gpchip{border-color:rgba(80,72,55,.28);color:#6b6252}
+.stage.holo .gpchip.on{border-color:#a8823f;color:#8c4a12;background:rgba(168,130,63,.12)}
+.stage.holo .gqrow{color:#4d4535}
+.stage.holo .gqrow b{color:#8c4a12}
+.stage.holo .gqclose{color:#2a2419}
+
 .gcall{width:100%;max-width:340px;margin:10px auto 0;padding:13px 14px;border:1px solid rgba(159,143,196,.26);border-radius:11px;background:rgba(20,15,38,.55);text-align:center}
 .gcall p{margin:0 0 8px;font-size:13px;color:#efe6ff}
 .gcall p i{font-style:normal;font-size:11px;color:#8a7f95;margin-left:6px}
