@@ -2365,6 +2365,16 @@ const seedRnd=(str)=>{let h=7;for(const c of String(str))h=(h*31+c.charCodeAt(0)
 
    지표가 없을 때(시 미상·구버전 저장분)를 대비해 축마다 폴백을 둔다. 폴백은 v114 판 그대로라,
    재료가 없으면 예전과 같은 값이 나온다 — 조용히 다른 얼굴이 되지 않는다. */
+/* ⚠ **명식이 아직 없을 때 세워지는 수호신용 채움값 (2026-08-31).**
+   홀로가 기본이 되면서 온보딩 0·1단계가 `<Guardian>` 을 **명식 없이** 세운다(검은 판 자리는
+   `DustOrb` 라 이 경로가 없었다). 색장(`GuardianField`)은 그걸 견디게 짜여 있는데
+   (`const el = (saju && saju.main) || null`) **폴백 입자 렌더러 셋은 아니었다** — 진실이 두 곳에 있었다.
+   그래서 WebGL 이 없거나 셰이더가 실패하면 `EL_COLOR[saju.main]` 에서 터지고,
+   이 앱에는 에러 경계가 0개라 **React 가 트리를 통째로 언마운트한다.** 화면이 `#0a0812` 단색이라
+   고장이 아니라 로딩 중으로 보인다. 실측: root 0자·버튼 0개, 첫 방문자만 죽는다(재방문자는 명식이 있다).
+   ⚠ **오행 이름을 한글 리터럴로 직접 쓰지 마라.** 도구가 NFD 로 써 넣으면 파일의 NFC 키와 안 맞아
+     `EL_COLOR[...]` 가 undefined 가 되고 같은 자리에서 다시 죽는다. 키를 코드에서 끌어온다. */
+const NO_SAJU = { main: Object.keys(EL_COLOR)[0], counts: {}, pillars: {}, idx: null, dayGan: "" };
 function texture(saju, zo, num, moon) {
   if (!saju) return "ISFJ";
   const c = saju.counts || {};
@@ -2396,7 +2406,7 @@ function texture(saju, zo, num, moon) {
 
   return E + N + T + P;
 }
-function GuardianCanvas({ saju, zo, num, moon, birth, agitateRef, reactRef, restRef, size = 340 }) {
+function GuardianCanvas({ saju = NO_SAJU, zo, num, moon, birth, agitateRef, reactRef, restRef, size = 340 }) {
   const ref = useRef(null);
   useEffect(() => {
     const cv = ref.current; if (!cv) return;
@@ -3004,10 +3014,24 @@ const MSR_FREE = (() => { try { return /[?&]msr=1(&|$)/.test(window.location.sea
      `?skin=dark`  — 까만 입자 판(예전 기본)
      `?face=off`   — 홀로는 쓰되 얼굴만 끈다
      `?face=b|c|d` — 다른 얼굴 프리셋 */
+/* ⚠ **못 그릴 기기에는 홀로를 주지 않는다 (2026-08-31).** 위 폴백 수정은 「죽지 않게」까지만
+   하고, 그 뒤 화면은 미색 판 + 검은 판용 가산 입자라 **아무도 설계하지 않은 세 번째 화면**이다.
+   여기서 걸러 내면 그 화면이 애초에 안 생긴다 — CSS 133개·JS 분기 14개·얼굴 기본값이
+   **한 점에서 동시에** 옛 판으로 넘어간다. 진실이 한 곳에 남는다.
+   왜 highp 까지 보나: 색장 셰이더만 `precision highp float` 을 쓰고 폴백 입자는 mediump 다.
+   WebGL1 에서 프래그먼트 highp 는 **선택 기능**인데 대체 경로가 0건이다.
+   (⚠ 실기기에서 highp 없는 비율은 미확인 — 코드 사실만 확인했다.) */
+const canHolo = (() => { try {
+  const c = document.createElement("canvas");
+  const g = c.getContext("webgl") || c.getContext("experimental-webgl");
+  if (!g) return false;
+  const p = g.getShaderPrecisionFormat && g.getShaderPrecisionFormat(g.FRAGMENT_SHADER, g.HIGH_FLOAT);
+  return !!(p && p.precision > 0);
+} catch (_) { return false; } })();
 const SKIN = (() => { try {
   const q = window.location.search;
   if (/[?&]skin=dark(&|$)/.test(q)) return "";        // 까만 판을 되살린다
-  return "holo";                                      // 기본 = 홀로
+  return canHolo ? "holo" : "";                       // 기본 = 홀로 (못 그리면 옛 판으로)
 } catch (_) { return "holo"; } })();
 const FACE = (() => { try {
   const q = window.location.search;
@@ -4032,8 +4056,15 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, gyeotRef, popRef
         }
       };
       draw();
+      /* ⚠ **형제 셋과 맞춘다 (2026-08-31).** `GuardianCanvasGL`·`GuardianCanvasSim` 에는
+         컨텍스트 상실 처리가 달려 있는데 색장에만 없었다 — 런타임에 GPU 를 잃으면
+         (모바일 백그라운드 복귀·탭 다수·GPU 리셋) 폴백이 안 걸리고 캔버스가 빈 채로 남는다.
+         홀로가 옵트인일 땐 소수만 겪었지만 **기본이 된 지금은 전 유저의 기본 실패 모드**다. */
+      const lostFn = (e) => { try { e.preventDefault(); } catch (_) {} fail(); };
+      cv.addEventListener("webglcontextlost", lostFn);
       return () => {
         cancelAnimationFrame(raf);
+        cv.removeEventListener("webglcontextlost", lostFn);
         cv.removeEventListener("pointerdown", on);
         cv.removeEventListener("pointermove", move);
         cv.removeEventListener("pointerup", off);
@@ -4073,7 +4104,7 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, gyeotRef, popRef
   </span>);
 }
 
-function GuardianCanvasGL({ saju, zo, num, moon, birth, agitateRef, reactRef, restRef, broodRef, orbRef, gyeotRef, popRef, mood, size = 340, onFail }) {
+function GuardianCanvasGL({ saju = NO_SAJU, zo, num, moon, birth, agitateRef, reactRef, restRef, broodRef, orbRef, gyeotRef, popRef, mood, size = 340, onFail }) {
   const ref = useRef(null);
   useEffect(() => {
     const cv = ref.current; if (!cv) return;
@@ -4480,7 +4511,7 @@ void main(){
   float a=m*v_a*u_alpha;
   gl_FragColor=vec4(col*a*u_bright,a);
 }`;
-function GuardianCanvasSim({ saju, zo, num, moon, birth, agitateRef, reactRef, restRef, size = 340, onFail }) {
+function GuardianCanvasSim({ saju = NO_SAJU, zo, num, moon, birth, agitateRef, reactRef, restRef, size = 340, onFail }) {
   const ref = useRef(null);
   useEffect(() => {
     const cv = ref.current; if (!cv) return;
