@@ -202,17 +202,42 @@ export function project(u, v, yaw, pitch) {
 export function drawFace(x, S, opt) {
   const P = Object.assign({ eye: "dot", mouth: "smile", cy: 0.50, gap: 0.115,
     eyeSz: 0.022, mSz: 0.055, mCy: 0.565, blush: true, ink: "#191308",
-    yaw: 0, pitch: 0, roll: 0, blink: 0, squish: 0, sqx: 1, sqy: 0, eyeScale: 1 }, opt);
+    yaw: 0, pitch: 0, roll: 0, blink: 0, squish: 0, sqx: 1, sqy: 0, eyeScale: 1,
+    radFrac: 0.24, gapR: null, mouthR: null }, opt);
   const { yaw, pitch } = P;
   /* 얼굴이 놓인 구의 반지름(화면 단위). 이 값이 곧 **원근의 세기**다 —
      크면 조금만 돌려도 크게 미끄러지고, 작으면 거의 평면이 된다. */
-  /* ⚠ **0.30 → 0.24**(창업자 2026-08-30: "얼굴 영역을 20% 정도 줄여줘").
-     구 반지름과 요소 치수를 **함께** 0.8 배 한다 — 하나만 줄이면 눈 벌어진 각도(eu)가 바뀌어
-     원근이 달라진다. 둘 다 줄이면 각도는 그대로고 얼굴만 작아진다. */
-  const RAD = S * 0.24;
+  /* ── 얼굴이 앉는 구 ──────────────────────────────────────────────────
+     ⚠ **여기가 「몸과 얼굴의 도형이 다르다」의 정체였다**(창업자 2026-08-30).
+     상수(S*0.24 = 142px)로 잡혀 있었는데 **몸의 코어는 판결 69px · 곁 44px** 이다(실측).
+     구가 몸보다 2~3배 크니 고개를 돌리면 눈이 **몸 위가 아니라 몸을 가로질러** 미끄러진다.
+     게다가 두 눈 반폭 64px 이 코어 반경 69px 의 **93%** — 눈이 몸 가장자리에 얹혀 있었다.
+     판결이 더 심한 것도 설명된다: 판결은 몸이 크고 불꽃이라 그 어긋남이 더 드러난다.
+     이제 **몸의 코어를 그대로 구로 쓴다**(radFrac = 셰이더의 R/2.35). 탭이 바뀌어 몸이
+     줄면 얼굴도 같이 준다 — 둘이 같은 입체가 된다. */
+  const RAD = S * (P.radFrac || 0.24);
   const cx = S * 0.5, cyPx = S * P.cy;
+  /* ⚠ 치수의 기준을 **구로 바꾼다.** 캔버스(S) 기준으로 두면 구가 줄어도 눈만 그대로라
+     또 가장자리로 밀린다 — 방금 고친 것과 같은 사고가 눈 크기·입에서 반복된다.
+     구 기준 경로는 앱이 쓰고, 캔버스 기준 경로는 보드의 옛 그림이 그대로 쓴다. */
+  const onSphere = P.gapR != null;
+  const U = onSphere ? RAD : S;
   /* 눈이 구 위에서 벌어진 각도 — 화면상 간격(gap)에서 역산한다 */
-  const eu = Math.asin(Math.min(0.95, (S * P.gap) / RAD));
+  /* 눈은 **구의 몇 할 자리**에 있는가로 잡는다. 화면 거리로 잡으면 구가 바뀔 때마다
+     눈이 가장자리로 밀려난다(93% 사고가 그것이다). 사람 얼굴은 대략 0.5~0.6 이다. */
+  /* ── 얼굴이 구를 넘지 않게 잠근다 ────────────────────────────────────
+     ⚠ **찡그린 눈(`><`)이 몸보다 넓게 그려졌다**(실기 영상 2026-08-31 — 획이 불꽃 양옆
+     배경까지 뻗어 수염처럼 보였다). 눈 크기 0.155 에 아픔 배율 1.9 가 곱해지고 거기에
+     간격 0.64 가 더해지면 가로 도달이 구를 **넘는다**. 값을 하나씩 줄이는 대신
+     **도달 자체를 잠근다** — 어떤 조합이 와도 구 안에 있다. */
+  let euRaw = P.gapR != null ? P.gapR : (S * P.gap) / RAD;
+  {
+    const half = (P.gapR != null ? P.eyeSz : (S * P.eyeSz) / RAD) * P.eyeScale
+               * (P.eye === "wince" ? 1.55 : 1.2);   // 눈 모양이 가로로 차지하는 반폭
+    const cap = 0.90 - half;                          // 눈 바깥 끝이 구의 0.90 을 못 넘는다
+    if (cap > 0.12 && euRaw > cap) euRaw = cap;
+  }
+  const eu = Math.asin(Math.min(0.95, euRaw));
   /* ⚠ 투영값을 그대로 쓰면 **얼굴 전체가 회전 방향으로 밀려난다** — 구가 도니 앞면도 옮겨간다.
      실기에서 얼굴이 오라 중심을 벗어나 가장자리에 붙었다. 카툰의 머리는 **제자리에서 돌기만** 한다.
      그래서 얼굴 정중앙(u=v=0)의 이동량을 빼서 중심을 고정하고, 회전은 요소 배치에만 남긴다. */
@@ -236,7 +261,7 @@ export function drawFace(x, S, opt) {
     return { px: cx + (q.x - c0.x) * RAD, py: cyPx + (q.y - c0.y) * RAD, z: q.z }; };
 
   /* 홍조도 같은 구 위에 있다. 눈보다 조금 바깥·조금 아래. */
-  drawBlush(x, P.blush, cx, cyPx, S * P.gap, S * P.eyeSz,
+  drawBlush(x, P.blush, cx, cyPx, U * P.gap, U * P.eyeSz,
     [-1, 1].map((sd) => { const q = put(sd * eu * 1.32, 0.42 * eu);
       return { px: q.px, py: q.py, s: Math.max(0.30, Math.abs(q.z)) }; }));
 
@@ -253,18 +278,18 @@ export function drawFace(x, S, opt) {
     /* ⚠ 바닥이 0.28 이면 옆으로 돌았을 때 표정 획이 **세로 지그재그**로 뭉친다. 0.48 로 올린다. */
     x.scale(Math.max(0.48, Math.abs(e.z)), Math.max(0.06, 1 - P.blink));
     x.translate(-e.px, -e.py);
-    drawEyes(x, P.eye, e.px, e.py, 0, S * P.eyeSz * near * P.eyeScale, P.ink,
+    drawEyes(x, P.eye, e.px, e.py, 0, U * P.eyeSz * near * P.eyeScale, P.ink,
       { x: yaw * 1.6, y: pitch * 1.6 }, side);
     x.restore();
   });
 
   /* 입도 같은 구 위에 있다 — 안 그러면 얼굴이 돌 때 입만 제자리에 남는다 */
-  const mv = Math.asin(Math.min(0.95, (S * (P.mCy - P.cy)) / RAD));
+  const mv = Math.asin(Math.min(0.95, P.mouthR != null ? P.mouthR : (S * (P.mCy - P.cy)) / RAD));
   const m = put(0, mv);
   if (m.z > -0.15) {
     const near = 0.55 + 0.45 * Math.max(0, m.z);
     x.save(); x.translate(m.px, m.py); x.scale(Math.max(0.30, Math.abs(m.z)), 1); x.translate(-m.px, -m.py);
-    drawMouth(x, P.mouth, m.px, m.py, S * P.mSz * near, P.ink);
+    drawMouth(x, P.mouth, m.px, m.py, U * P.mSz * near, P.ink);
     x.restore();
   }
   if (P.roll) x.restore();
