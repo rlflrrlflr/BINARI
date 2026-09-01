@@ -4679,7 +4679,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v179 · 곁에게 묻는다";
+const APP_VER = "v180 · 무엇을 물을지 골라 준다";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -6622,6 +6622,49 @@ function InviteLanding({ id, onOnboard, onDismiss }) {
 
    말버릇을 오행으로 가른 이유: 수호신의 정체가 그 사람의 오행이라고 앱이 이미 말하고 있다
    (`guardianIntro` — "나는 '…'의 기운을 두른 존재야"). 목소리가 거기서 안 나오면 그건 딴 사람이다. */
+/* ── 곁에게 묻기: 관계 줄 + 예상질문 (2026-09-01 팀 제안) ───────────────────
+   **왜 관계를 되묻나 — 「이미 너를 안다」를 안 어긴다.** 헌장이 금지하는 건 *자동 파생 가능한 값*을
+   손으로 되묻는 것인데, 곁 명부에는 관계 항목이 **처음부터 없다**(`gyeotFill` 이 저장하는 건
+   이름·오행·일간·좌표뿐). 게다가 관계는 그 사람의 속성이 아니라 **이번 물음의 틀**이다 —
+   같은 사람도 「일로」 물을 때와 「썸으로」 물을 때 묻고 싶은 게 다르다. 그래서 사람에 붙이지 않고
+   물음에 붙인다(껐다 켤 수 있고, 안 골라도 물어진다).
+
+   **왜 예상질문이 §모를 권리를 안 어기나.** 헌장의 push 금지는 **판결 국면 한정**이고, 금지하는 건
+   시스템이 **깊이를 먼저 펼치는 것**이다(L1→L2→L3 을 안 눌렀는데 여는 것). 예상질문은 깊이가 아니라
+   **입구**다 — 답을 미리 보여주는 게 아니라 유저가 할 말을 골라 놓는 메뉴이고, 눌러야 칸에 들어간다.
+   되물음(v55 에서 자원 배분 대상에서 뺀 그것)과 반대 방향인 이유도 같다: 되물음은 **수호신이 먼저 물었고**,
+   이건 **유저가 물을 말**이다.
+
+   ⚠ **줄 세우는 물음은 여기 없다.** 「위계서열」·「갑을」은 팀 제안에 있었으나 넣지 않았다 —
+     `gyeotOrder` 방어 ①②③ 과 `askGyeot` 의 「순위를 매기지 마라」가 정면으로 막는 것이고,
+     곁 이름은 **실명**이라 그 답이 사람 이름으로 렌더된다. 방침 결정 전에는 안 넣는다. */
+const GREL = ["비즈니스", "썸·연애", "친구", "가족"];
+/* 자리(one)=한 명만 골랐을 때 · 여럿(many)=둘 이상. 사람 수에 따라 물음이 갈리는 건
+   「누구와」와 「이 사람과」가 서로 다른 물음이기 때문이다. */
+const GASK = {
+  "비즈니스": {
+    one:  ["이 사람이랑 같이 일하면 뭐가 잘 맞고 뭐가 부딪힐까?", "이 사람한테 아쉬운 소리를 어떻게 꺼내지?", "이 사람이랑은 어디까지 같이 가는 게 좋을까?"],
+    many: ["이번 일은 이 중에 누구랑 하면 좋을까?", "이 사람들이랑 한 팀이 되면 어떤 판이 될까?", "이 중에 나랑 결이 제일 다른 사람은 누구고, 그게 왜 도움이 될까?"],
+  },
+  "썸·연애": {
+    one:  ["이 사람한테 먼저 연락해도 될까?", "이 사람이랑 나는 어떤 속도로 가는 게 맞을까?", "이 사람 앞에서 내가 자꾸 놓치는 게 뭘까?"],
+    many: ["이 중에 누구한테 마음이 기울어 있는 걸까?", "이 사람들이랑 나는 각각 어떤 온도야?", "지금 내가 먼저 움직여야 할 사람은 누구지?"],
+  },
+  "친구": {
+    one:  ["이 친구랑 요즘 왜 좀 어긋날까?", "이 친구한테 내가 기대도 되는 걸까?", "이 친구랑 오래 가려면 뭘 조심해야 해?"],
+    many: ["이 모임에서 나는 어떤 자리야?", "요즘 연락이 뜸한데 누구한테 먼저 연락할까?", "이 사람들이랑 같이 뭘 하면 제일 재밌을까?"],
+  },
+  "가족": {
+    one:  ["이 사람한테 서운한 걸 어떻게 말하지?", "이 사람이 요즘 나한테 바라는 게 뭘까?", "이 사람이랑 나는 왜 같은 말로 자꾸 싸울까?"],
+    many: ["이 사람들 사이에서 내가 하고 있는 역할이 뭘까?", "명절에 누구랑 무슨 이야기를 피하는 게 좋을까?", "이 중에 내가 요즘 제일 못 챙긴 사람은?"],
+  },
+  "": {
+    one:  ["이 사람이랑 나는 어떤 사이야?", "이 사람한테 지금 뭘 해 주면 좋을까?", "이 사람이랑 있을 때 나는 왜 그럴까?"],
+    many: ["이번 일은 누구랑 하면 좋을까?", "요즘 내가 제일 챙겨야 할 사람은 누구야?", "이 사람들 사이에서 나는 어떤 자리야?"],
+  },
+};
+function gAsks(rel, n) { return (GASK[rel] || GASK[""])[n === 1 ? "one" : "many"]; }
+
 const GSAY = {
   목: { touch1: "간지러워. 그렇게 만지면 자꾸 자라잖아.",
         touch2: "계속 만질 거야? 나 오늘 좀 뻗고 싶긴 해.",
@@ -7234,6 +7277,11 @@ export default function App() {
   const [gqBusy, setGqBusy] = useState(false);
   const [gqRes, setGqRes] = useState(null);
   const [gqErr, setGqErr] = useState("");
+  const [gqRel, setGqRel] = useState("");         // "" = 안 고름(자유 물음) · 한 줄에 하나만
+  /* 예상질문을 눌러서 채운 물음인지 — 계측에서 **칩이 실제로 쓰이는지**를 가른다.
+     안 세면 「칩을 붙였다」까지만 알고 「칩이 먹혔다」는 영영 모른다. ref 인 이유는 이 값이
+     화면을 안 바꾸기 때문이다(state 로 두면 글자 하나 칠 때마다 다시 그린다). */
+  const gqFromChip = useRef(false);
   const gqTargets = useMemo(() => {
     const pool = gyeotSorted.filter((x) => Number.isInteger(x.dg));   // 자리를 못 읽은 곁은 비교 대상이 못 된다
     return gqPick ? pool.filter((x) => gqPick.has(x.key)) : pool;
@@ -7254,7 +7302,11 @@ export default function App() {
       const msg = { role: "user", content:
         `[곁에게 묻기] 아래는 **판결이 아니다.** GO/STOP/HOLD 를 내지 마라 — 이건 「할까 말까」가 아니라 `
         + `「누구와」를 묻는 물음이고, 답은 판정이 아니라 **비교**다.\n`
-        + `물음: ${gq.trim()}\n[고른 곁]\n${lines}\n`
+        + `물음: ${gq.trim()}\n`
+        /* 관계는 **재료지 축이 아니다** — 사주 계산이나 가중치에 안 들어가고, 답의 결(말투·무엇을 볼지)만 정한다.
+           안 골랐으면 아예 안 싣는다(빈 값을 실으면 모델이 「관계: 없음」을 해석하려 든다). */
+        + (gqRel ? `틀: 이 물음은 **${gqRel}** 관계로 묻는 것이다. 그 틀에서 볼 것만 봐라.\n` : "")
+        + `[고른 곁]\n${lines}\n`
         + `⚠ 아는 건 **자리 이름 하나뿐**이다. 그 사람의 마음·형편·의사는 지어내지 마라 — `
         + `상대는 이 앱을 쓴 적도 동의한 적도 없다. **유저가 할 행동**으로만 말한다.\n`
         + `⚠ 이름을 쓰지 마라. \`곁1\` 표기를 그대로 쓴다(앱이 이름으로 바꾼다).\n`
@@ -7268,7 +7320,7 @@ export default function App() {
          팀장님·엄마만 골랐는데 답이 민수 이름으로 나갔다(실물 스샷으로 잡았다).
          이름은 **번호를 매긴 바로 그 목록**으로만 되돌린다. */
       setGqRes({ ...json, who: tg });
-      track("gyeot_asked", { n: tg.length, all: !gqPick, qlen: gq.trim().length });
+      track("gyeot_asked", { n: tg.length, all: !gqPick, qlen: gq.trim().length, rel: gqRel || "none", picked: gqFromChip.current });
     } catch (e) {
       setGqErr(`지금은 답을 못 받았어 — ${String(e?.message || e)}`);
       track("gyeot_ask_failed", {});
@@ -8274,9 +8326,26 @@ export default function App() {
                         );
                       })}
                     </div>
+                    {/* 관계 줄 — 사람 줄과 **다르게 하나만** 고른다. 여럿을 고르면 「썸이면서 가족」 같은
+                        틀이 생기고, 틀이 흐려지면 예상질문도 답도 같이 흐려진다. 다시 누르면 꺼진다. */}
+                    <div className="gpick grel">
+                      {GREL.map((r) => (
+                        <button key={r} className={"gpchip" + (gqRel === r ? " on" : "")}
+                          onClick={() => setGqRel((prev) => (prev === r ? "" : r))}>{r}</button>
+                      ))}
+                    </div>
                     <textarea className="qbox gqbox" rows={2} maxLength={200} value={gq}
                       placeholder="이번 일은 누구랑 하면 좋을까?"
-                      onChange={(e) => setGq(e.target.value)} />
+                      onChange={(e) => { setGq(e.target.value); gqFromChip.current = false; }} />
+                    {/* 예상질문 — 빈 칸일 때만 보인다. 쓰기 시작한 뒤에도 남아 있으면 **쓰던 걸 덮는 버튼**이 된다. */}
+                    {!gq.trim() && (
+                      <div className="gsug">
+                        {gAsks(gqRel, gqTargets.length).map((t) => (
+                          <button key={t} className="gsugchip"
+                            onClick={() => { setGq(t); gqFromChip.current = true; track("gyeot_ask_chip", { rel: gqRel || "none", n: gqTargets.length }); }}>{t}</button>
+                        ))}
+                      </div>
+                    )}
                     <button className="btn gold sm" disabled={!gq.trim() || gqBusy} onClick={askGyeot}>
                       {gqBusy ? "곁을 살펴보는 중…" : "물어볼게"}
                     </button>
@@ -9473,6 +9542,11 @@ const CSS = `
 .gpchip{flex:0 0 auto;background:transparent;border:1px solid rgba(159,143,196,.28);border-radius:999px;
   color:#8a7f95;font-family:sans-serif;font-size:11.5px;padding:5px 11px;cursor:pointer;white-space:nowrap;max-width:9em;overflow:hidden;text-overflow:ellipsis}
 .gpchip.on{border-color:rgba(245,217,139,.55);color:#f5d98b;background:rgba(245,217,139,.10)}
+.grel{margin-top:-3px}
+.gsug{display:flex;flex-direction:column;gap:5px;margin:8px 0 2px}
+.gsugchip{background:rgba(159,143,196,.07);border:1px solid rgba(159,143,196,.20);border-radius:11px;
+  color:#9a8fa8;font-family:sans-serif;font-size:12px;line-height:1.45;padding:7px 11px;cursor:pointer;text-align:left}
+.gsugchip:hover{border-color:rgba(245,217,139,.42);color:#d8cbe6}
 .gqbox{min-height:56px}
 .gask2 .btn.sm{margin:8px auto 0;display:block}
 .gqres{margin-top:12px;text-align:left}

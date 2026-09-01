@@ -46,10 +46,13 @@ await page.locator("canvas").first().dblclick();
 await page.waitForTimeout(900);
 
 /* ── ① 토글 ─────────────────────────────────────────────────────────────── */
-const chips = page.locator(".gpchip");
+/* ⚠ **사람 줄만 본다(`:not(.grel)`).** v180 에서 아래에 관계 줄이 하나 더 생겼고 칩 클래스가 같아서,
+   `.gpchip` 을 통째로 세면 「비즈니스·썸·연애…」까지 사람으로 세어진다 — 실제로 이 검사가 그렇게 깨졌다.
+   관계 줄은 gyeot-rel-check 가 따로 문다. */
+const chips = page.locator(".gpick:not(.grel) .gpchip");
 ck("① 질문 칸이 곁 탭에 있다", await page.locator("textarea.gqbox").isVisible().catch(() => false));
 ck("① 토글이 한 줄이다(가로 스크롤)", await page.evaluate(() => {
-  const el = document.querySelector(".gpick"); if (!el) return false;
+  const el = document.querySelector(".gpick:not(.grel)"); if (!el) return false;
   const cs = getComputedStyle(el);
   return cs.display === "flex" && /auto|scroll/.test(cs.overflowX) && cs.flexWrap !== "wrap";
 }));
@@ -57,11 +60,11 @@ ck("① 전체 + 사람들이 칩으로 선다", (await chips.allTextContents())
    (await chips.allTextContents()).join("·"));
 /* ⚠ 칩 순서는 **명부와 같은 최근순**이어야 한다 — 다른 순서를 쓰면 그 줄이 순위가 된다(§C-3 방어 ①) */
 ck("① 칩 순서가 명부 순서와 같다(순위가 아니다)", await page.evaluate(() => {
-  const chip = [...document.querySelectorAll(".gpchip")].slice(1).map((x) => x.innerText.trim());
+  const chip = [...document.querySelectorAll(".gpick:not(.grel) .gpchip")].slice(1).map((x) => x.innerText.trim());
   const row = [...document.querySelectorAll(".gyeotlist li input.galias")].map((x) => x.value.trim());
   return chip.join("|") === row.join("|");
 }));
-const on = async () => (await page.locator(".gpchip.on").allTextContents()).join("·");
+const on = async () => (await page.locator(".gpick:not(.grel) .gpchip.on").allTextContents()).join("·");
 ck("① 처음엔 전부 켜져 있다", (await on()) === "전체·민수·팀장님·엄마", await on());
 await chips.nth(1).click(); await page.waitForTimeout(250);
 ck("① 하나를 끄면 나머지만 남는다(전체도 같이 꺼진다)", (await on()) === "팀장님·엄마", await on());

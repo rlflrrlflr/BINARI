@@ -306,7 +306,11 @@ const fp = (y, m, d) => M.gyeotFingerprint(y, m, d);
   ck("⑤ 계측엔 이름이 아니라 적었는지 여부만", /named: !!\(f\.nm/.test(src) && !/track\([^)]*\bname:\s*[^)]*nm/.test(src));
   ck("⑤ 명부를 서버로 보내는 경로가 0",
      !new RegExp("(fetch|XMLHttpRequest|navigator\\.sendBeacon)[^\\n]*GYEOT_KEY").test(src)
-     && !/track\([^)]*gyeot[^)]*el\b/.test(src));
+     /* ⚠ **`el` 은 키 자리에 있을 때만 문다.** 예전엔 `el\b` 였는데 그러면 `rel:`(관계)·`del:` 같은
+        **다른 낱말의 꼬리**까지 걸린다 — 실제로 v180 의 관계 계측(`rel: …`)이 여기 걸려 멈췄다.
+        잡으려던 건 「곁의 **오행**을 계측에 싣는 것」이므로, `{` 나 `,` 뒤에 오는 **키로서의 el** 만 문다.
+        느슨해진 게 아니라 **겨냥이 좁아진 것**이다 — 아래 반증검사가 그걸 확인한다. */
+     && !/track\([^)]*gyeot[^)]*[{,]\s*el\s*:/.test(src));
 }
 
 const f = R.filter((x) => !x).length;
