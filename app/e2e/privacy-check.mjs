@@ -221,6 +221,29 @@ ck("거부 UI 가 화면에 있다", /사용 통계 수집을 끌래/.test(src))
      /단 초대를 보낸 경우에 한해, 관계 계산에 필요한 파생값만 30일간 보관합니다/.test(pv2));
 }
 
+/* ── A-3-b. 실패 계측이 진단은 되게 하되 원문은 안 싣는다 (2026-09-04) ────
+   9/3 실패 4건의 원인을 PostHog 만으로 못 밝혀 Vercel 로그까지 가야 했다 —
+   상태 0 이면 전부 "network" 한 버킷이었기 때문이다. 그래서 판별값을 싣기로 했는데,
+   **실패 경로는 anon() 을 안 거치는 자리**라 여기서 경계를 따로 못 박는다.
+   실을 수 있는 것: 우리가 만든 문구 · 브라우저 고정구 · 상태코드 · 시도 경로.
+   실으면 안 되는 것: 질문 원문 그 어떤 형태로도. */
+{
+  ck("실패 진단 꾸러미가 있다", /function failProps\(e\)/.test(src));
+  const fp = (src.match(/function failProps\(e\)[\s\S]*?\n\}/) || [""])[0];
+  ck("원인 문자열에 상한이 있다", /\.slice\(0, \d{1,3}\)/.test(fp), ((fp.match(/\.slice\(0, (\d+)\)/) || [])[1] || "?") + "자");
+  ck("폭포수 시도 경로를 남긴다(어디까지 갔나)", /tried:/.test(fp));
+  ck("오프라인 여부를 남긴다(우리 잘못과 가른다)", /online:/.test(fp) && /navigator\.onLine/.test(fp));
+  ck("실패 꾸러미에 질문이 안 실린다", !/question|qtext|\bq:/.test(fp.replace(/\/\*[\s\S]*?\*\//g, "")));
+  const fails = [...src.matchAll(/track\("(verdict_failed|detail_failed)"[\s\S]{0,320}?\);/g)].map((x) => x[0]).join("\n");
+  ck("두 실패 이벤트 모두 진단 꾸러미를 단다",
+     (fails.match(/\.\.\.failProps\(e\)/g) || []).length === 2,
+     `${(fails.match(/\.\.\.failProps\(e\)/g) || []).length}/2`);
+  ck("실패에도 질문은 글자 수만 간다", /qlen: q\.trim\(\)\.length/.test(fails) && !/[{,]\s*q: q[,\s}]/.test(fails));
+  /* 분류가 다시 한 버킷으로 뭉개지지 않게 — 상태 0 안을 최소 세 갈래로 가른다 */
+  const fr = (src.match(/function failReason\(e\)[\s\S]*?\n\}/) || [""])[0];
+  ck("상태 0 을 한 버킷으로 안 뭉갠다", /"aborted"/.test(fr) && /"offline"/.test(fr) && /"network"/.test(fr));
+}
+
 /* ── A-4. 각인·궁합에 고지가 있다 ──
    각인은 LLM 을 안 타므로 판결의 S3 가드레일을 **구조적으로 통과하지 않는다.**
    ⚠ 고지는 **문서 하단 고정 블록**이어야 한다 — 절마다 붙이면 다음 판에서 또 빠진다.

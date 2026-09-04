@@ -640,6 +640,52 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
   } catch (_) { /* 구조가 바뀌면 조용히 넘어간다 */ }
 }
 
+/* ── 검사 4-4. 초대 루프가 붙는 날 깨어나는 검사 — 계측 규격 준수 ──────────
+   초대→회신 루프는 아직 코드에 없다(2026-08-26 기준 grep 0건). 계측 규격만 먼저 못 박아 뒀다
+   (HANDOVER §2 「초대→회신 루프 5종」 · 작업지시_초대와회신 §6).
+   규격을 문서에만 두면 구현 세션이 다르게 짓는다 — 실제로 이 리포에서 이름이 갈린 선례가 있다
+   (`offer_shown` 으로 알고 찾았는데 실물은 `imprint_offer_shown` 이었다).
+   그래서 **초대 코드가 들어오는 순간 이 검사가 켜진다.** 보는 것 셋:
+     ① 다섯 이름을 규격대로 썼는가 (특히 k 의 분자 `invite_to_onboard`)
+     ② `invite_opened` 가 **유효 검증 뒤에** 발사되는가 — 위조·만료를 조회수로 세면 도달률이 부풀고
+        그 부푼 분모가 응답률을 인위적으로 낮춘다. `shared_verdict_view` 가 이미 같은 규칙을 쓴다
+     ③ `invite_answered`·`invite_to_onboard` 가 무효 초대 화면에서 새지 않는가
+        — `shared_cta` 가 검증 실패 화면에서도 발사돼 규칙 4 가 분모 단서를 따로 달아야 했던 그 함정이다 */
+{
+  try {
+    const SPEC = ["invite_created", "invite_opened", "invite_answered", "invite_to_onboard", "gyeot_promoted"];
+    const inviteWired = /invite_|inviteToken|초대\s*링크|gyeot_promoted/.test(src);
+    if (!inviteWired) {
+      add("정상", "초대 루프 계측(대기)",
+        `기능 미구현 — 규격 ${SPEC.length}종을 HANDOVER §2 에 선포해 둠. 초대 코드가 들어오면 이 검사가 이름·발사지점을 한꺼번에 깨움`, "");
+    } else {
+      const missing = SPEC.filter((e) => !src.includes(`"${e}"`) && !src.includes(`'${e}'`));
+      /* 발사 지점이 검증 뒤인가 — track("invite_opened") 앞쪽 창에 검증 낱말이 있어야 한다.
+         주석은 걷어내고 본다(검사 4-3 의 교훈: 규칙의 '왜'를 옆에 적으면 그 주석이 스스로를 통과시킨다). */
+      const view = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+      const openIdx = view.indexOf('track("invite_opened"');
+      const before = openIdx > 0 ? view.slice(Math.max(0, openIdx - 600), openIdx) : "";
+      /* ⚠ 2026-09-04 오탐 수정. 처음엔 검증 낱말(valid/verify/검증…)만 찾았는데,
+         실제 구현의 검증은 `if (!q.ok) { setState("dead"); return; }` 이고 「검증」은 **주석에만** 있었다.
+         주석을 걷어내고 보는 규칙(검사 4-3 의 교훈)과 겹쳐서, 옳게 짠 코드를 위반으로 잡았다.
+         **틀리게 우는 검사는 없느니만 못하다** — 다음 세션이 검진을 안 믿게 된다.
+         그래서 낱말이 아니라 **실제로 쓰이는 방어 형태**를 찾는다: 응답 성공 확인(.ok/status)·
+         실패 분기(dead/error/return)·유효성 낱말 중 하나라도 있으면 통과.
+         ⚠ 이건 발견법이지 증명이 아니다. 잡는 건 "검증 없이 곧바로 찍는" 명백한 경우뿐이다. */
+      const guarded = /\.ok\b|status|dead|error|valid|verify|검증|서명|sig|expire|만료/i.test(before);
+      const gaps = [];
+      if (missing.length) gaps.push(`규격과 다른 이름(누락: ${missing.join(", ")})`);
+      if (openIdx > 0 && !guarded) gaps.push("invite_opened 가 유효 검증 앞에서 발사됨(위조·만료가 조회수로 셈)");
+      if (gaps.length) {
+        add("심각", "초대 루프 계측이 규격과 다름", gaps.join(" · "),
+          `HANDOVER §2 「초대→회신 루프 5종」 표의 이름을 그대로 쓰고, invite_opened 는 유효 검증을 통과한 뒤에만 발사하세요. 특히 invite_to_onboard 는 k 의 분자라 빠지면 루프를 만들어 놓고 못 잽니다.`);
+      } else {
+        add("정상", "초대 루프 계측", `규격 ${SPEC.length}종 일치 · invite_opened 검증 뒤 발사`, "");
+      }
+    }
+  } catch (_) { /* 구조가 바뀌면 조용히 넘어간다 */ }
+}
+
 /* ── 검사 5-2. e2e 모의응답이 앱과 같은 표지로 콜1/콜2를 가르는가 ─────────
    실제 사고(2026-07-28): e2e 가 콜1 프롬프트의 "결론만" 이라는 문구로 콜1/콜2를 구분했는데,
    프롬프트를 다듬으며 그 문구가 사라지자 테스트가 콜1 자리에 콜2 응답을 물렸다.

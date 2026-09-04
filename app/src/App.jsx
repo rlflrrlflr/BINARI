@@ -6231,9 +6231,34 @@ function failReason(e) {
   if (s === 400) return "bad_request";
   if (s >= 500) return "upstream_error";
   if (/JSON|파싱|parse/i.test(f.msg)) return "parse_failed";
-  return s ? "http_" + s : "network";
+  if (s) return "http_" + s;
+  /* ⚠ 2026-09-04. 여기가 오래 **분류 실패 버킷**이었다 — 상태 0 이면 원인이 뭐든 전부 "network" 였다.
+     그 바람에 9/3 실패 4건(외부 헤비유저 한 명의 그날 질문 11건 중 4건, 36%)의 원인을
+     PostHog 만으로는 못 밝혀 Vercel 로그까지 가야 했다. **버킷이 넓으면 계측이 아니라 침묵이다.**
+     상태 0 은 "응답을 못 받았다"는 뜻이고, 그 안에 서로 다른 일이 섞여 있다:
+       · 유저가 떠남·탭 전환 → 사고가 아니다(분모에서 빼야 한다)
+       · 기기가 오프라인 → 우리 잘못이 아니다
+       · 연결이 끊김 → 우리 문제일 수 있다(판결은 10~40초씩 걸려 창이 넓다) */
+  if (/abort|aborted|취소/i.test(f.msg)) return "aborted";
+  try { if (typeof navigator !== "undefined" && navigator.onLine === false) return "offline"; } catch (_) {}
+  return "network";
 }
 const failStatus = (e) => (_serverFail(e) || {}).status || 0;
+/* 실패를 **PostHog 만으로 진단할 수 있게** 하는 최소 꾸러미(2026-09-04 신설).
+   이게 없어서 9/3 사고를 Vercel 로그까지 가서야 원인을 알았다 —
+   상류가 529(과부하)를 준 것과 연결이 끊긴 것이 데이터에서 똑같이 "network" 로 보였다.
+   ⚠ 실을 값을 고를 때의 선: **우리가 만든 문자열과 브라우저가 만든 문자열만** 싣는다.
+     유저 입력은 들어올 자리가 없다(서버 메시지는 우리 한국어 문구, 브라우저 메시지는 영문 고정구).
+     그래도 상한을 둔다 — 상류가 예상 못 한 걸 넣어 보내는 날을 대비한다. */
+function failProps(e) {
+  const fs = (e && e.fails) || [];
+  const sv = fs.find((x) => x.mode === "server") || null;
+  return {
+    err_msg: String((sv || fs[0] || {}).msg || "").slice(0, 80),   // 원인 문자열 — 분류가 못 가른 것을 사람이 읽는다
+    tried: fs.map((x) => x.mode + ":" + (x.status || 0)).join(","), // 폭포수가 실제로 어디까지 갔나
+    online: (() => { try { return navigator.onLine !== false; } catch (_) { return null; } })(),
+  };
+}
 
 /* v75: 공유 판결 인코딩 — 링크에 판결 자체를 실어, 받은 사람이 홈으로 떨어지지 않고
    '누군가의 수호신이 내린 판결'을 먼저 보게 한다(바이럴 루프 복원). UTF-8 안전 base64url */
@@ -7084,7 +7109,7 @@ export default function App() {
         tok_in: _u2 ? _u2.in : null, tok_out: _u2 ? _u2.out : null });
     } catch (e) {
       setDetail({ _err: true });
-      track("detail_failed", { reason: failReason(e), status: failStatus(e), ms: Math.round(performance.now() - _t0), dir: r1?.direction || null, retry: !!isRetry });
+      track("detail_failed", { reason: failReason(e), status: failStatus(e), ...failProps(e), ms: Math.round(performance.now() - _t0), dir: r1?.direction || null, retry: !!isRetry });
     }
     setDetailBusy(false);
   };
@@ -7630,7 +7655,7 @@ export default function App() {
       const m = e?.message || "";
       // 여기가 광고비가 새는 지점이다. 이 track 이 없으면 유저는 막다른 길에서 이탈하는데
       // 데이터에는 "question_asked 는 있고 verdict_shown 이 없다"까지만 남아 원인을 영영 모른다.
-      track("verdict_failed", demoProps(birth, { reason: failReason(e), status: failStatus(e), mode: "ritual", qlen: q.trim().length, ms: Math.round(performance.now() - _jt0), nth_verdict: records.length }));
+      track("verdict_failed", demoProps(birth, { reason: failReason(e), status: failStatus(e), ...failProps(e), mode: "ritual", qlen: q.trim().length, ms: Math.round(performance.now() - _jt0), nth_verdict: records.length }));
       setErr("판결이 닿지 못했어 · " + (/[가-힣]/.test(m) ? m : "잠시 뒤 다시 청해줘"));
       console.warn("judge:", m);
     }
