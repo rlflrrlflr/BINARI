@@ -1106,6 +1106,40 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
     "CSS·셰이더는 백틱 문자열 안에 있습니다. 그 안 주석에서 코드를 백틱으로 감싸면 문자열이 거기서 끊기고 화면이 통째로 깨집니다. 주석에서는 백틱 없이 적으세요.");
 }
 
+/* ── 미리보기 서버 — **브라우저를 쓰는 검사보다 먼저 떠 있어야 한다** ────────────
+   ⚠ 2026-09-04 실사고: 이 블록이 원래 **한참 아래**(검사 9 자리)에 있었다. 그래서
+   `webgl-check`·`crash-net-check` 처럼 별도 프로세스로 브라우저를 띄우는 검사들이
+   **서버가 우연히 떠 있을 때만 통과**했다. 손으로 미리보기를 켜 둔 채 검진을 돌리면 초록,
+   깨끗한 기계에서 돌리면 빨강 — **검사 결과가 코드가 아니라 터미널 상태를 반영했다.**
+   더 나쁜 건 방향이다. 이건 조용한 통과가 아니라 **거짓 경보**라서, 멀쩡한 판을
+   「배포하면 안 됨」으로 막는다. 5-p2 를 신설한 세션이 초록을 본 것도 그때 미리보기가
+   떠 있었기 때문이다.
+   → 브라우저를 쓰는 첫 검사 **앞**으로 올린다. 이미 떠 있으면 그대로 쓰고, 아니면 띄웠다가
+     검진 끝에서 끈다(`stopPreview()`). 아래 검사들은 `execFileSync` 로 도는 별개 프로세스라
+     서버가 정말로 켜져 있어야 한다 — 여기서 한 번 보장하면 그 뒤로는 전부 같은 서버를 쓴다. */
+let previewProc = null;
+async function ensurePreview(base) {
+  try { const r = await fetch(base); if (r.ok) return "이미 떠 있음"; } catch (_) { /* 아래에서 띄운다 */ }
+  previewProc = spawn("npm", ["run", "preview"], { stdio: "ignore", detached: true });
+  for (let i = 0; i < 40; i++) {
+    await new Promise(r => setTimeout(r, 500));
+    try { const r = await fetch(base); if (r.ok) return "검진이 띄움"; } catch (_) { /* 아직 */ }
+  }
+  return null;
+}
+function stopPreview() {
+  if (!previewProc) return;
+  try { process.kill(-previewProc.pid, "SIGTERM"); } catch (_) { try { previewProc.kill(); } catch (_) {} }
+  previewProc = null;
+}
+const PREVIEW_BASE = process.env.BASE || "http://localhost:4173";
+const previewUp = await ensurePreview(PREVIEW_BASE);
+if (!previewUp) {
+  add("심각", "미리보기 서버가 안 떠서 브라우저 검사를 못 함",
+    `${PREVIEW_BASE} 에 응답이 없음 — 이 아래 브라우저 검사들은 결과가 없는 것이지 통과가 아니다`,
+    "빌드가 깨졌거나 4173 포트를 다른 프로그램이 쓰고 있습니다. AI에게 이 문장을 그대로 전하세요.");
+}
+
 /* ── 검사 5-p2. **첫 방문자가 화면을 보는가** (2026-08-31 실사고) ─────────────
    ⚠ **앱이 통째로 안 뜨는 결함이 라이브로 나갔다.** 홀로가 기본이 되면서, WebGL 이 없거나
    셰이더가 실패하는 기기에서 첫 방문자 화면이 **빈 채로** 떴다(root 0자·버튼 0개).
@@ -1442,21 +1476,7 @@ if (existsSync("dist/index.html")) {
    가장 중요한 검사. 사고 이력: 사용자가 몇 시간 동안 실행되지도 않는 렌더러를 튜닝했고,
    앱이 아예 열리지 않는 사고(TDZ)를 빌드가 아니라 이 검사만 잡았다.
    미리보기 서버가 없으면 **직접 띄웠다가 끝나면 끈다.** */
-let previewProc = null;
-async function ensurePreview(base) {
-  try { const r = await fetch(base); if (r.ok) return "이미 떠 있음"; } catch (_) { /* 아래에서 띄운다 */ }
-  previewProc = spawn("npm", ["run", "preview"], { stdio: "ignore", detached: true });
-  for (let i = 0; i < 40; i++) {
-    await new Promise(r => setTimeout(r, 500));
-    try { const r = await fetch(base); if (r.ok) return "검진이 띄움"; } catch (_) { /* 아직 */ }
-  }
-  return null;
-}
-function stopPreview() {
-  if (!previewProc) return;
-  try { process.kill(-previewProc.pid, "SIGTERM"); } catch (_) { try { previewProc.kill(); } catch (_) {} }
-  previewProc = null;
-}
+/* 미리보기 수명주기는 위(브라우저를 쓰는 첫 검사 앞)로 옮겼다 — 사유는 그쪽 주석. */
 
 async function browserCheck() {
   const require = createRequire(import.meta.url);
