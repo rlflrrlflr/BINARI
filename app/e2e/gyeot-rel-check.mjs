@@ -50,18 +50,21 @@ await page.waitForTimeout(900);
 const rel = page.locator(".grel .gpchip");
 ck("⑧ 관계 줄이 한 줄로 보인다", (await rel.count()) === 4);
 const box = page.locator("textarea.gqbox");
-ck("⑨ 빈 칸이면 예상질문이 보인다", (await page.locator(".gsugchip").count()) === 3);
+/* ⚠ **보통 칩만 센다(`:not(.gplay)`).** v180 에서 줄 세우기·뽑기 칩이 같은 목록에 두 개 더 붙었고,
+   `.gsugchip` 을 통째로 세면 3 이 아니라 5 다 — 실제로 이 검사가 그렇게 깨졌다.
+   놀이 칩은 gyeot-rank-check 가 따로 문다. */
+ck("⑨ 빈 칸이면 예상질문이 보인다", (await page.locator(".gsugchip:not(.gplay)").count()) === 3);
 
-const before = await page.locator(".gsugchip").first().innerText();
+const before = await page.locator(".gsugchip:not(.gplay)").first().innerText();
 await rel.filter({ hasText: "썸·연애" }).click();
 await page.waitForTimeout(300);
-const after = await page.locator(".gsugchip").first().innerText();
+const after = await page.locator(".gsugchip:not(.gplay)").first().innerText();
 ck("⑩ 관계를 고르면 예상질문이 바뀐다", before !== after, after.slice(0, 24));
 
-await page.locator(".gsugchip").first().click();
+await page.locator(".gsugchip:not(.gplay)").first().click();
 await page.waitForTimeout(300);
 ck("⑪ 예상질문을 누르면 질문 칸에 들어간다", (await box.inputValue()) === after);
-ck("⑫ 채워지면 예상질문이 물러난다(쓰던 걸 안 덮는다)", (await page.locator(".gsugchip").count()) === 0);
+ck("⑫ 채워지면 예상질문이 물러난다(놀이 칩까지 전부)", (await page.locator(".gsugchip").count()) === 0);
 
 /* ⑬ 관계는 **껐다 켤 수 있다** — 안 고르고도 물을 수 있어야 한다(강제 게이트가 아니다) */
 await box.fill("");
@@ -69,7 +72,7 @@ await page.waitForTimeout(250);
 await rel.filter({ hasText: "썸·연애" }).click();
 await page.waitForTimeout(300);
 ck("⑬ 같은 관계를 다시 누르면 꺼진다", (await page.locator(".grel .gpchip.on").count()) === 0);
-ck("⑭ 관계를 안 골라도 예상질문이 있다(강제 아님)", (await page.locator(".gsugchip").count()) === 3);
+ck("⑭ 관계를 안 골라도 예상질문이 있다(강제 아님)", (await page.locator(".gsugchip:not(.gplay)").count()) === 3);
 
 /* ⑮ 사람 줄과 관계 줄이 **서로 다른 규칙** — 사람은 여럿, 관계는 하나 */
 await rel.filter({ hasText: "친구" }).click();
@@ -78,12 +81,12 @@ await page.waitForTimeout(300);
 ck("⑮ 관계는 하나만 켜진다", (await page.locator(".grel .gpchip.on").count()) === 1);
 
 /* ⑯ 사람 수가 바뀌면 물음이 바뀐다(한 명 ↔ 여럿) */
-const many = await page.locator(".gsugchip").first().innerText();
+const many = await page.locator(".gsugchip:not(.gplay)").first().innerText();
 const names = page.locator(".gpick:not(.grel) .gpchip");
 const n = await names.count();
 for (let i = 2; i < n; i++) await names.nth(i).click();   // 첫 곁 하나만 남긴다
 await page.waitForTimeout(400);
-const one = await page.locator(".gsugchip").first().innerText();
+const one = await page.locator(".gsugchip:not(.gplay)").first().innerText();
 ck("⑯ 한 명만 고르면 물음이 갈린다", many !== one, one.slice(0, 24));
 
 await b.close();

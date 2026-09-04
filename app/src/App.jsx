@@ -6664,6 +6664,46 @@ const GASK = {
   },
 };
 function gAsks(rel, n) { return (GASK[rel] || GASK[""])[n === 1 ? "one" : "many"]; }
+/* ── 줄 세우기 (2026-09-01 창업자 결정: "순위를 만들어보자… 기분이 나쁜지, 그냥 콘텐츠로
+   받아들여지는지 테스트해봐야 할 거 같아") ────────────────────────────────────────
+   **무엇이 뒤집혔고 무엇이 안 뒤집혔나.** 뒤집힌 건 「답이 사람을 줄 세워도 되는가」 하나다.
+   안 뒤집힌 건 **명부**다 — `gyeotOrder` 방어 ①②③(정렬키 최근순 하나 · 자리각이 순서와 무관 ·
+   숫자 금지)은 *저장되는 목록*에 관한 것이고, 여기 순위는 **그 판의 답 안에서만** 산다.
+   명부 정렬에도, 저장에도, 다음 물음에도 안 넘어간다. 그래서 둘은 같이 설 수 있다.
+   ⚠ 순위를 명부에 되쓰거나 `gyeotOrder` 에 두 번째 키로 넣는 순간 방어가 죽는다. 넣지 마라.
+
+   **왜 「인성」이 아니라 「기운」인가.** 곁 이름은 실명이고 상대는 동의한 적이 없다(askGyeot 주석).
+   순위를 열어도 그 사실은 안 변한다. 그래서 재미(줄 세우기·놀리는 어투)는 열되
+   **성격 결함 단정은 계속 막는다** — 「게으르다」는 그 사람에 대한 판정이고,
+   「오늘 기운이 제일 남았다」는 오늘의 상태다. 이 선이 프롬프트에 박혀 있다.
+
+   kind — "rank" 는 다 줄 세운다 · "pick" 은 **한 명만 뽑는다**(커피 쏘기 같은 것).
+   뽑기를 따로 둔 이유: 우열이 아니라 **오늘의 차례**라 부정 서술이 가장 약한 칸이고,
+   팀에서 실제로 웃은 것이 그 칸이었다(오연지 대리 "점심커피쏘기 요런거"). */
+const GRANK = {
+  "비즈니스": [
+    { q: "이 중에 누가 일 복이 많아서 우리가 맨날 야근하는 걸까?", kind: "rank" },
+    { q: "오늘 회의에서 말이 제일 길어질 사람은?", kind: "pick" },
+  ],
+  "썸·연애": [
+    { q: "이 중에 내 마음이 기운 순서대로 줄 세워 줘.", kind: "rank" },
+    { q: "오늘 나한테 먼저 연락 올 것 같은 사람은?", kind: "pick" },
+  ],
+  "친구": [
+    { q: "우리 모임 서열 좀 매겨 줘.", kind: "rank" },
+    { q: "오늘 점심 커피 쏠 사람은?", kind: "pick" },
+  ],
+  "가족": [
+    { q: "우리 집 실세 순서대로 줄 세워 줘.", kind: "rank" },
+    { q: "이번 명절에 제일 말 많을 사람은?", kind: "pick" },
+  ],
+  "": [
+    { q: "이 사람들 줄 세우면 어떻게 돼?", kind: "rank" },
+    { q: "오늘 커피 쏠 사람은?", kind: "pick" },
+  ],
+};
+function gRanks(rel) { return GRANK[rel] || GRANK[""]; }
+
 
 const GSAY = {
   목: { touch1: "간지러워. 그렇게 만지면 자꾸 자라잖아.",
@@ -7282,6 +7322,12 @@ export default function App() {
      안 세면 「칩을 붙였다」까지만 알고 「칩이 먹혔다」는 영영 모른다. ref 인 이유는 이 값이
      화면을 안 바꾸기 때문이다(state 로 두면 글자 하나 칠 때마다 다시 그린다). */
   const gqFromChip = useRef(false);
+  /* 줄 세우기는 **칩으로만 켜진다** — 손으로 친 글에서 「서열」 같은 낱말을 찾아 켜지 않는다.
+     ①글로 알아맞히면 오탐이 나고 ②무엇보다 **실험이 흐려진다**: 창업자가 재려는 건
+     「순위를 받은 사람이 기분 나빠하는가」인데, 어느 물음이 순위였는지 앱이 확신 못 하면
+     그 물음에 답이 안 나온다. 칩으로만 켜면 두 갈래가 깨끗이 갈린다. */
+  const [gqKind, setGqKind] = useState("");       // "" 보통 · "rank" 줄 세우기 · "pick" 한 명 뽑기
+  const [gqReact, setGqReact] = useState(0);      // 1 좀 그렇다 · 2 재밌다 · 0 미평가
   const gqTargets = useMemo(() => {
     const pool = gyeotSorted.filter((x) => Number.isInteger(x.dg));   // 자리를 못 읽은 곁은 비교 대상이 못 된다
     return gqPick ? pool.filter((x) => gqPick.has(x.key)) : pool;
@@ -7290,7 +7336,7 @@ export default function App() {
     if (!gq.trim() || gqBusy || !saju?.idx) return;
     const tg = gqTargets.slice(0, 8);              // 프롬프트를 재료로 채우지 않는다(gyeotPromptLine 과 같은 상한)
     if (!tg.length) { setGqErr("아직 자리를 읽은 곁이 없어. 궁합을 보거나 초대에 답이 오면 물어볼 수 있어."); return; }
-    setGqBusy(true); setGqErr(""); setGqRes(null);
+    setGqBusy(true); setGqErr(""); setGqRes(null); setGqReact(0);
     try {
       const system = makeSystem();
       /* 재료는 **기기가 만든다** — 자리 이름은 `roleOf` 가 이미 답했다. 모델은 그걸 **말로 옮기기만** 한다.
@@ -7310,8 +7356,19 @@ export default function App() {
         + `⚠ 아는 건 **자리 이름 하나뿐**이다. 그 사람의 마음·형편·의사는 지어내지 마라 — `
         + `상대는 이 앱을 쓴 적도 동의한 적도 없다. **유저가 할 행동**으로만 말한다.\n`
         + `⚠ 이름을 쓰지 마라. \`곁1\` 표기를 그대로 쓴다(앱이 이름으로 바꾼다).\n`
-        + `⚠ 순위를 매기지 마라(1등·2등·점수 금지). 자리가 다르다는 걸 말하는 것이지 누가 낫다는 게 아니다.\n`
-        + `JSON 만: {"rows":[{"who":"곁1","line":"이 사람과는 이렇게 하라는 한 줄(45자 이내)"}...],`
+        /* ⚠ 이 한 줄이 셋으로 갈린다. **보통 물음의 순위 금지는 그대로 살아 있다** —
+           창업자가 연 것은 「줄 세우기 칩을 눌렀을 때」뿐이다(2026-09-01). */
+        + (gqKind === "rank"
+            ? `이건 **놀이다.** 고른 사람을 **줄 세워라** — rows 를 1등부터 순서대로 담는다.\n`
+              + `⚠ 근거는 **그 사람의 인성이 아니라 오늘의 기운·자리**에서 온다. `
+              + `「게으르다」·「이기적이다」처럼 성격을 단정하지 마라 — 그건 판정이지 놀이가 아니고, `
+              + `상대는 이 앱을 쓴 적도 동의한 적도 없다. 놀리듯 가볍게, 그러나 흠집은 내지 마라.\n`
+            : gqKind === "pick"
+            ? `이건 **뽑기다.** 고른 사람 중 **딱 한 명**만 골라 rows 에 하나만 담는다.\n`
+              + `⚠ 우열이 아니라 **오늘의 차례**다. 그 사람이 못나서가 아니라 오늘 기운이 그렇다는 투로 말한다. `
+              + `성격을 단정하지 마라 — 상대는 이 앱을 쓴 적도 동의한 적도 없다.\n`
+            : `⚠ 순위를 매기지 마라(1등·2등·점수 금지). 자리가 다르다는 걸 말하는 것이지 누가 낫다는 게 아니다.\n`)
+        + `JSON 만: {"rows":[{"who":"곁1","line":"${gqKind === "rank" ? "왜 이 자리인지 한 줄(45자 이내)" : gqKind === "pick" ? "왜 이 사람인지 한 줄(45자 이내)" : "이 사람과는 이렇게 하라는 한 줄(45자 이내)"}"}...],`
         + `"close":"고른 사람 전체를 두고 마지막 한 줄(45자 이내)"}` };
       const { json } = await callClaude(system, [msg], 700);
       if (!json?.rows?.length) throw new Error("답을 읽지 못했어");
@@ -7319,8 +7376,9 @@ export default function App() {
          세는데, 화면에서 `gyeotSorted`(전체 명부)로 되돌리면 **사람이 뒤바뀐다** —
          팀장님·엄마만 골랐는데 답이 민수 이름으로 나갔다(실물 스샷으로 잡았다).
          이름은 **번호를 매긴 바로 그 목록**으로만 되돌린다. */
-      setGqRes({ ...json, who: tg });
-      track("gyeot_asked", { n: tg.length, all: !gqPick, qlen: gq.trim().length, rel: gqRel || "none", picked: gqFromChip.current });
+      setGqRes({ ...json, who: tg, kind: gqKind });
+      setGqReact(0);
+      track("gyeot_asked", { n: tg.length, all: !gqPick, qlen: gq.trim().length, rel: gqRel || "none", picked: gqFromChip.current, kind: gqKind || "plain" });
     } catch (e) {
       setGqErr(`지금은 답을 못 받았어 — ${String(e?.message || e)}`);
       track("gyeot_ask_failed", {});
@@ -8293,7 +8351,13 @@ export default function App() {
                             fetch(`/api/invite/${encodeURIComponent(g.inv)}`, { method: "DELETE" }).catch(() => {});
                             gyeotDropInvite(g.inv);
                           }
-                          setGyeot((p) => gyeotDrop(p, gyeotAsk)); track("gyeot_dropped", { pending: !!g?.inv }); setGyeotAsk("");
+                          setGyeot((p) => gyeotDrop(p, gyeotAsk));
+                          /* ⚠ **말보다 이게 정직하다.** 순위를 보고 「재밌다」를 누른 사람도
+                             그 사람을 조용히 지울 수 있다. 창업자가 재려는 「기분이 나쁜가」는
+                             버튼보다 여기서 먼저 드러난다 — 방금 줄 세운 사람을 지웠는가.
+                             `afterRank` 는 이번 화면의 답이 순위였는지만 싣는다(사람은 안 싣는다). */
+                          track("gyeot_dropped", { pending: !!g?.inv, afterRank: gqRes?.kind || "none" });
+                          setGyeotAsk("");
                         }}>지울래</button>
                       </div>
                     </div>
@@ -8336,13 +8400,19 @@ export default function App() {
                     </div>
                     <textarea className="qbox gqbox" rows={2} maxLength={200} value={gq}
                       placeholder="이번 일은 누구랑 하면 좋을까?"
-                      onChange={(e) => { setGq(e.target.value); gqFromChip.current = false; }} />
+                      onChange={(e) => { setGq(e.target.value); gqFromChip.current = false; setGqKind(""); }} />
                     {/* 예상질문 — 빈 칸일 때만 보인다. 쓰기 시작한 뒤에도 남아 있으면 **쓰던 걸 덮는 버튼**이 된다. */}
                     {!gq.trim() && (
                       <div className="gsug">
                         {gAsks(gqRel, gqTargets.length).map((t) => (
                           <button key={t} className="gsugchip"
-                            onClick={() => { setGq(t); gqFromChip.current = true; track("gyeot_ask_chip", { rel: gqRel || "none", n: gqTargets.length }); }}>{t}</button>
+                            onClick={() => { setGq(t); setGqKind(""); gqFromChip.current = true; track("gyeot_ask_chip", { rel: gqRel || "none", n: gqTargets.length }); }}>{t}</button>
+                        ))}
+                        {/* 줄 세우기 — **둘 이상일 때만** 뜬다. 한 명을 줄 세우는 건 말이 안 되고,
+                            한 명뿐인 화면에 「서열」이 뜨면 그건 그 사람 한 명에 대한 판정으로 읽힌다. */}
+                        {gqTargets.length > 1 && gRanks(gqRel).map((r) => (
+                          <button key={r.q} className="gsugchip gplay"
+                            onClick={() => { setGq(r.q); setGqKind(r.kind); gqFromChip.current = true; track("gyeot_ask_chip", { rel: gqRel || "none", n: gqTargets.length, kind: r.kind }); }}>{r.q}</button>
                         ))}
                       </div>
                     )}
@@ -8355,13 +8425,38 @@ export default function App() {
                         {/* ⚠ 되돌릴 때 쓰는 목록은 **물을 때 번호를 매긴 그 목록**이다(gqRes.who) —
                             전체 명부로 되돌리면 고른 사람과 답이 어긋난다(위 주석). */}
                         {gqRes.rows.map((r, i) => (
-                          <p key={i} className="gqrow">
+                          <p key={i} className={"gqrow" + (gqRes.kind ? " gqplay" : "")}>
+                            {/* 순번은 **줄 세우기일 때만.** 뽑기는 한 명이라 번호가 뜻이 없고,
+                                보통 물음에 번호가 붙으면 그게 곧 순위가 된다(안 연 칸이다). */}
+                            {gqRes.kind === "rank" && <i className="gqno">{i + 1}</i>}
                             <b>{gyeotFillNames(String(r.who || ""), gqRes.who || [])}</b>
                             <span>{gyeotFillNames(String(r.line || ""), gqRes.who || [])}</span>
                           </p>
                         ))}
                         {gqRes.close && <p className="gqclose">{gyeotFillNames(String(gqRes.close), gqRes.who || [])}</p>}
                         <p className="ainote">이 답은 AI가 만들어요 · 재미로 보는 참고예요</p>
+                        {/* ── 이게 이 기능의 **실험 장치**다 (창업자: "기분이 나쁜지, 그냥 콘텐츠로
+                            받아들여지는지 테스트해봐야 할 거 같아") ────────────────────────────
+                            묻는 말이 곧 창업자의 물음이다. 재는 장치 없이 순위만 열면
+                            **켠 것도 끈 것도 근거 없이** 하게 된다. 줄 세우기·뽑기에만 뜬다 —
+                            보통 물음에까지 달면 무엇에 대한 답인지 섞인다. */}
+                        {gqRes.kind && (
+                          <div className="graterow">
+                            {gqReact ? (
+                              <p className="ratedone">{gqReact === 2 ? "그럼 됐어. 또 물어봐." : "알겠어 — 담아뒀어. 이런 건 줄여 볼게."}</p>
+                            ) : (
+                              <>
+                                <span className="ratelab">이거 어땠어?</span>
+                                <div className="row gap center">
+                                  <button type="button" className="calbtn sm"
+                                    onClick={() => { setGqReact(2); track("gyeot_rank_react", { v: "fun", kind: gqRes.kind, rel: gqRel || "none", n: (gqRes.who || []).length }); }}>재밌다</button>
+                                  <button type="button" className="calbtn sm"
+                                    onClick={() => { setGqReact(1); track("gyeot_rank_react", { v: "bad", kind: gqRes.kind, rel: gqRel || "none", n: (gqRes.who || []).length }); }}>좀 그렇다</button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -9550,6 +9645,16 @@ const CSS = `
 .gqbox{min-height:56px}
 .gask2 .btn.sm{margin:8px auto 0;display:block}
 .gqres{margin-top:12px;text-align:left}
+.gplay{border-style:dashed}
+.gqplay{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap}
+/* 순번 — **순위 기능인데 순위가 안 읽히면 기능이 아니다.** 금색(#f5d98b)은 까만 판에서 나온 색이라
+   홀로의 밝은 바닥에서는 대비 1점대로 사라진다(홀로가독성감사가 든 그 증상 그대로다).
+   그래서 판마다 따로 준다 — 까만 판은 원래 금색, 홀로는 같은 계열의 **진한 호박색**. */
+.gqno{flex:0 0 auto;font-style:normal;font-family:sans-serif;font-size:11px;font-weight:700;color:#f5d98b;
+  border:1px solid rgba(245,217,139,.45);border-radius:999px;min-width:18px;height:18px;
+  display:inline-flex;align-items:center;justify-content:center}
+.holo .gqno{color:#5f4109;border-color:rgba(95,65,9,.50)}
+.graterow{margin-top:10px;text-align:center}
 .gqrow{margin:0 0 9px;font-size:13px;line-height:1.7;color:#cfc4e2;word-break:keep-all}
 .gqrow b{display:block;color:#ffe9ad;font-size:12px;margin-bottom:2px}
 .gqclose{margin:10px 0 0;padding-top:9px;border-top:1px solid rgba(159,143,196,.18);
