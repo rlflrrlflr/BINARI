@@ -2587,6 +2587,65 @@ const TUNE = {
   nE: 34000,        // 입자 수 — 외향(E)
   nI: 27000,        // 입자 수 — 내향(I)
 };
+/* ═══════════ 수호신 형상 — **다섯 형상의 수식이 사는 단 한 곳** ═══════════
+   ⚠ 2026-09-04 통합. 이 사슬이 오래도록 **두 벌**로 존재했다 — 화면에 그리는 셰이더(GL_VERT)와
+     GPU 시뮬레이션 셰이더(SHAPE_FN)에 다섯 형상이 통째로 복사돼 있었다. 검진이 「두 벌로 존재」를
+     계속 알렸고, 실제로 **값이 어긋나는 사고가 두 번**(검사 1·2가 잡은 것들) 여기서 났다.
+     한쪽만 고치면 **기기에 따라 다른 수호신이 보인다** — 어느 렌더러가 뜨는지는 기기가 정한다.
+   → 합칠 수 있었던 이유: 통합 직전 실측에서 다섯 분기가 **주석·공백만 빼면 완전히 같았다.**
+     즉 이건 리팩터링이 아니라 **이미 같은 것을 한 번만 적는 일**이다.
+   ⚠ 고칠 때 지킬 것: 이 사슬은 바깥에서 `t`·`strand`·`sOff`·`p`·`depth`·`v_a` 가 이미 선언돼
+     있다고 전제한다. 두 곳의 전제가 다르므로(한쪽은 varying, 한쪽은 out 매개변수)
+     **여기서 새로 선언하지 마라.** 선언은 각 셰이더가 자기 방식으로 하고, 여기서는 채우기만 한다. */
+const SHAPE_BRANCHES = `
+if(u_form<0.5){ // 화 — 꼬여 오르는 리본 기둥 (가닥 해시로 유기화)
+    float sh=fract(sin(strand*12.9898)*43758.5453);
+    float s=fract(a_r0.y+t*(0.032+0.022*sh)*(0.5+a_r0.z));
+    float y=mix(-1.05,1.05,s);
+    float tw=s*u_twist*6.2832+t*(0.18+0.12*sh)+sOff*6.2832+sh*3.1;
+    float rad=(0.13+0.1*sin(s*5.0+t*0.45+a_r1.x))*(0.5+0.9*a_r0.x)*(0.7+0.6*sh);
+    p=vec2(sin(tw)*rad*2.1+0.16*sin(y*1.6+t*0.14+sh*6.2)+sin(s*3.0+t*0.2+sOff*9.0)*0.12*u_chaos, y);
+    depth=0.45+0.55*(0.5+0.5*cos(tw));
+    v_a=0.5+0.5*s;
+  } else if(u_form<1.5){ // 수 — 흐르는 물결 층
+    float dir=mod(strand,2.0)<0.5?1.0:-1.0;
+    float x=mix(-1.25,1.25,fract(a_r0.x+t*0.03*dir*(0.6+a_r0.z)));
+    float band=(sOff-0.5)*1.5;
+    p=vec2(x, band+0.11*sin(x*3.6+t*0.55+a_r1.x)+(a_r0.y-0.5)*0.16);
+    depth=0.5+0.5*a_r0.z;
+    v_a=(1.0-abs(x)*0.45)*0.9;
+  } else if(u_form<2.5){ // 목 — 뻗어 오르는 가지 흐름
+    float br=mod(strand,u_arms);
+    float ang=1.5708+(br-(u_arms-1.0)*0.5)*0.42+0.05*sin(t*0.35+br*2.0);
+    float s=fract(a_r0.y+t*0.035*(0.5+a_r0.z));
+    vec2 d=vec2(cos(ang),sin(ang));
+    p=vec2((a_r0.x-0.5)*0.62,-0.8)+d*(s*1.8)+vec2(-d.y,d.x)*(a_r0.x-0.5)*(0.12+s*0.55)
+      +vec2(sin(s*8.0+t*0.5+a_r1.x),cos(s*7.0-t*0.5))*0.05*s*u_chaos;
+    depth=0.5+0.5*(1.0-s);
+    v_a=(0.4+0.6*(1.0-s*0.55))*(0.4+0.6*smoothstep(0.0,0.2,s));
+  } else if(u_form<3.5){ // 금 — 흘러내리는 용융 금속 (가닥이 굽이쳐 쏟아지며 아래로 수렴, 금속 광택 반짝임)
+    float str=strand;
+    float sh=fract(sin(str*12.9898)*43758.5453);
+    float s=fract(a_r0.y+t*0.05*(0.7+0.5*sh));             // 위→아래 흐름(쏟아짐)
+    float y=mix(1.0,-1.0,s);
+    float lane=(str/max(u_strands,1.0)-0.5)*1.1;           // 가닥 별 가로 위치
+    float coil=sin(y*3.0+str*2.4+t*0.5)*(0.13+0.09*u_twist)*(0.4+0.6*s); // 흘러내리며 감김
+    float x=lane*(1.0-0.35*s)+coil+(a_r0.x-0.5)*0.14;      // 아래로 갈수록 모임(레인 지터로 평행 줄무늬 완화)
+    p=vec2(x,y);
+    depth=0.5+0.5*sh;
+    float glint=step(0.93,a_r1.x)*0.7;                     // 금속 광택 반짝임(백화 완화)
+    v_a=((0.5+0.5*(1.0-abs(x)*0.5))+glint)*smoothstep(0.0,0.07,s)*smoothstep(1.0,0.9,s);
+  } else { // 토 — 중심 없는 난류 융기
+    float rr=pow(a_r0.z,0.75)*0.88;
+    float ang=a_r0.x*6.2832+t*0.05;
+    p=vec2(cos(ang),sin(ang)*0.92)*rr;
+    p+=u_chaos*0.16*vec2(sin(p.y*2.1+t*0.2+a_r1.x),cos(p.x*1.9-t*0.18+a_r0.y*6.0));
+    p+=u_chaos*0.06*vec2(sin(p.y*5.3-t*0.3+a_r0.w*9.0),cos(p.x*4.7+t*0.26+a_r1.x*3.0));
+    p*=1.0+0.03*sin(t*0.4);
+    depth=0.5+0.5*a_r0.y;
+    v_a=0.55+0.45*(1.0-rr*0.7);
+  }`;
+
 const GL_VERT = `
 precision highp float;
 attribute vec4 a_r0; // x:u y:v z:s w:size·위상
@@ -2665,53 +2724,7 @@ void main(){
   float strand=floor(a_r1.w*u_strands+0.0001);
   float sOff=strand/max(u_strands,1.0);
   vec2 p; float depth=1.0;
-  if(u_form<0.5){ // 화 — 꼬여 오르는 리본 기둥 (가닥 해시로 유기화)
-    float sh=fract(sin(strand*12.9898)*43758.5453);
-    float s=fract(a_r0.y+t*(0.032+0.022*sh)*(0.5+a_r0.z));
-    float y=mix(-1.05,1.05,s);
-    float tw=s*u_twist*6.2832+t*(0.18+0.12*sh)+sOff*6.2832+sh*3.1;
-    float rad=(0.13+0.1*sin(s*5.0+t*0.45+a_r1.x))*(0.5+0.9*a_r0.x)*(0.7+0.6*sh);
-    p=vec2(sin(tw)*rad*2.1+0.16*sin(y*1.6+t*0.14+sh*6.2)+sin(s*3.0+t*0.2+sOff*9.0)*0.12*u_chaos, y);
-    depth=0.45+0.55*(0.5+0.5*cos(tw));
-    v_a=0.5+0.5*s;
-  } else if(u_form<1.5){ // 수 — 흐르는 물결 층
-    float dir=mod(strand,2.0)<0.5?1.0:-1.0;
-    float x=mix(-1.25,1.25,fract(a_r0.x+t*0.03*dir*(0.6+a_r0.z)));
-    float band=(sOff-0.5)*1.5;
-    p=vec2(x, band+0.11*sin(x*3.6+t*0.55+a_r1.x)+(a_r0.y-0.5)*0.16);
-    depth=0.5+0.5*a_r0.z;
-    v_a=(1.0-abs(x)*0.45)*0.9;
-  } else if(u_form<2.5){ // 목 — 뻗어 오르는 가지 흐름
-    float br=mod(strand,u_arms);
-    float ang=1.5708+(br-(u_arms-1.0)*0.5)*0.42+0.05*sin(t*0.35+br*2.0);
-    float s=fract(a_r0.y+t*0.035*(0.5+a_r0.z));
-    vec2 d=vec2(cos(ang),sin(ang));
-    p=vec2((a_r0.x-0.5)*0.62,-0.8)+d*(s*1.8)+vec2(-d.y,d.x)*(a_r0.x-0.5)*(0.12+s*0.55)
-      +vec2(sin(s*8.0+t*0.5+a_r1.x),cos(s*7.0-t*0.5))*0.05*s*u_chaos;
-    depth=0.5+0.5*(1.0-s);
-    v_a=(0.4+0.6*(1.0-s*0.55))*(0.4+0.6*smoothstep(0.0,0.2,s));
-  } else if(u_form<3.5){ // 금 — 흘러내리는 용융 금속 (가닥이 굽이쳐 쏟아지며 아래로 수렴, 금속 광택 반짝임)
-    float str=strand;
-    float sh=fract(sin(str*12.9898)*43758.5453);
-    float s=fract(a_r0.y+t*0.05*(0.7+0.5*sh));             // 위→아래 흐름(쏟아짐)
-    float y=mix(1.0,-1.0,s);
-    float lane=(str/max(u_strands,1.0)-0.5)*1.1;           // 가닥 별 가로 위치
-    float coil=sin(y*3.0+str*2.4+t*0.5)*(0.13+0.09*u_twist)*(0.4+0.6*s); // 흘러내리며 감김
-    float x=lane*(1.0-0.35*s)+coil+(a_r0.x-0.5)*0.14;      // 아래로 갈수록 모임(레인 지터로 평행 줄무늬 완화)
-    p=vec2(x,y);
-    depth=0.5+0.5*sh;
-    float glint=step(0.93,a_r1.x)*0.7;                     // 금속 광택 반짝임(백화 완화)
-    v_a=((0.5+0.5*(1.0-abs(x)*0.5))+glint)*smoothstep(0.0,0.07,s)*smoothstep(1.0,0.9,s);
-  } else { // 토 — 중심 없는 난류 융기
-    float rr=pow(a_r0.z,0.75)*0.88;
-    float ang=a_r0.x*6.2832+t*0.05;
-    p=vec2(cos(ang),sin(ang)*0.92)*rr;
-    p+=u_chaos*0.16*vec2(sin(p.y*2.1+t*0.2+a_r1.x),cos(p.x*1.9-t*0.18+a_r0.y*6.0));
-    p+=u_chaos*0.06*vec2(sin(p.y*5.3-t*0.3+a_r0.w*9.0),cos(p.x*4.7+t*0.26+a_r1.x*3.0));
-    p*=1.0+0.03*sin(t*0.4);
-    depth=0.5+0.5*a_r0.y;
-    v_a=0.55+0.45*(1.0-rr*0.7);
-  }
+  ${SHAPE_BRANCHES}
   float halo=step(0.84,a_r1.y);                              // v64 성간 먼지 헤일로(입자 16% 재배정)
   if(halo>0.5){
     float hr=0.55+1.05*pow(a_r0.z,0.6);                      // 0.55~1.6 광역 타원 원반
@@ -4369,45 +4382,7 @@ void computeShape(vec4 a_r0, vec4 a_r1, out vec2 spos, out float depth, out floa
   float strand=floor(a_r1.w*u_strands+0.0001);
   float sOff=strand/max(u_strands,1.0);
   vec2 p; depth=1.0; v_a=1.0;
-  if(u_form<0.5){
-    float sh=fract(sin(strand*12.9898)*43758.5453);
-    float s=fract(a_r0.y+t*(0.032+0.022*sh)*(0.5+a_r0.z));
-    float y=mix(-1.05,1.05,s);
-    float tw=s*u_twist*6.2832+t*(0.18+0.12*sh)+sOff*6.2832+sh*3.1;
-    float rad=(0.13+0.1*sin(s*5.0+t*0.45+a_r1.x))*(0.5+0.9*a_r0.x)*(0.7+0.6*sh);
-    p=vec2(sin(tw)*rad*2.1+0.16*sin(y*1.6+t*0.14+sh*6.2)+sin(s*3.0+t*0.2+sOff*9.0)*0.12*u_chaos, y);
-    depth=0.45+0.55*(0.5+0.5*cos(tw)); v_a=0.5+0.5*s;
-  } else if(u_form<1.5){
-    float dir=mod(strand,2.0)<0.5?1.0:-1.0;
-    float x=mix(-1.25,1.25,fract(a_r0.x+t*0.03*dir*(0.6+a_r0.z)));
-    float band=(sOff-0.5)*1.5;
-    p=vec2(x, band+0.11*sin(x*3.6+t*0.55+a_r1.x)+(a_r0.y-0.5)*0.16);
-    depth=0.5+0.5*a_r0.z; v_a=(1.0-abs(x)*0.45)*0.9;
-  } else if(u_form<2.5){
-    float br=mod(strand,u_arms);
-    float ang=1.5708+(br-(u_arms-1.0)*0.5)*0.42+0.05*sin(t*0.35+br*2.0);
-    float s=fract(a_r0.y+t*0.035*(0.5+a_r0.z));
-    vec2 d=vec2(cos(ang),sin(ang));
-    p=vec2((a_r0.x-0.5)*0.62,-0.8)+d*(s*1.8)+vec2(-d.y,d.x)*(a_r0.x-0.5)*(0.12+s*0.55)+vec2(sin(s*8.0+t*0.5+a_r1.x),cos(s*7.0-t*0.5))*0.05*s*u_chaos;
-    depth=0.5+0.5*(1.0-s); v_a=(0.4+0.6*(1.0-s*0.55))*(0.4+0.6*smoothstep(0.0,0.2,s));
-  } else if(u_form<3.5){
-    float str=strand; float sh=fract(sin(str*12.9898)*43758.5453);
-    float s=fract(a_r0.y+t*0.05*(0.7+0.5*sh));
-    float y=mix(1.0,-1.0,s);
-    float lane=(str/max(u_strands,1.0)-0.5)*1.1;
-    float coil=sin(y*3.0+str*2.4+t*0.5)*(0.13+0.09*u_twist)*(0.4+0.6*s);
-    float x=lane*(1.0-0.35*s)+coil+(a_r0.x-0.5)*0.14;
-    p=vec2(x,y); depth=0.5+0.5*sh;
-    float glint=step(0.93,a_r1.x)*0.7;
-    v_a=((0.5+0.5*(1.0-abs(x)*0.5))+glint)*smoothstep(0.0,0.07,s)*smoothstep(1.0,0.9,s);
-  } else {
-    float rr=pow(a_r0.z,0.75)*0.88;
-    float ang=a_r0.x*6.2832+t*0.05;
-    p=vec2(cos(ang),sin(ang)*0.92)*rr;
-    p+=u_chaos*0.16*vec2(sin(p.y*2.1+t*0.2+a_r1.x),cos(p.x*1.9-t*0.18+a_r0.y*6.0));
-    p+=u_chaos*0.06*vec2(sin(p.y*5.3-t*0.3+a_r0.w*9.0),cos(p.x*4.7+t*0.26+a_r1.x*3.0));
-    p*=1.0+0.03*sin(t*0.4); depth=0.5+0.5*a_r0.y; v_a=0.55+0.45*(1.0-rr*0.7);
-  }
+  ${SHAPE_BRANCHES}
   float halo=step(0.84,a_r1.y);
   if(halo>0.5){
     float hr=0.55+1.05*pow(a_r0.z,0.6);
@@ -4710,7 +4685,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v188 · 마지막 그물";
+const APP_VER = "v189 · 형상은 한 곳에";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.

@@ -72,7 +72,15 @@ await click("다음");                await step("⑥ 확인");
 await click("하늘을 열기"); await page.waitForTimeout(1200);
 await step("⑦ 회상");
 await page.waitForTimeout(4500);    await step("⑧ 기억 완료");
-await click("응, 기억나"); await page.waitForTimeout(2200);
+/* ⚠ **시계로 기다리지 않는다 (2026-09-04 수정).** 여기가 `waitForTimeout(2200)` 이었는데,
+   회상(조각이 모이는 연출)이 기계 사정으로 2.2초를 넘기면 **아직 로비에 닿지도 않은 채**
+   다음 줄로 넘어갔다. 그러면 ⑨ 이후 검사들이 **로딩 화면을 재고**(색장·대비 검사는 거기서도
+   통과한다) 아래 깨우기가 「두드려봐」가 뜨기 전에 눌려 판결 칸을 영영 못 본다.
+   실제로 오늘 같은 코드가 한 번은 29/29, 한 번은 이 자리에서 죽었다 — **검사가 기계 속도를
+   재고 있었다.** 시각이 아니라 **화면이 도착했다는 사실**을 기다린다. */
+await click("응, 기억나");
+await page.waitForSelector("text=두 번 두드려봐", { timeout: 30000 });
+await page.waitForTimeout(600);
 await step("⑨ 탄생");
 
 /* ── ⑩ 곁은 **둥글어야** 한다 ────────────────────────────────────────────
@@ -163,7 +171,14 @@ const rad = async () => {
    장이 흐리고 들쭉날쭉하다 — 그 상태를 재면 광선마다 임계 교차가 딴 데서 나서 3주기 성분이
    0.14 로 나온다(같은 오브를 깨운 뒤 재면 0.002 다. 두 측정을 맞대어 확인했다).
    창업자가 「곁 탭 안 둥그런데」라고 한 건 **깨운 뒤의 화면**이다. 그 상태를 재야 한다. */
-await page.locator("canvas").first().dblclick();
+/* 한 번 두드려서 안 열리면 한 번 더 — 연출이 도는 중엔 첫 두드림이 먹히지 않는다.
+   ⚠ 그래도 안 열리면 **죽는다.** 조용히 넘어가면 그 뒤 측정이 「깨우기 전 화면」을 재고,
+     그건 이 파일 위 주석이 이미 이름 붙여 둔 함정이다(0.14 vs 0.002). */
+for (let i = 0; i < 3; i++) {
+  await page.locator("canvas").first().dblclick().catch(() => {});
+  if (await page.locator("textarea.qbox").count()) break;
+  await page.waitForTimeout(1200);
+}
 await page.waitForSelector("textarea.qbox", { timeout: 12000 }); await page.waitForTimeout(900);
 await page.getByRole("button", { name: "곁" }).click(); await page.waitForTimeout(2400);
 const gyeot3 = await rad();
