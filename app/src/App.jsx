@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, Component } from "react";
 import { readImprint } from "./lib/imprint.js";
 import { readMatch, matchAxes, roleOf, ROLE } from "./lib/match.js";
 /* 오라 스펙 — 레퍼런스를 값으로 적은 단일 진실 원천. 셰이더 상수를 코드에 안 박는다.
@@ -4710,7 +4710,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v179 · 곁에게 묻는다";
+const APP_VER = "v188 · 마지막 그물";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -6683,8 +6683,64 @@ const GSAY = {
 /* 오행이 없거나(있을 리 없지만) 표에 빠진 경우 — 목소리를 지어내지 않고 조용히 환영으로 돌아간다 */
 const gsay = (el, key) => (GSAY[el] || {})[key] || null;
 
+/* ═══════════════ 마지막 그물 — 화면이 통째로 죽지 않게 ═══════════════
+   2026-08-31 라이브 사고: 홀로가 기본이 된 뒤 WebGL 이 없는 기기에서 렌더가 던졌고,
+   **에러 경계가 0개라** React 가 트리를 통째로 언마운트했다 — root 0자, 버튼 0개.
+   그날 원인 셋(NO_SAJU·canHolo·컨텍스트 상실)은 고쳤지만 **구조는 그대로였다.**
+   다음에 어디서 렌더가 던지든 같은 빈 화면이 다시 나온다.
+
+   그리고 더 나쁜 게 하나 더 있다 — **그 빈 화면은 계측에 안 보인다.**
+   posthog.init 이 App 안의 useEffect 에서 돌고 capture_pageview 도 꺼져 있어서,
+   마운트가 실패하면 이벤트가 **0건**이다. 즉 「아무도 안 왔다」와
+   「스무 명이 왔는데 전부 죽었다」가 데이터에서 **같은 그림**이다.
+   광고로 분모를 채우기 직전이라, 이 눈멂은 그대로 예산을 태운다.
+
+   그래서 그물은 둘을 한다:
+     ① 유저에게 **누를 것을 준다** — 빈 화면 대신 「다시 열어볼래」.
+     ② 죽었다는 사실을 **내보낸다** — app_crashed.
+   ⚠ ②는 거부권을 **먼저 읽고 나서** 보낸다. 마운트가 실패했으면 _optout 이
+     기본값(false)에 머물러 있어서, 안 읽고 보내면 **거부한 사람에게서도 나간다.**
+   ⚠ 오류 문구는 140자로 자른다. 유저가 친 글이 예외 메시지에 섞여 나올 여지를 줄인다. */
+class BootNet extends Component {
+  constructor(p) { super(p); this.state = { dead: false }; }
+  static getDerivedStateFromError() { return { dead: true }; }
+  componentDidCatch(err, info) {
+    try {
+      _optout = readOptout();                       // 거부권 먼저 — 마운트가 죽었으면 아무도 안 읽었다
+      _consent = readConsent();
+      _initAnalytics();                             // 큐에 담기고 로드되면 흘러나간다
+      track("app_crashed", {
+        err_name: (err && err.name) || "Error",
+        err_msg: String((err && err.message) || "").slice(0, 140),
+        where: String((info && info.componentStack) || "").trim().split("\n").slice(0, 2).join(" / ").slice(0, 160),
+      });
+    } catch (_) {}
+  }
+  render() {
+    if (!this.state.dead) return this.props.children;
+    const wrap = { minHeight: "100dvh", display: "flex", flexDirection: "column", alignItems: "center",
+      justifyContent: "center", gap: 18, padding: 28, textAlign: "center",
+      background: "#0b0b10", color: "#e8e4dc", fontFamily: "inherit" };
+    const btn = { padding: "12px 22px", borderRadius: 999, border: "1px solid #6b6478",
+      background: "transparent", color: "#e8e4dc", fontSize: 15, cursor: "pointer" };
+    return (
+      <div style={wrap} data-boot-net="1">
+        <div style={{ fontSize: 17, lineHeight: 1.7 }}>하늘이 잠깐 닫혔어.<br />내 쪽 문제야 — 네 기억은 그대로 있어.</div>
+        <button style={btn} onClick={() => { try { window.location.href = window.location.pathname; } catch (_) { window.location.reload(); } }}>
+          다시 열어볼래
+        </button>
+      </div>
+    );
+  }
+}
+export { BootNet };
+
 /* ═══════════════ 앱 ═══════════════ */
 export default function App() {
+  /* 그물 검사용 훅. ?trackdebug 와 같은 계열의 주소 스위치다 —
+     그물은 **평소에 안 보이는 장치**라 일부러 죽여 보지 않으면 살아 있는지 알 수 없다.
+     유저가 이 주소를 열어도 손해는 없다: 그물이 받아서 「다시 열어볼래」를 보여 준다. */
+  if (typeof window !== "undefined" && /[?&]boom\b/.test(window.location.search)) throw new Error("boom — 그물 검사용");
   const [mem] = useState(loadMemory);             // v16(B1): 부팅 시 기억 1회 로드
   const returning = !!mem;                        // 재회 여부 — 인사·연출 분기
   const [step, setStep] = useState(mem ? 3 : 0);  // 기억이 있으면 온보딩 전체 생략
