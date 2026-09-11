@@ -1,10 +1,7 @@
 /* 동전 의식 검사 (v140) — 재미 축과 마찰 축을 둘 다 지킨다.
    이 검사가 있는 이유: v129.2 에 의식을 끈 사유가 **검증 불가능한 추측**("허들같아보여서")이었다.
    같은 일이 반복되지 않게, 되살린 판의 성질을 값이 아니라 **구조**로 못 박는다. */
-import { createRequire } from "node:module";
-const require = createRequire(import.meta.url);
-let pw; try { pw = require("playwright"); } catch { pw = require("/opt/node22/lib/node_modules/playwright"); }
-const { chromium } = pw;
+import { launch } from "./browser.mjs";   // 브라우저 찾기는 한 곳에서 (2026-09-11)
 import { readFileSync } from "fs";
 import { onboard } from "./onboard.mjs";
 
@@ -38,7 +35,7 @@ for (const forbidden of ["texture(", "canvas", "GuardianSeal", "shader", "u_form
   ck(!panel.includes(forbidden), `의식 블록이 수호신 렌더에 안 묶여 있다 — ${forbidden} 없음`);
 
 /* ── 실주행 ── */
-const b = await chromium.launch(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {});
+const b = await launch();
 const p = await b.newPage({ viewport: { width: 430, height: 932 } });
 try {
   await p.addInitScript(() => {

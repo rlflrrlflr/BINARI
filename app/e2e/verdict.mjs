@@ -1,10 +1,7 @@
 // 판결 경로 회귀 — ①window.claude.complete 정상 ②complete 고장 시 폭포수(→server 404→direct)
 // 실행: preview 기동 후 node e2e/verdict.mjs
-import { createRequire } from "node:module";
+import { launch } from "./browser.mjs";   // 브라우저 찾기는 한 곳에서 (2026-09-11)
 import { throwCoins } from "./ritual.mjs";   // v140: 의식이 켜져 있으면 여섯 번 던져 통과
-const require = createRequire(import.meta.url);
-let pw; try { pw = require("playwright"); } catch { pw = require("/opt/node22/lib/node_modules/playwright"); }
-const { chromium } = pw;
 const BASE = process.env.BASE || "http://localhost:4173";
 
 const R = []; const ck = (n, p, note = "") => { R.push(p); console.log(`${p ? "PASS" : "FAIL"} — ${n}${note ? " · " + note : ""}`); };
@@ -54,7 +51,7 @@ async function onboard(page, qs = "", nm = "") {   // qs: "?trackdebug" 처럼 �
 const vvText = async (page) => (await page.locator(".vv").allTextContents())[0] || "";
 const waitVerdict = async (page) => { for (let i = 0; i < 40; i++) { if ((await vvText(page)).includes("보내지 마")) return true; await page.waitForTimeout(300); } return false; };
 
-const b = await chromium.launch((process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}));
+const b = await launch();
 
 // ── 시나리오 1: complete 정상 (아티팩트 표준 환경) ──
 {

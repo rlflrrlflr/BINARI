@@ -1,16 +1,13 @@
 // v29 회귀 — ①회상 나레이션 선택 시작하면 숨김 ②자기소개 탄생 순간에만 ③정독 스로틀 하에도 판결 렌더 정상
 // 실행: preview 기동 후 node e2e/v29-check.mjs
-import { createRequire } from "node:module";
+import { launch } from "./browser.mjs";   // 브라우저 찾기는 한 곳에서 (2026-09-11)
 import { throwCoins } from "./ritual.mjs";   // v140: 의식이 켜져 있으면 여섯 번 던져 통과
-const require = createRequire(import.meta.url);
-let pw; try { pw = require("playwright"); } catch { pw = require("/opt/node22/lib/node_modules/playwright"); }
-const { chromium } = pw;
 const BASE = process.env.BASE || "http://localhost:4173";
 const R = []; const ck = (n, p, note = "") => { R.push(p); console.log(`${p ? "PASS" : "FAIL"} — ${n}${note ? " · " + note : ""}`); };
 const CALL1 = JSON.stringify({ category: "C", votes: [{ axis: "사주", v: "GO" }, { axis: "달", v: "GO" }, { axis: "별자리", v: "STOP" }], tone: "단호", direction: "GO", verdict: "가. 망설이지 마.", against: 2, total: 6 });
 const CALL2 = JSON.stringify({ subline: "이미 답을 알잖아.", reasons: [{ axis: "사주", vote: "GO", text: "목기가 뻗어." }], funLine: "가자.", disclaimer: "" });
 
-const b = await chromium.launch((process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}));
+const b = await launch();
 const page = await b.newPage({ viewport: { width: 430, height: 932 } });
 page.setDefaultTimeout(9000);
 const errs = [];

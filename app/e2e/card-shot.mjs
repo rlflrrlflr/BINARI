@@ -1,15 +1,12 @@
 /* 공유 카드 실물 뽑기 — 실행: preview 기동 후 node e2e/card-shot.mjs [출력폴더]
    카드는 **그림**이라 검사만으로는 "재미없다"를 못 잡는다. 실제로 떠서 눈으로 본다.
    ⚠ 검사가 아니다(통과/실패 없음). 창업자 검수용 산출물이다. */
-import { createRequire } from "node:module";
+import { launch } from "./browser.mjs";   // 브라우저 찾기는 한 곳에서 (2026-09-11)
 import { writeFileSync } from "node:fs";
-const require = createRequire(import.meta.url);
-let pw; try { pw = require("playwright"); } catch { pw = require("/opt/node22/lib/node_modules/playwright"); }
-const { chromium } = pw;
 const BASE = process.env.BASE || "http://localhost:4173";
 const OUT = process.argv[2] || ".";
 
-const b = await chromium.launch(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {});
+const b = await launch();
 const page = await b.newPage({ viewport: { width: 430, height: 932 } });
 await page.goto(BASE); await page.waitForTimeout(800);
 

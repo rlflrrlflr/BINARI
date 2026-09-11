@@ -17,17 +17,17 @@
  *   ⑤ 계측을 거부한 사람에게선 **안 나간다**
  *   ⑥ 오류 문구가 통째로 실려 나가지 않는다 (140자 상한)
  */
-import { createRequire } from "node:module";
-const require = createRequire(import.meta.url);
-let pw; try { pw = require("playwright"); } catch { pw = require("/opt/node22/lib/node_modules/playwright"); }
-const { chromium } = pw;
+/* ⚠ 브라우저 찾기는 `browser.mjs` 한 곳에서 한다 (2026-09-11).
+   원래 여기서 `chromium.launch({})` 로 기본값만 썼는데, playwright 를 다시 설치하자
+   기본 경로가 어긋나 **이 검사가 통째로 못 돌았다** — 8/31 에 webgl-check 이 같은 이유로
+   죽어서 고친 일이 있는데, 사다리가 그 파일에만 있어서 여기서 다시 겪었다. */
+import { launch } from "./browser.mjs";
 
 const BASE = process.env.BASE || "http://localhost:4173";
 const R = []; const ck = (n, p, note = "") => { R.push(p); console.log(`${p ? "PASS" : "FAIL"} — ${n}${note ? " · " + note : ""}`); };
 const evs = (page) => page.evaluate(() => window.__binariEvents || []);
 
-const b = await chromium.launch((process.env.CHROME_PATH || process.env.PW_CHROMIUM)
-  ? { executablePath: process.env.CHROME_PATH || process.env.PW_CHROMIUM } : {});
+const b = await launch();
 
 /* ── ① 멀쩡할 땐 그물이 안 보인다 ───────────────────────────────────────── */
 {

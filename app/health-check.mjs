@@ -1215,6 +1215,24 @@ if (!previewUp) {
     "그래픽 가속이 안 되는 폰에서 첫 화면이 빈 채로 뜨는 사고가 있었습니다. 화면이 검게만 보여서 고장인지 로딩인지 구분이 안 됩니다. 배포 전에 이 검사가 통과해야 합니다.");
 }
 
+/* ── 검사 5-r. **디스코드 작업 입구가 닫혀 있는가** (2026-09-11 신설) ───────
+   이 입구는 **디스코드 한 줄로 우리 저장소에서 코드를 돌리는 문**이다. 열려 있으면
+   주소를 아는 누구나 같은 일을 할 수 있고, 이 저장소는 지금 **공개 상태**라 서버 링크가
+   퍼질 여지가 더 크다(창업자 판단: 트라이얼 단계라 공개 유지, 나중에 전환).
+   ⚠ **문이 열렸는지는 화면에 안 보인다.** 서명 확인을 지워도, 허용 목록 판정을 뒤집어도
+     평소 동작은 똑같아 보인다. 이 리포가 반복해서 부딪히는 「안 보이는 결손」이라 검사로 문다. */
+{
+  const bad = [];
+  if (existsSync("e2e/discord-check.mjs")) {
+    try { execFileSync("node", ["e2e/discord-check.mjs"], { stdio: "pipe", timeout: 60000 }); }
+    catch (_) { bad.push("디스코드 입구가 안 막힌다 — node e2e/discord-check.mjs"); }
+  } else bad.push("디스코드 입구 검사 파일이 없음");
+  add(bad.length ? "심각" : "정상",
+    bad.length ? "디스코드로 아무나 코드를 돌릴 수 있음" : "디스코드 작업 입구 — 서명·권한 모두 닫힘",
+    bad.length ? bad.join(" · ") : "서명 확인·닫힘 기본값·길이 상한 모두 정상",
+    "디스코드에서 작업을 시킬 수 있게 해 둔 입구입니다. 여기가 열리면 링크를 아는 사람이 우리 코드를 고칠 수 있습니다. 배포 전에 이 검사가 통과해야 합니다.");
+}
+
 /* ── 검사 5-p3. **화면이 죽어도 유저에게 누를 것이 남는가** (2026-09-04 신설) ──
    5-p2 는 **그날 그 원인**(WebGL·셰이더)을 막는다. 이건 다른 걸 막는다 —
    **원인이 무엇이든 렌더가 던지면 빈 화면이 다시 나온다**는 구조 자체다.
@@ -1540,10 +1558,16 @@ async function browserCheck() {
   // 브라우저 실행 실패로 검진 전체가 죽으면 안 된다 — 나머지 20여 개 검사 결과까지 같이 사라진다.
   //   (실제로 발생: playwright 를 업데이트하면 예전 브라우저 폴더와 어긋나 launch 가 예외를 던진다)
   //   CHROME_PATH 를 주면 그 브라우저로 검사한다(playwright 가 받아둔 브라우저와 어긋날 때의 탈출구).
-  let b;
-  const _exe = process.env.CHROME_PATH || undefined;
-  try { b = await pw.chromium.launch({ executablePath: _exe, args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"] }); }
-  catch (e) { stopPreview(); return { launchErr: String(e?.message || e).split("\n")[0].slice(0, 120) }; }
+  /* ⚠ 2026-09-11 — 여기가 **눈을 감고 있었다.** `executablePath: undefined` 를 **키로 넘기면**
+     playwright 의 기본 해석이 안 된다(8/31 에 webgl-check 이 같은 이유로 죽어서 고친 함정인데,
+     그 사다리가 그 파일에만 있어서 검진 본체는 그대로 남아 있었다). 결과는 「가장 중요한 검사」가
+     조용히 건너뛰어지는 것이었다.
+     → 브라우저 찾기는 `e2e/browser.mjs` 한 곳에서 한다. 검진은 죽으면 나머지 결과까지
+       사라지므로 **죽지 않는 판**(tryLaunch)을 쓰고, 실패는 「못 봤다」로 보고한다. */
+  const { tryLaunch } = await import("./e2e/browser.mjs");
+  const lit = await tryLaunch({ args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
+  if (lit.err) { stopPreview(); return { launchErr: lit.err }; }
+  const b = lit.browser;
   const p = await b.newPage({ viewport: { width: 390, height: 844 } });
   const errs = [];
   p.on("pageerror", e => errs.push(String(e).slice(0, 80)));

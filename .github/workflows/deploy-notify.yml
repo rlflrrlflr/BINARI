@@ -1,0 +1,92 @@
+name: 반영 알림
+
+# main 에 무언가 올라가면(=라이브 사이트가 바뀌면) 디스코드로 알린다.
+#
+# 왜 필요한가 (2026-09-11 신설):
+#   팀원이 무언가 제보하면 우리는 진지하게 검토해서 문서로 정리한다. 그런데 그 문서가
+#   개발자용 저장소에 있어서 **말한 사람은 결과를 못 본다.** 말한 사람 눈에는
+#   「말했는데 아무 일도 안 일어났다」와 구분이 안 되고, 몇 번 반복되면 아무도 말을 안 하게 된다.
+#   실제로 가장 무거운 유저 제보 세 건이 그렇게 처리됐다 —
+#   `01_기획전략/비나리_기획전략_팀피드백트리아지_v01.md` 참조.
+#
+#   광고를 안 하기로 한 뒤(2026-09-10) 팀의 손이 유일한 성장 수단이 됐다.
+#   그 손을 계속 움직이게 하려면 **내 말이 제품을 바꿨다는 게 눈에 보여야** 한다.
+#
+# 넣어야 하는 값: DISCORD_WEBHOOK_URL — 이미 있다(아침 지표와 같은 값)
+#
+# ⚠ 커밋 메시지를 그대로 쏟지 않는다. 이 저장소 커밋 메시지는 다음 세션이 읽는 글이라
+#   길고 개발자용이다. 첫 줄만 싣고 나머지는 링크로 미룬다.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:          # 연결만 확인하고 싶을 때 손으로 돌린다
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: 저장소 받기
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 20     # 한 번에 여러 판이 올라가도 다 읽히게
+
+      - name: 무엇이 바뀌었나 알리기
+        env:
+          HOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+          SITE: https://binari-sepia.vercel.app
+          COMPARE: ${{ github.server_url }}/${{ github.repository }}/compare/${{ github.event.before }}...${{ github.sha }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "웹훅 주소가 없다 — 알림을 보내지 않는다(실패는 아니다)"
+            exit 0
+          fi
+          python3 - <<'PY'
+          import json, os, subprocess, urllib.request
+
+          def sh(*a):
+              try:
+                  return subprocess.run(a, capture_output=True, text=True, timeout=30).stdout.strip()
+              except Exception:
+                  return ""
+
+          before = os.environ.get("BEFORE", "")
+          after  = os.environ.get("AFTER", "")
+
+          # 이번에 올라간 커밋들의 첫 줄만 모은다.
+          rng = f"{before}..{after}" if before and not before.startswith("0000") else "-1"
+          subjects = sh("git", "log", "--format=%s", rng) if rng != "-1" else sh("git", "log", "-1", "--format=%s")
+          lines = [s for s in subjects.splitlines() if s.strip()][:5]
+
+          # 코드가 바뀌었는지 문서만 바뀌었는지 가른다 — 팀에게는 이 구분이 제일 중요하다.
+          # (문서만 바뀐 판까지 「화면 바뀜」으로 알리면 알림을 믿지 않게 된다)
+          files = sh("git", "diff", "--name-only", rng) if rng != "-1" else sh("git", "show", "--name-only", "--format=", "HEAD")
+          touched = [f for f in files.splitlines() if f.strip()]
+          code_changed = any(f.startswith("app/src/") or f.startswith("app/api/") or f.startswith("app/public/")
+                             for f in touched)
+
+          if code_changed:
+              head = "**화면이 바뀌었어요**"
+              foot = f"지금 보기: {os.environ['SITE']}\n(1~2분 뒤부터 보여요)"
+          else:
+              head = "**기록만 바뀌었어요** — 화면은 그대로예요"
+              foot = ""
+
+          body_lines = [head]
+          body_lines += [f"· {s}" for s in lines]
+          if len(files.splitlines()) > 0:
+              body_lines.append(f"바뀐 파일 {len(touched)}개 · 자세히: {os.environ['COMPARE']}")
+          if foot:
+              body_lines.append(foot)
+
+          msg = "\n".join(body_lines)[:1900]
+          payload = json.dumps({"content": msg, "allowed_mentions": {"parse": []}}).encode()
+          req = urllib.request.Request(os.environ["HOOK"], data=payload,
+                                       headers={"content-type": "application/json"})
+          urllib.request.urlopen(req, timeout=20).read()
+          print("보냈다")
+          PY

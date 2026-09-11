@@ -8,11 +8,8 @@
 
    ⚠ 여기서 제일 중요한 검사는 ②다 — 셰이더 좌표계 부호를 잘못 잡으면 '하강'이 조용히
      '상승'이 된다. 코드는 멀쩡히 돌고 화면도 그럴듯해서 눈으로는 못 잡는다. 픽셀로 잰다. */
-import { createRequire } from "node:module";
+import { launch } from "./browser.mjs";   // 브라우저 찾기는 한 곳에서 (2026-09-11)
 import { throwCoins } from "./ritual.mjs";   // v140: 의식이 켜져 있으면 여섯 번 던져 통과
-const require = createRequire(import.meta.url);
-let pw; try { pw = require("playwright"); } catch { pw = require("/opt/node22/lib/node_modules/playwright"); }
-const { chromium } = pw;
 const BASE = process.env.BASE || "http://localhost:4173";
 const R = [];
 const ck = (n, p, note = "") => { R.push(p); console.log(`${p ? "PASS" : "FAIL"} — ${n}${note ? " · " + note : ""}`); };
@@ -20,7 +17,7 @@ const ck = (n, p, note = "") => { R.push(p); console.log(`${p ? "PASS" : "FAIL"}
 const CALL1 = JSON.stringify({ category: "B", votes: [{ axis: "사주", v: "GO" }], tone: "단호", direction: "STOP", verdict: "보내지 마. 끝.", against: 4, total: 6 });
 const CALL2 = JSON.stringify({ subline: "밤이 널 속이는 거야.", reasons: [{ axis: "사주", vote: "STOP", text: "화기." }], funLine: "욱하지 마.", disclaimer: "" });
 
-const b = await chromium.launch(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {});
+const b = await launch();
 const page = await b.newPage({ viewport: { width: 430, height: 932 } });
 page.setDefaultTimeout(9000);
 

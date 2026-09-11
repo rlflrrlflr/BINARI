@@ -1,3 +1,4 @@
+import { launch } from "./browser.mjs";   // 브라우저 찾기는 한 곳에서 (2026-09-11)
 /* 기기별 레이아웃 — 탭이 본문을 가리지 않는가, 두 탭의 본문이 같은 자리에 있는가.
    실행: preview 기동 후 node e2e/layout-check.mjs
 
@@ -8,10 +9,6 @@
    둘 다 "내 기기에선 괜찮아 보이는" 종류라, 눈으로 보는 대신 **기기 크기를 바꿔 가며 좌표를 잰다.**
 
    ⚠ 생년월일은 onboard.mjs 의 가상 값을 쓴다(CLAUDE.md §운영 규칙). */
-import { createRequire } from "node:module";
-const require = createRequire(import.meta.url);
-let pw; try { pw = require("playwright"); } catch { pw = require("/opt/node22/lib/node_modules/playwright"); }
-const { chromium } = pw;
 const BASE = process.env.BASE || "http://localhost:4173";
 const { onboard } = await import("./onboard.mjs");
 
@@ -26,7 +23,7 @@ const DEVICES = [
 const R = [];
 const ck = (n, p, note = "") => { R.push(p); console.log(`${p ? "PASS" : "FAIL"} — ${n}${note ? " · " + note : ""}`); };
 
-const b = await chromium.launch(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {});
+const b = await launch();
 for (const [name, w, h] of DEVICES) {
   const page = await b.newPage({ viewport: { width: w, height: h } });
   page.setDefaultTimeout(9000);

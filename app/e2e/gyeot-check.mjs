@@ -6,17 +6,14 @@
    조용히 들어와서 곁 탭을 '아직 못 채운 것'으로 만든다. 그때부터 그 탭은 안 여는 게 낫다.
 
    §5 금지: 판결 탭 변경 · 결제벽 · 개수 표기 · 하트/커플/핑크 · 신규 캐릭터 · 상대 이름 받기 */
-import { createRequire } from "node:module";
+import { launch } from "./browser.mjs";   // 브라우저 찾기는 한 곳에서 (2026-09-11)
 import { throwCoins } from "./ritual.mjs";   // v140: 의식이 켜져 있으면 여섯 번 던져 통과
-const require = createRequire(import.meta.url);
-let pw; try { pw = require("playwright"); } catch { pw = require("/opt/node22/lib/node_modules/playwright"); }
-const { chromium } = pw;
 import { readFileSync } from "node:fs";
 const BASE = process.env.BASE || "http://localhost:4173";
 const R = [];
 const ck = (n, p, note = "") => { R.push(p); console.log(`${p ? "PASS" : "FAIL"} — ${n}${note ? " · " + note : ""}`); };
 
-const b = await chromium.launch(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {});
+const b = await launch();
 const page = await b.newPage({ viewport: { width: 430, height: 932 } });
 page.setDefaultTimeout(9000);
 const { onboard } = await import("./onboard.mjs");

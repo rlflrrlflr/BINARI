@@ -1,3 +1,4 @@
+import { launch } from "./browser.mjs";   // 브라우저 찾기는 한 곳에서 (2026-09-11)
 /* 홀로 스킨이 **온보딩 전 과정에** 걸려 있는가. 실행: preview 기동 후 node e2e/holo-check.mjs
  *
  * 왜 있나 — v150 에서 "여섯 건 다 반영했다"고 보고했는데 창업자가 실기에서 다시 잡았다.
@@ -13,17 +14,12 @@
  *
  * ⚠ 생년월일은 가상 값이다(CLAUDE.md §운영 규칙).
  */
-import { createRequire } from "node:module";
-const require = createRequire(import.meta.url);
-let pw; try { pw = require("playwright"); } catch { pw = require("/opt/node22/lib/node_modules/playwright"); }
 const BASE = process.env.BASE || "http://localhost:4173";
 
 const R = [];
 const ck = (n, p, note = "") => { R.push(p); console.log(`${p ? "PASS" : "FAIL"} — ${n}${note ? " · " + note : ""}`); };
 
-const b = await pw.chromium.launch(process.env.CHROME_PATH
-  ? { executablePath: process.env.CHROME_PATH, args: ["--use-gl=swiftshader", "--enable-unsafe-swiftshader"] }
-  : { args: ["--use-gl=swiftshader", "--enable-unsafe-swiftshader"] });
+const b = await launch({ args: ["--use-gl=swiftshader", "--enable-unsafe-swiftshader"] });
 const page = await b.newPage({ viewport: { width: 393, height: 852 } });
 page.setDefaultTimeout(15000);
 

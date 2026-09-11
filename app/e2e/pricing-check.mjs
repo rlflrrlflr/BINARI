@@ -4,10 +4,7 @@
    ⚠ 소급이 안 되는 표식이라, 조용히 빠지면 손실이 회복 불가다. 그래서 검사를 붙인다.
 
    값을 못 박지 않고 **성질**을 검사한다 — 상수 이름이 바뀌어도 살아 있게. */
-import { createRequire } from "node:module";
-const require = createRequire(import.meta.url);
-let pw; try { pw = require("playwright"); } catch { pw = require("/opt/node22/lib/node_modules/playwright"); }
-const { chromium } = pw;
+import { launch } from "./browser.mjs";   // 브라우저 찾기는 한 곳에서 (2026-09-11)
 import { onboard } from "./onboard.mjs";
 import { readFileSync } from "fs";
 
@@ -37,7 +34,7 @@ ok((SRC.match(/function markFreeIssue/g) || []).length === 1,
 ok(/if \(_superProps\.free_issued\) return;/.test(SRC), "사람당 한 번만 발사한다");
 
 /* ── 실주행: 정말로 붙어서 나가는가 ── */
-const br = await chromium.launch(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {});
+const br = await launch();
 const page = await br.newPage({ viewport: { width: 390, height: 844 } });
 try {
   await onboard(page, BASE, "?trackdebug&i=0");
