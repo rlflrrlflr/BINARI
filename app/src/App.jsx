@@ -54,7 +54,14 @@ function _initSuperProps() {
   try { ft = JSON.parse(window.localStorage.getItem(FIRSTTOUCH_KEY) || "null"); } catch (_) {}
   if (!ft || !ft.ft_source) {
     ft = {
-      ft_source: g("utm_source") || g("ref") || (g("fbclid") ? "meta" : null) || (g("gclid") ? "google" : null) || (g("v") ? "share" : "direct"),
+      /* ⚠ **초대 유입이 「직접 방문」에 뭉개지고 있었다**(2026-09-14 수정). 초대 링크는 `?inv=` 하나만
+         달고 오는데 아래 사슬에 그 칸이 없어서 전부 `direct` 로 떨어졌다 — 즉 초대로 온 사람과
+         주소를 직접 친 사람이 **같은 칸**에 들어갔다. 초대 루프가 도는지 아닌지를 유입 쪽에서 못 본다.
+         ⚠ **이 값은 최초 1회만 저장되고 절대 안 덮인다 → 소급이 안 된다.** 이미 direct 로 굳은 사람은
+         영영 그대로다. 그래서 사람이 늘기 전에 고쳐야 했다.
+         자리는 `v`(공유) 앞에 둔다 — 초대 링크에 `v` 가 같이 붙는 날에도 초대가 이긴다(더 구체적인 경로). */
+      ft_source: g("utm_source") || g("ref") || (g("fbclid") ? "meta" : null) || (g("gclid") ? "google" : null)
+        || (g("inv") ? "invite" : null) || (g("v") ? "share" : "direct"),
       ft_medium: g("utm_medium"),
       ft_campaign: g("utm_campaign"),
       ft_content: g("utm_content"),          // 소재 단위 — 이 값이 있어야 소재별 성과가 갈린다

@@ -63,6 +63,32 @@ try {
     await ctx.close();
   }
 
+  /* ── 초대 유입 귀속 (2026-09-14 신설) ─────────────────────────────────
+     초대 링크(`?inv=`)로 들어온 사람이 **「직접 방문」에 뭉개져 있었다.** 초대 루프가 도는지를
+     유입 쪽에서 볼 수 없었다는 뜻이다.
+     ⚠ **이 검사는 특히 중요하다 — first-touch 는 최초 1회만 저장되고 절대 안 덮인다.**
+        즉 이 줄이 조용히 되돌아가면 그동안 들어온 사람은 **영영 direct 로 굳는다.** 소급 복구가 없다. */
+  {
+    const ctx = await fresh();
+    const a = await open(ctx, "/?trackdebug&inv=abc123");
+    check("초대 링크 → ft_source=invite", a.ft_source === "invite", `ft_source=${a.ft_source}`);
+    check("초대 id 원값은 안 싣는다", !JSON.stringify(a).includes("abc123"));
+    await ctx.close();
+  }
+  {
+    const ctx = await fresh();
+    const a = await open(ctx, "/?trackdebug");
+    check("아무것도 없으면 여전히 direct", a.ft_source === "direct", `ft_source=${a.ft_source}`);
+    await ctx.close();
+  }
+  {
+    // 초대가 공유보다 구체적인 경로다 — 둘이 같이 붙어도 초대가 이겨야 귀속이 안 새어나간다
+    const ctx = await fresh();
+    const a = await open(ctx, "/?trackdebug&inv=abc123&v=1");
+    check("초대와 공유가 겹치면 초대가 이긴다", a.ft_source === "invite", `ft_source=${a.ft_source}`);
+    await ctx.close();
+  }
+
   /* ── D1: 내부 트래픽 플래그 — 유저 지표 오염을 막는 제외 필터의 근거 ── */
   {
     const ctx = await fresh();

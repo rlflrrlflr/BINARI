@@ -694,6 +694,39 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
   } catch (_) { /* 구조가 바뀌면 조용히 넘어간다 */ }
 }
 
+/* ── 검사 4-5. 공유 실패 계측이 붙는 날 깨어나는 검사 — 대시보드 이름 대조 ──
+   바이럴루프 지시서 §2 가 공유·저장 실패 계측을 시키고, §3 이 그걸 대시보드에 올리라고 했다.
+   **대시보드 타일은 2026-09-14 에 먼저 세워 뒀다** — 이름을 미리 못 박으면 구현이 그 이름을 쓴다.
+   ⚠ 반대로 **이름이 어긋나면 타일이 영원히 비어 있고 아무도 안 운다.** 0 이 「실패가 없다」로 읽힌다.
+      이 리포에 선례가 있다 — `offer_shown` 으로 알고 찾았는데 실물은 `imprint_offer_shown` 이었다.
+   그래서 공유 실패 코드가 들어오는 순간 이 검사가 켜져서 네 이름을 대조한다.
+   ⚠ 검사 4-4 에서 배운 것도 지킨다: **주석이 아니라 실제 코드에서 찾는다**(주석만 보면 스스로를 통과시킨다). */
+{
+  try {
+    const SPEC = ["verdict_share_attempted", "verdict_share_failed", "card_save_failed"];
+    const view = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+    const wired = SPEC.some((e) => view.includes(`"${e}"`) || view.includes(`'${e}'`));
+    if (!wired) {
+      add("정상", "공유 실패 계측(대기)",
+        `미구현 — 대시보드 타일 4종을 이름째 먼저 세워 뒀다(게이트 대시보드). 코드가 붙으면 이 검사가 이름을 대조한다`, "");
+    } else {
+      const missing = SPEC.filter((e) => !view.includes(`"${e}"`) && !view.includes(`'${e}'`));
+      /* 저장 경로를 안 실으면 「어디서 막히나」 타일이 통째로 무의미해진다 */
+      const hasWay = /card_save_failed[\s\S]{0,160}way/.test(view) || /way:[\s\S]{0,80}card_save_failed/.test(view);
+      /* 판정 기준(지시서 §2-B): 저장을 확신 못 하는 경로는 성공으로 세지 않는다 */
+      const gaps = [];
+      if (missing.length) gaps.push(`대시보드와 이름이 다름(누락: ${missing.join(", ")})`);
+      if (!hasWay) gaps.push("card_save_failed 에 저장 경로(way)가 없음 — 「어디서 막히나」를 못 읽는다");
+      if (gaps.length) {
+        add("심각", "공유 실패 계측이 대시보드 타일과 어긋남", gaps.join(" · "),
+          "게이트 대시보드의 「진단 ·」 타일 넷이 이 이름들을 그대로 찾습니다. 이름이 다르면 타일이 영원히 비고, 그 0 이 「실패가 없다」로 읽힙니다. HANDOVER 의 이름을 그대로 쓰세요.");
+      } else {
+        add("정상", "공유 실패 계측", `대시보드 타일과 이름 일치(${SPEC.length}종) · 저장 경로 부착`, "");
+      }
+    }
+  } catch (_) { /* 구조가 바뀌면 조용히 넘어간다 */ }
+}
+
 /* ── 검사 4-4. 초대 루프가 붙는 날 깨어나는 검사 — 계측 규격 준수 ──────────
    초대→회신 루프는 아직 코드에 없다(2026-08-26 기준 grep 0건). 계측 규격만 먼저 못 박아 뒀다
    (HANDOVER §2 「초대→회신 루프 5종」 · 작업지시_초대와회신 §6).

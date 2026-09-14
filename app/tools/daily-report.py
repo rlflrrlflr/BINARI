@@ -90,11 +90,22 @@ KST_YDAY = ("toDate(timestamp + INTERVAL 9 HOUR) = toDate(now() + INTERVAL 9 HOU
 #   8/16 에 뒤집혔다 — **이중 필터로 보면 외부 공유 발신은 0건이다.**
 #   소급 식별은 코호트 436757("계측 분리 이전 내부")이 맡는다. 게이트 대시보드 4종도 같은 코호트를 뺀다.
 #   → 여기 EXT 하나만 고치면 아래 네 질의가 전부 같은 정의를 쓴다. 손으로 두 조건을 기억하지 않는다.
+#
+# ⚠⚠ **사건 단위가 아니라 사람 단위로 거른다** (2026-09-14 · 바이럴루프 지시서 §3-3)
+#   위 이중 필터도 부족했다. `is_internal` 은 **페이지를 열 때 붙는 값**이라,
+#   팀원이 `?i=1` 을 누르기 **전에** 남긴 이벤트에는 그 표시가 없다.
+#   사건 단위로 거르면 그 옛 이벤트들이 **외부로 살아남아** 같은 사람이 양쪽에 걸친다.
+#   실측(60일): 사건 단위 **41명** vs 사람 단위 **36명** — **다섯 명, 14%가 우리 사람**이었다.
+#   → 그래서 "이 사람이 **한 번이라도** 내부로 찍힌 적이 있나"를 묻는다. 있으면 통째로 뺀다.
+#   ⚠ 하위 질의에도 기간이 필요하다(HogQL 규칙). 180일은 넉넉히 잡은 값이고,
+#     **플래그를 그보다 오래 전에 한 번만 누른 사람은 다시 새어 들어온다** — 그 경우는 코호트로 잡는다.
 INTERNAL_COHORT = 436757
-EXT = f"properties.is_internal != true AND person_id NOT IN COHORT {INTERNAL_COHORT}"
+_FLAGGED = (f"person_id IN (SELECT person_id FROM events "
+            f"WHERE timestamp >= now() - INTERVAL 180 DAY AND properties.is_internal = true)")
+EXT = f"NOT ({_FLAGGED}) AND person_id NOT IN COHORT {INTERNAL_COHORT}"
 # 내부 쪽 줄(맨 아래 '위 숫자에서 내부 N명은 뺐습니다')은 EXT 의 여집합이어야 한다.
-# 플래그만 보면 코호트 내부인이 어느 쪽에도 안 세어져 합이 안 맞는다.
-INT = f"(properties.is_internal = true OR person_id IN COHORT {INTERNAL_COHORT})"
+# 한쪽만 고치면 합이 안 맞고, 라벨이 또 거짓말을 한다(2026-07-28 사고와 같은 종류).
+INT = f"({_FLAGGED} OR person_id IN COHORT {INTERNAL_COHORT})"
 
 Q_DAILY = f"""
 SELECT
