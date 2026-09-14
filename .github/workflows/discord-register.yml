@@ -79,6 +79,19 @@ jobs:
               if tok.isdigit():             notes.append("숫자뿐이다 — 이건 토큰이 아니라 **ID** 다")
               if len(tok) == 64 and all(c in "0123456789abcdefABCDEF" for c in tok):
                   notes.append("64자 16진수 — 이건 **Public Key** 다(Bot 탭의 토큰이 아니다)")
+              # 어느 집안 값인지 **접두사로** 알아본다. 접두사는 공개된 형식 표시라 값이 아니다.
+              # ⚠ 2026-09-14 실측: 여기 들어 있던 건 93자·점 0개였다 — 깃허브 토큰 모양이다.
+              #   설정 중에 깃허브 토큰과 봇 토큰을 **서로 바꿔 넣기** 쉽다(같은 자리에서 둘 다 만든다).
+              fam = [("github_pat_", "깃허브 토큰(fine-grained) 이다"),
+                     ("ghp_",        "깃허브 토큰(classic) 이다"),
+                     ("gho_",        "깃허브 OAuth 토큰이다"),
+                     ("sk-ant-",     "앤트로픽 API 키다"),
+                     ("xoxb-",       "슬랙 봇 토큰이다"),
+                     ("https://",    "주소(URL) 다 — 웹훅 주소를 넣었을 수 있다")]
+              for pre, what in fam:
+                  if tok.lower().startswith(pre.lower()):
+                      notes.append(f"**{what}** — 디스코드 봇 토큰이 아니다")
+                      break
               parts = tok.split(".")
               if len(parts) != 3:
                   notes.append(f"마디가 {len(parts)}개다 — 봇 토큰은 점으로 나뉜 **3마디**다")
