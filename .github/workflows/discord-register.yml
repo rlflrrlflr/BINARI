@@ -78,9 +78,17 @@ jobs:
               }],
           }
 
+          # ⚠ **User-Agent 를 반드시 보낸다.** 없으면 디스코드 앞단(Cloudflare)이 막고
+          #   `403 error code: 1010` 을 준다 — API 오류가 아니라 **차단 페이지**다.
+          #   2026-07-28 아침 지표, 09-14 반영 알림에 이어 **여기서 세 번째로 같은 함정**을 밟았다.
+          #   1010 은 「권한 없음」이 아니다. 그렇게 읽으면 봇 초대·앱 ID 를 엉뚱하게 뒤지게 된다(실제로 그랬다).
           req = urllib.request.Request(
               url, data=json.dumps(body).encode(), method="POST",
-              headers={"Authorization": f"Bot {bot}", "Content-Type": "application/json"})
+              headers={
+                  "Authorization": f"Bot {bot}",
+                  "Content-Type": "application/json",
+                  "User-Agent": "DiscordBot (https://binari-sepia.vercel.app, 1.0)",
+              })
           try:
               with urllib.request.urlopen(req, timeout=30) as r:
                   out = json.loads(r.read())
@@ -91,9 +99,14 @@ jobs:
               detail = e.read().decode(errors="replace")[:400]
               # ⚠ 토큰은 절대 찍지 않는다 — 실행 기록은 저장소를 볼 수 있는 사람이 다 본다.
               print(f"::error::디스코드가 거절했다 ({e.code}). {detail}")
-              if e.code == 401:
+              # ⚠ 403 을 무조건 「권한 없음」으로 읽지 마라. 디스코드 앞단(Cloudflare)이 막은 것도 403 이고,
+              #   그 둘은 고치는 방법이 정반대다. 가르는 기준은 **본문 모양**이다 —
+              #   진짜 API 오류는 JSON({"code": 50001, ...}), 차단은 `error code: 1010` 같은 맨 글자다.
+              if "error code:" in detail or "cloudflare" in detail.lower():
+                  print("::error::권한 문제가 아니다 — 디스코드 앞단이 막았다(대개 User-Agent 누락). 봇 초대나 앱 ID 를 뒤지지 마라.")
+              elif e.code == 401:
                   print("::error::봇 토큰이 틀렸거나 만료됐다. 개발자 화면에서 Reset Token 으로 새로 받아 비밀값을 갱신해라.")
-              if e.code == 403:
+              elif e.code == 403:
                   print("::error::이 앱에 대한 권한이 없다. Application ID 가 그 봇의 것이 맞는지 확인해라.")
               sys.exit(1)
           PY

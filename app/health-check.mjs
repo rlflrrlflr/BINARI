@@ -1275,6 +1275,17 @@ if (!previewUp) {
       if (/daily-report\.py/.test(y)) continue;                        // 자기 발송기를 가진 옛 판(User-Agent 있음)
       bad.push(`${f} 가 웹훅을 직접 다룬다 — discord-post.py 를 거치게 하라`);
     }
+    /* ⚠ **웹훅만 보면 놓친다 (2026-09-14, 네 번째 재발).** 명령 등록 워크플로는 웹훅이 아니라
+       **봇 토큰**으로 `discord.com` 을 직접 부르는데, 위 검사는 웹훅만 봐서 그냥 통과시켰다.
+       실제로 `403 error code: 1010`(디스코드 앞단 차단)으로 실패했고, 창업자가 그 403 을
+       **권한 문제로 오인해** 봇 초대와 앱 ID 를 뒤졌다 — 내 오류 문구가 그렇게 안내했다.
+       → 이제 **디스코드를 부르는 모든 곳**을 본다. 웹훅이든 API 든 User-Agent 가 있어야 한다. */
+    for (const f of readdirSync(wfDir).filter((x) => x.endsWith(".yml"))) {
+      const y = readFileSync(`${wfDir}/${f}`, "utf8");
+      if (!/discord\.com/.test(y)) continue;
+      if (/discord-post\.py/.test(y) || /daily-report\.py/.test(y)) continue;
+      if (!/User-Agent/i.test(y)) bad.push(`${f} 가 User-Agent 없이 디스코드를 부른다 — 403(1010) 로 막힌다`);
+    }
   }
   add(bad.length ? "심각" : "정상",
     bad.length ? "디스코드 알림이 403 으로 조용히 실패할 수 있음" : "디스코드로 보내는 길 — 한 곳으로 모여 있음",
