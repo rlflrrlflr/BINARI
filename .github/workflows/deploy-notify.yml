@@ -38,13 +38,14 @@ jobs:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           BEFORE: ${{ github.event.before }}
           AFTER: ${{ github.sha }}
+          MANUAL: ${{ github.event_name == 'workflow_dispatch' && '1' || '' }}
           SITE: https://binari-sepia.vercel.app
-          COMPARE: ${{ github.server_url }}/${{ github.repository }}/compare/${{ github.event.before }}...${{ github.sha }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
         run: |
           # ⚠ 보내는 건 app/tools/discord-post.py 한 곳에서만 한다.
           #    직접 보내면 User-Agent 를 빠뜨려 403 이 난다 — 2026-07-28·09-14 두 번 겪었다.
           python3 - <<'PY' | python3 app/tools/discord-post.py
-          import os, subprocess
+          import os, re, subprocess
 
           def sh(*a):
               try:
@@ -52,24 +53,53 @@ jobs:
               except Exception:
                   return ""
 
-          before = os.environ.get("BEFORE", "")
-          after  = os.environ.get("AFTER", "")
-          rng = f"{before}..{after}" if before and not before.startswith("0000") else ""
+          before  = os.environ.get("BEFORE", "")
+          after   = os.environ.get("AFTER", "")
+          manual  = bool(os.environ.get("MANUAL"))
+          repo    = os.environ["REPO_URL"]
+          # 손으로 돌린 판에는 before 가 없다. 그대로 쓰면 `compare/...abc` 같은 깨진 주소가 나간다
+          # (실제로 나갔다 — 2026-09-14). 없으면 그 커밋 한 건만 본다.
+          has_range = bool(before) and not before.startswith("0000")
+          rng = f"{before}..{after}" if has_range else ""
 
-          subjects = sh("git", "log", "--format=%s", rng) if rng else sh("git", "log", "-1", "--format=%s")
-          lines = [s for s in subjects.splitlines() if s.strip()][:5]
+          bodies = sh("git", "log", "--format=%B%x00", rng) if rng else sh("git", "log", "-1", "--format=%B%x00")
+          msgs = [m.strip() for m in bodies.split("\0") if m.strip()]
 
-          # 코드가 바뀌었는지 문서만 바뀌었는지 가른다 — 팀에게는 이 구분이 제일 중요하다.
-          # (문서만 바뀐 판까지 「화면 바뀜」으로 알리면 알림을 안 믿게 된다)
+          # ── 팀에게 보일 문장은 커밋 제목이 아니라 「팀알림:」 줄에서 가져온다 ──────────
+          # ⚠ 2026-09-14 실사고: 커밋 제목을 그대로 실었더니 디스코드에
+          #   「반영 알림이 네 번 조용히 실패하고 있었다 — 403, 그리고 세 번째 같은 교훈」이 떴다.
+          #   이 저장소의 커밋 메시지는 **다음 세션이 읽는 글**이라 팀에게는 무슨 소린지 모른다.
+          #   알림을 만든 이유가 「팀이 자기 말의 결과를 알게 하는 것」인데 정반대가 됐다.
+          #   → 사람이 팀에게 하고 싶은 말은 커밋에 `팀알림: ...` 한 줄로 적는다.
+          #     없으면 **아무 말도 지어내지 않는다** — 개발자 문장을 흘리느니 조용한 게 낫다.
+          notes = []
+          for m in msgs:
+              for line in m.splitlines():
+                  mt = re.match(r"^\s*팀알림\s*[:：]\s*(.+)$", line)
+                  if mt:
+                      notes.append(mt.group(1).strip())
+
           files = sh("git", "diff", "--name-only", rng) if rng else sh("git", "show", "--name-only", "--format=", "HEAD")
           touched = [f for f in files.splitlines() if f.strip()]
-          code_changed = any(f.startswith(("app/src/", "app/api/", "app/public/")) for f in touched)
 
-          out = ["**화면이 바뀌었어요**" if code_changed else "**기록만 바뀌었어요** — 화면은 그대로예요"]
-          out += [f"· {s}" for s in lines]
-          if touched:
-              out.append(f"바뀐 파일 {len(touched)}개 · 자세히: {os.environ['COMPARE']}")
-          if code_changed:
-              out.append(f"지금 보기: {os.environ['SITE']}\n(1~2분 뒤부터 보여요)")
+          # 세 갈래로 가른다. ⚠ 서버(app/api)를 「화면이 바뀌었어요」로 부르면 안 된다 —
+          #   보러 가도 달라진 게 없어서 **알림을 안 믿게 된다**(실제로 그렇게 나갔다).
+          screen = any(f.startswith(("app/src/", "app/public/")) for f in touched)
+          inside = any(f.startswith(("app/api/", "app/tools/", ".github/")) for f in touched)
+
+          if screen:
+              head, tail = "**앱 화면이 바뀌었어요**", f"지금 보기: <{os.environ['SITE']}> (1~2분 뒤부터)"
+          elif inside:
+              head, tail = "**안쪽을 손봤어요** — 화면은 그대로예요", ""
+          else:
+              head, tail = "**기록만 바뀌었어요** — 화면은 그대로예요", ""
+
+          out = [("🧪 (시험 실행) " if manual else "") + head]
+          out += [f"· {n}" for n in notes[:4]]
+          # 주소는 <> 로 감싼다 — 안 그러면 디스코드가 큼직한 미리보기 카드를 붙여 화면을 먹는다
+          link = f"{repo}/compare/{before}...{after}" if has_range else f"{repo}/commit/{after}"
+          out.append(f"바뀐 파일 {len(touched)}개 · 자세히: <{link}>")
+          if tail:
+              out.append(tail)
           print("\n".join(out))
           PY
