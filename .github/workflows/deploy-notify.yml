@@ -88,18 +88,22 @@ jobs:
           inside = any(f.startswith(("app/api/", "app/tools/", ".github/")) for f in touched)
 
           if screen:
-              head, tail = "**앱 화면이 바뀌었어요**", f"지금 보기: <{os.environ['SITE']}> (1~2분 뒤부터)"
+              head = "**앱 화면이 바뀌었어요**"
           elif inside:
-              head, tail = "**안쪽을 손봤어요** — 화면은 그대로예요", ""
+              head = "**안쪽을 손봤어요** — 화면은 그대로예요"
           else:
-              head, tail = "**기록만 바뀌었어요** — 화면은 그대로예요", ""
+              head = "**기록만 바뀌었어요** — 화면은 그대로예요"
 
-          out = [("🧪 (시험 실행) " if manual else "") + head]
-          out += [f"· {n}" for n in notes[:4]]
-          # 주소는 <> 로 감싼다 — 안 그러면 디스코드가 큼직한 미리보기 카드를 붙여 화면을 먹는다
+          # ⚠ 주소를 날것으로 적지 마라 (2026-09-14 창업자: "URL은 그냥 하이퍼링크로 달아줘 너무 길어").
+          #   40자짜리 커밋 해시 두 개가 그대로 보이면 정작 읽어야 할 한 줄이 안 보인다.
+          #   디스코드는 웹훅 본문에서도 [글자](주소) 를 링크로 그려 준다 — 카드도 안 붙는다.
           link = f"{repo}/compare/{before}...{after}" if has_range else f"{repo}/commit/{after}"
-          out.append(f"바뀐 파일 {len(touched)}개 · 자세히: <{link}>")
-          if tail:
-              out.append(tail)
+          foot = [f"[뭐가 바뀌었나]({link})"]
+          if screen:
+              foot.insert(0, f"[지금 보기]({os.environ['SITE']})")
+
+          out = [("🧪 " if manual else "") + head]
+          out += [f"· {n}" for n in notes[:4]]
+          out.append(" · ".join(foot))
           print("\n".join(out))
           PY
