@@ -1215,6 +1215,42 @@ if (!previewUp) {
     "그래픽 가속이 안 되는 폰에서 첫 화면이 빈 채로 뜨는 사고가 있었습니다. 화면이 검게만 보여서 고장인지 로딩인지 구분이 안 됩니다. 배포 전에 이 검사가 통과해야 합니다.");
 }
 
+/* ── 검사 5-t. **엣지 함수가 Node 전용 물건을 쓰지 않는가** (2026-09-14 실사고) ─
+   ⚠ **9/11 배포 이후 사흘간 디스코드 입구가 죽어 있었는데 아무도 몰랐다.**
+     처음엔 런타임을 안 적고 Web 표준 꼴(`request.text()`)로 썼는데 Vercel 이 Node 꼴로 돌렸다 —
+     `request.headers.get is not a function` 4건, 그리고 **응답을 안 보내 300초 타임아웃 6건.**
+     디스코드는 3초를 기다리므로 주소 등록 자체가 실패한다. **화면에는 아무 표시가 없다.**
+   ⚠ 고치면서 `runtime: "edge"` 로 못박았는데, 이번엔 반대 함정이 있다 —
+     **엣지에는 `node:` 모듈이 없다.** 그런데 `node:crypto` 를 써도 **로컬 검사는 통과한다**
+     (검사는 Node 에서 도니까). 즉 **초록불을 보고 죽은 걸 배포하게 된다.** 그래서 정적으로 문다.
+   → 규칙 둘: ①엣지를 선언한 파일은 `node:` 를 들여오지 않는다 ②Web 표준 손잡이를 쓰는 파일은
+     런타임을 **반드시 명시**한다(안 적으면 Vercel 이 Node 꼴로 돌려 조용히 멈춘다). */
+{
+  const bad = [];
+  const apiDir = "api";
+  const walk = (d) => readdirSync(d, { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? walk(`${d}/${e.name}`) : (e.name.endsWith(".js") ? [`${d}/${e.name}`] : []));
+  if (existsSync(apiDir)) {
+    for (const f of walk(apiDir)) {
+      const raw = readFileSync(f, "utf8");
+      const code = raw.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+      const isEdge = /runtime:\s*["']edge["']/.test(code);
+      const webStyle = /\brequest\.(text|headers\.get)\s*\(/.test(code)
+                    || /export default async function handler\(\s*request\s*\)/.test(code);
+      if (isEdge && /from\s+["']node:/.test(code)) {
+        bad.push(`${f} — 엣지인데 node: 모듈을 쓴다(배포에서만 죽는다)`);
+      }
+      if (webStyle && !isEdge) {
+        bad.push(`${f} — Web 표준 꼴인데 런타임을 안 적었다(Node 꼴로 돌려 300초 멈춘다)`);
+      }
+    }
+  }
+  add(bad.length ? "심각" : "정상",
+    bad.length ? "서버 함수가 배포에서만 죽는 모양임" : "서버 함수 런타임 — 로컬과 배포가 같은 길을 탄다",
+    bad.length ? bad.join(" · ") : "엣지 선언과 쓰는 물건이 어긋나지 않음",
+    "이 검사가 빨간불이면 우리 컴퓨터에서는 멀쩡한데 실제 사이트에서만 죽습니다. 배포 전에 반드시 통과해야 합니다.");
+}
+
 /* ── 검사 5-s. **디스코드로 보내는 길이 한 곳인가** (2026-09-14 신설) ────────
    ⚠ **같은 함정을 두 번 밟아서 생긴 검사다.** 디스코드는 자기를 안 밝히는 요청(User-Agent 없음)을
      **403 으로 막는다.** 2026-07-28 아침 지표 첫 발송이 그걸로 실패해 고쳤고 사유도 주석에 적었는데,

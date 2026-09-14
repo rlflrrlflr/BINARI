@@ -17,15 +17,24 @@
      주소를 아는 누구나 우리 저장소에서 코드를 돌릴 수 있다 — 이건 편의 문제가 아니라 문이 열린 것이다.
 
    ⚠ **서명은 「받은 그대로의 본문」으로 검사한다.** JSON 으로 파싱한 걸 다시 문자열로 만들면
-     띄어쓰기·키 순서가 달라져 서명이 깨진다. 그래서 이 파일만 **Web 표준 손잡이**를 쓴다
-     (`request.text()` 로 원문을 읽을 수 있다). 형제 파일들(judge·share·invite)은 `(req,res)` 꼴인데,
-     Vercel 은 두 꼴을 같은 프로젝트에서 함께 받아 준다. 꼴을 맞추려고 이걸 바꾸면 서명이 깨진다.
+     띄어쓰기·키 순서가 달라져 서명이 깨진다. 그래서 원문을 읽을 수 있는 **Web 표준 손잡이**가 필요하다.
+
+   ⚠⚠ **2026-09-14 실사고 — 이 파일은 9/11 배포 이후 사흘간 죽어 있었다.**
+     처음엔 런타임을 안 지정하고 Web 표준 꼴(`request.text()`)로만 썼는데, Vercel 은 그걸
+     기본 Node 런타임의 `(req, res)` 로 돌렸다. 결과가 둘이었다:
+       · `TypeError: request.headers.get is not a function` (4건)
+       · **응답을 아무것도 안 보내서 300초 타임아웃** (6건) — 디스코드는 3초를 기다리므로
+         주소 등록 자체가 실패한다. 그런데 **화면에는 아무 표시가 없어서** 아무도 몰랐다.
+     → 그래서 **런타임을 엣지로 못박는다.** 엣지는 Web 표준 `Request`/`Response` 를 확실히 쓴다.
+     → 대신 엣지에는 `node:crypto` 가 없다. 서명 확인을 **WebCrypto** 로 바꿨다.
+     ⚠ **`node:crypto` 를 다시 들여오지 마라** — 로컬 검사는 통과하고 배포만 죽는다.
+       그 조합을 `health-check` 5-t 가 문다.
 
    ⚠ **허용 목록이 비어 있으면 전부 거절한다(닫힘이 기본).** 깜빡 잊고 배포했을 때
      "아무나 된다"로 열려 있는 쪽이 아니라 "아무도 안 된다"로 닫혀 있는 쪽으로 떨어져야 한다. */
 
-import { createPublicKey, verify as cryptoVerify } from "node:crypto";
-
+/* ⚠ 여기서 무엇도 import 하지 않는다. 엣지에는 node: 모듈이 없다.
+   서명 확인은 어디서나 있는 WebCrypto(`globalThis.crypto.subtle`)로 한다. */
 export const config = { runtime: "edge" };
 
 const REPO = process.env.GITHUB_REPO || "rlflrrlflr/BINARI";
@@ -43,25 +52,27 @@ const REPLY = 4;
 const json = (body, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
-/* ── 서명 확인 ──────────────────────────────────────────────────────────────
-   디스코드는 Ed25519 로 서명한다. Node 는 원시 32바이트 공개키를 그대로 못 먹으니
-   SPKI(DER) 껍데기를 앞에 붙여 준다. 이 접두사는 Ed25519 에서 항상 같은 고정값이다. */
-const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
+/* ── 서명 확인 (WebCrypto) ──────────────────────────────────────────────────
+   디스코드는 Ed25519 로 서명한다. `crypto.subtle` 은 엣지에도 Node 에도 있으므로
+   **로컬 검사와 배포가 같은 길을 탄다** — 그게 이 선택의 핵심이다.
+   ⚠ `Buffer` 를 쓰지 않는다. 엣지에서 있을 수도 없을 수도 있는 값에 기대지 않는다. */
+function hexToBytes(hex) {
+  if (typeof hex !== "string" || hex.length % 2 || /[^0-9a-fA-F]/.test(hex)) return null;
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i * 2, 2), 16);
+  return out;
+}
 
-function verifySignature(publicKeyHex, signatureHex, timestamp, rawBody) {
+async function verifySignature(publicKeyHex, signatureHex, timestamp, rawBody) {
   try {
-    const raw = Buffer.from(publicKeyHex, "hex");
-    if (raw.length !== 32) return false;
-    const key = createPublicKey({
-      key: Buffer.concat([ED25519_SPKI_PREFIX, raw]),
-      format: "der",
-      type: "spki",
-    });
-    const sig = Buffer.from(signatureHex, "hex");
-    if (sig.length !== 64) return false;
-    return cryptoVerify(null, Buffer.from(timestamp + rawBody, "utf8"), key, sig);
+    const pub = hexToBytes(publicKeyHex);
+    const sig = hexToBytes(signatureHex);
+    if (!pub || pub.length !== 32 || !sig || sig.length !== 64) return false;
+    const key = await crypto.subtle.importKey("raw", pub, { name: "Ed25519" }, false, ["verify"]);
+    const msg = new TextEncoder().encode(timestamp + rawBody);
+    return await crypto.subtle.verify({ name: "Ed25519" }, key, sig, msg);
   } catch (_) {
-    return false;                    // 형태가 틀렸으면 통과시키지 않는다
+    return false;                    // 형태가 틀렸거나 Ed25519 를 못 쓰면 **막는 쪽으로** 떨어진다
   }
 }
 
@@ -116,7 +127,7 @@ export default async function handler(request) {
 
   const rawBody = await request.text();
   if (rawBody.length > MAX_BODY) return json({ error: "본문이 너무 크다" }, 413);
-  if (!verifySignature(pub, sig, ts, rawBody)) return json({ error: "서명 불일치" }, 401);
+  if (!(await verifySignature(pub, sig, ts, rawBody))) return json({ error: "서명 불일치" }, 401);
 
   let body;
   try { body = JSON.parse(rawBody); } catch (_) { return json({ error: "본문 해석 불가" }, 400); }
