@@ -15,10 +15,7 @@
  *
  * PostHog 네트워크 없이 본다 — ?trackdebug 로 전송 직전 속성을 window.__binariEvents 에서 읽는다.
  */
-import { createRequire } from "node:module";
-const require = createRequire(import.meta.url);
-let pw; try { pw = require("playwright"); } catch { pw = require("/opt/node22/lib/node_modules/playwright"); }
-const { chromium } = pw;
+import { launch } from "./browser.mjs";   // 브라우저 찾기는 한 곳에서 (2026-09-11)
 import { onboard } from "./onboard.mjs";
 
 const BASE = process.env.BASE || "http://localhost:4173";
@@ -26,8 +23,7 @@ const R = []; const ck = (n, p, note = "") => { R.push(p); console.log(`${p ? "P
 const evs = (page) => page.evaluate(() => window.__binariEvents || []);
 const pick = async (page, ev) => (await evs(page)).filter((e) => e.ev === ev);
 
-const b = await chromium.launch((process.env.CHROME_PATH || process.env.PW_CHROMIUM)
-  ? { executablePath: process.env.CHROME_PATH || process.env.PW_CHROMIUM } : {});
+const b = await launch();
 
 /* ── ①·② 첫 방문 — days_since_first 와 스트릭 ─────────────────────────── */
 {

@@ -1,18 +1,15 @@
 // 실행: npm run preview -- --port 4173 & 후 node e2e/smoke.mjs (playwright 필요)
 // 비나리 v16 런타임 스모크 테스트 — 모바일 뷰포트, 온보딩→수호신→의식 실패 복구→재회(localStorage)
-import { createRequire } from "node:module";
+import { launch } from "./browser.mjs";   // 브라우저 찾기는 한 곳에서 (2026-09-11)
 import { mkdirSync } from "node:fs";
 import { throwCoins } from "./ritual.mjs";   // v140: 의식이 켜져 있으면 여섯 번 던져 통과
-const require = createRequire(import.meta.url);
-let pw; try { pw = require("playwright"); } catch { pw = require("/opt/node22/lib/node_modules/playwright"); }
-const { chromium } = pw;
 
 const SHOTS = process.env.SHOTS_DIR || "/tmp/binari-shots";
 mkdirSync(SHOTS, { recursive: true });
 const results = [];
 const check = (name, pass, note = "") => { results.push({ name, pass, note }); console.log(`${pass ? "PASS" : "FAIL"} — ${name}${note ? " · " + note : ""}`); };
 
-const browser = await chromium.launch((process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}));
+const browser = await launch();
 const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
 page.setDefaultTimeout(8000);
 const shot = (n) => page.screenshot({ path: `${SHOTS}/${n}.png`, fullPage: false });

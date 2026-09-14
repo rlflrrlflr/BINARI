@@ -7,10 +7,7 @@
    가드레일은 전부 생성 경로에만 있어서, URL 한 줄로 12,000자짜리 규칙 전체가 우회됐다.
 
    그래서 여기서 보는 것은 하나다 — **서명을 통과하지 못한 판결은 절대 그리지 않는가.** */
-import { createRequire } from "node:module";
-const require = createRequire(import.meta.url);
-let pw; try { pw = require("playwright"); } catch { pw = require("/opt/node22/lib/node_modules/playwright"); }
-const { chromium } = pw;
+import { launch } from "./browser.mjs";   // 브라우저 찾기는 한 곳에서 (2026-09-11)
 import { sign, verify } from "../api/share.js";
 
 const BASE = process.env.BASE || "http://localhost:4173";
@@ -41,7 +38,7 @@ const mkPayload = (over = {}) => b64(JSON.stringify({
 }
 
 /* ── ② 화면 (클라이언트가 실패-닫힘인가) ───────────────────────────────── */
-const browser = await chromium.launch(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {});
+const browser = await launch();
 const FORGED = "세 배는 확실해";
 
 /** 서버 대신 응답한다. mode: "ok"=서명해 준다 / "reject"=전부 거절 / "down"=서버 없음 */

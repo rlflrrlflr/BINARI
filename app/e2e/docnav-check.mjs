@@ -1,3 +1,4 @@
+import { launch } from "./browser.mjs";   // 브라우저 찾기는 한 곳에서 (2026-09-11)
 /* 문서 목차 — **긴 문서에서 길을 놓아 주는가.**
    실행: preview 기동 후 node e2e/docnav-check.mjs
 
@@ -7,15 +8,11 @@
      ② *"섹션별 타이틀이 잘 눈에 안 들어와서 … 타이틀을 위에 박으면 한눈에 들어오겠다."*
    §알 권리(2026-08-06)가 *"값을 치른 문서는 줄 수 있는 걸 다 주고 완결시킨다"* 로 정한 이상
    **문서는 앞으로도 길다** — 짧게 만드는 게 답이 아니라 길을 놓는 게 답이다. 그 길을 여기서 문다. */
-import { createRequire } from "node:module";
-const require = createRequire(import.meta.url);
-let pw; try { pw = require("playwright"); } catch { pw = require("/opt/node22/lib/node_modules/playwright"); }
-const { chromium } = pw;
 const BASE = process.env.BASE || "http://localhost:4173";
 const R = [];
 const ck = (n, p, note = "") => { R.push(p); console.log(`${p ? "PASS" : "FAIL"} — ${n}${note ? " · " + note : ""}`); };
 
-const b = await chromium.launch(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {});
+const b = await launch();
 const page = await b.newPage({ viewport: { width: 430, height: 932 } });
 page.setDefaultTimeout(12000);
 const { onboard } = await import("./onboard.mjs");

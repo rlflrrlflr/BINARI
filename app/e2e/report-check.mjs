@@ -3,11 +3,8 @@
 // 미래 생일에 이번 주 택일이 나갔다. 이 화면은 카드 뒷면 안에 있어서 어떤 e2e도 열어보지 않았다 —
 // 고장 나도 아무 검사가 안 우는 자리였다. 그래서 리포트를 실제로 열어 확인하는 검사를 신설한다.
 // 실행: preview 기동 후 node e2e/report-check.mjs
-import { createRequire } from "node:module";
+import { launch } from "./browser.mjs";   // 브라우저 찾기는 한 곳에서 (2026-09-11)
 import { throwCoins } from "./ritual.mjs";   // v140: 의식이 켜져 있으면 여섯 번 던져 통과
-const require = createRequire(import.meta.url);
-let pw; try { pw = require("playwright"); } catch { pw = require("/opt/node22/lib/node_modules/playwright"); }
-const { chromium } = pw;
 const BASE = process.env.BASE || "http://localhost:4173";
 
 const R = []; const ck = (n, p, note = "") => { R.push(p); console.log(`${p ? "PASS" : "FAIL"} — ${n}${note ? " · " + note : ""}`); };
@@ -37,8 +34,7 @@ async function onboard(page) {
 }
 
 // PW_CHROMIUM: playwright 번들 버전과 설치된 크로미움이 어긋나는 환경(CI·클라우드)에서 경로를 직접 준다
-const b = await chromium.launch((process.env.CHROME_PATH || process.env.PW_CHROMIUM)
-  ? { executablePath: process.env.CHROME_PATH || process.env.PW_CHROMIUM } : {});
+const b = await launch();
 const page = await b.newPage({ viewport: { width: 430, height: 932 } });
 page.setDefaultTimeout(9000);
 const errs = [];

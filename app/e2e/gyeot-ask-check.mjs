@@ -1,3 +1,4 @@
+import { launch } from "./browser.mjs";   // 브라우저 찾기는 한 곳에서 (2026-09-11)
 /* 곁에게 묻기 — **고른 사람에게 물었는가, 이름은 안 나갔는가, 판결이 되지 않았는가.**
    실행: preview 기동 후 node e2e/gyeot-ask-check.mjs
 
@@ -11,15 +12,11 @@
      ③ **되돌릴 때 번호를 매긴 그 목록을 쓴다** — 전체 명부로 되돌리면 **사람이 뒤바뀐다.**
         실제로 그랬다(팀장님·엄마만 골랐는데 답이 민수 이름으로 나갔다 — 실물 스샷으로 잡음).
      ④ **판결 포맷을 안 씌운다** — GO/STOP/HOLD 는 「할까 말까」의 답이지 「누구와」의 답이 아니다. */
-import { createRequire } from "node:module";
-const require = createRequire(import.meta.url);
-let pw; try { pw = require("playwright"); } catch { pw = require("/opt/node22/lib/node_modules/playwright"); }
-const { chromium } = pw;
 const BASE = process.env.BASE || "http://localhost:4173";
 const R = [];
 const ck = (n, p, note = "") => { R.push(p); console.log(`${p ? "PASS" : "FAIL"} — ${n}${note ? " · " + note : ""}`); };
 
-const b = await chromium.launch(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {});
+const b = await launch();
 const page = await b.newPage({ viewport: { width: 430, height: 932 } });
 page.setDefaultTimeout(12000);
 await page.addInitScript(() => {

@@ -36,7 +36,53 @@ const brightness = (page) => page.evaluate(() => {
   return s / (im.length / 4);
 });
 
-const b = await chromium.launch({ executablePath: process.env.CHROME_PATH || undefined, args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
+/* ⚠ **이 검사만 브라우저를 못 찾아 죽고 있었다 (2026-08-31).**
+   다른 검사들은 헤드리스 셸로 도는데, 여기는 소프트웨어 GPU 인자(swiftshader)를 쓰느라
+   **완전한 크로미움**이 필요하다. 그게 없으면 「npx playwright install 하라」로 끝나는데,
+   그 메시지가 **앱 사망과 구분이 안 된다** — 실제로 이 검사가 죽어 있는 동안
+   첫 방문자가 빈 화면을 보는 결함이 통과됐다.
+   그래서 후보를 차례로 시도하고, **전부 실패하면 조용히 통과하지 말고 그 사실을 말하고 죽는다.** */
+const GL_ARGS = ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"];
+const b = await (async () => {
+  const tries = [process.env.CHROME_PATH, "/opt/pw-browsers/chromium", null];
+  let last;
+  for (const ep of tries) {
+    if (ep === undefined) continue;
+    try { return await chromium.launch({ ...(ep ? { executablePath: ep } : {}), args: GL_ARGS }); }
+    catch (e) { last = e; }
+  }
+  console.log("FAIL — 브라우저를 못 찾아 이 검사가 아예 못 돌았다(통과가 아니다). CHROME_PATH 를 주거나 완전한 크로미움을 설치해라.");
+  console.log(String(last && last.message).split("\n")[0]);
+  process.exit(1);
+})();
+
+/* ── ⓪ **첫 방문자가 화면을 본다** (2026-08-31 신설) ────────────────────────────
+   ⚠ 이 검사가 없어서 **앱이 통째로 안 뜨는 결함이 라이브로 나갔다.**
+   홀로가 기본이 되면서 온보딩 0·1단계가 수호신을 **명식 없이** 세우는데, WebGL 이 없거나
+   셰이더가 실패해 입자 렌더러로 떨어지면 그쪽이 `saju.main` 을 무방비로 읽어 터졌다.
+   에러 경계가 0개라 React 가 트리를 통째로 언마운트했고, 배경이 `#0a0812` 단색이라
+   **고장이 아니라 로딩 중처럼 보였다.** 실측: root 0자·버튼 0개.
+   ⚠ **값이 아니라 성질을 묻는다** — 「첫 방문자가 누를 것을 보는가」. 렌더러가 무엇이든,
+     앞으로 기본값을 또 뒤집든, 이 질문은 그대로 유효하다. */
+{
+  const BLOCK = `HTMLCanvasElement.prototype.getContext = (function(o){ return function(t, ...r){
+    if (String(t).indexOf("webgl") === 0 || String(t) === "experimental-webgl") return null;
+    return o.call(this, t, ...r); }; })(HTMLCanvasElement.prototype.getContext);`;
+  for (const [tag, qs, block] of [
+    ["기본", "/", false], ["기본 · WebGL 없음", "/", true], ["보관한 옛 판 · WebGL 없음", "/?skin=dark", true],
+  ]) {
+    const page = await b.newPage({ viewport: { width: 430, height: 932 } });
+    const errs = []; page.on("pageerror", (e) => errs.push(e.message));
+    if (block) await page.addInitScript(BLOCK);
+    await page.goto(BASE + qs, { waitUntil: "load" });
+    await page.waitForTimeout(3200);
+    const root = await page.evaluate(() => (document.getElementById("root") || {}).innerHTML?.length || 0);
+    const btns = await page.locator("button").count();
+    ck(`⓪ ${tag} — 첫 방문자가 화면을 본다`, root > 1000 && btns >= 1, `root ${root}자 · 버튼 ${btns}개`);
+    ck(`⓪ ${tag} — 오류 없이 뜬다`, errs.length === 0, errs.slice(0, 1).join(""));
+    await page.close();
+  }
+}
 
 // ── ① WebGL 경로 + 픽셀 + 판결 반응 ──
 {
@@ -46,7 +92,11 @@ const b = await chromium.launch({ executablePath: process.env.CHROME_PATH || und
   await onboard(page);
   await page.waitForTimeout(2200); // 어셈블 진행
   const renderer = await page.evaluate(() => document.querySelector("canvas[data-renderer]")?.getAttribute("data-renderer"));
-  ck("① 렌더러 = webgl", renderer === "webgl", "renderer=" + renderer);
+  /* ⚠ **전제가 낡았다 (2026-08-31).** 2026-08-31 에 기본 스킨이 홀로로 뒤집혔다 —
+     인자 없이 열면 이제 색장(field)이 선다. 검출은 정확했고 틀린 건 검사의 전제였다.
+     그래서 **둘로 가른다**: 기본은 field 여야 하고, 보관해 둔 옛 판(?skin=dark)은 입자여야 한다.
+     ⚠ 「기본이 홀로인가」를 묻는 검사가 리포 전체에 0개였다 — 그걸 여기서 만든다. */
+  ck("① 기본으로 열면 색장이 선다(홀로가 기본)", renderer === "field", "renderer=" + renderer);
   const lum1 = await brightness(page);
   ck("① 입자 실제 렌더(평균 밝기 > 1)", lum1 > 1, "avg=" + lum1.toFixed(2));
   await page.locator("textarea.qbox").fill("이 길로 가도 될까?"); await page.waitForTimeout(200);

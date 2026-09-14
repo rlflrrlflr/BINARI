@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, Component } from "react";
 import { readImprint } from "./lib/imprint.js";
 import { readMatch, matchAxes, roleOf, ROLE } from "./lib/match.js";
 /* 오라 스펙 — 레퍼런스를 값으로 적은 단일 진실 원천. 셰이더 상수를 코드에 안 박는다.
@@ -2365,6 +2365,16 @@ const seedRnd=(str)=>{let h=7;for(const c of String(str))h=(h*31+c.charCodeAt(0)
 
    지표가 없을 때(시 미상·구버전 저장분)를 대비해 축마다 폴백을 둔다. 폴백은 v114 판 그대로라,
    재료가 없으면 예전과 같은 값이 나온다 — 조용히 다른 얼굴이 되지 않는다. */
+/* ⚠ **명식이 아직 없을 때 세워지는 수호신용 채움값 (2026-08-31).**
+   홀로가 기본이 되면서 온보딩 0·1단계가 `<Guardian>` 을 **명식 없이** 세운다(검은 판 자리는
+   `DustOrb` 라 이 경로가 없었다). 색장(`GuardianField`)은 그걸 견디게 짜여 있는데
+   (`const el = (saju && saju.main) || null`) **폴백 입자 렌더러 셋은 아니었다** — 진실이 두 곳에 있었다.
+   그래서 WebGL 이 없거나 셰이더가 실패하면 `EL_COLOR[saju.main]` 에서 터지고,
+   이 앱에는 에러 경계가 0개라 **React 가 트리를 통째로 언마운트한다.** 화면이 `#0a0812` 단색이라
+   고장이 아니라 로딩 중으로 보인다. 실측: root 0자·버튼 0개, 첫 방문자만 죽는다(재방문자는 명식이 있다).
+   ⚠ **오행 이름을 한글 리터럴로 직접 쓰지 마라.** 도구가 NFD 로 써 넣으면 파일의 NFC 키와 안 맞아
+     `EL_COLOR[...]` 가 undefined 가 되고 같은 자리에서 다시 죽는다. 키를 코드에서 끌어온다. */
+const NO_SAJU = { main: Object.keys(EL_COLOR)[0], counts: {}, pillars: {}, idx: null, dayGan: "" };
 function texture(saju, zo, num, moon) {
   if (!saju) return "ISFJ";
   const c = saju.counts || {};
@@ -2396,7 +2406,7 @@ function texture(saju, zo, num, moon) {
 
   return E + N + T + P;
 }
-function GuardianCanvas({ saju, zo, num, moon, birth, agitateRef, reactRef, restRef, size = 340 }) {
+function GuardianCanvas({ saju = NO_SAJU, zo, num, moon, birth, agitateRef, reactRef, restRef, size = 340 }) {
   const ref = useRef(null);
   useEffect(() => {
     const cv = ref.current; if (!cv) return;
@@ -2577,6 +2587,65 @@ const TUNE = {
   nE: 34000,        // 입자 수 — 외향(E)
   nI: 27000,        // 입자 수 — 내향(I)
 };
+/* ═══════════ 수호신 형상 — **다섯 형상의 수식이 사는 단 한 곳** ═══════════
+   ⚠ 2026-09-04 통합. 이 사슬이 오래도록 **두 벌**로 존재했다 — 화면에 그리는 셰이더(GL_VERT)와
+     GPU 시뮬레이션 셰이더(SHAPE_FN)에 다섯 형상이 통째로 복사돼 있었다. 검진이 「두 벌로 존재」를
+     계속 알렸고, 실제로 **값이 어긋나는 사고가 두 번**(검사 1·2가 잡은 것들) 여기서 났다.
+     한쪽만 고치면 **기기에 따라 다른 수호신이 보인다** — 어느 렌더러가 뜨는지는 기기가 정한다.
+   → 합칠 수 있었던 이유: 통합 직전 실측에서 다섯 분기가 **주석·공백만 빼면 완전히 같았다.**
+     즉 이건 리팩터링이 아니라 **이미 같은 것을 한 번만 적는 일**이다.
+   ⚠ 고칠 때 지킬 것: 이 사슬은 바깥에서 `t`·`strand`·`sOff`·`p`·`depth`·`v_a` 가 이미 선언돼
+     있다고 전제한다. 두 곳의 전제가 다르므로(한쪽은 varying, 한쪽은 out 매개변수)
+     **여기서 새로 선언하지 마라.** 선언은 각 셰이더가 자기 방식으로 하고, 여기서는 채우기만 한다. */
+const SHAPE_BRANCHES = `
+if(u_form<0.5){ // 화 — 꼬여 오르는 리본 기둥 (가닥 해시로 유기화)
+    float sh=fract(sin(strand*12.9898)*43758.5453);
+    float s=fract(a_r0.y+t*(0.032+0.022*sh)*(0.5+a_r0.z));
+    float y=mix(-1.05,1.05,s);
+    float tw=s*u_twist*6.2832+t*(0.18+0.12*sh)+sOff*6.2832+sh*3.1;
+    float rad=(0.13+0.1*sin(s*5.0+t*0.45+a_r1.x))*(0.5+0.9*a_r0.x)*(0.7+0.6*sh);
+    p=vec2(sin(tw)*rad*2.1+0.16*sin(y*1.6+t*0.14+sh*6.2)+sin(s*3.0+t*0.2+sOff*9.0)*0.12*u_chaos, y);
+    depth=0.45+0.55*(0.5+0.5*cos(tw));
+    v_a=0.5+0.5*s;
+  } else if(u_form<1.5){ // 수 — 흐르는 물결 층
+    float dir=mod(strand,2.0)<0.5?1.0:-1.0;
+    float x=mix(-1.25,1.25,fract(a_r0.x+t*0.03*dir*(0.6+a_r0.z)));
+    float band=(sOff-0.5)*1.5;
+    p=vec2(x, band+0.11*sin(x*3.6+t*0.55+a_r1.x)+(a_r0.y-0.5)*0.16);
+    depth=0.5+0.5*a_r0.z;
+    v_a=(1.0-abs(x)*0.45)*0.9;
+  } else if(u_form<2.5){ // 목 — 뻗어 오르는 가지 흐름
+    float br=mod(strand,u_arms);
+    float ang=1.5708+(br-(u_arms-1.0)*0.5)*0.42+0.05*sin(t*0.35+br*2.0);
+    float s=fract(a_r0.y+t*0.035*(0.5+a_r0.z));
+    vec2 d=vec2(cos(ang),sin(ang));
+    p=vec2((a_r0.x-0.5)*0.62,-0.8)+d*(s*1.8)+vec2(-d.y,d.x)*(a_r0.x-0.5)*(0.12+s*0.55)
+      +vec2(sin(s*8.0+t*0.5+a_r1.x),cos(s*7.0-t*0.5))*0.05*s*u_chaos;
+    depth=0.5+0.5*(1.0-s);
+    v_a=(0.4+0.6*(1.0-s*0.55))*(0.4+0.6*smoothstep(0.0,0.2,s));
+  } else if(u_form<3.5){ // 금 — 흘러내리는 용융 금속 (가닥이 굽이쳐 쏟아지며 아래로 수렴, 금속 광택 반짝임)
+    float str=strand;
+    float sh=fract(sin(str*12.9898)*43758.5453);
+    float s=fract(a_r0.y+t*0.05*(0.7+0.5*sh));             // 위→아래 흐름(쏟아짐)
+    float y=mix(1.0,-1.0,s);
+    float lane=(str/max(u_strands,1.0)-0.5)*1.1;           // 가닥 별 가로 위치
+    float coil=sin(y*3.0+str*2.4+t*0.5)*(0.13+0.09*u_twist)*(0.4+0.6*s); // 흘러내리며 감김
+    float x=lane*(1.0-0.35*s)+coil+(a_r0.x-0.5)*0.14;      // 아래로 갈수록 모임(레인 지터로 평행 줄무늬 완화)
+    p=vec2(x,y);
+    depth=0.5+0.5*sh;
+    float glint=step(0.93,a_r1.x)*0.7;                     // 금속 광택 반짝임(백화 완화)
+    v_a=((0.5+0.5*(1.0-abs(x)*0.5))+glint)*smoothstep(0.0,0.07,s)*smoothstep(1.0,0.9,s);
+  } else { // 토 — 중심 없는 난류 융기
+    float rr=pow(a_r0.z,0.75)*0.88;
+    float ang=a_r0.x*6.2832+t*0.05;
+    p=vec2(cos(ang),sin(ang)*0.92)*rr;
+    p+=u_chaos*0.16*vec2(sin(p.y*2.1+t*0.2+a_r1.x),cos(p.x*1.9-t*0.18+a_r0.y*6.0));
+    p+=u_chaos*0.06*vec2(sin(p.y*5.3-t*0.3+a_r0.w*9.0),cos(p.x*4.7+t*0.26+a_r1.x*3.0));
+    p*=1.0+0.03*sin(t*0.4);
+    depth=0.5+0.5*a_r0.y;
+    v_a=0.55+0.45*(1.0-rr*0.7);
+  }`;
+
 const GL_VERT = `
 precision highp float;
 attribute vec4 a_r0; // x:u y:v z:s w:size·위상
@@ -2655,53 +2724,7 @@ void main(){
   float strand=floor(a_r1.w*u_strands+0.0001);
   float sOff=strand/max(u_strands,1.0);
   vec2 p; float depth=1.0;
-  if(u_form<0.5){ // 화 — 꼬여 오르는 리본 기둥 (가닥 해시로 유기화)
-    float sh=fract(sin(strand*12.9898)*43758.5453);
-    float s=fract(a_r0.y+t*(0.032+0.022*sh)*(0.5+a_r0.z));
-    float y=mix(-1.05,1.05,s);
-    float tw=s*u_twist*6.2832+t*(0.18+0.12*sh)+sOff*6.2832+sh*3.1;
-    float rad=(0.13+0.1*sin(s*5.0+t*0.45+a_r1.x))*(0.5+0.9*a_r0.x)*(0.7+0.6*sh);
-    p=vec2(sin(tw)*rad*2.1+0.16*sin(y*1.6+t*0.14+sh*6.2)+sin(s*3.0+t*0.2+sOff*9.0)*0.12*u_chaos, y);
-    depth=0.45+0.55*(0.5+0.5*cos(tw));
-    v_a=0.5+0.5*s;
-  } else if(u_form<1.5){ // 수 — 흐르는 물결 층
-    float dir=mod(strand,2.0)<0.5?1.0:-1.0;
-    float x=mix(-1.25,1.25,fract(a_r0.x+t*0.03*dir*(0.6+a_r0.z)));
-    float band=(sOff-0.5)*1.5;
-    p=vec2(x, band+0.11*sin(x*3.6+t*0.55+a_r1.x)+(a_r0.y-0.5)*0.16);
-    depth=0.5+0.5*a_r0.z;
-    v_a=(1.0-abs(x)*0.45)*0.9;
-  } else if(u_form<2.5){ // 목 — 뻗어 오르는 가지 흐름
-    float br=mod(strand,u_arms);
-    float ang=1.5708+(br-(u_arms-1.0)*0.5)*0.42+0.05*sin(t*0.35+br*2.0);
-    float s=fract(a_r0.y+t*0.035*(0.5+a_r0.z));
-    vec2 d=vec2(cos(ang),sin(ang));
-    p=vec2((a_r0.x-0.5)*0.62,-0.8)+d*(s*1.8)+vec2(-d.y,d.x)*(a_r0.x-0.5)*(0.12+s*0.55)
-      +vec2(sin(s*8.0+t*0.5+a_r1.x),cos(s*7.0-t*0.5))*0.05*s*u_chaos;
-    depth=0.5+0.5*(1.0-s);
-    v_a=(0.4+0.6*(1.0-s*0.55))*(0.4+0.6*smoothstep(0.0,0.2,s));
-  } else if(u_form<3.5){ // 금 — 흘러내리는 용융 금속 (가닥이 굽이쳐 쏟아지며 아래로 수렴, 금속 광택 반짝임)
-    float str=strand;
-    float sh=fract(sin(str*12.9898)*43758.5453);
-    float s=fract(a_r0.y+t*0.05*(0.7+0.5*sh));             // 위→아래 흐름(쏟아짐)
-    float y=mix(1.0,-1.0,s);
-    float lane=(str/max(u_strands,1.0)-0.5)*1.1;           // 가닥 별 가로 위치
-    float coil=sin(y*3.0+str*2.4+t*0.5)*(0.13+0.09*u_twist)*(0.4+0.6*s); // 흘러내리며 감김
-    float x=lane*(1.0-0.35*s)+coil+(a_r0.x-0.5)*0.14;      // 아래로 갈수록 모임(레인 지터로 평행 줄무늬 완화)
-    p=vec2(x,y);
-    depth=0.5+0.5*sh;
-    float glint=step(0.93,a_r1.x)*0.7;                     // 금속 광택 반짝임(백화 완화)
-    v_a=((0.5+0.5*(1.0-abs(x)*0.5))+glint)*smoothstep(0.0,0.07,s)*smoothstep(1.0,0.9,s);
-  } else { // 토 — 중심 없는 난류 융기
-    float rr=pow(a_r0.z,0.75)*0.88;
-    float ang=a_r0.x*6.2832+t*0.05;
-    p=vec2(cos(ang),sin(ang)*0.92)*rr;
-    p+=u_chaos*0.16*vec2(sin(p.y*2.1+t*0.2+a_r1.x),cos(p.x*1.9-t*0.18+a_r0.y*6.0));
-    p+=u_chaos*0.06*vec2(sin(p.y*5.3-t*0.3+a_r0.w*9.0),cos(p.x*4.7+t*0.26+a_r1.x*3.0));
-    p*=1.0+0.03*sin(t*0.4);
-    depth=0.5+0.5*a_r0.y;
-    v_a=0.55+0.45*(1.0-rr*0.7);
-  }
+  ${SHAPE_BRANCHES}
   float halo=step(0.84,a_r1.y);                              // v64 성간 먼지 헤일로(입자 16% 재배정)
   if(halo>0.5){
     float hr=0.55+1.05*pow(a_r0.z,0.6);                      // 0.55~1.6 광역 타원 원반
@@ -3004,10 +3027,24 @@ const MSR_FREE = (() => { try { return /[?&]msr=1(&|$)/.test(window.location.sea
      `?skin=dark`  — 까만 입자 판(예전 기본)
      `?face=off`   — 홀로는 쓰되 얼굴만 끈다
      `?face=b|c|d` — 다른 얼굴 프리셋 */
+/* ⚠ **못 그릴 기기에는 홀로를 주지 않는다 (2026-08-31).** 위 폴백 수정은 「죽지 않게」까지만
+   하고, 그 뒤 화면은 미색 판 + 검은 판용 가산 입자라 **아무도 설계하지 않은 세 번째 화면**이다.
+   여기서 걸러 내면 그 화면이 애초에 안 생긴다 — CSS 133개·JS 분기 14개·얼굴 기본값이
+   **한 점에서 동시에** 옛 판으로 넘어간다. 진실이 한 곳에 남는다.
+   왜 highp 까지 보나: 색장 셰이더만 `precision highp float` 을 쓰고 폴백 입자는 mediump 다.
+   WebGL1 에서 프래그먼트 highp 는 **선택 기능**인데 대체 경로가 0건이다.
+   (⚠ 실기기에서 highp 없는 비율은 미확인 — 코드 사실만 확인했다.) */
+const canHolo = (() => { try {
+  const c = document.createElement("canvas");
+  const g = c.getContext("webgl") || c.getContext("experimental-webgl");
+  if (!g) return false;
+  const p = g.getShaderPrecisionFormat && g.getShaderPrecisionFormat(g.FRAGMENT_SHADER, g.HIGH_FLOAT);
+  return !!(p && p.precision > 0);
+} catch (_) { return false; } })();
 const SKIN = (() => { try {
   const q = window.location.search;
   if (/[?&]skin=dark(&|$)/.test(q)) return "";        // 까만 판을 되살린다
-  return "holo";                                      // 기본 = 홀로
+  return canHolo ? "holo" : "";                       // 기본 = 홀로 (못 그리면 옛 판으로)
 } catch (_) { return "holo"; } })();
 const FACE = (() => { try {
   const q = window.location.search;
@@ -4032,8 +4069,15 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, gyeotRef, popRef
         }
       };
       draw();
+      /* ⚠ **형제 셋과 맞춘다 (2026-08-31).** `GuardianCanvasGL`·`GuardianCanvasSim` 에는
+         컨텍스트 상실 처리가 달려 있는데 색장에만 없었다 — 런타임에 GPU 를 잃으면
+         (모바일 백그라운드 복귀·탭 다수·GPU 리셋) 폴백이 안 걸리고 캔버스가 빈 채로 남는다.
+         홀로가 옵트인일 땐 소수만 겪었지만 **기본이 된 지금은 전 유저의 기본 실패 모드**다. */
+      const lostFn = (e) => { try { e.preventDefault(); } catch (_) {} fail(); };
+      cv.addEventListener("webglcontextlost", lostFn);
       return () => {
         cancelAnimationFrame(raf);
+        cv.removeEventListener("webglcontextlost", lostFn);
         cv.removeEventListener("pointerdown", on);
         cv.removeEventListener("pointermove", move);
         cv.removeEventListener("pointerup", off);
@@ -4073,7 +4117,7 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, gyeotRef, popRef
   </span>);
 }
 
-function GuardianCanvasGL({ saju, zo, num, moon, birth, agitateRef, reactRef, restRef, broodRef, orbRef, gyeotRef, popRef, mood, size = 340, onFail }) {
+function GuardianCanvasGL({ saju = NO_SAJU, zo, num, moon, birth, agitateRef, reactRef, restRef, broodRef, orbRef, gyeotRef, popRef, mood, size = 340, onFail }) {
   const ref = useRef(null);
   useEffect(() => {
     const cv = ref.current; if (!cv) return;
@@ -4338,45 +4382,7 @@ void computeShape(vec4 a_r0, vec4 a_r1, out vec2 spos, out float depth, out floa
   float strand=floor(a_r1.w*u_strands+0.0001);
   float sOff=strand/max(u_strands,1.0);
   vec2 p; depth=1.0; v_a=1.0;
-  if(u_form<0.5){
-    float sh=fract(sin(strand*12.9898)*43758.5453);
-    float s=fract(a_r0.y+t*(0.032+0.022*sh)*(0.5+a_r0.z));
-    float y=mix(-1.05,1.05,s);
-    float tw=s*u_twist*6.2832+t*(0.18+0.12*sh)+sOff*6.2832+sh*3.1;
-    float rad=(0.13+0.1*sin(s*5.0+t*0.45+a_r1.x))*(0.5+0.9*a_r0.x)*(0.7+0.6*sh);
-    p=vec2(sin(tw)*rad*2.1+0.16*sin(y*1.6+t*0.14+sh*6.2)+sin(s*3.0+t*0.2+sOff*9.0)*0.12*u_chaos, y);
-    depth=0.45+0.55*(0.5+0.5*cos(tw)); v_a=0.5+0.5*s;
-  } else if(u_form<1.5){
-    float dir=mod(strand,2.0)<0.5?1.0:-1.0;
-    float x=mix(-1.25,1.25,fract(a_r0.x+t*0.03*dir*(0.6+a_r0.z)));
-    float band=(sOff-0.5)*1.5;
-    p=vec2(x, band+0.11*sin(x*3.6+t*0.55+a_r1.x)+(a_r0.y-0.5)*0.16);
-    depth=0.5+0.5*a_r0.z; v_a=(1.0-abs(x)*0.45)*0.9;
-  } else if(u_form<2.5){
-    float br=mod(strand,u_arms);
-    float ang=1.5708+(br-(u_arms-1.0)*0.5)*0.42+0.05*sin(t*0.35+br*2.0);
-    float s=fract(a_r0.y+t*0.035*(0.5+a_r0.z));
-    vec2 d=vec2(cos(ang),sin(ang));
-    p=vec2((a_r0.x-0.5)*0.62,-0.8)+d*(s*1.8)+vec2(-d.y,d.x)*(a_r0.x-0.5)*(0.12+s*0.55)+vec2(sin(s*8.0+t*0.5+a_r1.x),cos(s*7.0-t*0.5))*0.05*s*u_chaos;
-    depth=0.5+0.5*(1.0-s); v_a=(0.4+0.6*(1.0-s*0.55))*(0.4+0.6*smoothstep(0.0,0.2,s));
-  } else if(u_form<3.5){
-    float str=strand; float sh=fract(sin(str*12.9898)*43758.5453);
-    float s=fract(a_r0.y+t*0.05*(0.7+0.5*sh));
-    float y=mix(1.0,-1.0,s);
-    float lane=(str/max(u_strands,1.0)-0.5)*1.1;
-    float coil=sin(y*3.0+str*2.4+t*0.5)*(0.13+0.09*u_twist)*(0.4+0.6*s);
-    float x=lane*(1.0-0.35*s)+coil+(a_r0.x-0.5)*0.14;
-    p=vec2(x,y); depth=0.5+0.5*sh;
-    float glint=step(0.93,a_r1.x)*0.7;
-    v_a=((0.5+0.5*(1.0-abs(x)*0.5))+glint)*smoothstep(0.0,0.07,s)*smoothstep(1.0,0.9,s);
-  } else {
-    float rr=pow(a_r0.z,0.75)*0.88;
-    float ang=a_r0.x*6.2832+t*0.05;
-    p=vec2(cos(ang),sin(ang)*0.92)*rr;
-    p+=u_chaos*0.16*vec2(sin(p.y*2.1+t*0.2+a_r1.x),cos(p.x*1.9-t*0.18+a_r0.y*6.0));
-    p+=u_chaos*0.06*vec2(sin(p.y*5.3-t*0.3+a_r0.w*9.0),cos(p.x*4.7+t*0.26+a_r1.x*3.0));
-    p*=1.0+0.03*sin(t*0.4); depth=0.5+0.5*a_r0.y; v_a=0.55+0.45*(1.0-rr*0.7);
-  }
+  ${SHAPE_BRANCHES}
   float halo=step(0.84,a_r1.y);
   if(halo>0.5){
     float hr=0.55+1.05*pow(a_r0.z,0.6);
@@ -4480,7 +4486,7 @@ void main(){
   float a=m*v_a*u_alpha;
   gl_FragColor=vec4(col*a*u_bright,a);
 }`;
-function GuardianCanvasSim({ saju, zo, num, moon, birth, agitateRef, reactRef, restRef, size = 340, onFail }) {
+function GuardianCanvasSim({ saju = NO_SAJU, zo, num, moon, birth, agitateRef, reactRef, restRef, size = 340, onFail }) {
   const ref = useRef(null);
   useEffect(() => {
     const cv = ref.current; if (!cv) return;
@@ -4679,7 +4685,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v180 · 무엇을 물을지 골라 준다";
+const APP_VER = "v191 · 막히면 다른 길로";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -5264,6 +5270,65 @@ function shareRisk(kinds) {
   return { ok: why.length === 0, level: worst ? "위험" : why.length ? "주의" : "안전", dayLcm, years: years.length, n: named.length, why };
 }
 
+/* ── 링크·글이 앱 밖으로 나가는 하나뿐인 문 (2026-09-14 지시서 §2) ──────────────
+   **무엇이 죽어 있었나.** 세 곳(판결 공유·초대 링크 두 곳)이 전부 이렇게 적혀 있었다:
+
+       try { if (navigator.share) { await navigator.share(...); return; } }
+       catch (_) { return; }                    // ← 여기서 끝난다
+       try { await navigator.clipboard.writeText(...); } catch (_) {}
+
+   `catch` 가 **곧바로 `return`** 해서, 공유시트가 **취소가 아닌 이유로 실패하면**
+   (권한 거부·비보안 컨텍스트·기기 미지원·시트 자체 오류) **밑의 복사 폴백이 영영 안 돈다.**
+   유저 눈에는 「눌렀는데 아무 일도 안 일어난다」로 보인다 — 그리고 계측에도 안 남는다.
+   주석은 「유저 취소 포함 — 조용히」라 적혀 있었는데, **취소만 걸러야 할 자리에서 전부를 걸렀다.**
+   ⚠ 바로 아래 `saveOrShareCard` 는 이미 `AbortError` 만 갈라내고 있었다 —
+     **같은 파일 안에 옳은 코드와 틀린 코드가 같이 있었다.**
+
+   **그래서 한 곳으로 모은다.** v190.1 이 브라우저 실행을 21개 파일에서 걷어내며 적은 교훈이
+   그대로 적용된다 — *「수단이 한 곳에 없으면 고쳐도 한 파일만 고쳐진다」*.
+
+   사다리: 공유시트 → 클립보드 → **옛 방식 복사**(execCommand) → 실패 보고.
+   ⚠ 세 번째 칸이 필요한 이유: `navigator.clipboard` 는 보안 컨텍스트·권한이 있어야 하고
+     구형 사파리·인앱 브라우저(카톡·인스타)에서 곧잘 없다. **카톡 인앱은 우리 주 유입 경로다.** */
+/* ⚠ 오류의 **이름만** 싣는다. `String(e)` 로 메시지째 실으면 브라우저에 따라
+   그 안에 **공유하려던 주소**가 섞여 들어간다 — 주소에는 서명된 판결이 담겨 있다.
+   이름(AbortError·NotAllowedError…)만으로 어디서 막혔는지는 충분히 갈린다. */
+const errName = (e) => (e && typeof e.name === "string" && e.name ? e.name : "Unknown").slice(0, 40);
+async function shareOrCopy({ title, text, url, what }) {
+  const body = text ? `${text}
+${url}` : url;
+  if (navigator.share) {
+    try {
+      await navigator.share(text ? { title, text, url } : { title, url });
+      track("share_done", { what, way: "sheet" });
+      return "shared";
+    } catch (e) {
+      /* 취소는 실패가 아니다 — 따로 센다. 그 외에는 **떨어지지 말고 다음 칸으로.** */
+      if (e && e.name === "AbortError") { track("share_cancelled", { what }); return "cancelled"; }
+      track("share_sheet_failed", { what, err: errName(e) });
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(body);
+    track("share_done", { what, way: "clipboard" });
+    return "copied";
+  } catch (_) { /* 다음 칸 */ }
+  /* 옛 방식 — 화면 밖 textarea 를 골라 복사한다. 인앱 브라우저에서 이게 마지막 다리다. */
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = body; ta.setAttribute("readonly", "");
+    ta.style.position = "fixed"; ta.style.top = "-1000px"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, body.length);
+    const ok = document.execCommand && document.execCommand("copy");
+    ta.remove();
+    if (ok) { track("share_done", { what, way: "legacy_copy" }); return "copied"; }
+  } catch (_) { /* 다음 칸 */ }
+  /* ⚠ **여기까지 오면 유저는 아무것도 못 받았다.** 예전엔 이 상태가 계측에 안 남아
+     「공유를 눌렀는데 아무 일도 없다」가 **0건으로 보였다.** 이제 센다. */
+  track("share_failed", { what });
+  return "failed";
+}
+
 /* 카드가 앱 밖으로 나가는 **하나뿐인 문**. 부적·각인·궁합이 전부 이 함수를 지난다.
    ⚠ 새 카드를 만들 때 이 문을 우회하면 shareRisk 검사도 card_saved 계측도 통째로 빠진다.
    ⚠ 그림 자체는 `build` 콜백이 만든다 — 위험 판정을 **그리기 전에** 하려는 것이다.
@@ -5294,18 +5359,68 @@ async function saveOrShareCard({ build, cardKind, skyKinds, fileBase, title }) {
     }
   } catch (e) {
     if (e && e.name === "AbortError") { track("card_share_cancelled", { card_kind: kind }); return; }   // 취소는 실패가 아니다 — 따로 센다
-    /* 그 외 실패 → 폴백 */
+    /* 그 외 실패 → 폴백. ⚠ **이 칸이 계측에 없었다** — 공유시트가 얼마나 자주 실패해서
+       폴백으로 내려가는지 몰랐고, 그래서 폴백이 죽어 있어도(위 새 탭 건) 안 보였다. */
+    track("card_share_sheet_failed", { card_kind: kind, err: errName(e) });
   }
-  if (!iOS) {                                                  // 데스크톱: 파일 다운로드
-    const a = document.createElement("a"); a.href = dataUrl; a.download = `${args.fileBase || "binari_bujeok"}.png`;
-    document.body.appendChild(a); a.click(); a.remove();
-    done("download");
-  } else {                                                     // iOS Safari: download 속성 무시 → 새 탭 이미지(길게 눌러 저장)
-    const w = window.open("", "_blank");
-    if (w) w.document.write(`<title>${args.title || "비나리 부적"}</title><body style="margin:0;background:#050408;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="${dataUrl}" style="max-width:100%" alt="길게 눌러 사진에 저장"></body>`);
-    else location.href = dataUrl;
-    done("new_tab");
+  /* ── 폴백 두 칸을 갈아 끼웠다 (2026-09-14 지시서 §2) ─────────────────────────
+     **① 다운로드는 blob 으로.** 예전엔 `a.href = dataUrl` 이었는데, 카드 한 장이
+     base64 로 수 MB 라 크로미움이 아주 큰 data: URL 을 거부하는 일이 있다. 게다가 그 문자열이
+     통째로 DOM 에 얹힌다. `URL.createObjectURL` 은 참조만 넘긴다 — 같은 파일, 훨씬 가볍다.
+     **② 새 탭 대신 화면 안 이미지.** 예전 iOS 경로는 `window.open` 인데,
+     바로 위에서 **`await` 를 한 번 지나온 뒤**라 사용자 제스처가 이미 소모돼 사파리가 막는다.
+     막히면 `location.href = dataUrl` 로 **앱 밖으로 나가 버렸다** — 돌아오면 상태가 날아간다.
+     이제 화면 위에 이미지를 그대로 띄운다. 길게 눌러 저장하는 손짓은 똑같고 앱을 안 떠난다.
+     **③ 그리고 실패를 실패라고 센다.** 예전엔 `w` 가 null 이어도(=새 탭이 막혀도)
+     `done("new_tab")` 을 불러 **막힌 것이 성공으로 집계**됐다. */
+  const blobUrl = (() => { try { return URL.createObjectURL(dataUrlToFile(dataUrl, "c.png")); } catch (_) { return ""; } })();
+  const drop = () => { if (blobUrl) setTimeout(() => URL.revokeObjectURL(blobUrl), 60000); };
+  /* `?cardfb` — 일부러 폴백까지 내려가 본다(`?boom` 과 같은 계열).
+     v188 이 그물을 만들며 적은 사유가 그대로다: **평소에 안 보이는 길은 일부러 밟아 봐야 산 걸 안다.**
+     특히 이 길은 아이폰에서만 도는데 우리 검사 기계는 아이폰이 아니다 — 창업자가 자기 폰에서
+     확인할 수단이 없으면 「고쳤다」는 말은 검사기 안에서만 참이다. */
+  const forceFb = typeof window !== "undefined" && /[?&]cardfb\b/.test(window.location.search);
+  if (!iOS && !forceFb) {
+    try {
+      const a = document.createElement("a");
+      a.href = blobUrl || dataUrl; a.download = `${args.fileBase || "binari_bujeok"}.png`;
+      document.body.appendChild(a); a.click(); a.remove();
+      done(blobUrl ? "download" : "download_dataurl");
+      drop(); return;
+    } catch (e) {
+      track("card_save_failed", { card_kind: kind, way: "download", err: errName(e) });
+      /* 데스크톱에서도 막히면 아래 화면 안 이미지로 내려간다 — 빈손으로 돌려보내지 않는다 */
+    }
   }
+  if (showCardFallback(blobUrl || dataUrl, args.title)) { done("in_page"); drop(); return; }
+  track("card_save_failed", { card_kind: kind, way: "in_page", err: "no_dom" });
+  drop();
+}
+/* 화면 안 이미지 — 앱을 안 떠나고 길게 눌러 저장한다.
+   ⚠ 스타일을 CSS 템플릿이 아니라 **여기서 직접** 준다. 이 파일의 CSS·셰이더 템플릿 안에
+     백틱을 넣었다가 빌드를 세 번 깨뜨렸고(검진 5-r 이 그래서 생겼다), 여기는 그 위험이 없다. */
+function showCardFallback(src, title) {
+  try {
+    if (document.getElementById("cardfb")) return true;
+    const wrap = document.createElement("div");
+    wrap.id = "cardfb";
+    wrap.style.cssText = "position:fixed;inset:0;z-index:9999;background:rgba(5,4,8,.94);display:flex;"
+      + "flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:18px;overflow:auto";
+    const hint = document.createElement("p");
+    hint.textContent = "이미지를 길게 눌러 사진에 저장해";
+    hint.style.cssText = "margin:0;color:#e8dcf5;font-family:sans-serif;font-size:13px;text-align:center";
+    const img = document.createElement("img");
+    img.src = src; img.alt = title || "비나리 카드";
+    img.style.cssText = "max-width:100%;max-height:74vh;border-radius:10px";
+    const close = document.createElement("button");
+    close.type = "button"; close.textContent = "닫을래";
+    close.style.cssText = "background:transparent;border:1px solid rgba(159,143,196,.45);border-radius:999px;"
+      + "color:#c9bcd8;font-family:sans-serif;font-size:13px;padding:8px 20px;cursor:pointer";
+    close.onclick = () => wrap.remove();
+    wrap.append(hint, img, close);
+    document.body.appendChild(wrap);
+    return true;
+  } catch (_) { return false; }
 }
 /* ── 각인·궁합 공유 카드 (v130) ─────────────────────────────────────────────
    창업자 제안: "각인 궁합도 공유 가능하게 하면 좋지 않을까."
@@ -6511,8 +6626,7 @@ function InviteLanding({ id, onOnboard, onDismiss }) {
         받을 사람에게 그대로 보내 줘.</p>
       <button className="btn gold mt" onClick={async () => {
         const url = `${SHARE_HOST}/?inv=${encodeURIComponent(id)}`;
-        try { if (navigator.share) { await navigator.share({ title: "비나리 — 둘 사이를 보자", url }); return; } } catch (_) { return; }
-        try { await navigator.clipboard.writeText(url); } catch (_) {}
+        await shareOrCopy({ title: "비나리 — 둘 사이를 보자", url, what: "invite_resend" });
       }}>링크 다시 보내기</button>
       <button className="btn ghost mt" onClick={onDismiss}>비나리로 돌아갈래</button>
     </section>
@@ -6735,8 +6849,64 @@ const GSAY = {
 /* 오행이 없거나(있을 리 없지만) 표에 빠진 경우 — 목소리를 지어내지 않고 조용히 환영으로 돌아간다 */
 const gsay = (el, key) => (GSAY[el] || {})[key] || null;
 
+/* ═══════════════ 마지막 그물 — 화면이 통째로 죽지 않게 ═══════════════
+   2026-08-31 라이브 사고: 홀로가 기본이 된 뒤 WebGL 이 없는 기기에서 렌더가 던졌고,
+   **에러 경계가 0개라** React 가 트리를 통째로 언마운트했다 — root 0자, 버튼 0개.
+   그날 원인 셋(NO_SAJU·canHolo·컨텍스트 상실)은 고쳤지만 **구조는 그대로였다.**
+   다음에 어디서 렌더가 던지든 같은 빈 화면이 다시 나온다.
+
+   그리고 더 나쁜 게 하나 더 있다 — **그 빈 화면은 계측에 안 보인다.**
+   posthog.init 이 App 안의 useEffect 에서 돌고 capture_pageview 도 꺼져 있어서,
+   마운트가 실패하면 이벤트가 **0건**이다. 즉 「아무도 안 왔다」와
+   「스무 명이 왔는데 전부 죽었다」가 데이터에서 **같은 그림**이다.
+   광고로 분모를 채우기 직전이라, 이 눈멂은 그대로 예산을 태운다.
+
+   그래서 그물은 둘을 한다:
+     ① 유저에게 **누를 것을 준다** — 빈 화면 대신 「다시 열어볼래」.
+     ② 죽었다는 사실을 **내보낸다** — app_crashed.
+   ⚠ ②는 거부권을 **먼저 읽고 나서** 보낸다. 마운트가 실패했으면 _optout 이
+     기본값(false)에 머물러 있어서, 안 읽고 보내면 **거부한 사람에게서도 나간다.**
+   ⚠ 오류 문구는 140자로 자른다. 유저가 친 글이 예외 메시지에 섞여 나올 여지를 줄인다. */
+class BootNet extends Component {
+  constructor(p) { super(p); this.state = { dead: false }; }
+  static getDerivedStateFromError() { return { dead: true }; }
+  componentDidCatch(err, info) {
+    try {
+      _optout = readOptout();                       // 거부권 먼저 — 마운트가 죽었으면 아무도 안 읽었다
+      _consent = readConsent();
+      _initAnalytics();                             // 큐에 담기고 로드되면 흘러나간다
+      track("app_crashed", {
+        err_name: (err && err.name) || "Error",
+        err_msg: String((err && err.message) || "").slice(0, 140),
+        where: String((info && info.componentStack) || "").trim().split("\n").slice(0, 2).join(" / ").slice(0, 160),
+      });
+    } catch (_) {}
+  }
+  render() {
+    if (!this.state.dead) return this.props.children;
+    const wrap = { minHeight: "100dvh", display: "flex", flexDirection: "column", alignItems: "center",
+      justifyContent: "center", gap: 18, padding: 28, textAlign: "center",
+      background: "#0b0b10", color: "#e8e4dc", fontFamily: "inherit" };
+    const btn = { padding: "12px 22px", borderRadius: 999, border: "1px solid #6b6478",
+      background: "transparent", color: "#e8e4dc", fontSize: 15, cursor: "pointer" };
+    return (
+      <div style={wrap} data-boot-net="1">
+        <div style={{ fontSize: 17, lineHeight: 1.7 }}>하늘이 잠깐 닫혔어.<br />내 쪽 문제야 — 네 기억은 그대로 있어.</div>
+        <button style={btn} onClick={() => { try { window.location.href = window.location.pathname; } catch (_) { window.location.reload(); } }}>
+          다시 열어볼래
+        </button>
+      </div>
+    );
+  }
+}
+export { BootNet };
+
 /* ═══════════════ 앱 ═══════════════ */
 export default function App() {
+  /* 그물 검사용 훅. ?trackdebug 와 같은 계열의 주소 스위치다 —
+     그물은 **평소에 안 보이는 장치**라 일부러 죽여 보지 않으면 살아 있는지 알 수 없다.
+     유저가 이 주소를 열어도 손해는 없다: 그물이 받아서 「다시 열어볼래」를 보여 준다. */
+  if (typeof window !== "undefined" && /[?&]boom\b/.test(window.location.search)) throw new Error("boom — 그물 검사용");
   const [mem] = useState(loadMemory);             // v16(B1): 부팅 시 기억 1회 로드
   const returning = !!mem;                        // 재회 여부 — 인사·연출 분기
   const [step, setStep] = useState(mem ? 3 : 0);  // 기억이 있으면 온보딩 전체 생략
@@ -7142,6 +7312,19 @@ export default function App() {
   };
 
   const [shared, setShared] = useState(false);   // v53: 판결 공유 피드백
+  const [shareFail, setShareFail] = useState("");  // 사다리 끝까지 실패했을 때 보여 줄 링크
+  /* 사다리가 전부 막혔을 때만 뜬다 — 그전엔 아무 반응이 없어 「고장」으로 보였다.
+     ⚠ **판결 화면과 곁 탭 **둘 다**에 건다.** 처음엔 판결 쪽에만 뒀는데, 초대는 곁 탭에서
+       일어나니 그쪽에서는 상태만 서고 **화면엔 아무것도 안 떴다** — 고치기 전과 똑같은 빈손이다.
+       검사 ⑤가 그걸 잡았다.
+     ⚠ `readOnly` 인 건 고쳐 쓰면 서명이 깨져 받는 쪽에서 위조로 읽히기 때문이다. */
+  const failBox = shareFail ? (
+    <div className="sharefail fade">
+      <p className="sub2">공유도 복사도 막혀 있어 — <b>아래 주소를 길게 눌러 복사해</b>.</p>
+      <input className="failurl" readOnly value={shareFail} onFocus={(e) => e.target.select()} />
+      <button type="button" className="btn ghost sm" onClick={() => setShareFail("")}>닫을래</button>
+    </div>
+  ) : null;
   const [rated, setRated] = useState(0);         // v75: 판결 평가(1 빗나감 · 2 글쎄 · 3 딱) — 0=미평가
   const [lean, setLean] = useState("");          // v54: 판결 전 내심 → v72 프롬프트 반영(어조 참고용)
   const [hesit, setHesit] = useState("");        // v72: 왜 망설이는지(고민 종결 근거)
@@ -7174,10 +7357,12 @@ export default function App() {
     const enc = encodeShare(payload);
     const sig = enc ? await signShare(enc) : "";
     const url = (enc && sig) ? `${SHARE_HOST}/?v=${enc}.${sig}` : `${SHARE_HOST}/?ref=share`;
-    try {
-      if (navigator.share) { await navigator.share({ title: "비나리 — 수호신의 판결", text, url }); return; }
-    } catch (_) { return; } // 유저 취소 포함 — 조용히
-    try { await navigator.clipboard.writeText(`${text}\n${url}`); setShared(true); setTimeout(() => setShared(false), 2200); } catch (_) {}
+    const r = await shareOrCopy({ title: "비나리 — 수호신의 판결", text, url, what: "verdict" });
+    if (r === "copied") { setShared(true); setTimeout(() => setShared(false), 2200); }
+    /* ⚠ **끝까지 실패하면 유저에게 링크를 직접 보여 준다.** 여기까지 왔다는 건 공유시트도
+       복사도 다 막혔다는 뜻이고, 그때 아무 반응이 없으면 유저는 앱이 고장 난 줄 안다.
+       화면에 띄우면 적어도 **손으로 골라 복사**할 수 있다. */
+    if (r === "failed") setShareFail(url);
   };
   const exportMemory = () => {                             // v54: iOS 7일 localStorage 소멸 임시 방어
     try {
@@ -7290,10 +7475,9 @@ export default function App() {
          내가 세운 규칙에 내가 먼저 걸린 게 이 검사의 값이다. */
       const _me = (birth.name || "").trim() || "누군가";
       const text = `${_me}${josa(_me, "이", "가")} 너와의 사이를 궁금해했어.\n생일만 넣으면 둘 사이가 보여.`;
-      try {
-        if (navigator.share) { await navigator.share({ title: "비나리 — 둘 사이를 보자", text, url }); return; }
-      } catch (_) { /* 유저가 공유시트를 닫은 것 — 실패가 아니다 */ return; }
-      try { await navigator.clipboard.writeText(`${text}\n${url}`); setShared(true); setTimeout(() => setShared(false), 2200); } catch (_) {}
+      const sent = await shareOrCopy({ title: "비나리 — 둘 사이를 보자", text, url, what: "invite_new" });
+      if (sent === "copied") { setShared(true); setTimeout(() => setShared(false), 2200); }
+      if (sent === "failed") setShareFail(url);
     } catch (e) {
       /* ⚠ 가드 없이 붙이면 「초대를 못 만들었어 — Failed to fetch」가 뜬다.
          같은 파일 판결 실패 경로가 이미 한글 메시지일 때만 통과시킨다 — 그 방식을 그대로 쓴다. */
@@ -8188,6 +8372,7 @@ export default function App() {
                   <p className="fine gyegate">생일을 대신 넣어 보는 건 한 번이었어 —
                     <b> 이제 그 사람이 직접 넣어야 서</b></p>
                   {inviteErr && <p className="err gyerr">{inviteErr}</p>}
+                  {failBox}
                   <button className="btn ghost mt" disabled={inviteBusy === "new"}
                     onClick={() => inviteNew()}>{inviteBusy === "new" ? "만드는 중…" : "부를 사람에게 링크 보내기"}</button>
                 </>)}</>
@@ -8462,6 +8647,7 @@ export default function App() {
                   </div>
                 )}
                 {inviteErr && <p className="err gyerr">{inviteErr}</p>}
+                {failBox}
                 {/* ⚠ **여기서 「서버로도 안 나가」로 끝내면 거짓이 된다 (2026-08-29 정정).**
                     바로 아래 「한 사람 더 부를래」가 `inviteNew()` 를 부르고, 그게 **네 이름**을
                     초대 서버에 올린다(`axes, name: birth.name` — 받는 사람 화면에 「○○가」로 뜨려면 필요하다).
@@ -8918,6 +9104,7 @@ export default function App() {
             </div>
           )}
           {res && cardOn && <button className="btn gold mt" onClick={shareVerdict}>{shared ? "복사했어 — 붙여넣으면 돼" : "카톡·라인으로 판결 보내기"}</button>}
+          {failBox}
           {/* v127.2: 부적을 서신(유료) 위로 올린다. 이 화면에서 앱 밖으로 나갈 수 있는 그림은 이것뿐인데
               지금까지 맨 아래 ghost 한 줄이라 판결 100회에 4번 열렸다(45일 계측).
               자동으로 펼치지는 않는다 — 판결 국면의 push 금지(설계 헌장)는 그대로 지킨다. */}
@@ -9644,6 +9831,10 @@ const CSS = `
 .gsugchip:hover{border-color:rgba(245,217,139,.42);color:#d8cbe6}
 .gqbox{min-height:56px}
 .gask2 .btn.sm{margin:8px auto 0;display:block}
+.sharefail{margin-top:10px;text-align:center}
+.failurl{width:100%;box-sizing:border-box;margin:6px 0;padding:8px 10px;border-radius:9px;
+  border:1px solid rgba(159,143,196,.34);background:rgba(255,255,255,.06);color:inherit;
+  font-family:sans-serif;font-size:12px;text-align:center}
 .gqres{margin-top:12px;text-align:left}
 .gplay{border-style:dashed}
 .gqplay{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap}

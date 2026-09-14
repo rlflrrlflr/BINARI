@@ -6,10 +6,7 @@
 
    ⚠ preview 는 정적 서버라 `/api/*` 가 없다. 그래서 **진짜 핸들러를 이 프로세스에서 돌려**
      page.route 로 물린다. 서버를 흉내 내면 흉내가 통과할 뿐이다 — 검사가 잡으려는 건 그 반대다. */
-import { createRequire } from "node:module";
-const require = createRequire(import.meta.url);
-let pw; try { pw = require("playwright"); } catch { pw = require("/opt/node22/lib/node_modules/playwright"); }
-const { chromium } = pw;
+import { launch } from "./browser.mjs";   // 브라우저 찾기는 한 곳에서 (2026-09-11)
 import handler, { _resetMem } from "../api/invite/[[...seg]].js";
 
 const BASE = process.env.BASE || "http://localhost:4173";
@@ -54,7 +51,7 @@ const HDR = { origin: "https://binari-sepia.vercel.app" };   // 검사가 직접
 const made = await api("POST", { seg: ["new"], body: { axes: A_AXES, name: "연지" }, headers: HDR });
 const ID = made.body.id;
 
-const b = await chromium.launch(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {});
+const b = await launch();
 const page = await b.newPage({ viewport: { width: 430, height: 932 } });
 page.setDefaultTimeout(9000);
 const seen = [], seenHeaders = [];

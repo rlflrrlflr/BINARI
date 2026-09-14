@@ -10,11 +10,8 @@
      ② **모델을 안 부른다** — 이 줄 하나로 판결 원가가 붙으면 안 된다. 표에서 고른다.
      ③ **써 놓고 화면에 못 나오는 대사가 없다** — 첫 판에 둘이나 그랬다(곁 탭엔 이 자리가 없고,
         깨어난 구간은 v55 가 「수호신이 물러난 자리」로 정해 둔 곳이었다). 죽은 대사는 죽은 검사와 같다. */
-import { createRequire } from "node:module";
+import { launch } from "./browser.mjs";   // 브라우저 찾기는 한 곳에서 (2026-09-11)
 import { readFileSync } from "node:fs";
-const require = createRequire(import.meta.url);
-let pw; try { pw = require("playwright"); } catch { pw = require("/opt/node22/lib/node_modules/playwright"); }
-const { chromium } = pw;
 const BASE = process.env.BASE || "http://localhost:4173";
 const R = [];
 const ck = (n, p, note = "") => { R.push(p); console.log(`${p ? "PASS" : "FAIL"} — ${n}${note ? " · " + note : ""}`); };
@@ -63,7 +60,7 @@ const fnArea = src.slice(src.indexOf("const GSAY = {"), src.indexOf("const GSAY 
 ck("② 모델을 안 부른다(표에서 고른다)", !/callClaude|fetch\(/.test(fnArea));
 
 /* ── ③ 실제로 손짓에 답하는가 ────────────────────────────────────────────── */
-const b = await chromium.launch(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {});
+const b = await launch();
 const page = await b.newPage({ viewport: { width: 430, height: 932 } });
 page.setDefaultTimeout(12000);
 const { onboard } = await import("./onboard.mjs");

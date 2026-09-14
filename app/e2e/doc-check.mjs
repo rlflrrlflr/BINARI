@@ -9,10 +9,7 @@
  * PostHog 네트워크 없이 본다 — ?trackdebug 를 붙이면 전송 직전 속성이
  * window.__binariEvents 에 그대로 쌓인다. API 키도 판결 호출도 필요 없다.
  */
-import { createRequire } from "node:module";
-const require = createRequire(import.meta.url);
-let pw; try { pw = require("playwright"); } catch { pw = require("/opt/node22/lib/node_modules/playwright"); }
-const { chromium } = pw;
+import { launch } from "./browser.mjs";   // 브라우저 찾기는 한 곳에서 (2026-09-11)
 import { onboard } from "./onboard.mjs";
 
 const BASE = process.env.BASE || "http://localhost:4173";
@@ -20,8 +17,7 @@ const R = []; const ck = (n, p, note = "") => { R.push(p); console.log(`${p ? "P
 const evs = (page) => page.evaluate(() => window.__binariEvents || []);
 const one = async (page, ev) => (await evs(page)).filter((e) => e.ev === ev).pop() || null;
 
-const b = await chromium.launch((process.env.CHROME_PATH || process.env.PW_CHROMIUM)
-  ? { executablePath: process.env.CHROME_PATH || process.env.PW_CHROMIUM } : {});
+const b = await launch();
 const page = await b.newPage({ viewport: { width: 430, height: 932 } });
 page.setDefaultTimeout(12000);
 await onboard(page, BASE, "?trackdebug&i=0");

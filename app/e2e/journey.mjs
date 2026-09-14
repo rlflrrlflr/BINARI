@@ -1,17 +1,14 @@
 // 전 여정 풀페이지 캡처 — 매 단계를 사람 눈으로 검수하기 위한 스크린샷 세트
 // 실행: preview 기동 후 SHOTS_DIR=... BIRTH=1993-7-15 node e2e/journey.mjs
-import { createRequire } from "node:module";
+import { launch } from "./browser.mjs";   // 브라우저 찾기는 한 곳에서 (2026-09-11)
 import { mkdirSync } from "node:fs";
-const require = createRequire(import.meta.url);
-let pw; try { pw = require("playwright"); } catch { pw = require("/opt/node22/lib/node_modules/playwright"); }
-const { chromium } = pw;
 
 const BASE = process.env.BASE || "http://localhost:4173";
 const SHOTS = process.env.SHOTS_DIR || "/tmp/binari-journey";
 const [BY, BM, BD] = (process.env.BIRTH || "1993-7-15").split("-");
 mkdirSync(SHOTS, { recursive: true });
 
-const b = await chromium.launch((process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}));
+const b = await launch();
 const page = await b.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
 page.setDefaultTimeout(9000);
 const shot = (n) => page.screenshot({ path: `${SHOTS}/${n}.png`, fullPage: true });

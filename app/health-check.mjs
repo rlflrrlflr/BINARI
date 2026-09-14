@@ -56,11 +56,25 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
     add("주의", "튜닝값이 단일화되지 않음", "같은 값이 여러 곳에 직접 박혀 있음",
       "TUNE 블록으로 옮기면 한쪽만 고쳐 어긋나는 사고를 원천 차단할 수 있습니다.");
   }
+  /* ⚠ **여기 셋이 오래 눈을 감고 있었다 (2026-09-04 발견).** stg·입자 수·별 입자 대비는
+     패턴이 **한 곳도 못 찾는** 상태였는데, 아래 루프가 `vals.length >= 2` 일 때만 말하도록
+     돼 있어서 **정상도 주의도 아닌 침묵**으로 빠졌다. 검진 화면에는 아무것도 안 뜬다.
+     → 못 찾은 진짜 이유는 좋은 쪽이었다: 그 값들이 **이미 TUNE 한 곳으로 단일화**돼
+       (`${TUNE.stg}` 처럼 주입된다) 하드코딩된 숫자가 사라진 것이다. 즉 이 검사가 막으려던
+       사고가 구조적으로 불가능해졌는데, **검사는 그걸 말할 줄 몰라서 그냥 조용해졌다.**
+     → 그래서 `tune` 키를 붙인다. 못 찾았을 때 그 값이 TUNE 에서 주입되고 있으면
+       **「구조적으로 한 벌」이라고 말하고**, 그것도 아니면 **「검사가 낡았다」고 운다.**
+       침묵은 어느 쪽도 아니다. */
   const pairs = [
-    { name: "응집 시차(stg)", re: /float stg=a_r1\.z\*([\d.]+)/g, why: "수호신이 손끝으로 모이는 순서. 두 값이 다르면 움직임과 밝기가 어긋납니다." },
-    { name: "입자 수", re: /const n = E \? (\d+) : (\d+);/g, why: "렌더러마다 입자 수가 다르면 같은 사람인데 기기별로 다른 수호신이 보입니다." },
+    { name: "응집 시차(stg)", re: /float stg=a_r1\.z\*([\d.]+)/g, tune: "stg", why: "수호신이 손끝으로 모이는 순서. 두 값이 다르면 움직임과 밝기가 어긋납니다." },
+    { name: "입자 수", re: /const n = E \? (\d+) : (\d+);/g, tune: "nE",
+      /* ⚠ 이 항목의 옛 문구는 **전제가 틀렸다** — 「렌더러마다 다르면 안 된다」고 했는데,
+         Canvas2D 폴백은 4,200/3,200 이고 WebGL 은 34,000/27,000 으로 **일부러 다르다**(CPU 가
+         3만 개를 못 그린다). 지켜야 할 건 「모든 렌더러가 같은 수」가 아니라 「**WebGL 쪽 두
+         경로가 같은 수**」이고, 그건 TUNE.nE/nI 로 이미 단일화돼 있다. */
+      why: "WebGL 두 경로의 입자 수가 갈리면 같은 사람인데 기기별로 다른 수호신이 보입니다. (Canvas2D 폴백이 더 적은 건 정상 — CPU 예산입니다.)" },
     { name: "노출 예산(F_AL)", re: /F_AL = \{ 화: ([\d.]+)/g, why: "밝기 기준. 다르면 렌더러를 바꿀 때 화면이 갑자기 밝아지거나 어두워집니다." },
-    { name: "별 입자 대비", re: /mix\(([\d.]+),([\d.]+),star\)\*\(0\.90/g, why: "알갱이 위계. 다르면 두 렌더러의 질감이 달라집니다." },
+    { name: "별 입자 대비", re: /mix\(([\d.]+),([\d.]+),star\)\*\(0\.90/g, tune: "starLo", why: "알갱이 위계. 다르면 두 렌더러의 질감이 달라집니다." },
   ];
   for (const p of pairs) {
     const vals = [...src.matchAll(p.re)].map(m => m.slice(1).join("/"));
@@ -68,26 +82,46 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
       add("심각", `같은 설정값이 서로 다름 — ${p.name}`, `발견된 값: ${vals.join(" vs ")}`, `${p.why} 두 곳을 같은 값으로 맞추세요.`);
     } else if (vals.length >= 2) {
       add("정상", `설정값 일치 — ${p.name}`, `${vals.length}곳 모두 ${vals[0]}`, "");
+    } else if (p.tune && new RegExp(`TUNE\\.${p.tune}\\b`).test(src) && new RegExp(`\\b${p.tune}:\\s`).test(src)) {
+      /* 하드코딩이 사라지고 TUNE 한 곳에서 나온다 — 두 벌이 될 수가 없다. 이건 통과다.
+         ⚠ 셰이더는 `${TUNE.x}` 로 주입되고 JS 는 `TUNE.x` 로 그냥 읽는다. **둘 다 단일화다** —
+           `${...}` 형태만 세면 JS 쪽이 「못 봤다」로 잘못 울린다(실제로 그랬다). */
+      add("정상", `설정값 단일화 — ${p.name}`, `TUNE.${p.tune} 한 곳에서 나옴(하드코딩된 짝 없음)`, "");
+    } else {
+      /* 못 찾았고 TUNE 으로도 설명이 안 된다 — 조용히 넘어가면 안 본 것이 통과로 보인다 */
+      add("주의", `설정값을 못 봤다 — ${p.name}`, `${vals.length}곳 발견(2곳 이상이어야 비교 가능) · TUNE 주입도 아님`,
+        `${p.why} 이 검사의 패턴이 코드와 어긋난 것일 수 있습니다. 통과가 아니라 확인을 못 한 상태입니다.`);
     }
   }
 }
 
-/* ── 검사 3. 같은 수식을 두 벌 유지하고 있는가(중복) ─────────────────────
-   중복 자체는 당장 고장은 아니지만, 위 1·2번 사고의 원인이다. 개수를 눈에 보이게 둔다. */
+/* ── 검사 3. 수호신 형상 수식이 **한 곳에만** 있는가 ──────────────────────
+   위 1·2번이 잡는 「값이 어긋남」 사고의 뿌리가 여기다. 다섯 형상이 화면 셰이더(GL_VERT)와
+   시뮬 셰이더(SHAPE_FN)에 통째로 복사돼 있으면, **한쪽만 고쳤을 때 기기에 따라 다른 수호신이
+   보인다** — 어느 렌더러가 뜨는지는 유저의 기기가 정하지 우리가 정하지 않는다.
+   ⚠ 2026-09-04 통합 완료: 다섯 분기가 주석·공백만 빼면 완전히 같아서 `SHAPE_BRANCHES` 한 곳으로
+     합쳤다. 그러자 **옛 검사가 저절로 조용해졌다** — 두 셰이더에서 분기를 못 찾으니 0개가 되어
+     통과처럼 보인다. 그건 통과가 아니라 **검사가 눈을 감은 것**이다.
+   → 그래서 개수를 세지 않고 **성질**을 묻는다: ①수식이 사는 곳이 하나인가 ②두 셰이더가 모두
+     그 하나를 참조하는가 ③다시 복사된 곳은 없는가. */
 {
   const cut = (a, b) => src.slice(src.indexOf(a), src.indexOf(b));
   const norm = t => t.replace(/\/\/[^\n]*/g, "").replace(/\s+/g, "");
   try {
-    const gl = norm(cut("const GL_VERT", "const GL_FRAG"));
-    const fn = norm(cut("const SHAPE_FN", "const SIM_VERT"));
-    const forms = t => [...t.matchAll(/u_form<([\d.]+)\)\{(.*?)\}else/gs)].map(m => m[0]);
-    const g = forms(gl), f = forms(fn);
-    const same = g.filter((x, i) => x === f[i]).length;
-    if (same > 0) {
+    const hasConst = /const SHAPE_BRANCHES = `/.test(src);
+    const gl = cut("const GL_VERT", "const GL_FRAG");
+    const fn = cut("const SHAPE_FN", "const SIM_VERT");
+    const refs = ["GL_VERT", "SHAPE_FN"].filter((_, i) => /\$\{SHAPE_BRANCHES\}/.test([gl, fn][i]));
+    /* 사슬이 실제로 몇 벌 있는지 — 첫 분기의 머리를 세면 복사본이 드러난다 */
+    const copies = (norm(src).match(/if\(u_form<0\.5\)\{/g) || []).length;
+    if (!hasConst || refs.length < 2) {
       add("주의", "수호신 형상 수식이 두 벌로 존재",
-        `${same}개 분기가 두 곳(GL_VERT / SHAPE_FN)에 똑같이 있음`,
-        "한쪽만 고치면 두 렌더러가 다르게 보입니다. 지금은 검사 2가 어긋남을 잡아주지만, 근본적으로는 한 곳으로 합치는 게 안전합니다.");
-    }
+        `한 곳으로 모으는 상수 ${hasConst ? "있음" : "없음"} · 참조하는 셰이더 ${refs.length}/2`,
+        "화면용과 시뮬용 셰이더가 형상 수식을 각자 들고 있으면, 한쪽만 고쳤을 때 기기에 따라 다른 수호신이 보입니다. SHAPE_BRANCHES 한 곳에 두고 양쪽이 그것을 쓰게 하세요.");
+    } else if (copies !== 1) {
+      add("주의", "형상 수식이 다시 복사됨", `사슬이 ${copies}벌 발견됨(1벌이어야 함)`,
+        "SHAPE_BRANCHES 말고 다른 곳에도 형상 수식이 적혔습니다. 한쪽만 고치면 두 렌더러가 갈립니다.");
+    } else add("정상", "형상 수식이 한 곳에만 있음", "SHAPE_BRANCHES 1벌 · 두 셰이더가 모두 참조", "");
   } catch (_) { /* 구조가 바뀌면 조용히 넘어간다 */ }
 }
 
@@ -410,10 +444,30 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
     } else if (mt3 && clamp3) add("정상", "콜3(서신)/서버 클램프", `콜3 ${mt3} ≤ 클램프 ${clamp3}`, "");
     /* 서버 로그가 콜3을 콜2로 세면 티어별 비용을 못 가른다(무료 카드와 유료 서신이 한 통에 섞인다).
        실제 사고(2026-08-02): 토큰 상한으로 갈랐더니 v105.1에서 서신을 두 조각으로 쪼개며 상한이 2100까지
-       내려가, 유료 서신이 call:2 로 찍혔다. 토큰은 언제든 또 내려간다 — tier 로 갈라야 안 흔들린다. */
-    if (/call: tierKey === "paid" \? 3/.test(api3)) add("정상", "콜1/콜2/콜3 로그 구분", "콜3을 tier 로 가름", "");
-    else add("주의", "서버 로그가 콜3을 콜2로 셈", "judge.js 의 call 분류가 tier 기준이 아님",
-      "'call: tierKey === \"paid\" ? 3 : mt <= 800 ? 1 : 2' 로 바꾸세요. 토큰 상한으로 가르면 서신 길이가 바뀔 때마다 통계가 조용히 섞입니다.");
+       내려가, 유료 서신이 call:2 로 찍혔다. 토큰은 언제든 또 내려간다 — tier 로 갈라야 안 흔들린다.
+       ⚠ **이 검사 자체가 낡아서 거짓 경보를 내고 있었다 (2026-09-04 수정).** 옛 판은 문자열
+         `call: tierKey === "paid"` 를 **글자 그대로** 요구했다. 그런데 A-0 봉합(2026-08-16)으로
+         `tierKey` 는 결제가 붙기 전까지 **항상 "free"** 다 — 그 문자열을 만족시키면 서신이 전부
+         콜2 로 찍힌다. 즉 **검사가 시키는 대로 고치면 v105.4 에서 고친 오분류가 되살아난다.**
+         코드는 이미 `tierAsked` 로 올바르게 갈라 놓고 주석으로 사유까지 적어 뒀는데, 검사만
+         그 앞 세대에 멈춰 있었다.
+       → **값을 못 박지 말고 성질을 묻는다**: ①콜3을 tier 로 가르는가 ②그 tier 가 「청한 값」인가
+         (「응답한 값」이면 항상 free 라 못 가른다) ③토큰만으로 가르지는 않는가. */
+    /* ⚠ 주석을 먼저 걷어낸다 — 바로 위 주석이 사고를 설명하며 「call:2 로 찍혔다」라고 적고 있어서,
+       그냥 찾으면 **주석 문장을 코드로 오인한다**(실제로 그렇게 잡혔다). */
+    const api3c = api3.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+    const callLine = (api3c.match(/call:\s*[^,\n]+/) || [""])[0];
+    if (/tierKey\s*===\s*"paid"/.test(callLine)) {
+      add("심각", "콜3 구분이 항상 free 인 값을 본다",
+        `judge.js 의 call 분류가 tierKey 를 봄 — PAID_ENABLED=false 인 동안 tierKey 는 항상 "free" 라 서신이 전부 콜2 로 찍힌다`,
+        "'tierKey' 를 'tierAsked' 로 바꾸세요. 무엇을 청했나(콜 구분)와 무엇으로 응답했나(모델)는 다른 값입니다.");
+    } else if (/tierAsked\s*===\s*"paid"\s*\?\s*3/.test(callLine)) {
+      add("정상", "콜1/콜2/콜3 로그 구분", "콜3을 청한 tier 로 가름(토큰 상한에 안 흔들림)", "");
+    } else if (callLine && !/tier/.test(callLine)) {
+      add("주의", "서버 로그가 콜3을 콜2로 셈", "judge.js 의 call 분류가 tier 기준이 아니라 토큰 기준임",
+        "콜3(서신)은 토큰이 아니라 청한 tier 로 가르세요 — 'call: tierAsked === \"paid\" ? 3 : mt <= 800 ? 1 : 2'. 토큰 상한으로 가르면 서신 길이가 바뀔 때마다 통계가 조용히 섞입니다.");
+    } else add("주의", "콜 구분 로그의 모양이 바뀜", `읽은 값: ${callLine.slice(0, 60) || "못 찾음"}`,
+      "콜1/2/3 을 어떻게 가르는지 확인해 주세요. 콜3 은 청한 tier(tierAsked)로 갈라야 합니다.");
   } catch (_) { /* 구조가 바뀌면 조용히 넘어간다 */ }
 
   // v103: 속결 제거 — 잔재가 남으면 죽은 분기가 조용히 살아 있는 셈이다
@@ -1106,6 +1160,120 @@ const GLSL_RESERVED = ["asm", "union", "packed", "namespace", "using", "template
     "CSS·셰이더는 백틱 문자열 안에 있습니다. 그 안 주석에서 코드를 백틱으로 감싸면 문자열이 거기서 끊기고 화면이 통째로 깨집니다. 주석에서는 백틱 없이 적으세요.");
 }
 
+/* ── 미리보기 서버 — **브라우저를 쓰는 검사보다 먼저 떠 있어야 한다** ────────────
+   ⚠ 2026-09-04 실사고: 이 블록이 원래 **한참 아래**(검사 9 자리)에 있었다. 그래서
+   `webgl-check`·`crash-net-check` 처럼 별도 프로세스로 브라우저를 띄우는 검사들이
+   **서버가 우연히 떠 있을 때만 통과**했다. 손으로 미리보기를 켜 둔 채 검진을 돌리면 초록,
+   깨끗한 기계에서 돌리면 빨강 — **검사 결과가 코드가 아니라 터미널 상태를 반영했다.**
+   더 나쁜 건 방향이다. 이건 조용한 통과가 아니라 **거짓 경보**라서, 멀쩡한 판을
+   「배포하면 안 됨」으로 막는다. 5-p2 를 신설한 세션이 초록을 본 것도 그때 미리보기가
+   떠 있었기 때문이다.
+   → 브라우저를 쓰는 첫 검사 **앞**으로 올린다. 이미 떠 있으면 그대로 쓰고, 아니면 띄웠다가
+     검진 끝에서 끈다(`stopPreview()`). 아래 검사들은 `execFileSync` 로 도는 별개 프로세스라
+     서버가 정말로 켜져 있어야 한다 — 여기서 한 번 보장하면 그 뒤로는 전부 같은 서버를 쓴다. */
+let previewProc = null;
+async function ensurePreview(base) {
+  try { const r = await fetch(base); if (r.ok) return "이미 떠 있음"; } catch (_) { /* 아래에서 띄운다 */ }
+  previewProc = spawn("npm", ["run", "preview"], { stdio: "ignore", detached: true });
+  for (let i = 0; i < 40; i++) {
+    await new Promise(r => setTimeout(r, 500));
+    try { const r = await fetch(base); if (r.ok) return "검진이 띄움"; } catch (_) { /* 아직 */ }
+  }
+  return null;
+}
+function stopPreview() {
+  if (!previewProc) return;
+  try { process.kill(-previewProc.pid, "SIGTERM"); } catch (_) { try { previewProc.kill(); } catch (_) {} }
+  previewProc = null;
+}
+const PREVIEW_BASE = process.env.BASE || "http://localhost:4173";
+const previewUp = await ensurePreview(PREVIEW_BASE);
+if (!previewUp) {
+  add("심각", "미리보기 서버가 안 떠서 브라우저 검사를 못 함",
+    `${PREVIEW_BASE} 에 응답이 없음 — 이 아래 브라우저 검사들은 결과가 없는 것이지 통과가 아니다`,
+    "빌드가 깨졌거나 4173 포트를 다른 프로그램이 쓰고 있습니다. AI에게 이 문장을 그대로 전하세요.");
+}
+
+/* ── 검사 5-p2. **첫 방문자가 화면을 보는가** (2026-08-31 실사고) ─────────────
+   ⚠ **앱이 통째로 안 뜨는 결함이 라이브로 나갔다.** 홀로가 기본이 되면서, WebGL 이 없거나
+   셰이더가 실패하는 기기에서 첫 방문자 화면이 **빈 채로** 떴다(root 0자·버튼 0개).
+   배경이 단색이라 고장이 아니라 로딩 중으로 보인다.
+   ⚠ **검사는 이미 있었다. 검진이 안 불렀을 뿐이다** — `webgl-check.mjs` 는 여태 파일 내용을
+   읽는 데만 쓰였고 실행 목록에 없었다. 바로 위 5-p 주석이 같은 함정을 이미 이름 붙여 놨는데
+   그 아래에서 또 겪었다. 그래서 **실행 목록에 넣는다.**
+   ⚠ 이 검사만 소프트웨어 GPU 인자를 써서 **완전한 크로미움**이 필요하다. 못 찾으면 검사가
+   스스로 「못 돌았다(통과가 아니다)」라고 말하고 죽는다 — 조용한 통과를 막아 뒀다. */
+{
+  const bad = [];
+  if (existsSync("e2e/webgl-check.mjs")) {
+    try { execFileSync("node", ["e2e/webgl-check.mjs"], { stdio: "pipe", timeout: 240000 }); }
+    catch (_) { bad.push("첫 화면이 안 뜨거나 폴백이 깨짐 — node e2e/webgl-check.mjs"); }
+  } else bad.push("WebGL 검사 파일이 없음");
+  add(bad.length ? "심각" : "정상",
+    bad.length ? "일부 기기에서 앱이 아예 안 뜰 수 있음" : "첫 방문자 화면 — WebGL 없어도 뜬다",
+    bad.length ? bad.join(" · ") : "기본·WebGL 없음·보관한 옛 판 셋 다 정상",
+    "그래픽 가속이 안 되는 폰에서 첫 화면이 빈 채로 뜨는 사고가 있었습니다. 화면이 검게만 보여서 고장인지 로딩인지 구분이 안 됩니다. 배포 전에 이 검사가 통과해야 합니다.");
+}
+
+/* ── 검사 5-r. **디스코드 작업 입구가 닫혀 있는가** (2026-09-11 신설) ───────
+   이 입구는 **디스코드 한 줄로 우리 저장소에서 코드를 돌리는 문**이다. 열려 있으면
+   주소를 아는 누구나 같은 일을 할 수 있고, 이 저장소는 지금 **공개 상태**라 서버 링크가
+   퍼질 여지가 더 크다(창업자 판단: 트라이얼 단계라 공개 유지, 나중에 전환).
+   ⚠ **문이 열렸는지는 화면에 안 보인다.** 서명 확인을 지워도, 허용 목록 판정을 뒤집어도
+     평소 동작은 똑같아 보인다. 이 리포가 반복해서 부딪히는 「안 보이는 결손」이라 검사로 문다. */
+{
+  const bad = [];
+  if (existsSync("e2e/discord-check.mjs")) {
+    try { execFileSync("node", ["e2e/discord-check.mjs"], { stdio: "pipe", timeout: 60000 }); }
+    catch (_) { bad.push("디스코드 입구가 안 막힌다 — node e2e/discord-check.mjs"); }
+  } else bad.push("디스코드 입구 검사 파일이 없음");
+  add(bad.length ? "심각" : "정상",
+    bad.length ? "디스코드로 아무나 코드를 돌릴 수 있음" : "디스코드 작업 입구 — 서명·권한 모두 닫힘",
+    bad.length ? bad.join(" · ") : "서명 확인·닫힘 기본값·길이 상한 모두 정상",
+    "디스코드에서 작업을 시킬 수 있게 해 둔 입구입니다. 여기가 열리면 링크를 아는 사람이 우리 코드를 고칠 수 있습니다. 배포 전에 이 검사가 통과해야 합니다.");
+}
+
+/* ── 검사 5-s. **공유·저장 폴백이 살아 있는가** (2026-09-14 신설, 지시서 §2) ──
+   ⚠ **폴백은 평소에 안 돈다.** 공유시트가 되는 기기에서는 첫 칸에서 끝나므로,
+     폴백이 죽어 있어도 **개발자 화면에서는 멀쩡해 보인다.** 실제로 셋이 죽어 있었다 —
+     ①`catch (_) { return; }` 라 복사 폴백이 영영 안 돌았고 ②iOS 카드 저장이
+     `await` 뒤 `window.open` 이라 사파리가 막았으며 ③막혀도 성공으로 집계됐다.
+   ⚠ 이 리포는 **「검사는 있었는데 검진이 안 불렀다」를 이미 두 번 겪었다**(5-r 주석·v190.1).
+     그래서 만들자마자 여기 등재한다. */
+{
+  const bad = [];
+  if (existsSync("e2e/share-fallback-check.mjs")) {
+    try { execFileSync("node", ["e2e/share-fallback-check.mjs"], { stdio: "pipe", timeout: 240000 }); }
+    catch (_) { bad.push("공유·저장 폴백이 깨짐 — node e2e/share-fallback-check.mjs"); }
+  } else bad.push("공유·저장 폴백 검사 파일이 없음");
+  add(bad.length ? "심각" : "정상",
+    bad.length ? "공유·저장이 막히면 유저가 빈손으로 돌아감" : "공유·저장 폴백 — 사다리 네 칸 모두 살아 있음",
+    bad.length ? bad.join(" · ") : "시트 실패 시 복사 · 복사 실패 시 옛 방식 · 전부 막히면 화면에 주소 · 실패 계측",
+    "공유가 막힌 기기에서 유저가 아무것도 못 받고 돌아가는 것을 막는 검사입니다. 이건 평소에 안 보이는 고장이라 — 공유되는 폰으로 눌러 보면 멀쩡합니다 — 검사로만 잡힙니다.");
+}
+
+/* ── 검사 5-p3. **화면이 죽어도 유저에게 누를 것이 남는가** (2026-09-04 신설) ──
+   5-p2 는 **그날 그 원인**(WebGL·셰이더)을 막는다. 이건 다른 걸 막는다 —
+   **원인이 무엇이든 렌더가 던지면 빈 화면이 다시 나온다**는 구조 자체다.
+   에러 경계가 0개였고, 사고를 고칠 때도 원인 셋만 고쳤지 경계는 안 세웠다.
+   ⚠ 그리고 그 빈 화면은 **계측에 안 보인다.** posthog.init 이 App 안의 useEffect 에서
+     돌기 때문에 마운트가 실패하면 이벤트가 0건이다 — 「아무도 안 왔다」와
+     「전부 죽었다」가 데이터에서 같은 그림이다. 광고로 분모를 채우는 동안 이 눈멂은
+     그대로 예산을 태운다. 그래서 그물은 화면과 계측 **둘 다** 책임진다.
+   ⚠ 거부권도 같이 문다 — 마운트가 죽으면 _optout 이 기본값에 머물러서, 그물이
+     거부권을 스스로 다시 읽지 않으면 **거부한 사람에게서도 이벤트가 나간다.** */
+{
+  const bad = [];
+  if (existsSync("e2e/crash-net-check.mjs")) {
+    try { execFileSync("node", ["e2e/crash-net-check.mjs"], { stdio: "pipe", timeout: 180000 }); }
+    catch (_) { bad.push("렌더가 던지면 빈 화면이 된다 — node e2e/crash-net-check.mjs"); }
+  } else bad.push("그물 검사 파일이 없음");
+  add(bad.length ? "심각" : "정상",
+    bad.length ? "어디서든 렌더가 죽으면 빈 화면 + 계측 0건" : "마지막 그물 — 죽어도 누를 것이 남고, 죽었다는 게 나간다",
+    bad.length ? bad.join(" · ") : "그물·되살리기·app_crashed·거부권 모두 정상",
+    "앱이 어떤 이유로든 뜨지 못하면 예전에는 빈 화면만 보였고 통계에도 아무 기록이 안 남았습니다. 지금은 「다시 열어볼래」 버튼이 뜨고, 죽었다는 사실이 통계로 넘어옵니다. 광고를 돌리는 동안 특히 중요합니다.");
+}
+
 /* ── 검사 5-q. 초대가 실기에서 닿는가 (2026-08-28 실사고) ─────────────────
    **이 둘은 로컬 검사를 전부 통과하고 라이브에서만 죽었다.** 그래서 여기 남긴다 —
    검진은 배포 직전에 도는 유일한 관문이다.
@@ -1399,21 +1567,7 @@ if (existsSync("dist/index.html")) {
    가장 중요한 검사. 사고 이력: 사용자가 몇 시간 동안 실행되지도 않는 렌더러를 튜닝했고,
    앱이 아예 열리지 않는 사고(TDZ)를 빌드가 아니라 이 검사만 잡았다.
    미리보기 서버가 없으면 **직접 띄웠다가 끝나면 끈다.** */
-let previewProc = null;
-async function ensurePreview(base) {
-  try { const r = await fetch(base); if (r.ok) return "이미 떠 있음"; } catch (_) { /* 아래에서 띄운다 */ }
-  previewProc = spawn("npm", ["run", "preview"], { stdio: "ignore", detached: true });
-  for (let i = 0; i < 40; i++) {
-    await new Promise(r => setTimeout(r, 500));
-    try { const r = await fetch(base); if (r.ok) return "검진이 띄움"; } catch (_) { /* 아직 */ }
-  }
-  return null;
-}
-function stopPreview() {
-  if (!previewProc) return;
-  try { process.kill(-previewProc.pid, "SIGTERM"); } catch (_) { try { previewProc.kill(); } catch (_) {} }
-  previewProc = null;
-}
+/* 미리보기 수명주기는 위(브라우저를 쓰는 첫 검사 앞)로 옮겼다 — 사유는 그쪽 주석. */
 
 async function browserCheck() {
   const require = createRequire(import.meta.url);
@@ -1423,10 +1577,16 @@ async function browserCheck() {
   // 브라우저 실행 실패로 검진 전체가 죽으면 안 된다 — 나머지 20여 개 검사 결과까지 같이 사라진다.
   //   (실제로 발생: playwright 를 업데이트하면 예전 브라우저 폴더와 어긋나 launch 가 예외를 던진다)
   //   CHROME_PATH 를 주면 그 브라우저로 검사한다(playwright 가 받아둔 브라우저와 어긋날 때의 탈출구).
-  let b;
-  const _exe = process.env.CHROME_PATH || undefined;
-  try { b = await pw.chromium.launch({ executablePath: _exe, args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"] }); }
-  catch (e) { stopPreview(); return { launchErr: String(e?.message || e).split("\n")[0].slice(0, 120) }; }
+  /* ⚠ 2026-09-11 — 여기가 **눈을 감고 있었다.** `executablePath: undefined` 를 **키로 넘기면**
+     playwright 의 기본 해석이 안 된다(8/31 에 webgl-check 이 같은 이유로 죽어서 고친 함정인데,
+     그 사다리가 그 파일에만 있어서 검진 본체는 그대로 남아 있었다). 결과는 「가장 중요한 검사」가
+     조용히 건너뛰어지는 것이었다.
+     → 브라우저 찾기는 `e2e/browser.mjs` 한 곳에서 한다. 검진은 죽으면 나머지 결과까지
+       사라지므로 **죽지 않는 판**(tryLaunch)을 쓰고, 실패는 「못 봤다」로 보고한다. */
+  const { tryLaunch } = await import("./e2e/browser.mjs");
+  const lit = await tryLaunch({ args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
+  if (lit.err) { stopPreview(); return { launchErr: lit.err }; }
+  const b = lit.browser;
   const p = await b.newPage({ viewport: { width: 390, height: 844 } });
   const errs = [];
   p.on("pageerror", e => errs.push(String(e).slice(0, 80)));

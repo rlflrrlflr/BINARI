@@ -1,0 +1,213 @@
+name: 디스코드 작업 요청
+
+# 디스코드에서 온 요청을 받아 클로드가 실제로 코드를 고친다.
+#
+# 흐름: 디스코드 슬래시 명령 → app/api/discord.js → (여기) → 결과를 디스코드로
+#
+# 왜 깃허브인가: 내 컴퓨터를 켜둘 필요가 없다. 깃허브가 대신 돌려준다.
+# 왜 구독인가: CLAUDE_CODE_OAUTH_TOKEN 으로 로그인하면 토큰 과금이 안 붙고
+#              구독 한도에서 나간다. 광고비도 없는 상황이라 이쪽이 맞다.
+#
+# 넣어야 하는 값 (저장소 Settings → Secrets and variables → Actions):
+#   CLAUDE_CODE_OAUTH_TOKEN  — 내 컴퓨터에서 `claude setup-token` 으로 받는다
+#   DISCORD_WEBHOOK_URL      — 이미 있다(아침 지표가 쓰는 것과 같은 값)
+#
+# ⚠ 이 작업은 main 에 직접 올리지 않는다. 반드시 브랜치를 새로 따서 올리고
+#   사람이 보고 합친다. 디스코드 한 줄이 곧바로 라이브 사이트를 바꾸면
+#   오타 한 번에 유저 화면이 깨진다. CLAUDE.md 의 「main 푸시는 명시 지시가 있을 때만」과 같은 뜻이다.
+
+on:
+  repository_dispatch:
+    types: [discord-task]
+  workflow_dispatch:           # Actions 탭에서 손으로도 돌려볼 수 있다
+    inputs:
+      task:
+        description: "무엇을 해야 하나"
+        required: true
+      requester:
+        description: "누가 시켰나"
+        default: "손으로 실행"
+
+concurrency:
+  # 같은 시간에 둘이 돌면 서로 덮어쓴다. 뒤에 온 요청은 앞이 끝나기를 기다린다.
+  # (취소하지 않는다 — 취소하면 시킨 사람은 결과를 영영 못 받는다)
+  group: claude-task
+  cancel-in-progress: false
+
+jobs:
+  work:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30          # 구독 한도를 한 작업이 통째로 먹지 않게 막는다
+    permissions:
+      contents: write            # 브랜치를 만들어 올린다
+      pull-requests: write       # 사람이 보고 합칠 PR 을 연다
+    steps:
+      - name: 저장소 받기
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0         # 재기반·이력 확인에 필요하다
+
+      - name: 요청 내용 정리
+        id: ask
+        env:
+          # ⚠ 쉘에 직접 끼워 넣지 않는다. 요청 문구에 따옴표나 백틱이 들어오면
+          #    명령이 깨지거나 의도하지 않은 게 실행될 수 있다. 환경변수로만 옮긴다.
+          RAW_TASK: ${{ github.event.client_payload.task || inputs.task }}
+          RAW_WHO: ${{ github.event.client_payload.requester || inputs.requester }}
+        run: |
+          {
+            echo "task<<TASK_EOF"
+            printf '%s\n' "$RAW_TASK"
+            echo "TASK_EOF"
+          } >> "$GITHUB_OUTPUT"
+          printf 'who=%s\n' "${RAW_WHO:-누군가}" >> "$GITHUB_OUTPUT"
+          printf 'branch=claude/discord-%s\n' "${GITHUB_RUN_ID}" >> "$GITHUB_OUTPUT"
+
+      - name: 시작했다고 알리기
+        env:
+          HOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          WHO: ${{ steps.ask.outputs.who }}
+          TASK: ${{ steps.ask.outputs.task }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          [ -z "$HOOK" ] && exit 0
+          python3 - <<'PY'
+          import json, os, urllib.request
+          msg = "**작업 시작** — {}님 요청\n> {}\n진행 보기: {}".format(
+              os.environ.get("WHO", ""), os.environ.get("TASK", "")[:400], os.environ.get("RUN", ""))
+          body = json.dumps({"content": msg, "allowed_mentions": {"parse": []}}).encode()
+          req = urllib.request.Request(os.environ["HOOK"], data=body,
+                                       headers={"content-type": "application/json"})
+          urllib.request.urlopen(req, timeout=20).read()
+          PY
+
+      - name: 준비물 설치
+        run: |
+          npm install -g @anthropic-ai/claude-code
+          cd app && npm ci
+
+      - name: 브랜치 만들기
+        run: |
+          git config user.name  "Claude (디스코드)"
+          git config user.email "noreply@anthropic.com"
+          git checkout -b "${{ steps.ask.outputs.branch }}"
+
+      - name: 클로드가 일한다
+        id: run
+        continue-on-error: true     # 실패해도 아래 알림까지는 가야 한다
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          TASK: ${{ steps.ask.outputs.task }}
+          WHO: ${{ steps.ask.outputs.who }}
+        run: |
+          # CLAUDE.md 를 클로드가 알아서 읽으므로 규칙은 여기 다시 안 적는다.
+          # 여기 적는 건 「이 실행에만 해당하는 것」뿐이다.
+          cat > /tmp/prompt.txt <<'PROMPT_EOF'
+          디스코드에서 온 작업 요청이다. 아래 요청을 처리해라.
+
+          이 실행에만 해당하는 규칙:
+          - 지금 브랜치에서만 작업한다. main 에 직접 푸시하지 않는다.
+          - 코드를 고쳤으면 app/health-check.mjs 를 돌려 통과를 확인한다.
+          - 커밋까지 하고 멈춘다. 푸시와 PR 은 이 워크플로가 한다.
+          - 요청이 애매해서 여러 갈래로 읽히면, 추측해서 고치지 말고
+            무엇이 애매한지 적고 멈춘다. 물어볼 사람이 여기 없으므로
+            잘못 짚고 진행하는 것보다 멈추는 게 낫다.
+
+          요청한 사람: REQUESTER_PLACEHOLDER
+
+          요청:
+          PROMPT_EOF
+          python3 - <<'PY' >> /tmp/prompt.txt
+          import os
+          print(os.environ.get("TASK", ""))
+          PY
+          python3 - <<'PY'
+          import os, pathlib
+          p = pathlib.Path("/tmp/prompt.txt")
+          p.write_text(p.read_text().replace("REQUESTER_PLACEHOLDER", os.environ.get("WHO", "누군가")))
+          PY
+          claude -p "$(cat /tmp/prompt.txt)" \
+            --permission-mode acceptEdits \
+            --output-format text 2>&1 | tee /tmp/claude-out.txt
+
+      - name: 바뀐 게 있으면 올리기
+        id: push
+        run: |
+          if [ -z "$(git status --porcelain)" ] && [ "$(git rev-list --count HEAD ^origin/main)" = "0" ]; then
+            echo "changed=no" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # 클로드가 커밋을 안 했으면 여기서 한다(빠뜨려도 일이 사라지지 않게)
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -m "디스코드 요청 처리 (${{ steps.ask.outputs.who }})" || true
+          fi
+          git push -u origin "${{ steps.ask.outputs.branch }}"
+          echo "changed=yes" >> "$GITHUB_OUTPUT"
+
+      - name: 사람이 볼 PR 열기
+        id: pr
+        if: steps.push.outputs.changed == 'yes'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WHO: ${{ steps.ask.outputs.who }}
+          TASK: ${{ steps.ask.outputs.task }}
+        run: |
+          URL=$(gh pr create \
+            --base main \
+            --head "${{ steps.ask.outputs.branch }}" \
+            --title "디스코드 요청 — ${WHO}" \
+            --body "$(printf '디스코드에서 들어온 요청입니다.\n\n**요청**\n> %s\n\n**요청한 사람**: %s\n\n실행 기록: %s/%s/actions/runs/%s\n\n⚠ 합치기 전에 사람이 한 번 봐 주세요.' "$TASK" "$WHO" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")" \
+            2>&1 | tail -1)
+          printf 'url=%s\n' "$URL" >> "$GITHUB_OUTPUT"
+
+      - name: 결과 알리기
+        if: always()
+        env:
+          HOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          WHO: ${{ steps.ask.outputs.who }}
+          TASK: ${{ steps.ask.outputs.task }}
+          OK: ${{ steps.run.outcome }}
+          CHANGED: ${{ steps.push.outputs.changed }}
+          PR: ${{ steps.pr.outputs.url }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          [ -z "$HOOK" ] && exit 0
+          python3 - <<'PY'
+          import json, os, pathlib, urllib.request
+
+          ok      = os.environ.get("OK") == "success"
+          changed = os.environ.get("CHANGED") == "yes"
+          pr      = (os.environ.get("PR") or "").strip()
+          who     = os.environ.get("WHO", "")
+          task    = (os.environ.get("TASK") or "")[:300]
+          run     = os.environ.get("RUN", "")
+
+          # 클로드가 마지막에 한 말을 그대로 싣는다. 요약하면 「왜 멈췄는지」가 사라진다.
+          tail = ""
+          try:
+              tail = pathlib.Path("/tmp/claude-out.txt").read_text(errors="replace")[-900:].strip()
+          except Exception:
+              pass
+
+          if ok and changed:
+              head = "**다 했어요** — 합치기 전에 한 번 봐 주세요"
+          elif ok and not changed:
+              # 실패가 아니다. 「고칠 게 없었다」거나 「애매해서 멈췄다」일 수 있다.
+              head = "**바꾼 건 없어요** — 아래 설명을 봐 주세요"
+          else:
+              head = "**막혔어요**"
+
+          lines = [head, f"{who}님 요청", f"> {task}"]
+          if pr.startswith("http"):
+              lines.append(f"볼 곳: {pr}")
+          if tail:
+              lines.append(f"```\n{tail}\n```")
+          lines.append(f"실행 기록: {run}")
+
+          msg = "\n".join(lines)[:1900]      # 디스코드 한 통 상한(2000자)에 여유를 둔다
+          body = json.dumps({"content": msg, "allowed_mentions": {"parse": []}}).encode()
+          req = urllib.request.Request(os.environ["HOOK"], data=body,
+                                       headers={"content-type": "application/json"})
+          urllib.request.urlopen(req, timeout=20).read()
+          PY

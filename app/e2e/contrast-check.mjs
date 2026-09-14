@@ -7,7 +7,7 @@
  *   그래야 어두운 문서는 자동으로 통과시키면서 밝은 판의 실패만 잡는다.
  *
  * ⚠ 대비만 재고 「고쳐라」는 안 한다. 예외는 `SKIP` 에 사유와 함께 적는다. */
-import { chromium } from "playwright";
+import { launch } from "./browser.mjs";   // 브라우저 찾기는 한 곳에서 (2026-09-11)
 import { onboard } from "./onboard.mjs";
 
 const BASE = process.env.BASE || "http://localhost:4173";
@@ -155,8 +155,7 @@ async function run(page, qs) {
   }
 }
 
-const b = await chromium.launch({ executablePath: process.env.CHROME_PATH,
-  args: ["--use-gl=swiftshader", "--enable-unsafe-swiftshader"] });
+const b = await launch({ args: ["--use-gl=swiftshader", "--enable-unsafe-swiftshader"] });
 
 /* ⚠ **두 판을 다 걷는다.** 홀로만 재면 「원래부터 낮은 것」까지 홀로 탓으로 잡힌다 —
    실측으로 기존 화면에 13건이 있었고 홀로에 남은 2건이 **그 안에 들어 있었다.**
