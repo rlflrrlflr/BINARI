@@ -1215,6 +1215,37 @@ if (!previewUp) {
     "그래픽 가속이 안 되는 폰에서 첫 화면이 빈 채로 뜨는 사고가 있었습니다. 화면이 검게만 보여서 고장인지 로딩인지 구분이 안 됩니다. 배포 전에 이 검사가 통과해야 합니다.");
 }
 
+/* ── 검사 5-s. **디스코드로 보내는 길이 한 곳인가** (2026-09-14 신설) ────────
+   ⚠ **같은 함정을 두 번 밟아서 생긴 검사다.** 디스코드는 자기를 안 밝히는 요청(User-Agent 없음)을
+     **403 으로 막는다.** 2026-07-28 아침 지표 첫 발송이 그걸로 실패해 고쳤고 사유도 주석에 적었는데,
+     2026-09-11 에 새로 만든 「반영 알림」이 **같은 403 으로 네 번 조용히 실패**했다.
+     고친 코드가 한 파일에만 있어서 새 파일이 그 교훈을 물려받지 못한 것이다.
+   → 보내는 방법은 `app/tools/discord-post.py` 한 곳에만 둔다. 워크플로가 웹훅 주소를 쥐고 있으면서
+     그 도구를 안 거치면 **또 403 이 난다** — 그리고 알림은 눈에 안 보이는 장치라 아무도 안 운다. */
+{
+  const bad = [];
+  const SENDER = "tools/discord-post.py";
+  if (!existsSync(SENDER)) bad.push("공용 발송기가 없음");
+  else {
+    const src2 = readFileSync(SENDER, "utf8");
+    if (!/User-Agent/.test(src2)) bad.push("공용 발송기에 User-Agent 가 없다 — 그게 403 의 원인이다");
+  }
+  const wfDir = "../.github/workflows";
+  if (existsSync(wfDir)) {
+    for (const f of readdirSync(wfDir).filter((x) => x.endsWith(".yml"))) {
+      const y = readFileSync(`${wfDir}/${f}`, "utf8");
+      if (!/secrets\.DISCORD_WEBHOOK_URL/.test(y)) continue;          // 디스코드를 안 쓰는 워크플로
+      if (/discord-post\.py/.test(y)) continue;                        // 공용 발송기를 쓴다 — 좋다
+      if (/daily-report\.py/.test(y)) continue;                        // 자기 발송기를 가진 옛 판(User-Agent 있음)
+      bad.push(`${f} 가 웹훅을 직접 다룬다 — discord-post.py 를 거치게 하라`);
+    }
+  }
+  add(bad.length ? "심각" : "정상",
+    bad.length ? "디스코드 알림이 403 으로 조용히 실패할 수 있음" : "디스코드로 보내는 길 — 한 곳으로 모여 있음",
+    bad.length ? bad.join(" · ") : "공용 발송기 사용 · User-Agent 있음",
+    "디스코드는 자기를 밝히지 않는 요청을 막습니다. 이 검사가 빨간불이면 알림이 안 가는데 아무도 모르는 상태가 됩니다.");
+}
+
 /* ── 검사 5-r. **디스코드 작업 입구가 닫혀 있는가** (2026-09-11 신설) ───────
    이 입구는 **디스코드 한 줄로 우리 저장소에서 코드를 돌리는 문**이다. 열려 있으면
    주소를 아는 누구나 같은 일을 할 수 있고, 이 저장소는 지금 **공개 상태**라 서버 링크가

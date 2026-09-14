@@ -35,18 +35,16 @@ jobs:
 
       - name: 무엇이 바뀌었나 알리기
         env:
-          HOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           BEFORE: ${{ github.event.before }}
           AFTER: ${{ github.sha }}
           SITE: https://binari-sepia.vercel.app
           COMPARE: ${{ github.server_url }}/${{ github.repository }}/compare/${{ github.event.before }}...${{ github.sha }}
         run: |
-          if [ -z "$HOOK" ]; then
-            echo "웹훅 주소가 없다 — 알림을 보내지 않는다(실패는 아니다)"
-            exit 0
-          fi
-          python3 - <<'PY'
-          import json, os, subprocess, urllib.request
+          # ⚠ 보내는 건 app/tools/discord-post.py 한 곳에서만 한다.
+          #    직접 보내면 User-Agent 를 빠뜨려 403 이 난다 — 2026-07-28·09-14 두 번 겪었다.
+          python3 - <<'PY' | python3 app/tools/discord-post.py
+          import os, subprocess
 
           def sh(*a):
               try:
@@ -56,37 +54,22 @@ jobs:
 
           before = os.environ.get("BEFORE", "")
           after  = os.environ.get("AFTER", "")
+          rng = f"{before}..{after}" if before and not before.startswith("0000") else ""
 
-          # 이번에 올라간 커밋들의 첫 줄만 모은다.
-          rng = f"{before}..{after}" if before and not before.startswith("0000") else "-1"
-          subjects = sh("git", "log", "--format=%s", rng) if rng != "-1" else sh("git", "log", "-1", "--format=%s")
+          subjects = sh("git", "log", "--format=%s", rng) if rng else sh("git", "log", "-1", "--format=%s")
           lines = [s for s in subjects.splitlines() if s.strip()][:5]
 
           # 코드가 바뀌었는지 문서만 바뀌었는지 가른다 — 팀에게는 이 구분이 제일 중요하다.
-          # (문서만 바뀐 판까지 「화면 바뀜」으로 알리면 알림을 믿지 않게 된다)
-          files = sh("git", "diff", "--name-only", rng) if rng != "-1" else sh("git", "show", "--name-only", "--format=", "HEAD")
+          # (문서만 바뀐 판까지 「화면 바뀜」으로 알리면 알림을 안 믿게 된다)
+          files = sh("git", "diff", "--name-only", rng) if rng else sh("git", "show", "--name-only", "--format=", "HEAD")
           touched = [f for f in files.splitlines() if f.strip()]
-          code_changed = any(f.startswith("app/src/") or f.startswith("app/api/") or f.startswith("app/public/")
-                             for f in touched)
+          code_changed = any(f.startswith(("app/src/", "app/api/", "app/public/")) for f in touched)
 
+          out = ["**화면이 바뀌었어요**" if code_changed else "**기록만 바뀌었어요** — 화면은 그대로예요"]
+          out += [f"· {s}" for s in lines]
+          if touched:
+              out.append(f"바뀐 파일 {len(touched)}개 · 자세히: {os.environ['COMPARE']}")
           if code_changed:
-              head = "**화면이 바뀌었어요**"
-              foot = f"지금 보기: {os.environ['SITE']}\n(1~2분 뒤부터 보여요)"
-          else:
-              head = "**기록만 바뀌었어요** — 화면은 그대로예요"
-              foot = ""
-
-          body_lines = [head]
-          body_lines += [f"· {s}" for s in lines]
-          if len(files.splitlines()) > 0:
-              body_lines.append(f"바뀐 파일 {len(touched)}개 · 자세히: {os.environ['COMPARE']}")
-          if foot:
-              body_lines.append(foot)
-
-          msg = "\n".join(body_lines)[:1900]
-          payload = json.dumps({"content": msg, "allowed_mentions": {"parse": []}}).encode()
-          req = urllib.request.Request(os.environ["HOOK"], data=payload,
-                                       headers={"content-type": "application/json"})
-          urllib.request.urlopen(req, timeout=20).read()
-          print("보냈다")
+              out.append(f"지금 보기: {os.environ['SITE']}\n(1~2분 뒤부터 보여요)")
+          print("\n".join(out))
           PY

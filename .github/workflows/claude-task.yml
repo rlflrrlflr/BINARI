@@ -65,20 +65,17 @@ jobs:
 
       - name: 시작했다고 알리기
         env:
-          HOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           WHO: ${{ steps.ask.outputs.who }}
           TASK: ${{ steps.ask.outputs.task }}
           RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          [ -z "$HOOK" ] && exit 0
-          python3 - <<'PY'
-          import json, os, urllib.request
-          msg = "**작업 시작** — {}님 요청\n> {}\n진행 보기: {}".format(
-              os.environ.get("WHO", ""), os.environ.get("TASK", "")[:400], os.environ.get("RUN", ""))
-          body = json.dumps({"content": msg, "allowed_mentions": {"parse": []}}).encode()
-          req = urllib.request.Request(os.environ["HOOK"], data=body,
-                                       headers={"content-type": "application/json"})
-          urllib.request.urlopen(req, timeout=20).read()
+          # ⚠ `[ -z "$HOOK" ] && exit 0` 이었는데, 그러면 HOOK 이 **있을 때** 판정이 거짓이라
+          #    bash -e 가 그 줄에서 스크립트를 실패로 끝낸다. 조건은 if 로 쓴다.
+          python3 - <<'PY' | python3 app/tools/discord-post.py
+          import os
+          print("**작업 시작** — {}님 요청\n> {}\n진행 보기: {}".format(
+              os.environ.get("WHO", ""), os.environ.get("TASK", "")[:400], os.environ.get("RUN", "")))
           PY
 
       - name: 준비물 설치
@@ -164,7 +161,7 @@ jobs:
       - name: 결과 알리기
         if: always()
         env:
-          HOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           WHO: ${{ steps.ask.outputs.who }}
           TASK: ${{ steps.ask.outputs.task }}
           OK: ${{ steps.run.outcome }}
@@ -172,9 +169,8 @@ jobs:
           PR: ${{ steps.pr.outputs.url }}
           RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          [ -z "$HOOK" ] && exit 0
-          python3 - <<'PY'
-          import json, os, pathlib, urllib.request
+          python3 - <<'PY' | python3 app/tools/discord-post.py
+          import os, pathlib
 
           ok      = os.environ.get("OK") == "success"
           changed = os.environ.get("CHANGED") == "yes"
@@ -204,10 +200,5 @@ jobs:
           if tail:
               lines.append(f"```\n{tail}\n```")
           lines.append(f"실행 기록: {run}")
-
-          msg = "\n".join(lines)[:1900]      # 디스코드 한 통 상한(2000자)에 여유를 둔다
-          body = json.dumps({"content": msg, "allowed_mentions": {"parse": []}}).encode()
-          req = urllib.request.Request(os.environ["HOOK"], data=body,
-                                       headers={"content-type": "application/json"})
-          urllib.request.urlopen(req, timeout=20).read()
+          print("\n".join(lines))
           PY
