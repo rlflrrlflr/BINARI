@@ -26,6 +26,8 @@
 
 import { createPublicKey, verify as cryptoVerify } from "node:crypto";
 
+export const config = { runtime: "edge" };
+
 const REPO = process.env.GITHUB_REPO || "rlflrrlflr/BINARI";
 const MAX_BODY = 16 * 1024;          // 슬래시 명령 한 건이 이보다 클 이유가 없다
 const MAX_TASK = 1500;               // 지시문 길이 상한 — 이보다 길면 디스코드가 아니라 문서로 줄 일이다
