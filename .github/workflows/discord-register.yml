@@ -63,6 +63,43 @@ jobs:
               print("::error::scope 를 guild 로 골랐으면 guild_id 가 필요하다.")
               sys.exit(1)
 
+          # ── 토큰이 「무엇인지」만 본다 (2026-09-14 신설) ────────────────────────────
+          # 401 이 떴을 때 물음은 언제나 같다: **값이 틀린 건가, 코드가 틀린 건가.**
+          # 값을 찍어 볼 수는 없으니(찍으면 유출) **모양만** 본다.
+          # 핵심: 봇 토큰의 첫 마디는 **Application ID 를 base64 로 적은 것**이다.
+          #       그걸 풀어 app_id 와 맞대면, 값을 한 글자도 안 드러내고 셋을 가른다 —
+          #       ①다른 앱의 토큰 ②토큰이 아닌 것(Client Secret·Public Key·ID) ③맞는데 폐기됨.
+          # ⚠ 토큰의 어떤 조각도 출력하지 않는다. 길이·모양·일치 여부만 말한다.
+          def token_shape(tok, app_id):
+              import base64
+              notes = []
+              if tok != tok.strip():        notes.append("앞뒤에 공백이 있다")
+              if tok[:1] in "\"'" or tok[-1:] in "\"'": notes.append("따옴표까지 붙여 넣었다")
+              if tok.lower().startswith(("bot ", "bearer ")): notes.append("이미 접두사가 붙어 있다(코드가 또 붙여 401 이 난다)")
+              if tok.isdigit():             notes.append("숫자뿐이다 — 이건 토큰이 아니라 **ID** 다")
+              if len(tok) == 64 and all(c in "0123456789abcdefABCDEF" for c in tok):
+                  notes.append("64자 16진수 — 이건 **Public Key** 다(Bot 탭의 토큰이 아니다)")
+              parts = tok.split(".")
+              if len(parts) != 3:
+                  notes.append(f"마디가 {len(parts)}개다 — 봇 토큰은 점으로 나뉜 **3마디**다")
+              else:
+                  try:
+                      head = parts[0]
+                      decoded = base64.urlsafe_b64decode(head + "=" * (-len(head) % 4)).decode()
+                      if decoded == app_id:
+                          notes.append("토큰이 가리키는 앱 = 입력한 Application ID **일치**")
+                      else:
+                          notes.append("토큰이 가리키는 앱이 입력한 Application ID 와 **다르다** — 다른 앱의 토큰이다")
+                  except Exception:
+                      notes.append("첫 마디가 앱 ID 로 안 풀린다 — 봇 토큰이 아닐 가능성이 높다")
+              return notes
+
+          print("::group::토큰 모양 점검 (값은 찍지 않는다)")
+          print(f"  길이 {len(bot)}자")
+          for n in token_shape(bot, app):
+              print(f"  · {n}")
+          print("::endgroup::")
+
           url = (f"https://discord.com/api/v10/applications/{app}/guilds/{guild}/commands"
                  if scope == "guild" else
                  f"https://discord.com/api/v10/applications/{app}/commands")
