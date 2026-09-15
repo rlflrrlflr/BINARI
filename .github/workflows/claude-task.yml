@@ -54,6 +54,7 @@ jobs:
           #    명령이 깨지거나 의도하지 않은 게 실행될 수 있다. 환경변수로만 옮긴다.
           RAW_TASK: ${{ github.event.client_payload.task || inputs.task }}
           RAW_WHO: ${{ github.event.client_payload.requester || inputs.requester }}
+          RAW_CHAN: ${{ github.event.client_payload.channel_id }}
         run: |
           {
             echo "task<<TASK_EOF"
@@ -62,10 +63,16 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           printf 'who=%s\n' "${RAW_WHO:-누군가}" >> "$GITHUB_OUTPUT"
           printf 'branch=claude/discord-%s\n' "${GITHUB_RUN_ID}" >> "$GITHUB_OUTPUT"
+          # ⚠ 2026-09-15 실사고: 입구가 채널을 실어 보내는데 **여기서 안 받아서** 버려졌다.
+          #   그래서 결과가 늘 웹훅 채널(데이터)로만 갔다 — 시킨 사람은 자기 채널만 보니
+          #   「아무 일도 안 일어났다」로 보인다. 손으로 돌린 판에는 채널이 없어 빈 값이 된다.
+          printf 'chan=%s\n' "${RAW_CHAN}" >> "$GITHUB_OUTPUT"
 
       - name: 시작했다고 알리기
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_CHANNEL_ID: ${{ steps.ask.outputs.chan }}
           WHO: ${{ steps.ask.outputs.who }}
           TASK: ${{ steps.ask.outputs.task }}
           RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -162,6 +169,8 @@ jobs:
         if: always()
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_CHANNEL_ID: ${{ steps.ask.outputs.chan }}
           WHO: ${{ steps.ask.outputs.who }}
           TASK: ${{ steps.ask.outputs.task }}
           OK: ${{ steps.run.outcome }}
