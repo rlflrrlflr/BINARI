@@ -1,0 +1,96 @@
+name: 디스코드 채널 점검
+
+# 봇이 각 채널에 **정말 글을 쓸 수 있는지** 한 번에 확인한다. 클로드를 안 부른다.
+#
+# 왜 생겼나 (2026-09-21 신설):
+#   2026-09-15 에 디자인 채널에서 시킨 작업의 결과가 **데이터 채널**에 떴다.
+#   원인은 코드가 아니라 봇에게 그 채널 글쓰기 권한이 없던 것이었다(403 → 웹훅으로 떨어짐).
+#   그런데 그걸 알아내려면 **작업을 통째로 한 번 돌려야** 했다 — 구독 한도를 몇 분 태우고
+#   맨 끝에 가서야 「권한이 없다」를 알게 된다. 권한 설정은 한 번에 되는 일이 거의 없어서
+#   그 왕복이 여러 번 생긴다.
+#   → 여기서는 **글 한 줄만 써 본다.** 한도를 안 쓰고 몇 초에 끝난다.
+#
+# 쓰는 법: Actions 탭 → '디스코드 채널 점검' → Run workflow → 채널 ID 를 쉼표로 붙여 넣기.
+#   채널 ID 얻기: 디스코드 설정 → 고급 → **개발자 모드** 켜기 → 채널 우클릭 → **채널 ID 복사**
+#
+# ⚠ 「쓸 수 있나」를 물어보는 창구가 디스코드에 없다. 그래서 **실제로 써 본다.**
+#   그게 이 검사가 정직한 이유이자, 채널에 한 줄이 남는 이유다.
+#   → 남는 줄이 싫으면 아래 message 입력칸을 비워도 되지만, 그러면 검사가 안 된다.
+#     「조용하지만 아무것도 확인 못 하는 검사」는 이 저장소가 반복해서 데인 함정이다.
+
+on:
+  workflow_dispatch:
+    inputs:
+      channels:
+        description: "채널 ID 들 (쉼표로 이어 붙인다)"
+        required: true
+      message:
+        description: "채널에 남길 한 줄"
+        default: "봇 점검 — 이 채널에 글을 쓸 수 있습니다. 여기서 /콜 로 시키면 결과도 여기로 옵니다."
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 저장소 받기
+        uses: actions/checkout@v4
+
+      - name: 채널마다 써 본다
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          CHANNELS: ${{ inputs.channels }}
+          MESSAGE: ${{ inputs.message }}
+        run: |
+          if [ -z "$DISCORD_BOT_TOKEN" ]; then
+            echo "::error::DISCORD_BOT_TOKEN 이 없다. 저장소 Settings → Secrets and variables → Actions 에 먼저 넣어라."
+            exit 1
+          fi
+          python3 - <<'PY'
+          import importlib.util, os, pathlib, sys
+
+          # ⚠ 보내는 방법은 app/tools/discord-post.py **한 곳**에만 둔다.
+          #   여기서 직접 부르면 User-Agent 를 빠뜨려 403 이 난다 — 2026-07-28·09-14 두 번 데였고,
+          #   그 403 을 「권한 없음」으로 읽어 엉뚱한 데를 뒤졌다. 파일 이름에 `-` 가 있어 import 가
+          #   안 되므로 경로로 불러들인다.
+          src  = pathlib.Path("app/tools/discord-post.py")
+          spec = importlib.util.spec_from_file_location("discord_post", src)
+          mod  = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(mod)
+
+          bot  = os.environ["DISCORD_BOT_TOKEN"].strip()
+          msg  = (os.environ.get("MESSAGE") or "").strip()
+          ids  = [c.strip() for c in os.environ["CHANNELS"].replace("\n", ",").split(",") if c.strip()]
+
+          if not msg:
+              print("::error::남길 한 줄이 비어 있다 — 그러면 아무것도 확인되지 않는다.")
+              sys.exit(1)
+          if not ids:
+              print("::error::채널 ID 를 하나도 못 읽었다.")
+              sys.exit(1)
+
+          ok, bad = [], []
+          for cid in ids:
+              if not cid.isdigit():
+                  bad.append((cid, "숫자가 아니다 — 채널 **이름**이 아니라 **ID** 를 넣어야 한다"))
+                  continue
+              try:
+                  mod.post_channel(cid, bot, msg)
+                  ok.append(cid)
+              except Exception as e:
+                  # 403 = 권한 없음 / 404 = 그 채널이 없거나 봇이 서버에 없다 / 401 = 토큰이 틀렸다
+                  bad.append((cid, str(e)[:140]))
+
+          print("::group::결과")
+          for c in ok:
+              print(f"  ○ {c} — 쓸 수 있다")
+          for c, why in bad:
+              print(f"  ✗ {c} — {why}")
+          print("::endgroup::")
+
+          if bad:
+              print("::error::못 쓰는 채널이 있다. 서버 설정 → 역할에서 봇 역할에 "
+                    "「채널 보기」와 「메시지 보내기」를 켜라. 비공개 채널이면 채널마다 따로 봇을 추가해야 한다.")
+              print("::error::401 이면 권한이 아니라 봇 토큰이 틀린 것이다. 404 면 봇이 그 서버에 없는 것이다.")
+              sys.exit(1)
+          print(f"전부 통과 — 채널 {len(ok)}곳에 쓸 수 있다.")
+          PY
