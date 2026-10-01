@@ -6,6 +6,7 @@ import { readMatch, matchAxes, roleOf, ROLE } from "./lib/match.js";
 import AURA from "./lib/aura-spec.json";
 /* 얼굴 — 오라 위에 얹는 2D 층. 시안 보드와 **같은 모듈**을 쓴다(두 벌로 갈리지 않게). */
 import { drawFace, FACE_PRESETS, MOOD_EYE } from "./lib/face.js";
+import { FX, typeIn, typeFx } from "./lib/typefx.js";
 
 /* ───── 계측(PostHog) — 휴면-준비: VITE_POSTHOG_KEY 없으면 완전 무동작 ───── */
 const AKEY = import.meta.env.VITE_POSTHOG_KEY;
@@ -3052,6 +3053,13 @@ const FACE = (() => { try {
   const m = /[?&]face=([abcd])(&|$)/.exec(q);
   return m ? m[1] : (SKIN === "holo" ? "a" : "");     // 기본 = A
 } catch (_) { return SKIN === "holo" ? "a" : ""; } })();
+/* ── 3D 판 (`?r=3d`, 짧은 주소 /3d) — 창업자 2026-10-01 ────────────────────────
+   「앱 주소 구분해서」: **기본 앱은 한 줄도 안 바뀐다.** 이 플래그가 켜진 주소에서만
+   ①타이핑 반응(기기 안 낱말 판단 — 경악·어이없음·설렘·무거움…) ②곁의 3D 공간(three.js, 동적 로드)이 붙는다.
+   몸은 그대로 색장이고 초대·누르기·밀어내기 같은 기능도 그대로다 — **앱 위에 얹는 판**이지 다른 앱이 아니다.
+   (시험판을 따로 만들었더니 「기능이 싹 다 없어졌다」는 지적을 받았다 — 그래서 앱 안으로 들였다.) */
+const R3D = (() => { try { return SKIN === "holo" && /[?&]r=3d(&|$)/.test(window.location.search); } catch (_) { return false; } })();
+const REDUCE3D = (() => { try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (_) { return false; } })();
 
 /* ── 오늘의 상태 — **두 체계를 섞는다** (2026-08-28 창업자 결정) ──────────────
    **왜 섞나.** 전엔 사주 하나(일진 십성)만 썼는데, 십성은 **일간 10개**만 보므로
@@ -3536,6 +3544,7 @@ const HOLO_MOON = ["#46557f", "#93a6d0", "#b7a9d6"];
 function GuardianField({ saju, mood, orbRef, reactRef, scatter, gyeotRef, popRef, size = 340, onFail }) {
   const ref = useRef(null);
   const faceRef = useRef(null);
+  const backRef = useRef(null), frontRef = useRef(null);   // 3D 판의 곁 층(몸 뒤 / 몸 앞)
   useEffect(() => {
     const cv = ref.current; if (!cv) return;
     let gl = null, raf = 0, dead = false;
@@ -3637,6 +3646,14 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, gyeotRef, popRef
          → 예전엔 **어디를 눌러도 손끝으로 모였다.** 얼굴이 생긴 뒤로는 그게 안 맞는다 —
            얼굴은 누르는 대상이고, 몸통 바깥은 **밀어내는** 자리다. 둘을 가른다. */
       let mode = "out", press = 0, pressT = 0, pdx = 0, pdy = 0, shove = 0;
+      /* 3D 판 — 곁 공간(three.js)은 **이 판에서만** 불러온다. 기본 앱 번들엔 three 가 없다 */
+      let g3 = null;
+      if (R3D && backRef.current && frontRef.current) {
+        import("./lib/gyeot3d.js").then((m) => { if (!dead) g3 = m.makeGyeot3D(backRef.current, frontRef.current, S); })
+          .catch((e) => { try { console.error("[3D] 곁 공간 로드 실패:", e && e.message); } catch (_) {} });
+      }
+      /* 3D 판의 반응 상태 — 표정·몸짓을 한 프레임에 한 번 정해 얼굴과 몸이 같이 쓴다 */
+      const rx3 = { eye: null, eS: 1, mouth: null, mS: 1, blush: false, lastAct: performance.now(), sleeping: false, startleT: -1e9 };
       const TRAIL = 6;
       const trail = Array.from({ length: TRAIL }, () => [0, 0]);
       let tLast = 0;
@@ -3649,6 +3666,8 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, gyeotRef, popRef
       const on = (e) => {
         try { e.preventDefault(); } catch (_) {}
         at(e); wisp.ex = Math.min(1.6, wisp.ex + 0.5);
+        /* 3D 판: 졸고 있었으면 **화들짝** 깬다 — 살아 있는 것은 자다 건드리면 놀란다 */
+        if (R3D) { if (rx3.sleeping) rx3.startleT = performance.now(); rx3.lastAct = performance.now(); }
         /* 얼굴 안/밖 판정 — touch 는 -0.5~0.5(위가 +y), core 는 0~1(아래가 +y) */
         const rx = touch.x - (core.x - 0.5), ry = touch.y - (0.5 - core.y);
         const d = Math.hypot(rx, ry);
@@ -3868,6 +3887,61 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, gyeotRef, popRef
           gaze.pitch = lim(look.y * 4.0, 0.19) + Math.sin(tt2 * 0.24 + 0.9) * 0.045;
           gaze.roll = lim(-look.x * 1.6, 0.17) + Math.sin(tt2 * 0.19 + 2.2) * 0.022;
           if (press > 0.01) { gaze.yaw += -pdx * 0.26 * press; gaze.pitch += pdy * 0.18 * press; }
+          /* ── 3D 판: 타이핑 반응 (창업자 2026-10-01: "표정 변화도 드라마틱해야해. 어이없는 느낌으로
+             더 뜨악하고 경악하고 / 살아있는 생명체같이 느껴져야지") ──────────────────────────
+             표정만 바꾸면 스티커 갈아끼우기다. **몸이 같이 반응해야** 생물이다 — 그래서 고개(gaze)와
+             위습(튀어오름)·밝기·가라앉음을 같은 순간에 건다. 고개는 몸의 u_look 으로도 가므로 몸도 같이 돈다.
+             경악은 두 박자다: ①뜨악(1초 — 눈이 커지고 입이 벌어지고 펄쩍 뛰며 부들부들 떤다)
+             ②어이없음(그 뒤 — 눈이 콩알만 해지고 입이 일자가 되고 고개를 갸웃 돌린다). 둘째 박자가 「어이없는 느낌」이다. */
+          if (R3D) {
+            const fx = typeFx(now), kind = fx.kind, a = fx.age;
+            if (fx.typing) rx3.lastAct = now;
+            if (kind && !FX.fired) {
+              FX.fired = true;
+              if (!REDUCE3D) {
+                if (kind === "shock") { wisp.vy += 3.6; wisp.ex = Math.min(1.6, wisp.ex + 1.4); }
+                else if (kind === "love") { wisp.vy += 1.7; wisp.ex = Math.min(1.6, wisp.ex + 0.8); }
+                else if (kind === "food") wisp.vy += 2.1;
+                else if (kind === "serious") wisp.vy -= 0.7;
+              }
+            }
+            let eye = null, eS = 1, mouth = null, mS = 1, blush = false, lum = 1, sink = 0;
+            /* 읽는다 — 커서를 따라 눈이 가고, 글자마다 살짝 끄덕인다 */
+            if (fx.typing && kind !== "shock") { gaze.yaw = gaze.yaw * 0.25 + fx.caretX * 0.75; gaze.pitch = gaze.pitch * 0.3 - 0.13; }
+            gaze.pitch -= Math.exp(-fx.sinceKey / 0.12) * 0.06;
+            if (kind === "shock") {
+              if (a < 1.4) {
+                const d = 1 - a / 1.4;
+                eye = "wide"; eS = 1.75; mouth = "o"; mS = 2.4;   // ⚠ 2.5 는 두 눈이 한 덩이로 붙었다 — 크기 잠금이 간격을 깎는다
+                if (!REDUCE3D) { gaze.yaw += Math.sin(a * Math.PI * 26) * 0.24 * d * d; gaze.roll += Math.sin(a * Math.PI * 22 + 1) * 0.10 * d * d; }
+                gaze.pitch += 0.20 * d;                                    // 뒤로 젖힌다
+              } else {
+                eye = "dot"; eS = 0.48; mouth = "flat"; mS = 0.75;          // 콩알 눈 · 일자 입
+                gaze.roll += 0.24; gaze.yaw = gaze.yaw * 0.3 + 0.18; gaze.pitch = gaze.pitch * 0.3 + 0.04;
+              }
+            } else if (kind === "love") {
+              eye = "shine"; eS = 1.55; mouth = "smile"; mS = 1.35; blush = true; lum = 1.06;
+              if (!REDUCE3D) { gaze.roll += Math.sin(a * 3.2) * 0.13; if (a > 0.5 && (a % 0.9) < dt) wisp.vy += 1.0; }
+            } else if (kind === "heavy") {
+              /* ⚠ 무거운 말엔 놀라지 않는다 — 고개를 숙이고 가라앉는다 */
+              eye = "droop"; mouth = "flat"; mS = 0.85; lum = 0.86; sink = Math.min(1, a / 1.2) * 0.55;
+              gaze.pitch = gaze.pitch * 0.3 - 0.17; gaze.yaw *= 0.4;
+            } else if (kind === "serious") {
+              eye = "stern"; eS = 1.2; mouth = "flat"; gaze.yaw = gaze.yaw * 0.4 + fx.caretX * 0.4;
+            } else if (kind === "food") {
+              eye = "shine"; eS = 1.4; mouth = "o"; mS = 1.5;
+              if (!REDUCE3D && (a % 0.55) < dt) wisp.vy += 1.3;
+            }
+            /* 오래 아무도 안 건드리면 꾸벅꾸벅 존다 — 깨우면 화들짝(pointerdown) */
+            const idle = (now - rx3.lastAct) / 1000;
+            if (!eye && idle > 14) { eye = "sleepy"; rx3.sleeping = true; gaze.pitch -= 0.08 + Math.sin(idle * 1.3) * 0.04; }
+            else rx3.sleeping = false;
+            if (now - rx3.startleT < 450) { eye = "wide"; eS = 1.9; mouth = "o"; mS = 1.4; }
+            rx3.eye = eye; rx3.eS = eS; rx3.mouth = mouth; rx3.mS = mS; rx3.blush = blush;
+            gl.uniform1f(U.u_lum, (mood ? Math.min(1.12, mood.lum) : 1) * lum);
+            gl.uniform1f(U.u_sink, SINK + sink);
+            try { window.__BINARI_FX = { kind, eye: eye || "dot", sleeping: rx3.sleeping }; } catch (_) {}
+          }
           /* ⚠ **몸만 옮기면 얼굴이 뒤에 남는다.** 셰이더가 `w = e - lk*R*0.30` 으로
              덩어리를 고개 쪽으로 보냈으니, 얼굴도 **같은 만큼** 가야 얼굴이 몸의 앞면에 붙어 있다.
              실기에서 이걸 빼먹었더니 몸은 돌았는데 얼굴만 제자리라 아까보다 더 따로 놀았다.
@@ -3890,8 +3964,10 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, gyeotRef, popRef
           const gy = (gyeotRef && gyeotRef.current) || [];
           try { window.__BINARI_SAT = gy.length; } catch (_) {}
           const ob = Math.min(Math.max(orb, 0), 1);
-          if (!gy.length || ob < 0.02) return;
           const tS = ((now - T0) / 1000) * SPD;
+          /* 3D 판: 곁은 2D 가 아니라 공간 층이 그린다(몸 뒤·앞 두 겹) */
+          if (g3) { g3.frame({ ob, cx: core.x, cy: core.y, R1: S2 * (coreR / 2.35), gy, tS }); try { window.__BINARI_G3 = gy.length; } catch (_) {} return; }
+          if (!gy.length || ob < 0.02) return;
           const cxp = core.x * S2, cyp = core.y * S2;
           const R1 = S2 * (coreR / 2.35);
           g2.save();
@@ -4020,16 +4096,18 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, gyeotRef, popRef
             /* ⚠ 예전엔 `closed`(아래로 휜 호)를 썼다 — **안 아파 보인다**(창업자 2026-08-29).
                그건 흐뭇하게 감은 눈이다. 아픈 눈은 안쪽으로 꺾인다(`wince`). */
             const hurt = press > 0.30;
-            const eyeKind = hurt ? "wince" : (P.eye || (mood && MOOD_EYE[mood.ss]) || "dot");
+            const eyeKind = hurt ? "wince" : ((R3D && rx3.eye) || P.eye || (mood && MOOD_EYE[mood.ss]) || "dot");
             /* ── 홍조는 **감정일 때만** (창업자 2026-08-30: "기본은 홍조 제거.
                홍조는 감정 표현 시에 노출") ─────────────────────────────────
                기본 눈은 `dot`(평온)이다. 그 밖의 눈 모양은 전부 **오늘 상태가 고른 것**이거나
                눌림(`wince`)이라 감정이 실려 있다. 그러니 「점눈이 아니면 감정」으로 가른다 —
                프리셋의 `blush` 플래그는 더 안 쓴다. 상태를 두 군데서 정하면 어긋난다. */
-            const emo = hurt || eyeKind !== "dot";
+            const emo = hurt || eyeKind !== "dot" || (R3D && rx3.blush);
             drawFace(g2, S, {
               eye: eyeKind,
-              mouth: hurt ? "wave" : P.mouth, blush: emo,
+              mouth: hurt ? "wave" : ((R3D && rx3.mouth) || P.mouth),
+              /* 3D 판: 반응 중엔 볼터치를 반응이 정한다(경악·어이없음에 홍조가 뜨면 수줍음으로 읽힌다) */
+              blush: R3D ? (hurt || rx3.blush || (!rx3.eye && emo)) : emo,
               /* ⚠ 아픈 눈은 **커져야 읽힌다.** 3% 점 크기 그대로 >< 를 그렸더니
                  6px 안에 획 셋이 겹쳐 **X 자국**이 됐다(실기 확인). 표정은 크기를 요구한다. */
               /* ⚠ eyeSz 를 키우면 **홍조까지 같이 커진다**(홍조가 눈 크기를 쓴다).
@@ -4058,8 +4136,8 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, gyeotRef, popRef
                  「눌렸다」는 남기고 「뭉개졌다」는 없앤다. */
               gapR: 0.56 * NAR * k * (1 - 0.17 * press),
               mouthR: 0.36 * NAR * k * (1 - 0.18 * press),
-              cy: P.cy, gap: 0.56, eyeSz: 0.155 * NAR * k, eyeScale: hurt ? 1.9 : 1,   // 보드에서 고른 값
-              mSz: 0.30 * NAR * k * (hurt ? 1.35 : 1), mCy: P.mCy,
+              cy: P.cy, gap: 0.56, eyeSz: 0.155 * NAR * k, eyeScale: hurt ? 1.9 : (R3D ? rx3.eS : 1),   // 보드에서 고른 값
+              mSz: 0.30 * NAR * k * (hurt ? 1.35 : (R3D ? rx3.mS : 1)), mCy: P.mCy,
               yaw, pitch, roll, blink: hurt ? 0 : blink,
               /* 누른 축으로 찌그러진다 — 방향은 손끝→얼굴 벡터의 **반대**(=밀린 쪽) */
               squish: press, sqx: pdx, sqy: -pdy,
@@ -4077,6 +4155,7 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, gyeotRef, popRef
       cv.addEventListener("webglcontextlost", lostFn);
       return () => {
         cancelAnimationFrame(raf);
+        try { g3 && g3.dispose(); } catch (_) {}
         cv.removeEventListener("webglcontextlost", lostFn);
         cv.removeEventListener("pointerdown", on);
         cv.removeEventListener("pointermove", move);
@@ -4110,10 +4189,14 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, gyeotRef, popRef
      예전엔 `?face=` 일 때만 붙여서, 얼굴을 안 켜면 위성도 같이 사라졌다.
      얼굴은 **별도 2D 캔버스**로 겹친다 — 셰이더에 넣으면 선이 뭉개지고, 오라를 건드리게 된다.
      포인터는 아래 오라 캔버스가 받아야 하므로 `pointerEvents:none`. */
+  /* 3D 판: 곁 공간 층 둘 — 몸 **뒤**(색장 아래)와 몸 **앞**(색장 위, 얼굴 아래). 포인터는 여전히 색장이 받는다 */
+  const L3 = { position: "absolute", left: 0, top: 0, width: size, height: size, pointerEvents: "none" };
   return (<span style={{ position: "relative", display: "block", width: size, height: size }}>
-    {cv}
+    {R3D && <canvas ref={backRef} aria-hidden="true" style={{ ...L3, zIndex: 0 }} />}
+    {R3D ? <span style={{ position: "relative", zIndex: 1, display: "block" }}>{cv}</span> : cv}
+    {R3D && <canvas ref={frontRef} aria-hidden="true" style={{ ...L3, zIndex: 2 }} />}
     <canvas ref={faceRef} aria-hidden="true" data-face-overlay="1"
-      style={{ position: "absolute", left: 0, top: 0, width: size, height: size, pointerEvents: "none" }} />
+      style={{ position: "absolute", left: 0, top: 0, width: size, height: size, pointerEvents: "none", ...(R3D ? { zIndex: 3 } : null) }} />
   </span>);
 }
 
@@ -8534,7 +8617,8 @@ export default function App() {
               {!ritual && <textarea className="qbox" rows={2} maxLength={100} value={q} placeholder={`"${QHINTS[qhintI]}"`}
                 /* 수호신은 **네가 말할 차례가 되면** 물러난다 — 시계가 아니라 이 손짓이 신호다 */
                 onFocus={() => setGSay(null)}
-                onChange={e => { setQ(e.target.value); if (gSay) setGSay(null); }} />}
+                onChange={e => { setQ(e.target.value); if (gSay) setGSay(null); if (R3D) typeIn(e.target); }}
+                onKeyUp={R3D ? (e => typeIn(e.target)) : undefined} onClick={R3D ? (e => typeIn(e.target)) : undefined} />}
               {!ritual && !res && q.trim().length > 0 && isDecisionQ(q) && (
                 <div className="leanrow fade">
                   <span className="leanlab">왜 망설여? <em className="dim">(안 골라도 돼)</em></span>

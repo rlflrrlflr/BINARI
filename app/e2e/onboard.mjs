@@ -22,6 +22,7 @@ export async function onboard(page, BASE, qs = "", nm = "") {
   await page.getByRole("button", { name: "하늘을 열기" }).click();
   await page.getByRole("button", { name: "응, 기억나" }).click({ timeout: 12000 });
   await page.waitForSelector("text=두드려봐", { timeout: 12000 });
-  await page.locator("canvas").first().dblclick();
+  /* 수호신 캔버스를 이름으로 집는다 — 3D 판에선 그 앞에 곁 층 캔버스가 먼저 온다 */
+  await page.locator("canvas[data-renderer]").first().dblclick();
   await page.waitForSelector("textarea.qbox", { timeout: 12000 }); await page.waitForTimeout(600);
 }
