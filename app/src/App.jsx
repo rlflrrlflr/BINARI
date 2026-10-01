@@ -3899,7 +3899,7 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, gyeotRef, popRef
             if (kind && !FX.fired) {
               FX.fired = true;
               if (!REDUCE3D) {
-                if (kind === "shock") { wisp.vy += 3.6; wisp.ex = Math.min(1.6, wisp.ex + 1.4); }
+                if (kind === "shock") { wisp.vy += 2.6; wisp.ex = Math.min(1.6, wisp.ex + 1.0); }
                 else if (kind === "love") { wisp.vy += 1.7; wisp.ex = Math.min(1.6, wisp.ex + 0.8); }
                 else if (kind === "food") wisp.vy += 2.1;
                 else if (kind === "serious") wisp.vy -= 0.7;
@@ -3909,28 +3909,42 @@ function GuardianField({ saju, mood, orbRef, reactRef, scatter, gyeotRef, popRef
             /* 읽는다 — 커서를 따라 눈이 가고, 글자마다 살짝 끄덕인다 */
             if (fx.typing && kind !== "shock") { gaze.yaw = gaze.yaw * 0.25 + fx.caretX * 0.75; gaze.pitch = gaze.pitch * 0.3 - 0.13; }
             gaze.pitch -= Math.exp(-fx.sinceKey / 0.12) * 0.06;
+            /* ⚠ **과하면 귀신이 된다**(창업자 2026-10-01: "너무 심한데? 귀신같아보여"). 눈 1.75배에
+               속이 꽉 찬 검은 타원 둘 + 크게 벌린 입 = 비명 가면이었다. 놀람을 「귀엽게」 읽히게 하는 건
+               크기가 아니라 **눈 속 반짝임**이다 — 텅 빈 검은 눈은 공포, 하이라이트가 든 눈은 놀람.
+               그래서 크기는 1.3배로 줄이고 반짝이는 눈(shine)을 쓴다. 과장은 표정이 아니라 **몸짓**으로 낸다. */
             if (kind === "shock") {
-              if (a < 1.4) {
-                const d = 1 - a / 1.4;
-                eye = "wide"; eS = 1.75; mouth = "o"; mS = 2.4;   // ⚠ 2.5 는 두 눈이 한 덩이로 붙었다 — 크기 잠금이 간격을 깎는다
-                if (!REDUCE3D) { gaze.yaw += Math.sin(a * Math.PI * 26) * 0.24 * d * d; gaze.roll += Math.sin(a * Math.PI * 22 + 1) * 0.10 * d * d; }
-                gaze.pitch += 0.20 * d;                                    // 뒤로 젖힌다
+              if (a < 1.1) {
+                const d = 1 - a / 1.1;
+                eye = "shine"; eS = 1.3; mouth = "o"; mS = 1.5;
+                if (!REDUCE3D) { gaze.yaw += Math.sin(a * Math.PI * 24) * 0.12 * d * d; gaze.roll += Math.sin(a * Math.PI * 20 + 1) * 0.05 * d * d; }
+                gaze.pitch += 0.16 * d;                                    // 움찔 뒤로
               } else {
-                eye = "dot"; eS = 0.48; mouth = "flat"; mS = 0.75;          // 콩알 눈 · 일자 입
-                gaze.roll += 0.24; gaze.yaw = gaze.yaw * 0.3 + 0.18; gaze.pitch = gaze.pitch * 0.3 + 0.04;
+                eye = "dot"; eS = 0.62; mouth = "flat"; mS = 0.8;          // 어이없음 — 콩알 눈 · 일자 입
+                gaze.roll += 0.18; gaze.yaw = gaze.yaw * 0.3 + 0.14; gaze.pitch = gaze.pitch * 0.3 + 0.03;
               }
+            } else if (kind === "laugh") {
+              eye = "smile"; mouth = "smile"; mS = 1.3; blush = true;
+              if (!REDUCE3D) { gaze.roll += Math.sin(a * 9) * 0.07; if ((a % 0.38) < dt) wisp.vy += 0.8; }
+            } else if (kind === "sad") {
+              eye = "teary"; mouth = "frown"; lum = 0.95; gaze.pitch = gaze.pitch * 0.4 - 0.09;
+            } else if (kind === "angry") {
+              eye = "angry"; eS = 1.1; mouth = "frown"; lum = 1.04;
+              if (!REDUCE3D && a < 0.6) gaze.yaw += Math.sin(a * Math.PI * 30) * 0.05;   // 부르르
+            } else if (kind === "curious") {
+              eye = "dot"; eS = 1.18; mouth = "o"; mS = 0.8; gaze.roll += 0.16;            // 갸웃
             } else if (kind === "love") {
-              eye = "shine"; eS = 1.55; mouth = "smile"; mS = 1.35; blush = true; lum = 1.06;
-              if (!REDUCE3D) { gaze.roll += Math.sin(a * 3.2) * 0.13; if (a > 0.5 && (a % 0.9) < dt) wisp.vy += 1.0; }
+              eye = "shine"; eS = 1.3; mouth = "smile"; mS = 1.25; blush = true; lum = 1.05;
+              if (!REDUCE3D) { gaze.roll += Math.sin(a * 3.2) * 0.10; if (a > 0.5 && (a % 0.9) < dt) wisp.vy += 0.9; }
             } else if (kind === "heavy") {
               /* ⚠ 무거운 말엔 놀라지 않는다 — 고개를 숙이고 가라앉는다 */
-              eye = "droop"; mouth = "flat"; mS = 0.85; lum = 0.86; sink = Math.min(1, a / 1.2) * 0.55;
-              gaze.pitch = gaze.pitch * 0.3 - 0.17; gaze.yaw *= 0.4;
+              eye = "droop"; mouth = "flat"; mS = 0.85; lum = 0.88; sink = Math.min(1, a / 1.2) * 0.45;
+              gaze.pitch = gaze.pitch * 0.3 - 0.15; gaze.yaw *= 0.4;
             } else if (kind === "serious") {
-              eye = "stern"; eS = 1.2; mouth = "flat"; gaze.yaw = gaze.yaw * 0.4 + fx.caretX * 0.4;
+              eye = "stern"; eS = 1.1; mouth = "flat"; gaze.yaw = gaze.yaw * 0.4 + fx.caretX * 0.4;
             } else if (kind === "food") {
-              eye = "shine"; eS = 1.4; mouth = "o"; mS = 1.5;
-              if (!REDUCE3D && (a % 0.55) < dt) wisp.vy += 1.3;
+              eye = "shine"; eS = 1.2; mouth = "o"; mS = 1.2;
+              if (!REDUCE3D && (a % 0.55) < dt) wisp.vy += 1.0;
             }
             /* 오래 아무도 안 건드리면 꾸벅꾸벅 존다 — 깨우면 화들짝(pointerdown) */
             const idle = (now - rx3.lastAct) / 1000;
@@ -6867,7 +6881,8 @@ export default function App() {
   const [flip, setFlip] = useState(false);
   const [phase, setPhase] = useState(0);        // v6: 0=수호신 형성 중, 1=완성
   const [formStep, setFormStep] = useState(0);  // v70: 형성 중 단계별 '읽는 중' 연출
-  const [awake, setAwake] = useState(false);    // v52: 로비→두 번 두드려 깨움 후 질문 UI 노출
+  const [awake, setAwake] = useState(false);
+  const [qFocus, setQFocus] = useState(false);    // 3D 판: 질문 칸에 손이 가 있으면 얼굴을 당겨 본다    // v52: 로비→두 번 두드려 깨움 후 질문 UI 노출
   const [cardOn, setCardOn] = useState(false);  // v6: 판결 카드 등장 게이트
   const [ritual, setRitual] = useState(false);  // v6(D2): 주역 동전 의식
   const [tosses, setTosses] = useState([]);
@@ -7901,7 +7916,7 @@ export default function App() {
     /* v127.4 오행 색 연동 — 사람마다 다른 건 수호신뿐이고 화면 크롬은 전 유저 같은 금색이었다.
        골드 기조는 그대로 두고(가독성) **글로우만** 그 사람의 오행 색으로 물들인다.
        경쟁 8개사는 브랜드 컬러가 고정이라 구조적으로 못 하는 개인화다. */
-    <div className={`stage${SKIN === "holo" ? " holo" : ""}`} style={saju ? { "--elc": (EL_COLOR[saju.main] || [])[0] || "#f5d98b", "--elc2": (EL_COLOR[saju.main] || [])[1] || "#ffe9ad" } : undefined}>
+    <div className={`stage${SKIN === "holo" ? " holo" : ""}${R3D ? " r3d" : ""}`} style={saju ? { "--elc": (EL_COLOR[saju.main] || [])[0] || "#f5d98b", "--elc2": (EL_COLOR[saju.main] || [])[1] || "#ffe9ad" } : undefined}>
       <style>{CSS}</style>
       <VerBadge />
 
@@ -8173,7 +8188,7 @@ export default function App() {
           className={`scene fade ${tab === "gyeot" ? "gyeot" : (phase >= 1 && !res && !awake ? "lobby" : "")}`}
           onClick={tab === "judge" ? (phase >= 1 && !res && !awake ? tryWake : undefined)
             : (phase >= 1 && gyeotSorted.length > 0 && !gyeotOpen ? tryGyeotOpen : undefined)}>
-          <div className={`halo wide ${tab === "gyeot" ? "gyeotscale" : `${!awake && phase >= 1 && !res ? "lobbyscale" : ""} ${asking ? "asking" : ""} ${ritual ? "ritualfade" : ""} ${busy || (res && !cardOn) ? "busy" : ""} ${res && cardOn ? "dimmed" : ""}`}`}>
+          <div className={`halo wide ${tab === "gyeot" ? "gyeotscale" : `${!awake && phase >= 1 && !res ? "lobbyscale" : ""} ${asking ? "asking" : ""} ${R3D && asking && qFocus ? "qzoom" : ""} ${ritual ? "ritualfade" : ""} ${busy || (res && !cardOn) ? "busy" : ""} ${res && cardOn ? "dimmed" : ""}`}`}>
             {phase === 0
               /* ⚠ 홀로 스킨에서 온보딩만 입자(BirthCanvas)를 쓰면 **처음 두 화면에 심볼이 없다**
                  (창업자 실기 제보 2026-08-28: "홀로그램에 맞춰서 심볼이 있어야지 처음부터").
@@ -8616,7 +8631,8 @@ export default function App() {
               {!ritual && <p className="gintro dim2">{isNight ? "밤이 깊었네. 이 시간의 물음은 마음이 먼저 기울어 있기 마련이야." : "그래서, 요즘 뭘 망설이고 있어?"}</p>}
               {!ritual && <textarea className="qbox" rows={2} maxLength={100} value={q} placeholder={`"${QHINTS[qhintI]}"`}
                 /* 수호신은 **네가 말할 차례가 되면** 물러난다 — 시계가 아니라 이 손짓이 신호다 */
-                onFocus={() => setGSay(null)}
+                onFocus={() => { setGSay(null); if (R3D) setQFocus(true); }}
+                onBlur={R3D ? (() => setQFocus(false)) : undefined}
                 onChange={e => { setQ(e.target.value); if (gSay) setGSay(null); if (R3D) typeIn(e.target); }}
                 onKeyUp={R3D ? (e => typeIn(e.target)) : undefined} onClick={R3D ? (e => typeIn(e.target)) : undefined} />}
               {!ritual && !res && q.trim().length > 0 && isDecisionQ(q) && (
@@ -8637,7 +8653,7 @@ export default function App() {
                   ⚠ 진행률·남은 시간은 쓰지 않는다 — 콜1 은 한 덩어리라 단계를 알 수 없고,
                     모르는 걸 아는 척 표시하면 그건 우리가 프롬프트에서 금지하는 '지어낸 숫자'와 같다. */}
               {busy && !res && <p className="brooding">조각들이 합의하는 중…</p>}
-              {!ritual && !busy && (
+              {!ritual && !busy && (!R3D || q.trim()) && (
                 <div className="w100">
                   <div className="row gap center">
                     <button className="btn gold" onClick={() => {
@@ -8692,7 +8708,7 @@ export default function App() {
                   이제 클릭률 = *_clicked / *_offer_shown 으로 세 상품을 같은 자로 잰다. */}
               {!ritual && !res && saju && (<>
                 <OfferShown records={records} />
-                <button className="btn ghost mt w100" onClick={() => { track("imprint_clicked", { price: IMPRINT_PRICE, nth_verdict: records.length }); setImprintOpen(true); }}>
+                <button className="btn ghost mt w100 impbtn" onClick={() => { track("imprint_clicked", { price: IMPRINT_PRICE, nth_verdict: records.length }); setImprintOpen(true); }}>
                   각인 — 네가 어떻게 만들어졌는지 · {IMPRINT_PRICE.toLocaleString()}원 <span className="impbadge">시험 발행</span>
                 </button>
                 {/* ⚠ **궁합 버튼을 판결 탭에서 뺐다**(2026-08-28 창업자: "판결 탭에서 궁합 없애").
@@ -8701,7 +8717,7 @@ export default function App() {
                     같은 문이 두 곳에 있으면 어느 쪽이 본진인지 흐려진다.
                     ⚠ 값도 뗐다(같은 날 창업자 결정: "궁합 공짜로 풀자") — 아래 fine 이 「둘 다」였던 것도
                       이제 각인 하나다. 문구를 안 고치면 화면이 없는 버튼을 가리킨다. */}
-                <p className="fine"><b>지금은 값을 안 받아.</b> 결제는 아직 연결돼 있지 않고, 적힌 값은
+                <p className="fine paynote"><b>지금은 값을 안 받아.</b> 결제는 아직 연결돼 있지 않고, 적힌 값은
                   <b> "이만하면 받겠어?"</b>를 묻는 표시야.</p>
               </>)}
               {/* 판결록은 '되읽으러 오는' 자산이다 — 새 판결을 안 물어도 다시 오는 이유가 된다.
@@ -9210,6 +9226,21 @@ const CSS = `
 .halo.wide.gyeotscale{transform:translateY(4vh) scale(1.72)}
 .halo.wide.dissolved{opacity:0;transform:scale(1.7);filter:blur(7px);pointer-events:none}
 .halo.wide.asking{transform:translateY(-5vh) scale(.82);opacity:.96}
+/* ── 3D 판(/3d) 화면 정리 — 창업자 2026-10-01: "UI는 이게 훨씬 깔끔한거 같은데 … 기존꺼는 메인 화면이
+   너무 번잡했어" + "얼굴 부분이 확대되어서 표정 변화가 잘 보이면 좋겠어".
+   ⚠ 기본 앱엔 안 걸린다(.stage.r3d 로만). 기능은 안 지운다 — 판결록·문안·서신함은 그대로 있고,
+   걷어내는 건 **설명문·상품 문구·버전 표시** 같은 글 무더기뿐이다. 각인은 이 주소에서만 숨긴다(시험 주소라 상품 측정에 안 섞이게). */
+.stage.r3d .tabbar{top:0;bottom:auto;padding:calc(10px + env(safe-area-inset-top)) 16px 8px;gap:8px}
+.stage.r3d .tabbar::before{display:none}
+.stage.holo.r3d .tabbtn{flex:1;max-width:220px;padding:12px 0;background:transparent;color:#6b6252;border:1px solid rgba(25,19,8,.16);letter-spacing:.04em;font-size:15px}
+.stage.holo.r3d .tabbtn.on{background:#191308;color:#fff;border-color:#191308}
+.stage.r3d .scene{padding-top:64px;padding-bottom:28px}
+.stage.r3d .gintro,.stage.r3d .fine,.stage.r3d .verbadge,.stage.r3d .streak,.stage.r3d .impbtn{display:none}
+.stage.r3d .gtext{position:relative;z-index:2}
+/* 질문을 쓰는 동안엔 물러나지 않고 **얼굴을 당겨 온다** — 기본 앱은 반대로 .82 로 물러난다 */
+.stage.r3d .halo.wide.asking{transform:translateY(-1vh) scale(1.25);opacity:1}
+/* ⚠ 2.15 는 과했다 — 몸이 떠다니는 폭까지 같이 커져 얼굴이 화면 밖으로 반쯤 나갔다(첫 실측) */
+.stage.r3d .halo.wide.asking.qzoom{transform:translateY(3vh) scale(1.65);transform-origin:50% 44%}
 .halo.wide.ritualfade{opacity:.1;pointer-events:none;transition:opacity .8s ease}
 .residue{position:fixed;inset:0;z-index:0;pointer-events:none;background:radial-gradient(50% 34% at 50% 36%,var(--elc),transparent 62%);opacity:.2}
 @keyframes residueDrift{0%,100%{opacity:.18;transform:scale(1)}50%{opacity:.4;transform:scale(1.12)}}
