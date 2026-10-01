@@ -30,6 +30,22 @@
      생성 POST /api/invite/new · 엿보기 GET /api/invite/:id · 응답 POST /api/invite/answer ·
      조회 GET /api/invite/check?ids= · 취소 DELETE /api/invite/:id
 
+   ⚠⚠ **조회와 취소는 「보낸 사람 열쇠」가 있어야 된다 (2026-10-01).**
+     그 전엔 **링크 번호 하나가 전부였다.** 그런데 그 번호는 링크에 실려 B들에게 간다 —
+     즉 **받은 사람 전원이 보낸 사람과 같은 열쇠를 쥐고 있었다.** 단톡방에 뿌리면
+     같은 방의 누구나 조회 창구를 직접 불러 **먼저 답한 사람의 이름과 좌표**를 꺼낼 수 있었고,
+     A의 초대를 지울 수도 있었다. 답한 사람은 「보낸 사람도 둘 사이를 보게 할까」에 동의했지
+     **같은 방 다른 사람에게** 동의한 게 아니다 — 처리방침 §5-2 「보낸 이에게 전달」이 거짓이 되는 자리였다.
+     8/30 「여럿이 답한다」 때 적은 위험은 반대 방향(A의 좌표가 방 전체로)뿐이었고, 이 방향은 빠져 있었다.
+     금융 테크 컨퍼런스(2026-09-22) API 보안 발표의 BOLA — 「인증이 아니라 객체 단위 인가 문제」 — 를
+     이 파일에 대 보다가 찾았다.
+   → 만들 때 **두 번째 값(owner)** 을 따로 발급해 A 기기에만 준다. 링크에는 안 싣는다.
+     서버는 **해시만** 저장한다 — 저장소가 새도 열쇠 원문은 안 나간다.
+     조회·취소는 `x-invite-owner: <id>.<열쇠>,…` 헤더로 낸다(URL 에 넣으면 접속 로그에 남는다).
+   ⚠ **열쇠가 없는 옛 초대는 예전처럼 번호만으로 연다.** 이미 단톡방에 돌고 있는 링크를
+     조용히 죽이지 않으려는 것이다 — 그게 바이럴엔 진짜 손해다. 옛 초대는 30일 안에 저절로 사라진다.
+   ⚠ **엿보기·응답은 그대로 번호만으로 된다.** 그건 받은 사람이 하는 일이고, 받은 사람은 링크만 갖고 있다.
+
    ⚠ **맨 경로(`/api/invite`)를 쓰지 마라 — Vercel 이 404 를 준다.** 파일 이름이 「선택적」
      캐치올(`[[...seg]]`)이라 조각 0개도 잡힐 줄 알았는데, 이 프로젝트(Next 아닌 zero-config)에서는
      **조각이 최소 하나 있어야 함수까지 도달한다.** 라이브 실측(2026-08-28):
@@ -53,7 +69,7 @@
      Vercel 이 인스턴스를 여러 개 띄우면 A가 만든 초대를 B의 요청이 못 찾을 수 있고,
      콜드스타트마다 통째로 사라진다. 그래서 **폴백은 개발·검사용이지 운영용이 아니다.**
      운영에서 이 기능이 실제로 동작하려면 KV 프로비저닝이 선행이다(지시서 §8 창업자 몫). */
-import { randomBytes } from "node:crypto";
+import { randomBytes, createHash, timingSafeEqual } from "node:crypto";
 import { isAllowedOrigin } from "../judge.js";   // 출처 판정은 한 곳에서만 — 두 벌이 되면 한쪽만 열린다
 
 const TTL_SEC = 30 * 24 * 60 * 60;    // 30일 — 처리방침 §5-2 가 약속한 그 값이다. 바꾸면 방침도 바꿔라
@@ -71,6 +87,7 @@ const MAX_IDS = 24;                    // 곁 상한과 맞춘다(명부가 24�
 const MAX_ANSWERS = 24;
 const MAX_LABEL = 12;                  // 곁 이름 칸과 같은 상한
 const ID_BYTES = 9;                    // base64url 12자 — "answer" 와 길이·문자셋이 겹치지 않는다
+const OWNER_BYTES = 16;                // 보낸 사람 열쇠 — 128비트. 링크에는 절대 안 실린다(머리 ⚠⚠)
 
 const KV_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || "";
 const KV_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || "";
@@ -88,6 +105,7 @@ const _memGet = (k) => {
 };
 const _memSet = (k, val) => { _mem.set(k, { val, exp: Date.now() + TTL_SEC * 1000 }); };
 export const _resetMem = () => _mem.clear();     // 검사 전용
+export const _seedMem = (id, val) => _memSet(id, val);   // 검사 전용 — 열쇠 이전의 옛 초대를 심는다
 
 async function kv(cmd) {
   const r = await fetch(KV_URL, {
@@ -120,6 +138,29 @@ const clean = (s, n) => String(s == null ? "" : s).slice(0, n);
 /* 답 목록 — **옛 판이 저장한 한 칸(`answered`)도 읽는다.** 이미 살아 있는 초대가 30일 남아 있어서
    여기서 안 받아 주면 그 사람들 답이 조용히 사라진다. 새로 쓸 때는 `answers` 로만 쓴다. */
 const answersOf = (inv) => (Array.isArray(inv?.answers) ? inv.answers : inv?.answered ? [inv.answered] : []);
+
+/* ── 보낸 사람 열쇠 (머리 ⚠⚠) ──────────────────────────────────────────────── */
+const hashOwner = (k) => createHash("sha256").update(String(k)).digest("base64url");
+/* 헤더 `x-invite-owner: <id>.<열쇠>,<id>.<열쇠>` → Map(id → 열쇠).
+   id 와 열쇠는 둘 다 base64url 이라 `.` 과 `,` 가 안 섞인다 — 구분자로 써도 안전하다. */
+function ownersOf(req) {
+  const raw = String(req.headers?.["x-invite-owner"] || "");
+  const out = new Map();
+  for (const pair of raw.split(",").slice(0, MAX_IDS)) {
+    const [id, key] = pair.trim().split(".");
+    if (id && key) out.set(clean(id, 64), clean(key, 64));
+  }
+  return out;
+}
+/* ⚠ **열쇠가 없는 옛 초대는 통과시킨다** — 머리 ⚠⚠ 마지막 줄. 새 초대는 해시가 맞아야만 연다.
+   비교는 시간 차로 새지 않게 `timingSafeEqual` 로 한다(길이가 다르면 바로 거짓). */
+function isOwner(inv, key) {
+  if (!inv?.ownerHash) return true;
+  if (!key) return false;
+  const a = Buffer.from(hashOwner(key));
+  const b = Buffer.from(String(inv.ownerHash));
+  return a.length === b.length && timingSafeEqual(a, b);
+}
 /* 생년월일 원값이 섞여 오는 것을 서버가 막는다 — **양쪽 좌표에 다 건다**(A의 axes · B의 bAxes) */
 const BANNED = ["y", "m", "d", "h", "min", "birth", "birthday", "ymd"];
 
@@ -157,7 +198,7 @@ export default async function handler(req, res) {
     res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Vary", "Origin");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "content-type");
+    res.setHeader("Access-Control-Allow-Headers", "content-type, x-invite-owner");
     res.setHeader("Access-Control-Max-Age", "86400");
   }
   if (req.method === "OPTIONS") return res.status(originOk ? 204 : 403).end();
@@ -212,6 +253,12 @@ export default async function handler(req, res) {
     if (req.method === "DELETE") {
       const id = clean(seg[0] || body?.id, 64);
       if (!id) return res.status(400).json({ error: { message: "초대가 없어" } });
+      /* ⚠ **링크를 받은 사람은 못 지운다** — 그 전엔 단톡방의 누구나 A의 초대를 지울 수 있었다(머리 ⚠⚠).
+         없는 초대는 그대로 200 이다: 이미 지워졌거나 만료된 걸 다시 지우는 건 실패가 아니다. */
+      const inv = await getInvite(id);
+      if (inv && !isOwner(inv, ownersOf(req).get(id))) {
+        return res.status(403).json({ error: { message: "보낸 사람만 지울 수 있어" } });
+      }
       await delInvite(id);
       return res.status(200).json({ ok: true });
     }
@@ -235,9 +282,13 @@ export default async function handler(req, res) {
       const ids = String(req.query?.ids || "").split(",").map((x) => clean(x, 64)).filter(Boolean).slice(0, MAX_IDS);
       if (!ids.length) return res.status(200).json([]);
       const out = [];
+      const owners = ownersOf(req);
       for (const id of ids) {
         const inv = await getInvite(id);
         if (!inv) continue;                                  // 만료·취소는 조용히 빠진다
+        /* ⚠ **열쇠가 안 맞으면 없는 것처럼 빠진다**(머리 ⚠⚠). 403 으로 따로 답하면
+           「그 번호의 초대가 살아 있다」는 사실 하나가 새므로, 만료와 같은 모양으로 둔다. */
+        if (!isOwner(inv, owners.get(id))) continue;
         /* ⚠ **동의를 안 한 응답은 A에게 answered 로 보이지 않는다.**
            처리방침 §5-2: "동의하지 않으면 … 보낸 이에게는 아무것도 전달되지 않습니다."
            서버는 소비 사실을 알지만 A에게는 안 알린다 — 그 한 비트가 곧 제3자 제공이다. */
@@ -266,8 +317,11 @@ export default async function handler(req, res) {
       if (hit) return res.status(400).json({ error: { message: `생년월일 원값은 안 받아 — '${hit}'` } });
 
       const id = randomBytes(ID_BYTES).toString("base64url");
-      await putInvite(id, { axes, name: clean(body?.name, MAX_LABEL), at: Date.now(), answered: null });
-      return res.status(200).json({ id });
+      /* 보낸 사람 열쇠 — **원문은 이 응답 한 번만** 나가고 서버엔 해시만 남는다(머리 ⚠⚠) */
+      const owner = randomBytes(OWNER_BYTES).toString("base64url");
+      await putInvite(id, { axes, name: clean(body?.name, MAX_LABEL), at: Date.now(), answered: null,
+        ownerHash: hashOwner(owner) });
+      return res.status(200).json({ id, owner });
     }
 
     return res.status(405).json({ error: { message: "지원하지 않는 요청이야" } });

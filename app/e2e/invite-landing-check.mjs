@@ -156,7 +156,7 @@ ck("⑤ 넣었던 생년월일이 실제로 실려 있다", ys === "1987", ys);
 {
   const pa = await b.newPage({ viewport: { width: 430, height: 932 } });
   const calls = [];
-  await pa.route("**/api/invite**", (route) => relay(route, (x) => calls.push({ m: x.m, body: x.body })));
+  await pa.route("**/api/invite**", (route) => relay(route, (x) => calls.push({ m: x.m, path: x.path, body: x.body, headers: x.headers })));
   const { onboard } = await import("./onboard.mjs");
   await onboard(pa, BASE);
   /* ⚠ **첫 곁은 초대로 안 만든다.** 창업자 게이트가 그렇다 — *"첫 입력은 공짜야. 근데 추가로
@@ -221,6 +221,11 @@ ck("⑤ 넣었던 생년월일이 실제로 실려 있다", ys === "1987", ys);
   /* ── ⑦ B가 답한다 → A가 앱을 열면 그 자리가 사람이 된다 ─────────────── */
     const invId = await pa.evaluate(() => JSON.parse(localStorage.getItem("binari.invites.v1") || "[]")[0]);
   ck("⑦ 초대 id 는 A 기기에만 남는다", typeof invId === "string" && invId.length >= 10, String(invId).slice(0, 4) + "…");
+  /* ⚠ **보낸 사람 열쇠도 A 기기에만 남는다**(2026-10-01). 이게 없으면 A도 답을 못 본다 —
+     서버가 새 초대는 열쇠가 맞아야만 답 목록을 열기 때문이다. 링크 주소에는 안 실린다. */
+  const ownerKey = await pa.evaluate((id) => (JSON.parse(localStorage.getItem("binari.invite_keys.v1") || "{}") || {})[id], invId);
+  ck("⑦ 보낸 사람 열쇠가 A 기기에 저장된다", typeof ownerKey === "string" && ownerKey.length >= 20,
+     ownerKey ? `${ownerKey.length}자` : "(없음)");
   /* B가 동의하고 답한다 — **좌표를 함께 보낸다.** 이게 A에게 돌아오는 초대의 대가다
      (2026-08-28 창업자: "내가 초대했는데 내꺼에도 자동 반영이 되어야지"). */
   const B_AXES = { dG: 7, dJ: 4, el: "금", nayin: "검봉금", sun: "황소자리", moon: "사자자리",
@@ -238,6 +243,11 @@ ck("⑤ 넣었던 생년월일이 실제로 실려 있다", ys === "1987", ys);
   ck("⑦ 답이 오면 그 자리가 '곁'이 된다", !((await row2.getAttribute("class")) || "").includes("called"),
      (await row2.getAttribute("class")) || "(없음)");
   ck("⑦ 승격해도 이름은 그대로다", (await pa.locator(".gyeotlist li input.galias").first().inputValue()) === "주영");
+  {
+    const chkCall = calls.filter((x) => x.m === "GET" && /\/check$/.test(x.path || "")).pop();
+    const hv = String(chkCall?.headers?.["x-invite-owner"] || "");
+    ck("⑦ 앱이 확인할 때 보낸 사람 열쇠를 헤더로 낸다", hv.startsWith(`${invId}.`), hv ? "실림" : "(안 실림)");
+  }
   const out3 = await pa.locator("section.gyeot").evaluate((el) => {
     const c = el.cloneNode(true);
     c.querySelectorAll(".gsumtable, .gsum").forEach((x) => x.remove());
@@ -295,7 +305,8 @@ ck("⑤ 넣었던 생년월일이 실제로 실려 있다", ys === "1987", ys);
     const r = await api("POST", { seg: ["answer"], body: { id: ID2, notify: true, bAxes: THREE[k], label: NAMES[k] }, headers: HDR });
     ck(`⑨ ${k + 1}번째 사람이 같은 링크로 답한다`, r.code === 200 && !!r.body?.aAxes, `${r.code}`);
   }
-  const chk = await api("GET", { seg: ["check"], query: { ids: ID2 }, headers: HDR });
+  /* 보낸 사람으로서 조회한다 — 새 초대는 열쇠가 있어야 답 목록이 열린다(2026-10-01) */
+  const chk = await api("GET", { seg: ["check"], query: { ids: ID2 }, headers: { ...HDR, "x-invite-owner": `${ID2}.${made2.body.owner}` } });
   ck("⑨ 셋이 다 A에게 온다", (chk.body?.[0]?.answers || []).length === 3,
      `${(chk.body?.[0]?.answers || []).length}명`);
   ck("⑨ 각자의 좌표가 섞이지 않는다",
@@ -307,7 +318,11 @@ ck("⑤ 넣었던 생년월일이 실제로 실려 있다", ys === "1987", ys);
   await pz.route("**/api/invite**", (route) => relay(route));
   const { onboard: ob } = await import("./onboard.mjs");
   await ob(pz, BASE);
-  await pz.evaluate((id) => localStorage.setItem("binari.invites.v1", JSON.stringify([id])), ID2);
+  /* 앱이 초대를 만들 때 하는 일을 그대로 한다 — id 목록과 **보낸 사람 열쇠**를 같이 둔다 */
+  await pz.evaluate(([id, k]) => {
+    localStorage.setItem("binari.invites.v1", JSON.stringify([id]));
+    localStorage.setItem("binari.invite_keys.v1", JSON.stringify({ [id]: k }));
+  }, [ID2, made2.body.owner]);
   await pz.reload({ waitUntil: "domcontentloaded" });
   await pz.waitForTimeout(3200);
   const seats = () => pz.evaluate(() => JSON.parse(localStorage.getItem("binari.gyeot.v1") || "[]").filter((x) => String(x.key).startsWith("inv:")));

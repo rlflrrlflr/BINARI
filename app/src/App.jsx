@@ -4685,7 +4685,7 @@ const SHARE_HOST = "https://binari-sepia.vercel.app";
    이 상수 하나로 카드발 유입이 direct 에서 갈라진다. 카드는 회수가 안 되므로
    자체 도메인으로 옮기는 날에도 vercel.app 쪽 /c 리다이렉트는 죽이면 안 된다(HANDOVER 체크리스트). */
 const CARD_URL = SHARE_HOST + "/c";
-const APP_VER = "v190 · 디스코드에서 시킨다";
+const APP_VER = "v191 · 초대 답은 보낸 사람만";
 /* 지시서 5·6: 서신(심층 리포트) 가격·구성·미리보기. 아직 판매하지 않고 지불 의사만 잰다.
    목차는 fake door 가 재는 '약속' 그 자체다 — 여기 적힌 다섯 줄을 보고 누르느냐가 데이터이므로,
    실제로 만들 물건과 다른 목차를 걸어두면 클릭률이 거짓말이 된다.
@@ -5907,15 +5907,41 @@ function gyeotInvites() {
   try { const a = JSON.parse(store.getItem(INVITE_KEY) || "[]"); return Array.isArray(a) ? a.filter((x) => typeof x === "string").slice(0, GYEOT_MAX) : []; }
   catch (_) { return []; }
 }
+/* 보낸 사람 열쇠 — **답한 사람 목록을 여는 유일한 열쇠**(2026-10-01).
+   ⚠ 그 전엔 링크 번호 하나로 조회·취소가 다 됐다. 그 번호는 링크에 실려 받은 사람 전원에게 가므로,
+     단톡방의 누구나 먼저 답한 사람의 이름과 좌표를 꺼낼 수 있었다(api/invite 머리 ⚠⚠).
+     이제 만들 때 받은 열쇠를 **이 기기에만** 두고, 확인·취소할 때만 헤더로 내민다. 링크엔 안 싣는다.
+   ⚠ id 목록(INVITE_KEY)의 모양은 안 바꾼다 — 따로 둔다. 목록이 문자열 배열이라는 걸 다른 곳이 믿고 있다.
+   ⚠ 열쇠가 없는 옛 초대도 그대로 확인된다(서버가 옛 초대는 번호만으로 연다). */
+const INVITE_OWNER_KEY = "binari.invite_keys.v1";
+function gyeotOwners() {
+  try { const o = JSON.parse(store.getItem(INVITE_OWNER_KEY) || "{}"); return o && typeof o === "object" && !Array.isArray(o) ? o : {}; }
+  catch (_) { return {}; }
+}
+/* 남아 있는 초대의 열쇠만 남긴다 — 목록에서 빠진 초대의 열쇠가 쌓이지 않게 */
+function gyeotKeepOwners(ids, extra) {
+  const o = { ...gyeotOwners(), ...(extra || {}) };
+  const next = {};
+  for (const id of ids) if (typeof o[id] === "string") next[id] = o[id];
+  try { store.setItem(INVITE_OWNER_KEY, JSON.stringify(next)); } catch (_) {}
+}
+/* 확인·취소 요청에 붙일 헤더. 열쇠가 하나도 없으면 빈 객체 — 옛 초대만 있는 기기도 그대로 돈다 */
+function gyeotOwnerHeader(ids) {
+  const o = gyeotOwners();
+  const pairs = ids.filter((id) => typeof o[id] === "string").map((id) => `${id}.${o[id]}`);
+  return pairs.length ? { "x-invite-owner": pairs.join(",") } : {};
+}
 /* 취소·응답이 끝난 초대 id 를 내 목록에서 뺀다 — 안 빼면 확인(GET)이 죽은 id 를 계속 물고 간다 */
 function gyeotDropInvite(id) {
   const next = gyeotInvites().filter((x) => x !== id);
   try { store.setItem(INVITE_KEY, JSON.stringify(next)); } catch (_) {}
+  gyeotKeepOwners(next);
   return next;
 }
-function gyeotPushInvite(id) {
+function gyeotPushInvite(id, owner) {
   const next = [String(id).slice(0, 64), ...gyeotInvites().filter((x) => x !== id)].slice(0, GYEOT_MAX);
   try { store.setItem(INVITE_KEY, JSON.stringify(next)); } catch (_) {}
+  gyeotKeepOwners(next, owner ? { [String(id).slice(0, 64)]: String(owner).slice(0, 64) } : null);
   return next;
 }
 function gyeotDrop(list, key) { return writeGyeot(list.filter((x) => x.key !== key)); }
@@ -6848,7 +6874,8 @@ export default function App() {
     const timers = [];
     (async () => {
       try {
-        const q = await fetch(`/api/invite/check?ids=${ids.map(encodeURIComponent).join(",")}`);
+        /* ⚠ 열쇠는 **URL 이 아니라 헤더로** 낸다 — URL 은 서버 접속 로그에 남는다 */
+        const q = await fetch(`/api/invite/check?ids=${ids.map(encodeURIComponent).join(",")}`, { headers: gyeotOwnerHeader(ids) });
         if (!q.ok) return;
         const arr = await q.json().catch(() => null);
         if (!alive || !Array.isArray(arr)) return;
@@ -7256,7 +7283,7 @@ export default function App() {
       });
       const d = await r.json().catch(() => null);
       if (!r.ok || !d?.id) throw new Error(d?.error?.message || "지금은 초대를 만들 수 없어");
-      gyeotPushInvite(d.id);
+      gyeotPushInvite(d.id, d.owner);
       /* ⚠ **이름을 안 묻는다**(2026-08-28 창업자: *"누구를 부를지 이름을 쓰는 게 왜 필요해?
          받은 사람이 쓰면 되지."*). 맞다 — v155 부터 **답이 올 때 그 사람 이름이 함께 온다**
          (동의한 경우). 그 앞에서 A에게 한 번 더 묻는 건 같은 값을 두 번 받는 것이고,
@@ -8300,7 +8327,7 @@ export default function App() {
                              ⚠ 실패해도 화면에서는 지운다 — 유저가 지웠는데 안 지워지는 게 더 나쁘다.
                                서버 쪽은 30일 뒤 어차피 사라진다. */
                           if (g?.inv) {
-                            fetch(`/api/invite/${encodeURIComponent(g.inv)}`, { method: "DELETE" }).catch(() => {});
+                            fetch(`/api/invite/${encodeURIComponent(g.inv)}`, { method: "DELETE", headers: gyeotOwnerHeader([g.inv]) }).catch(() => {});
                             gyeotDropInvite(g.inv);
                           }
                           setGyeot((p) => gyeotDrop(p, gyeotAsk)); track("gyeot_dropped", { pending: !!g?.inv }); setGyeotAsk("");

@@ -5,7 +5,7 @@
    처리방침 §5-2 가 유저에게 다섯 가지를 약속했고(무엇을 저장/무엇을 안 저장/30일/동의/취소),
    그 약속은 코드가 지켜야 문장이 된다. `privacy-check` 는 **문장이 있는지**를 보고,
    이 파일은 **그 문장대로 도는지**를 본다. 둘 다 있어야 약속이 성립한다. */
-import handler, { _resetMem, hasKV } from "../api/invite/[[...seg]].js";
+import handler, { _resetMem, _seedMem, hasKV } from "../api/invite/[[...seg]].js";
 import { readFileSync } from "node:fs";
 
 const R = [];
@@ -15,14 +15,26 @@ const ORIGIN = "https://binari-sepia.vercel.app";
 /* Vercel 핸들러 대역 — req/res 를 최소로 흉내 낸다. 프레임워크를 안 끌어온다(의존성 0개 원칙).
    ⚠ `origin: null` 을 넘기면 **헤더 자체를 안 붙인다** — 브라우저가 같은 출처 GET 에서
      하는 일이 그거다(아래 ⑧). 빈 문자열이 아니라 부재를 재현해야 그 경로가 검사된다. */
-async function call(method, { seg = [], query = {}, body = null, origin = ORIGIN } = {}) {
+/* 만든 초대의 **보낸 사람 열쇠**를 기억한다 — 앱이 기기에 두는 것(`gyeotOwnerHeader`)과 같은 일이다.
+   그래서 아래 검사들은 기본이 「보낸 사람으로서」 부르는 것이고, 링크만 쥔 사람은
+   `as: "stranger"` 로 따로 부른다(⑪). 기본값을 「열쇠 없음」으로 두면 옛 검사 전부가
+   남의 자리에서 조회하는 셈이 되어 뜻이 뒤집힌다. */
+const OWNERS = new Map();
+async function call(method, { seg = [], query = {}, body = null, origin = ORIGIN, as = "owner", headers: extra = {} } = {}) {
   /* ⚠ **`query.seg` 를 일부러 안 넣는다.** Vercel 이 이 프로젝트에서 그걸 안 실어 주기 때문이다
      (라이브 실측 2026-08-28: 조각이 [] 로 와서 전 경로가 405). 검사가 그걸 넣어 주면
      **검사만 통과하고 배포에서 죽는다** — 이 파일에서 세 번 연속 그 방식으로 놓쳤다.
      그래서 여기서 재현하는 건 Vercel 이 실제로 주는 것: `url` 과 **일반 쿼리뿐**이다. */
   const qs = new URLSearchParams(Object.entries(query).filter(([, v]) => v !== undefined)).toString();
   const url = "/api/invite" + (seg.length ? "/" + seg.map(encodeURIComponent).join("/") : "") + (qs ? "?" + qs : "");
-  const req = { method, headers: origin == null ? {} : { origin }, url, query: { ...query }, body };
+  const headers = origin == null ? {} : { origin };
+  if (as === "owner") {
+    const ids = seg[0] === "check" ? String(query.ids || "").split(",") : method === "DELETE" ? [seg[0]] : [];
+    const pairs = ids.filter((x) => OWNERS.has(x)).map((x) => `${x}.${OWNERS.get(x)}`);
+    if (pairs.length) headers["x-invite-owner"] = pairs.join(",");
+  }
+  Object.assign(headers, extra);
+  const req = { method, headers, url, query: { ...query }, body };
   let code = 200, payload = null;
   const res = {
     setHeader() {},
@@ -31,6 +43,7 @@ async function call(method, { seg = [], query = {}, body = null, origin = ORIGIN
     end() { return res; },
   };
   await handler(req, res);
+  if (method === "POST" && seg[0] === "new" && payload?.id && payload?.owner) OWNERS.set(payload.id, payload.owner);
   return { code, body: payload };
 }
 const AXES = { dG: 2, dJ: 0, el: "화", sun: "전갈", moon: "게", weton: 12, tzolkin: "치칸", nayin: "노방토", lp: 7 };
@@ -195,7 +208,6 @@ let id;
   ck("⑩ 한 번에 24개까지만 본다", many.body.length === 24, `${many.body.length}개`);
 }
 
-const f = R.filter((x) => !x).length;
 /* ── ⑦ 엿보기의 경계 — 여기가 새어도 화면은 멀쩡하다 ─────────────────────── */
 {
   _resetMem();
@@ -277,5 +289,86 @@ const f = R.filter((x) => !x).length;
      /function segsOf/.test(api) && api.indexOf("req.url") < api.indexOf("req.query?.seg"));
 }
 
+/* ── ⑪ 링크만 쥔 사람은 남의 답을 못 본다 (2026-10-01 — 보낸 사람 열쇠) ─────
+   ⚠ 그 전엔 **링크 번호 하나가 조회·취소의 열쇠**였다. 그 번호는 링크에 실려 받은 사람 전원에게
+     가므로, 단톡방의 누구나 먼저 답한 사람의 이름과 좌표를 꺼낼 수 있었고 A의 초대를 지울 수도 있었다.
+     답한 사람은 「보낸 사람도 보게 할까」에 동의했지 같은 방 다른 사람에게 동의한 게 아니다.
+   여기서 무는 건 셋이다 — ①링크만 쥔 사람은 못 본다·못 지운다 ②받은 사람의 일(엿보기·응답)은
+   그대로 된다 ③이미 돌고 있는 옛 링크는 안 죽는다. */
+{
+  _resetMem();
+  const c = await call("POST", { seg: ["new"], body: { axes: AXES, name: "철수" } });
+  const gid = c.body?.id, owner = c.body?.owner;
+  ck("⑪ 만들면 보낸 사람 열쇠를 따로 준다", typeof owner === "string" && owner.length >= 20 && owner !== gid,
+     `${String(owner || "").length}자`);
+  await call("POST", { seg: ["answer"], body: { id: gid, bAxes: { ...AXES, dG: 7 }, notify: true, label: "영희" } });
+
+  /* 같은 단톡방의 민수 — 링크(번호)만 갖고 있다 */
+  const m1 = await call("GET", { seg: ["check"], query: { ids: gid }, as: "stranger" });
+  ck("⑪ 링크만 가진 사람이 조회하면 아무것도 안 나온다", m1.code === 200 && Array.isArray(m1.body) && m1.body.length === 0,
+     JSON.stringify(m1.body).slice(0, 60));
+  const m2 = await call("GET", { seg: ["check"], query: { ids: gid }, as: "stranger",
+    headers: { "x-invite-owner": `${gid}.AAAAAAAAAAAAAAAAAAAAAA` } });
+  ck("⑪ 틀린 열쇠로도 안 나온다", Array.isArray(m2.body) && m2.body.length === 0);
+  const m3 = await call("GET", { seg: ["check"], query: { ids: gid }, as: "stranger",
+    headers: { "x-invite-owner": `${gid}.${gid}` } });
+  ck("⑪ 링크 번호를 열쇠 자리에 넣어도 안 나온다", Array.isArray(m3.body) && m3.body.length === 0);
+  const a1 = await call("GET", { seg: ["check"], query: { ids: gid } });
+  ck("⑪ 보낸 사람은 열쇠로 영희의 답을 본다", a1.body?.[0]?.answers?.[0]?.label === "영희");
+
+  const d1 = await call("DELETE", { seg: [gid], as: "stranger" });
+  ck("⑪ 링크만 가진 사람은 초대를 못 지운다", d1.code === 403, `${d1.code}`);
+  ck("⑪ 지우기 시도 뒤에도 초대는 살아 있다",
+     (await call("GET", { seg: ["check"], query: { ids: gid } })).body?.length === 1);
+
+  /* 받은 사람이 하는 일은 그대로 번호만으로 된다 — 받은 사람은 링크만 갖고 있다 */
+  const peek = await call("GET", { seg: [gid], as: "stranger" });
+  ck("⑪ 엿보기는 열쇠 없이 된다(받은 사람의 일)", peek.code === 200, `${peek.code}`);
+  const b2 = await call("POST", { seg: ["answer"], body: { id: gid, bAxes: AXES, notify: true, label: "민수" }, as: "stranger" });
+  ck("⑪ 응답도 열쇠 없이 된다", b2.code === 200, `${b2.code}`);
+  const every = JSON.stringify([peek.body, b2.body, a1.body]);
+  ck("⑪ 엿보기·응답·조회 어디에도 열쇠나 해시가 안 실린다", !/owner/i.test(every) && !every.includes(owner));
+
+  const d2 = await call("DELETE", { seg: [gid] });
+  ck("⑪ 보낸 사람은 지울 수 있다", d2.code === 200 &&
+     (await call("GET", { seg: ["check"], query: { ids: gid } })).body?.length === 0);
+}
+/* 이미 돌고 있는 옛 링크 — 열쇠가 생기기 전에 만든 초대 */
+{
+  _resetMem();
+  const OLD = "OLDinvite123";
+  _seedMem(OLD, { axes: AXES, name: "옛판", at: Date.now(), answered: null });
+  await call("POST", { seg: ["answer"], body: { id: OLD, bAxes: AXES, notify: true, label: "옛응답" } });
+  const o1 = await call("GET", { seg: ["check"], query: { ids: OLD }, as: "stranger" });
+  ck("⑪ 옛 초대는 예전처럼 번호만으로 확인된다 — 돌고 있는 링크를 안 죽인다",
+     o1.body?.[0]?.answers?.[0]?.label === "옛응답");
+  const c = await call("POST", { seg: ["new"], body: { axes: AXES } });
+  const mix = await call("GET", { seg: ["check"], query: { ids: `${OLD},${c.body.id}` }, as: "stranger" });
+  ck("⑪ 옛 것과 새 것을 섞어 물어도 새 것은 열쇠가 있어야 나온다",
+     mix.body?.length === 1 && mix.body[0].id === OLD, `${mix.body?.length}개`);
+  ck("⑪ 옛 초대는 번호만으로 지워진다(예전과 같다)",
+     (await call("DELETE", { seg: [OLD], as: "stranger" })).code === 200);
+}
+/* 소스 규약 — 동작 검사가 못 보는 것 */
+{
+  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+  const api = strip(readFileSync(new URL("../api/invite/[[...seg]].js", import.meta.url), "utf8"));
+  const puts = [...api.matchAll(/putInvite\(id,\s*\{[\s\S]*?\}\s*\)/g)].map((m) => m[0]);
+  ck("⑪ 서버는 열쇠 원문이 아니라 해시만 저장한다",
+     puts.some((s) => /ownerHash: hashOwner\(owner\)/.test(s)) && puts.every((s) => !/[{,]\s*owner\s*[,}:]/.test(s)),
+     `${puts.length}곳`);
+  ck("⑪ 열쇠 비교는 시간 차로 새지 않는 방식이다", /timingSafeEqual\(/.test(api));
+  ck("⑪ 다른 허용 출처의 사전 요청에서도 열쇠 헤더가 통과한다",
+     /"Access-Control-Allow-Headers", "content-type, x-invite-owner"/.test(api));
+  const app = strip(readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8"));
+  ck("⑪ 앱은 확인할 때 열쇠를 URL 이 아니라 헤더로 낸다",
+     /invite\/check\?ids=\$\{[^`]*`\s*,\s*\{\s*headers:\s*gyeotOwnerHeader\(ids\)/.test(app) &&
+     !(app.match(/\/api\/invite[^`"']*/g) || []).some((u) => /[?&](owner|key)=/.test(u)));
+  ck("⑪ 앱은 지울 때도 열쇠를 낸다", /method:\s*"DELETE",\s*headers:\s*gyeotOwnerHeader\(\[g\.inv\]\)/.test(app));
+  ck("⑪ 앱은 만들 때 받은 열쇠를 저장한다", /gyeotPushInvite\(d\.id,\s*d\.owner\)/.test(app));
+  ck("⑪ 링크 주소에는 열쇠가 안 실린다", /\?inv=\$\{encodeURIComponent\(d\.id\)\}`/.test(app) && !/\?inv=[^`]*owner/.test(app));
+}
+
+const f = R.filter((x) => !x).length;
 console.log(`\n=== 초대와 회신: ${R.length - f}/${R.length} PASS ===`);
 if (f) process.exit(1);
