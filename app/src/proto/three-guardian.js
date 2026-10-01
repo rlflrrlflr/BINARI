@@ -16,29 +16,13 @@
  */
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import APP from "../App.jsx?raw";
+import { FIELD_FRAG, FIELD_VERT, EL_COLOR, PAL } from "virtual:app-field";   // 빌드 때 App.jsx 에서 뽑는다(vite.config.js)
 import AURA from "../lib/aura-spec.json";
 import { drawEyes, drawMouth, drawBlush } from "../lib/face.js";
 
-/* ── 앱에서 그대로 뽑는다 ──────────────────────────────────────────── */
-function sliceConst(src, name) {
-  const head = "const " + name + " = `"; const i = src.indexOf(head);
-  if (i < 0) throw new Error(name + " 없음");
-  const s = i + head.length; let body = src.slice(s, src.indexOf("`;", s));
-  if (body.includes("${")) {
-    const ti = src.indexOf("const TUNE = {");
-    const TUNE = new Function(src.slice(ti, src.indexOf("};", ti) + 2) + "\nreturn TUNE;")();
-    body = body.replace(/\$\{TUNE\.(\w+)\}/g, (m, k) => (TUNE[k] === undefined ? m : String(TUNE[k])));
-  }
-  return body;
-}
-const FIELD_FRAG = sliceConst(APP, "FIELD_FRAG");
-const FIELD_VERT = sliceConst(APP, "FIELD_VERT");
-const holoPal = new Function(
-  APP.match(/const EL_COLOR = \{[\s\S]*?\};/)[0] + "\n" +
-  APP.slice(APP.indexOf("const HOLO_FIX"), APP.indexOf("const HOLO_BG")) + "\nreturn holoPal;")();
+/* ⚠ 여기서 new Function 으로 뽑으면 배포판이 죽는다 — CSP 가 eval 을 막는다(2026-10-01 실기). */
+const holoPal = (k) => PAL[k];
 const HOLO_BG = [0.851, 0.835, 0.792];
-const EL_COLOR = new Function("return " + APP.match(/const EL_COLOR = (\{[\s\S]*?\});/)[1])();
 const hex2rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
 
 const ME = "화";
